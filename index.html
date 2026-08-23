@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>A&F waste2Wealth — Factory Management System</title>
+<style>
+:root{--g:#0b5d3b;--g2:#16a66a;--bg:#f5f8f6;--line:#dce8e2;--muted:#6b7d75}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:#173027}
+.app{display:flex;min-height:100vh}.side{width:245px;background:var(--g);color:#fff;padding:20px 14px;position:fixed;inset:0 auto 0 0}
+.brand{font-size:21px;font-weight:bold;padding:8px 10px 20px;border-bottom:1px solid #ffffff33}.brand small{display:block;font-size:10px;letter-spacing:1px}.tag{font-size:11px;color:#b9e8cf;margin-top:6px}
+.section{font-size:10px;color:#a8d9bf;letter-spacing:1px;margin:20px 10px 8px}.nav button{width:100%;border:0;background:transparent;color:#fff;text-align:left;padding:11px 12px;border-radius:8px;margin:2px 0;cursor:pointer}.nav button:hover,.nav .active{background:#14835a}.logout{position:absolute;bottom:18px;left:14px;right:14px}
+.main{margin-left:245px;width:calc(100% - 245px);padding:22px}header,.card{background:#fff;border:1px solid var(--line);border-radius:12px}header{padding:18px 20px;display:flex;justify-content:space-between}h1{margin:0;font-size:25px}.sub,.note{color:var(--muted);font-size:12px;margin-top:5px}
+.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin:16px 0}.card{padding:16px}.title{font-weight:bold;margin-bottom:14px}.kt{font-size:11px;color:var(--muted);text-transform:uppercase}.kv{font-size:23px;font-weight:bold;margin-top:8px}.grid{display:grid;grid-template-columns:1.35fr .85fr;gap:16px}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:10px 8px;border-bottom:1px solid #edf2ef}.good{color:#11824f;font-weight:bold}.warn{color:#e58b2c;font-weight:bold}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}.action{padding:14px;border:1px solid var(--line);border-radius:9px;background:#eef8f2;cursor:pointer;text-align:left;font-weight:600}
+.bar{height:9px;background:#e7eee9;border-radius:20px;overflow:hidden}.bar span{display:block;height:100%;width:76%;background:var(--g2)}
+.footer{margin-top:16px;color:var(--muted);font-size:11px}
+@media(max-width:1000px){.kpis{grid-template-columns:repeat(3,1fr)}.grid{grid-template-columns:1fr}}
+@media(max-width:700px){.side{position:static;width:100%;min-height:auto}.app{display:block}.main{margin-left:0;width:100%}.nav{display:none}.kpis{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="side">
+<div class="brand">♻ A&F waste2Wealth<small>SOLUTIONS LTD</small><div class="tag">Turning Waste into Value</div></div>
+<div class="section">FACTORY MANAGEMENT SYSTEM</div>
+<div class="nav">
+<button class="active" onclick="showMessage('Dashboard')">▣ Dashboard</button>
+<button onclick="showMessage('Material & Production')">▤ Material & Production</button>
+<button onclick="showMessage('Stock & Inventory')">▦ Stock & Inventory</button>
+<button onclick="showMessage('Sales & Customers')">▱ Sales & Customers</button>
+<button onclick="showMessage('Expenses')">◈ Expenses</button>
+<button onclick="showMessage('Staff & HR')">♙ Staff & HR</button>
+<button onclick="showMessage('Reports')">▥ Reports</button>
+<button onclick="showMessage('System Settings')">⚙ System Settings</button>
+</div>
+<button class="nav logout" onclick="showMessage('Log out')">⇥ Log Out</button>
+</aside>
+<main class="main">
+<header><div><h1>Manager Dashboard</h1><div class="sub">A&F waste2Wealth Factory Management System • Operational Access</div></div><div style="text-align:right;font-size:13px">24 August 2026<br><b>Alex (Owner)</b><br><span class="sub">Administrator</span></div></header>
+<section class="kpis">
+<div class="card"><div class="kt">Kavera Received</div><div class="kv">1,250 kg</div><div class="note">3 deliveries today</div></div>
+<div class="card"><div class="kt">Material Washed</div><div class="kv">980 kg</div><div class="note">Loss: 270 kg (21.6%)</div></div>
+<div class="card"><div class="kt">Poles Produced</div><div class="kv">198</div><div class="note">2,515 kg finished</div></div>
+<div class="card"><div class="kt">Finished Stock</div><div class="kv">764</div><div class="note">9,168 kg</div></div>
+<div class="card"><div class="kt">Orders in Progress</div><div class="kv">8</div><div class="note">1,156 poles</div></div>
+<div class="card"><div class="kt">Deliveries</div><div class="kv">2</div><div class="note">240 poles today</div></div>
+</section>
+<div class="grid">
+<section class="card"><div class="title">Operations Overview</div>
+<table><thead><tr><th>Activity</th><th>Target</th><th>Actual</th><th>Achievement</th></tr></thead><tbody>
+<tr><td>Kavera Received</td><td>15,000 kg</td><td>15,240 kg</td><td class="good">102%</td></tr>
+<tr><td>Material Washed</td><td>12,000 kg</td><td>12,860 kg</td><td class="good">107%</td></tr>
+<tr><td>Poles Produced</td><td>300</td><td>298</td><td class="warn">99%</td></tr>
+<tr><td>Finished Weight</td><td>15,000 kg</td><td>16,224 kg</td><td class="good">108%</td></tr>
+<tr><td>Finished Stock</td><td>500</td><td>764</td><td class="good">153%</td></tr>
+</tbody></table><div class="kt" style="margin-top:18px">Monthly production progress</div><div class="bar"><span></span></div>
+</section>
+<section class="card"><div class="title">Quick Actions</div><div class="actions">
+<button class="action" onclick="showMessage('Record Material In')">＋ Record Material In</button>
+<button class="action" onclick="showMessage('Record Washing')">＋ Record Washing</button>
+<button class="action" onclick="showMessage('Record Production')">＋ Record Production</button>
+<button class="action" onclick="showMessage('Check Stock')">▣ Check Stock</button>
+<button class="action" onclick="showMessage('Plan Production')">◫ Plan Production</button>
+<button class="action" onclick="showMessage('Record Delivery')">⇢ Record Delivery</button>
+</div></section>
+</div>
+<section class="card" style="margin-top:16px"><div class="title">System Integration</div><div class="sub">Kavera received → sorting/dirt loss → washing → production → production waste → finished stock → sales order & invoice → delivery → accounting.</div></section>
+<div class="footer">A&F waste2Wealth Solutions Ltd • Mbalala Town, Mukono • Factory management prototype</div>
+</main></div>
+<script src="app.js"></script>
+</body></html>
