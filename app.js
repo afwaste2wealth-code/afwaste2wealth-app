@@ -141,7 +141,7 @@ const p = Number(price.value) || 0;
 const t = Number(transport.value) || 0;
 
 const net = g * (1 - d / 100);
-constmaterialCost = net * p;
+const materialCost = net * p;
 const total = materialCost + t;
 
 modal.querySelector("#netWeight").textContent =
