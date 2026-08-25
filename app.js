@@ -194,7 +194,7 @@ const totalKavera = records.reduce(
   0
 );
 
-constkaveraElement = document.getElementById("kaveraReceived");
+const kaveraElement = document.getElementById("kaveraReceived");
 
 if (kaveraElement) {
 kaveraElement.textContent =
