@@ -164,7 +164,7 @@ modal.remove();
 
 modal.querySelector("#saveMaterial").onclick = () => {
 const record = {
-      date: modal.querySelector("#materialDate").value || newDate().toISOString().split("T")[0],
+      date: modal.querySelector("#materialDate").value || new Date().toISOString().split("T")[0],
       supplier: modal.querySelector("#supplier").value,
 materialType: modal.querySelector("#materialType").value,
 grossWeight: Number(gross.value) || 0,
