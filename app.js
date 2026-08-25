@@ -227,17 +227,18 @@ document.getElementById("kaveraReceived");
 kaveraElement.textContent =
 totalKavera.toLocaleString() + " kg";
   }
-});
+  
 const today = new Date().toISOString().split("T")[0];
 
 const deliveriesToday = records.filter(
   item =>String(item.date).split("T")[0] === today
 ).length;
 
-constdeliveriesElement =
+const deliveriesElement =
 document.getElementById("deliveriesToday");
 
 if (deliveriesElement) {
 deliveriesElement.textContent = deliveriesToday;
-}
+ }
+});
 
