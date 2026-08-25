@@ -215,12 +215,12 @@ window.addEventListener("DOMContentLoaded", () => {
 const records =
 JSON.parse(localStorage.getItem("materialRecords") || "[]");
 
-consttotalKavera = records.reduce(
+const totalKavera = records.reduce(
     (sum, item) => sum + Number(item.grossWeight || 0),
     0
   );
 
-constkaveraElement =
+const kaveraElement =
 document.getElementById("kaveraReceived");
 
   if (kaveraElement) {
@@ -228,4 +228,16 @@ kaveraElement.textContent =
 totalKavera.toLocaleString() + " kg";
   }
 });
+const today = new Date().toISOString().split("T")[0];
+
+const deliveriesToday = records.filter(
+  item =>String(item.date).split("T")[0] === today
+).length;
+
+constdeliveriesElement =
+document.getElementById("deliveriesToday");
+
+if (deliveriesElement) {
+deliveriesElement.textContent = deliveriesToday;
+}
 
