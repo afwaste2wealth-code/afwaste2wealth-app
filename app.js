@@ -189,6 +189,17 @@ localStorage.setItem(
 JSON.stringify(records)
     );
 
+const totalKavera = records.reduce(
+  (sum, item) => sum + Number(item.grossWeight || 0),
+  0
+);
+
+constkaveraElement = document.getElementById("kaveraReceived");
+
+if (kaveraElement) {
+kaveraElement.textContent =
+totalKavera.toLocaleString() + " kg";
+}
 modal.remove();
 
     alert(
