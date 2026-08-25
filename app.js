@@ -210,3 +210,22 @@ record.netWeight.toLocaleString() +
     );
   };
 }
+
+window.addEventListener("DOMContentLoaded", () => {
+const records =
+JSON.parse(localStorage.getItem("materialRecords") || "[]");
+
+consttotalKavera = records.reduce(
+    (sum, item) => sum + Number(item.grossWeight || 0),
+    0
+  );
+
+constkaveraElement =
+document.getElementById("kaveraReceived");
+
+  if (kaveraElement) {
+kaveraElement.textContent =
+totalKavera.toLocaleString() + " kg";
+  }
+});
+
