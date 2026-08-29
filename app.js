@@ -195,10 +195,13 @@ const totalKavera = records.reduce(
 );
 const totalNetUsable = records.reduce(sum, item) => sum + Number(item.netWeight || 0), 0); 
 const kaveraElement = document.getElementById("kaveraReceived");
-
+const netUsableElement = document.getElementId("netUsableMaterial");
 if (kaveraElement) {
 kaveraElement.textContent =
 totalKavera.toLocaleString() + " kg";
+}
+if (netUsableElement) {
+  netUsableElement.textContent = totalNetUsable.toLocaleString() + "kg";
 }
 modal.remove();
 
@@ -220,7 +223,20 @@ const totalKavera = records.reduce(
     0
   );
 
-const kaveraElement =
+const netUsableElement =
+document.getElementById("netUsableMaterial");
+
+if (netUsableElement) {
+const totalNetUsable = records.reduce(
+    (sum, item) => sum + Number(item.netWeight || 0),
+    0
+  );
+
+netUsableElement.textContent =
+totalNetUsable.toLocaleString() + " kg";
+}
+
+  const kaveraElement =
 document.getElementById("kaveraReceived");
 
   if (kaveraElement) {
@@ -239,6 +255,18 @@ document.getElementById("deliveriesToday");
 
 if (deliveriesElement) {
 deliveriesElement.textContent = deliveriesToday;
- }
+}
+// Update dashboard with finished production weight
+const finishedWeightElement = document.getElementById("finishedWeight");
+
+if (finishedWeightElement) {
+const totalFinishedWeight = records.reduce(
+        (sum, item) => sum + Number(item.finishedWeight || 0),
+        0
+    );
+
+finishedWeightElement.textContent =
+totalFinishedWeight.toLocaleString() + " kg";
+}
 });
 
