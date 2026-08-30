@@ -218,55 +218,63 @@ window.addEventListener("DOMContentLoaded", () => {
 const records =
 JSON.parse(localStorage.getItem("materialRecords") || "[]");
 
+  // Total Kavera received
 const totalKavera = records.reduce(
     (sum, item) => sum + Number(item.grossWeight || 0),
     0
   );
 
-const netUsableElement =
-document.getElementById("netUsableMaterial");
-
-if (netUsableElement) {
-const totalNetUsable = records.reduce(
-    (sum, item) => sum + Number(item.netWeight || 0),
-    0
-  );
-
-netUsableElement.textContent =
-totalNetUsable.toLocaleString() + " kg";
-}
-
-  const kaveraElement =
+const kaveraElement =
 document.getElementById("kaveraReceived");
 
   if (kaveraElement) {
 kaveraElement.textContent =
 totalKavera.toLocaleString() + " kg";
   }
-  
-const today = new Date().toISOString().split("T")[0];
+
+  // Total net usable material
+const totalNetUsable = records.reduce(
+    (sum, item) => sum + Number(item.netWeight || 0),
+    0
+  );
+
+const netUsableElement =
+document.getElementById("netUsableMaterial");
+
+  if (netUsableElement) {
+netUsableElement.textContent =
+totalNetUsable.toLocaleString() + " kg";
+  }
+
+  // Material deliveries received today
+const today =
+    new Date().toISOString().split("T")[0];
 
 const deliveriesToday = records.filter(
-  item =>String(item.date).split("T")[0] === today
-).length;
+    item =>
+      String(item.date).split("T")[0] === today
+  ).length;
 
 const deliveriesElement =
 document.getElementById("deliveriesToday");
 
-if (deliveriesElement) {
+  if (deliveriesElement) {
 deliveriesElement.textContent = deliveriesToday;
-}
-// Update dashboard with finished production weight
-const finishedWeightElement = document.getElementById("finishedWeight");
+  }
 
-if (finishedWeightElement) {
+  // Finished production weight
 const totalFinishedWeight = records.reduce(
-        (sum, item) => sum + Number(item.finishedWeight || 0),
-        0
-    );
+    (sum, item) =>
+      sum + Number(item.finishedWeight || 0),
+    0
+  );
 
+const finishedWeightElement =
+document.getElementById("finishedWeight");
+
+  if (finishedWeightElement) {
 finishedWeightElement.textContent =
 totalFinishedWeight.toLocaleString() + " kg";
-}
+  }
 });
 
