@@ -441,7 +441,7 @@ netKg.toLocaleString() +
     /*
      * Refresh Best Client information immediately.
      */
-    if (typeofupdateClientPerformance === "function") {
+    if (typeof updateClientPerformance === "function") {
 updateClientPerformance();
     }
   };
@@ -481,7 +481,8 @@ records.forEach(record => {
 
     if (
 record.materialSource !== "client" ||
-      !record.clientName
+      !record.clientName || 
+      (record.clientService !== "washing" && record.clientService !== "washing_pelletizing")
     ) {
       return;
     }
@@ -530,7 +531,7 @@ record.materialSource !== "client" ||
     }
 
     if (
-record.clientService !== "washing_pelletizing"
+record.clientService !== "pelletizing" && record.clientService !== "washing_pelletizing"
     ) {
       return;
     }
