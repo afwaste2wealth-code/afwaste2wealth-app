@@ -195,7 +195,7 @@ const totalKavera = records.reduce(
 );
 const totalNetUsable = records.reduce(sum, item) => sum + Number(item.netWeight || 0), 0); 
 const kaveraElement = document.getElementById("kaveraReceived");
-const netUsableElement = document.getElementId("netUsableMaterial");
+const netUsableElement = document.getElementById("netUsableMaterial");
 if (kaveraElement) {
 kaveraElement.textContent =
 totalKavera.toLocaleString() + " kg";
