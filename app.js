@@ -194,14 +194,10 @@ const totalKavera = records.reduce(
   0
 );
 const totalNetUsable = records.reduce(sum, item) => sum + Number(item.netWeight || 0), 0); 
-const kaveraElement = document.getElementById("kaveraReceived");
-const netUsableElement = document.getElementById("netUsableMaterial");
-if (kaveraElement) {
-kaveraElement.textContent =
-totalKavera.toLocaleString() + " kg";
-}
-if (netUsableElement) {
-  netUsableElement.textContent = totalNetUsable.toLocaleString() + "kg";
+const netWeightElement = document.getElementById("netWeight");
+if (netWeightElement) {
+netWeightElement.textContent =
+totalNetUsable.toLocaleString() + " kg";
 }
 modal.remove();
 
