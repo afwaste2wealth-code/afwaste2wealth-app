@@ -1,4 +1,4 @@
-function showMessage(name) {
+function showMessage(name) { 
   if (name === "Record Material In") {
 recordMaterialIn();
     return;
