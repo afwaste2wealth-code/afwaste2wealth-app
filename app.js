@@ -706,7 +706,7 @@ deliveriesToday.toLocaleString() + " ";
      ========================================= */
 
 const rows = document.querySelectorAll(
-    ".grid table tbodytr"
+    ".grid table tbody tr"
   );
 
 rows.forEach(row => {
