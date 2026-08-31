@@ -636,11 +636,150 @@ bestPelletClient[1].toLocaleString() +
 
 
 /* =========================================================
-   RUN PERFORMANCE UPDATE WHEN PAGE LOADS
+   DASHBOARD MATERIAL TOTALS
+   ========================================================= */
+
+function updateDashboardMaterialTotals() {
+
+const records = JSON.parse(
+localStorage.getItem("materialRecords") || "[]"
+  );
+
+  let totalKaveraReceived = 0;
+  let totalNetUsableCompany = 0;
+  let deliveriesToday = 0;
+
+const today = new Date().toISOString().split("T")[0];
+
+records.forEach(record => {
+
+const gross = Number(record.grossWeight) || 0;
+
+    /* ALL KAVERA RECEIVED — COMPANY + CLIENT */
+totalKaveraReceived += gross;
+
+    /* NET USABLE MATERIAL — COMPANY MATERIAL ONLY */
+    if (record.materialSource === "company") {
+totalNetUsableCompany +=
+        Number(record.netWeight) || 0;
+    }
+
+    /* NUMBER OF MATERIAL DELIVERIES TODAY */
+    if (record.date === today) {
+deliveriesToday++;
+    }
+  });
+
+
+  /* =========================================
+     UPDATE TOP DASHBOARD CARDS
+     ========================================= */
+
+constkaveraElement =
+document.getElementById("kaveraReceived");
+
+constnetElement =
+document.getElementById("netUsableMaterial");
+
+constdeliveriesElement =
+document.getElementById("deliveriesToday");
+
+
+  if (kaveraElement) {
+kaveraElement.textContent =
+totalKaveraReceived.toLocaleString() + " kg";
+  }
+
+  if (netElement) {
+netElement.textContent =
+totalNetUsableCompany.toLocaleString() + " kg";
+  }
+
+  if (deliveriesElement) {
+deliveriesElement.textContent =
+deliveriesToday.toLocaleString() + " ";
+  }
+
+
+  /* =========================================
+     UPDATE OPERATIONS OVERVIEW
+     ========================================= */
+
+const rows = document.querySelectorAll(
+    ".grid table tbodytr"
+  );
+
+rows.forEach(row => {
+
+const activity =
+row.cells[0]?.textContent.trim();
+
+constactualCell = row.cells[2];
+constachievementCell = row.cells[3];
+
+    if (!actualCell || !achievementCell) {
+      return;
+    }
+
+
+    /* KAVERA RECEIVED */
+    if (activity === "Kavera Received") {
+
+const target = 15000;
+
+const achievement =
+        target > 0
+          ? Math.round(
+              (totalKaveraReceived / target) * 100
+            )
+          : 0;
+
+actualCell.textContent =
+totalKaveraReceived.toLocaleString() + " kg";
+
+achievementCell.textContent =
+        achievement + "%";
+    }
+
+
+    /* NET USABLE MATERIAL */
+    if (activity === "Material Washed") {
+
+const target = 12000;
+
+const achievement =
+        target > 0
+          ? Math.round(
+              (totalNetUsableCompany / target) * 100
+            )
+          : 0;
+
+actualCell.textContent =
+totalNetUsableCompany.toLocaleString() + " kg";
+
+achievementCell.textContent =
+        achievement + "%";
+    }
+
+  });
+
+
+  /* =========================================
+     ALSO UPDATE BEST CLIENTS
+     ========================================= */
+
+  if (typeof updateClientPerformance === "function") {
+updateClientPerformance();
+  }
+}
+
+
+/* =========================================================
+   RUN DASHBOARD UPDATES WHEN PAGE LOADS
    ========================================================= */
 
 document.addEventListener("DOMContentLoaded", function () {
 
-updateClientPerformance();
+updateDashboardMaterialTotals();
 
 });
