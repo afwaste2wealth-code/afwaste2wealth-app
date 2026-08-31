@@ -193,7 +193,10 @@ const totalKavera = records.reduce(
   (sum, item) => sum + Number(item.grossWeight || 0),
   0
 );
-const totalNetUsable = records.reduce(sum, item) => sum + Number(item.netWeight || 0), 0); 
+const totalNetUsable = records.reduce(
+  (sum, item) => sum + Number(item.netWeight || 0),
+  0
+);
 const netWeightElement = document.getElementById("netWeight");
 if (netWeightElement) {
 netWeightElement.textContent =
