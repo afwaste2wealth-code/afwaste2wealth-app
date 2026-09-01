@@ -1318,5 +1318,6 @@ modal.remove();
 
 viewMaterialRecords();
   };
+}
 
 
