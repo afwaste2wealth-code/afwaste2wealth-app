@@ -3,7 +3,7 @@ function showMessage(name) {
 recordMaterialIn();
     return;
   }
-if (name === "Material & Production") {
+if (name === "Material & Production") { 
   viewMaterialRecords();
   return;
 }
