@@ -622,3 +622,698 @@ if (typeof updateDashboardMaterialTotals === "function") {
   updateClientPerformance();
 
 });
+/* =========================================================
+   VIEW MATERIAL RECORDS
+   ========================================================= */
+
+function viewMaterialRecords() {
+
+const records = JSON.parse(
+localStorage.getItem("materialRecords") || "[]"
+  );
+
+const modal = document.createElement("div");
+
+modal.style.cssText = `
+position:fixed;
+    inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+align-items:center;
+justify-content:center;
+    z-index:9999;
+font-family:Arial,sans-serif;
+  `;
+
+  let rows = "";
+
+  if (records.length === 0) {
+    rows = `
+<tr>
+<td colspan="8" style="text-align:center;padding:25px">
+          No material records found.
+</td>
+</tr>
+    `;
+  } else {
+
+records.slice().reverse().forEach(record => {
+
+const source =
+record.materialSource === "client"
+          ? "Client"
+          : "A&F / Company";
+
+const service =
+record.clientService === "washing"
+          ? "Washing Only"
+          : record.clientService === "washing_pelletizing"
+          ? "Washing + Pelletizing"
+          : "Company Material";
+
+      rows += `
+<tr>
+<td>${record.date || "-"}</td>
+
+<td>${source}</td>
+
+<td>
+            ${
+record.clientName ||
+record.materialType ||
+              "-"
+            }
+</td>
+
+<td>
+            ${Number(record.grossWeight || 0).toLocaleString()} kg
+</td>
+
+<td>
+            ${Number(record.netWeight || 0).toLocaleString()} kg
+</td>
+
+<td>${service}</td>
+
+<td>
+            ${
+              Number(
+record.actualPelletWeight ||
+record.pelletWeight ||
+                0
+              ).toLocaleString()
+            } kg
+</td>
+
+<td>
+<button
+onclick="editMaterialRecord(${record.id})"
+              style="
+                padding:7px 12px;
+                border:0;
+                border-radius:6px;
+                background:#0b5d3b;
+color:white;
+cursor:pointer;
+              "
+>
+✏ Edit
+</button>
+</td>
+</tr>
+      `;
+    });
+  }
+
+modal.innerHTML = `
+<div style="
+background:white;
+      width:1100px;
+      max-width:96%;
+      max-height:92vh;
+overflow:auto;
+      border-radius:14px;
+      padding:22px;
+      box-shadow:0 10px 40px rgba(0,0,0,.3);
+    ">
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:center;
+        margin-bottom:15px;
+      ">
+
+<h2 style="
+          margin:0;
+          color:#0b5d3b;
+        ">
+          Material Records
+</h2>
+
+<button id="closeMaterialRecords"
+          style="
+            padding:8px 14px;
+            border:1px solid #ccc;
+            border-radius:7px;
+background:white;
+cursor:pointer;
+          "
+>
+✕ Close
+</button>
+
+</div>
+
+<div style="overflow:auto">
+
+<table style="
+          width:100%;
+border-collapse:collapse;
+          font-size:13px;
+        ">
+
+<thead>
+<tr style="background:#eef8f2">
+
+<th style="padding:10px;text-align:left">
+                Date
+</th>
+
+<th style="padding:10px;text-align:left">
+                Source
+</th>
+
+<th style="padding:10px;text-align:left">
+                Client / Material
+</th>
+
+<th style="padding:10px;text-align:left">
+                Gross kg
+</th>
+
+<th style="padding:10px;text-align:left">
+                Net kg
+</th>
+
+<th style="padding:10px;text-align:left">
+                Service
+</th>
+
+<th style="padding:10px;text-align:left">
+                Pellets kg
+</th>
+
+<th style="padding:10px;text-align:left">
+                Action
+</th>
+
+</tr>
+</thead>
+
+<tbody>
+            ${rows}
+</tbody>
+
+</table>
+
+</div>
+
+</div>
+  `;
+
+document.body.appendChild(modal);
+
+modal.querySelector("#closeMaterialRecords").onclick = () => {
+modal.remove();
+  };
+}
+
+
+/* =========================================================
+   EDIT MATERIAL RECORD
+   ========================================================= */
+
+function editMaterialRecord(id) {
+
+const records = JSON.parse(
+localStorage.getItem("materialRecords") || "[]"
+  );
+
+const record = records.find(
+    r => String(r.id) === String(id)
+  );
+
+  if (!record) {
+    alert("Material record not found.");
+    return;
+  }
+
+const modal = document.createElement("div");
+
+modal.style.cssText = `
+position:fixed;
+    inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+align-items:center;
+justify-content:center;
+    z-index:10000;
+font-family:Arial,sans-serif;
+  `;
+
+constisClient =
+record.materialSource === "client";
+
+modal.innerHTML = `
+<div style="
+background:white;
+      width:560px;
+      max-width:94%;
+      max-height:92vh;
+overflow:auto;
+      border-radius:14px;
+      padding:24px;
+      box-shadow:0 10px 40px rgba(0,0,0,.3);
+    ">
+
+<h2 style="
+        margin-top:0;
+        color:#0b5d3b;
+      ">
+        Edit Material Record
+</h2>
+
+<label>Date</label>
+
+<input
+        id="editMaterialDate"
+        type="date"
+        value="${record.date || ""}"
+        style="width:100%;padding:10px;margin:6px 0 14px"
+>
+
+<label>Material Source</label>
+
+<select
+        id="editMaterialSource"
+        style="width:100%;padding:10px;margin:6px 0 14px"
+>
+
+<option value="company"
+          ${!isClient ? "selected" : ""}>
+          A&F / Company Material
+</option>
+
+<option value="client"
+          ${isClient ? "selected" : ""}>
+          Client Material
+</option>
+
+</select>
+
+<div id="editClientSection"
+        style="${isClient ? "display:block" : "display:none"}">
+
+<label>Client Name</label>
+
+<input
+          id="editClientName"
+          type="text"
+          value="${record.clientName || ""}"
+          style="width:100%;padding:10px;margin:6px 0 14px"
+>
+
+<label>Client Phone</label>
+
+<input
+          id="editClientPhone"
+          type="text"
+          value="${record.clientPhone || ""}"
+          style="width:100%;padding:10px;margin:6px 0 14px"
+>
+
+<label>Client Address</label>
+
+<input
+          id="editClientAddress"
+          type="text"
+          value="${record.clientAddress || ""}"
+          style="width:100%;padding:10px;margin:6px 0 14px"
+>
+
+<label>Client Service</label>
+
+<select
+          id="editClientService"
+          style="width:100%;padding:10px;margin:6px 0 14px"
+>
+
+<option value="washing"
+            ${record.clientService === "washing" ? "selected" : ""}>
+            Washing Only
+</option>
+
+<option value="washing_pelletizing"
+            ${record.clientService === "washing_pelletizing" ? "selected" : ""}>
+            Washing + Pelletizing
+</option>
+
+</select>
+
+</div>
+
+<label>Material Type</label>
+
+<select
+        id="editMaterialType"
+        style="width:100%;padding:10px;margin:6px 0 14px"
+>
+
+<option ${record.materialType === "HDPE" ? "selected" : ""}>
+          HDPE
+</option>
+
+<option ${record.materialType === "LDPE" ? "selected" : ""}>
+          LDPE
+</option>
+
+<option ${record.materialType === "PP" ? "selected" : ""}>
+          PP
+</option>
+
+<option ${record.materialType === "Mixed Plastic" ? "selected" : ""}>
+          Mixed Plastic
+</option>
+
+</select>
+
+<label>Gross Weight Received (kg)</label>
+
+<input
+        id="editGrossWeight"
+        type="number"
+        min="0"
+        value="${record.grossWeight || 0}"
+        style="width:100%;padding:10px;margin:6px 0 14px"
+>
+
+<div id="editCompanySection"
+        style="${isClient ? "display:none" : "display:block"}">
+
+<label>Dirt / Waste (%)</label>
+
+<input
+          id="editDirtPercent"
+          type="number"
+          min="0"
+          max="100"
+          value="${record.dirtPercent || 0}"
+          style="width:100%;padding:10px;margin:6px 0 14px"
+>
+
+<label>Purchase Price per kg (UGX)</label>
+
+<input
+          id="editPricePerKg"
+          type="number"
+          min="0"
+          value="${record.pricePerKg || 0}"
+          style="width:100%;padding:10px;margin:6px 0 14px"
+>
+
+<label>Transport Cost (UGX)</label>
+
+<input
+          id="editTransportCost"
+          type="number"
+          min="0"
+          value="${record.transportCost || 0}"
+          style="width:100%;padding:10px;margin:6px 0 14px"
+>
+
+</div>
+
+<div id="editPelletSection"
+        style="
+          ${isClient&&
+record.clientService === "washing_pelletizing"
+            ? "display:block"
+            : "display:none"}
+        "
+>
+
+<label>Actual Pellets Produced / Received (kg)</label>
+
+<input
+          id="editPelletWeight"
+          type="number"
+          min="0"
+          value="${
+record.actualPelletWeight ||
+record.pelletWeight ||
+            0
+          }"
+          style="width:100%;padding:10px;margin:6px 0 14px"
+>
+
+</div>
+
+<div style="
+display:flex;
+        gap:10px;
+        margin-top:15px;
+      ">
+
+<button id="updateMaterialRecord"
+          style="
+            flex:1;
+            padding:12px;
+            border:0;
+            border-radius:8px;
+            background:#0b5d3b;
+color:white;
+cursor:pointer;
+font-weight:bold;
+          "
+>
+💾 Update Record
+</button>
+
+<button id="cancelEditMaterial"
+          style="
+            flex:1;
+            padding:12px;
+            border:1px solid #ccc;
+            border-radius:8px;
+background:white;
+cursor:pointer;
+          "
+>
+          Cancel
+</button>
+
+</div>
+
+</div>
+  `;
+
+document.body.appendChild(modal);
+
+const source =
+modal.querySelector("#editMaterialSource");
+
+constclientSection =
+modal.querySelector("#editClientSection");
+
+constcompanySection =
+modal.querySelector("#editCompanySection");
+
+constpelletSection =
+modal.querySelector("#editPelletSection");
+
+constclientService =
+modal.querySelector("#editClientService");
+
+
+  function updateEditForm() {
+
+const client =
+source.value === "client";
+
+clientSection.style.display =
+      client ? "block" : "none";
+
+companySection.style.display =
+      client ? "none" : "block";
+
+pelletSection.style.display =
+      client &&
+clientService.value === "washing_pelletizing"
+        ? "block"
+        : "none";
+  }
+
+
+source.addEventListener(
+    "change",
+updateEditForm
+  );
+
+clientService.addEventListener(
+    "change",
+updateEditForm
+  );
+
+
+modal.querySelector(
+    "#cancelEditMaterial"
+  ).onclick = () => {
+modal.remove();
+  };
+
+
+modal.querySelector(
+    "#updateMaterialRecord"
+  ).onclick = () => {
+
+const client =
+source.value === "client";
+
+constgrossKg =
+      Number(
+modal.querySelector("#editGrossWeight").value
+      ) || 0;
+
+    if (grossKg<= 0) {
+      alert("Please enter the gross weight received.");
+      return;
+    }
+
+    if (
+      client &&
+      !modal.querySelector("#editClientName").value.trim()
+    ) {
+      alert("Please enter the client name.");
+      return;
+    }
+
+constdirtPercent =
+      Number(
+modal.querySelector("#editDirtPercent").value
+      ) || 0;
+
+constpricePerKg =
+      Number(
+modal.querySelector("#editPricePerKg").value
+      ) || 0;
+
+consttransportCost =
+      Number(
+modal.querySelector("#editTransportCost").value
+      ) || 0;
+
+constnetKg =
+grossKg *
+      (1 - dirtPercent / 100);
+
+constpelletKg =
+      Number(
+modal.querySelector("#editPelletWeight").value
+      ) || 0;
+
+
+record.date =
+modal.querySelector("#editMaterialDate").value;
+
+record.materialSource =
+      client ? "client" : "company";
+
+record.materialType =
+modal.querySelector("#editMaterialType").value;
+
+record.clientName =
+      client
+        ? modal.querySelector("#editClientName").value.trim()
+        : "";
+
+record.clientPhone =
+      client
+        ? modal.querySelector("#editClientPhone").value.trim()
+        : "";
+
+record.clientAddress =
+      client
+        ? modal.querySelector("#editClientAddress").value.trim()
+        : "";
+
+record.clientService =
+      client
+        ? modal.querySelector("#editClientService").value
+        : "";
+
+record.grossWeight =
+grossKg;
+
+record.washingGrossWeight =
+      client ? grossKg : 0;
+
+record.dirtPercent =
+      client ? 0 : dirtPercent;
+
+record.netWeight =
+      client ? grossKg : netKg;
+
+record.pricePerKg =
+      client ? 0 : pricePerKg;
+
+record.transportCost =
+      client ? 0 : transportCost;
+
+record.totalCost =
+      client
+        ? 0
+        : (netKg * pricePerKg) +
+transportCost;
+
+record.pelletWeight =
+      client ? pelletKg : 0;
+
+record.actualPelletWeight =
+      client ? pelletKg : 0;
+
+
+    /*
+     * SAVE UPDATED MASTER RECORD
+     */
+
+localStorage.setItem(
+      "materialRecords",
+JSON.stringify(records)
+    );
+
+
+    /*
+     * REBUILD CLIENT RECORDS FROM MASTER RECORDS
+     */
+
+constclientRecords =
+records.filter(
+        r =>r.materialSource === "client"
+      );
+
+localStorage.setItem(
+      "clientMaterialRecords",
+JSON.stringify(clientRecords)
+    );
+
+
+    /*
+     * REFRESH DASHBOARD
+     */
+
+    if (
+typeofupdateDashboardMaterialTotals ===
+      "function"
+    ) {
+updateDashboardMaterialTotals();
+    }
+
+    if (
+typeofupdateClientPerformance ===
+      "function"
+    ) {
+updateClientPerformance();
+    }
+
+
+modal.remove();
+
+    alert(
+      "Material record updated successfully."
+    );
+
+viewMaterialRecords();
+  };
+
+
