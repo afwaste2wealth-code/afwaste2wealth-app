@@ -483,46 +483,70 @@ const pelletTotals = {};
 
 records.forEach(record => {
 
-    if (
-record.materialSource !== "client" ||
-      !record.clientName
-    ) {
-      return;
-    }
+const name =
+record.clientName ||
+record.customerName ||
+record.client ||
+record.customer ||
+      "";
 
-const name = record.clientName;
-const service = record.clientService;
+    if (!name) return;
 
-    // BEST WASHING CLIENT
-    if (
-      service === "washing" ||
-      service === "washing_pelletizing"
-    ) {
+const source =
+record.materialSource ||
+record.source ||
+      "";
+
+const service =
+      String(
+record.clientService ||
+record.service ||
+record.serviceType ||
+        ""
+      ).toLowerCase();
 
 const gross = Number(
 record.washingGrossWeight ??
 record.grossWeight ??
-        0
-      );
+record.receivedWeight ??
+record.weight ??
+      0
+    );
 
+const pellets = Number(
+record.actualPelletWeight ??
+record.pelletWeight ??
+record.pelletsProduced ??
+record.pelletKg ??
+      0
+    );
+
+const isClient =
+      source === "client" ||
+      source === "Client" ||
+      !!record.clientName ||
+      !!record.customerName ||
+      !!record.client;
+
+    if (!isClient) return;
+
+    /* BEST WASHING CLIENT */
+    if (
+service.includes("washing") ||
+service.includes("wash") ||
+service.includes("washing_pelletizing")
+    ) {
       if (gross > 0) {
 washingTotals[name] =
           (washingTotals[name] || 0) + gross;
       }
     }
 
-    // BEST PELLETIZING CLIENT
+    /* BEST PELLETIZING CLIENT */
     if (
-      service === "pelletizing" ||
-      service === "washing_pelletizing"
+service.includes("pellet") ||
+service.includes("washing_pelletizing")
     ) {
-
-const pellets = Number(
-record.actualPelletWeight ??
-record.pelletWeight ??
-        0
-      );
-
       if (pellets > 0) {
 pelletTotals[name] =
           (pelletTotals[name] || 0) + pellets;
@@ -539,7 +563,6 @@ Object.entries(pelletTotals)
       .sort((a, b) => b[1] - a[1])[0] || null;
 
 const performance = {
-
 bestWashingClient: bestWashingClient
       ? {
           name: bestWashingClient[0],
