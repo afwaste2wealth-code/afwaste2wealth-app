@@ -615,7 +615,10 @@ bestPelletClient[1].toLocaleString() +
 
 document.addEventListener("DOMContentLoaded", function () {
 
-updateDashboardMaterialTotals();
+updateDashboardMaterialTotals === "function") {
+  updateDashboardMaterialTotals(
+    );
+}
   updateClientPerformance();
 
 });
