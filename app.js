@@ -458,68 +458,30 @@ calculateCompanyMaterial();
 
 function updateClientPerformance() {
 
-const records = JSON.parse(
+constmaterialRecords = JSON.parse(
+localStorage.getItem("materialRecords") || "[]"
+  );
+
+constlegacyClientRecords = JSON.parse(
 localStorage.getItem("clientMaterialRecords") || "[]"
   );
 
-  if (!records.length) {
-    return;
-  }
+  // Use materialRecords as the main source.
+  // Add older client records only when they are not already there.
+const records = [...materialRecords];
 
-  /*
-   * =====================================================
-   * BEST CLIENT BY GROSS WEIGHT RECEIVED FOR WASHING
-   * =====================================================
-   *
-   * Every client washing job contributes its actual
-   * gross weight received.
-   */
+constexistingIds = new Set(
+materialRecords.map(record => String(record.id))
+  );
 
-const washingTotals = {};
-
-records.forEach(record => {
-
-    if (
-record.materialSource !== "client" ||
-      !record.clientName || 
-      (record.clientService !== "washing" && record.clientService !== "washing_pelletizing")
-    ) {
-      return;
+legacyClientRecords.forEach(record => {
+    if (!existingIds.has(String(record.id))) {
+records.push(record);
     }
-
-const gross =
-      Number(
-record.washingGrossWeight ??
-record.grossWeight ??
-        0
-      );
-
-    if (gross <= 0) {
-      return;
-    }
-
-const name = record.clientName;
-
-    if (!washingTotals[name]) {
-washingTotals[name] = 0;
-    }
-
-washingTotals[name] += gross;
   });
 
-
-  /*
-   * =====================================================
-   * BEST CLIENT BY ACTUAL PELLETS PRODUCED
-   * =====================================================
-   *
-   * Only jobs that include pelletizing count here.
-   *
-   * The figure is the actual pellet weight after
-   * pelletizing.
-   */
-
-const pelletTotals = {};
+constwashingTotals = {};
+constpelletTotals = {};
 
 records.forEach(record => {
 
@@ -530,54 +492,55 @@ record.materialSource !== "client" ||
       return;
     }
 
+const name = record.clientName;
+const service = record.clientService;
+
+    // WASHING:
+    // Washing Only + Washing & Pelletizing
     if (
-record.clientService !== "pelletizing" && record.clientService !== "washing_pelletizing"
+      service === "washing" ||
+      service === "washing_pelletizing"
     ) {
-      return;
+
+const gross = Number(
+record.washingGrossWeight ??
+record.grossWeight ??
+        0
+      );
+
+      if (gross > 0) {
+washingTotals[name] =
+          (washingTotals[name] || 0) + gross;
+      }
     }
 
-const pellets =
-      Number(
+    // PELLETIZING:
+    // Washing & Pelletizing + any future Pelletizing-only records
+    if (
+      service === "pelletizing" ||
+      service === "washing_pelletizing"
+    ) {
+
+const pellets = Number(
 record.actualPelletWeight ??
 record.pelletWeight ??
         0
       );
 
-    if (pellets <= 0) {
-      return;
+      if (pellets > 0) {
+pelletTotals[name] =
+          (pelletTotals[name] || 0) + pellets;
+      }
     }
-
-const name = record.clientName;
-
-    if (!pelletTotals[name]) {
-pelletTotals[name] = 0;
-    }
-
-pelletTotals[name] += pellets;
   });
 
-
-  /*
-   * Find highest washing client
-   */
-
-const bestWashingClient =
+constbestWashingClient =
 Object.entries(washingTotals)
       .sort((a, b) => b[1] - a[1])[0] || null;
 
-
-  /*
-   * Find highest pelletizing client
-   */
-
-const bestPelletClient =
+constbestPelletClient =
 Object.entries(pelletTotals)
       .sort((a, b) => b[1] - a[1])[0] || null;
-
-
-  /*
-   * SAVE RESULTS
-   */
 
 const performance = {
 
@@ -603,166 +566,35 @@ localStorage.setItem(
 JSON.stringify(performance)
   );
 
-
-  /*
-   * UPDATE DASHBOARD
-   */
-
-const washingElement =
+constwashingElement =
 document.getElementById("bestWashingClient");
 
-const pelletElement =
+constpelletElement =
 document.getElementById("bestPelletClient");
 
-
-  if (washingElement&&bestWashingClient) {
+  // Always update the cards, including clearing them when empty.
+  if (washingElement) {
 
 washingElement.textContent =
-bestWashingClient[0] +
-      " — " +
+bestWashingClient
+        ? bestWashingClient[0] +
+          " — " +
 bestWashingClient[1].toLocaleString() +
-      " kg";
+          " kg"
+        : "-";
   }
 
-
-  if (pelletElement&&bestPelletClient) {
+  if (pelletElement) {
 
 pelletElement.textContent =
-bestPelletClient[0] +
-      " — " +
+bestPelletClient
+        ? bestPelletClient[0] +
+          " — " +
 bestPelletClient[1].toLocaleString() +
-      " kg";
+          " kg"
+        : "-";
   }
 }
-
-
-/* =========================================================
-   DASHBOARD MATERIAL TOTALS
-   ========================================================= */
-
-function updateDashboardMaterialTotals() {
-
-const records = JSON.parse(
-localStorage.getItem("materialRecords") || "[]"
-  );
-
-  let totalKaveraReceived = 0;
-  let totalNetUsableCompany = 0;
-  let deliveriesToday = 0;
-
-const today = new Date().toISOString().split("T")[0];
-
-records.forEach(record => {
-
-const gross = Number(record.grossWeight) || 0;
-
-    /* ALL KAVERA RECEIVED — COMPANY + CLIENT */
-totalKaveraReceived += gross;
-
-    /* NET USABLE MATERIAL — COMPANY MATERIAL ONLY */
-    if (record.materialSource === "company") {
-totalNetUsableCompany +=
-        Number(record.netWeight) || 0;
-    }
-
-    /* NUMBER OF MATERIAL DELIVERIES TODAY */
-    if (record.date === today) {
-deliveriesToday++;
-    }
-  });
-
-
-  /* =========================================
-     UPDATE TOP DASHBOARD CARDS
-     ========================================= */
-
-constkaveraElement =
-document.getElementById("kaveraReceived");
-
-constnetElement =
-document.getElementById("netUsableMaterial");
-
-constdeliveriesElement =
-document.getElementById("deliveriesToday");
-
-
-  if (kaveraElement) {
-kaveraElement.textContent =
-totalKaveraReceived.toLocaleString() + " kg";
-  }
-
-  if (netElement) {
-netElement.textContent =
-totalNetUsableCompany.toLocaleString() + " kg";
-  }
-
-  if (deliveriesElement) {
-deliveriesElement.textContent =
-deliveriesToday.toLocaleString() + " ";
-  }
-
-
-  /* =========================================
-     UPDATE OPERATIONS OVERVIEW
-     ========================================= */
-
-const rows = document.querySelectorAll(
-    ".grid table tbody tr"
-  );
-
-rows.forEach(row => {
-
-const activity =
-row.cells[0]?.textContent.trim();
-
-constactualCell = row.cells[2];
-constachievementCell = row.cells[3];
-
-    if (!actualCell || !achievementCell) {
-      return;
-    }
-
-
-    /* KAVERA RECEIVED */
-    if (activity === "Kavera Received") {
-
-const target = 15000;
-
-const achievement =
-        target > 0
-          ? Math.round(
-              (totalKaveraReceived / target) * 100
-            )
-          : 0;
-
-actualCell.textContent =
-totalKaveraReceived.toLocaleString() + " kg";
-
-achievementCell.textContent =
-        achievement + "%";
-    }
-
-
-    /* NET USABLE MATERIAL */
-    if (activity === "Material Washed") {
-
-const target = 12000;
-
-const achievement =
-        target > 0
-          ? Math.round(
-              (totalNetUsableCompany / target) * 100
-            )
-          : 0;
-
-actualCell.textContent =
-totalNetUsableCompany.toLocaleString() + " kg";
-
-achievementCell.textContent =
-        achievement + "%";
-    }
-
-  });
 
 
   /* =========================================
