@@ -3,7 +3,10 @@ function showMessage(name) {
 recordMaterialIn();
     return;
   }
-
+if (name === "Material & Production") {
+  viewMaterialRecords();
+  return;
+}
   alert(
     name +
       " module selected. This prototype is ready to be connected to the A&F data and backend."
@@ -862,7 +865,7 @@ justify-content:center;
 font-family:Arial,sans-serif;
   `;
 
-constisClient =
+const isClient =
 record.materialSource === "client";
 
 modal.innerHTML = `
@@ -1103,16 +1106,16 @@ document.body.appendChild(modal);
 const source =
 modal.querySelector("#editMaterialSource");
 
-constclientSection =
+const clientSection =
 modal.querySelector("#editClientSection");
 
-constcompanySection =
+const companySection =
 modal.querySelector("#editCompanySection");
 
-constpelletSection =
+const pelletSection =
 modal.querySelector("#editPelletSection");
 
-constclientService =
+const clientService =
 modal.querySelector("#editClientService");
 
 
@@ -1160,7 +1163,7 @@ modal.querySelector(
 const client =
 source.value === "client";
 
-constgrossKg =
+const grossKg =
       Number(
 modal.querySelector("#editGrossWeight").value
       ) || 0;
@@ -1178,26 +1181,26 @@ modal.querySelector("#editGrossWeight").value
       return;
     }
 
-constdirtPercent =
+const dirtPercent =
       Number(
 modal.querySelector("#editDirtPercent").value
       ) || 0;
 
-constpricePerKg =
+const pricePerKg =
       Number(
 modal.querySelector("#editPricePerKg").value
       ) || 0;
 
-consttransportCost =
+const transportCost =
       Number(
 modal.querySelector("#editTransportCost").value
       ) || 0;
 
-constnetKg =
+const netKg =
 grossKg *
       (1 - dirtPercent / 100);
 
-constpelletKg =
+const pelletKg =
       Number(
 modal.querySelector("#editPelletWeight").value
       ) || 0;
@@ -1277,7 +1280,7 @@ JSON.stringify(records)
      * REBUILD CLIENT RECORDS FROM MASTER RECORDS
      */
 
-constclientRecords =
+const clientRecords =
 records.filter(
         r =>r.materialSource === "client"
       );
@@ -1293,14 +1296,14 @@ JSON.stringify(clientRecords)
      */
 
     if (
-typeofupdateDashboardMaterialTotals ===
+typeof updateDashboardMaterialTotals ===
       "function"
     ) {
 updateDashboardMaterialTotals();
     }
 
     if (
-typeofupdateClientPerformance ===
+typeof updateClientPerformance ===
       "function"
     ) {
 updateClientPerformance();
