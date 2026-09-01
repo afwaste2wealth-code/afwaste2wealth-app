@@ -466,8 +466,6 @@ const legacyClientRecords = JSON.parse(
 localStorage.getItem("clientMaterialRecords") || "[]"
   );
 
-  // Use materialRecords as the main source.
-  // Add older client records only when they are not already there.
 const records = [...materialRecords];
 
 const existingIds = new Set(
@@ -495,8 +493,7 @@ record.materialSource !== "client" ||
 const name = record.clientName;
 const service = record.clientService;
 
-    // WASHING:
-    // Washing Only + Washing & Pelletizing
+    // BEST WASHING CLIENT
     if (
       service === "washing" ||
       service === "washing_pelletizing"
@@ -514,8 +511,7 @@ washingTotals[name] =
       }
     }
 
-    // PELLETIZING:
-    // Washing & Pelletizing + any future Pelletizing-only records
+    // BEST PELLETIZING CLIENT
     if (
       service === "pelletizing" ||
       service === "washing_pelletizing"
@@ -544,21 +540,19 @@ Object.entries(pelletTotals)
 
 const performance = {
 
-bestWashingClient:
-bestWashingClient
-        ? {
-            name: bestWashingClient[0],
-            kg: bestWashingClient[1]
-          }
-        : null,
+bestWashingClient: bestWashingClient
+      ? {
+          name: bestWashingClient[0],
+          kg: bestWashingClient[1]
+        }
+      : null,
 
-bestPelletClient:
-bestPelletClient
-        ? {
-            name: bestPelletClient[0],
-            kg: bestPelletClient[1]
-          }
-        : null
+bestPelletClient: bestPelletClient
+      ? {
+          name: bestPelletClient[0],
+          kg: bestPelletClient[1]
+        }
+      : null
   };
 
 localStorage.setItem(
@@ -572,37 +566,22 @@ document.getElementById("bestWashingClient");
 const pelletElement =
 document.getElementById("bestPelletClient");
 
-  // Always update the cards, including clearing them when empty.
   if (washingElement) {
-
-washingElement.textContent =
-bestWashingClient
-        ? bestWashingClient[0] +
-          " — " +
+washingElement.textContent = bestWashingClient
+      ? bestWashingClient[0] +
+        " — " +
 bestWashingClient[1].toLocaleString() +
-          " kg"
-        : "-";
+        " kg"
+      : "-";
   }
 
   if (pelletElement) {
-
-pelletElement.textContent =
-bestPelletClient
-        ? bestPelletClient[0] +
-          " — " +
+pelletElement.textContent = bestPelletClient
+      ? bestPelletClient[0] +
+        " — " +
 bestPelletClient[1].toLocaleString() +
-          " kg"
-        : "-";
-  }
-}
-
-
-  /* =========================================
-     ALSO UPDATE BEST CLIENTS
-     ========================================= */
-
-  if (typeof updateClientPerformance === "function") {
-updateClientPerformance();
+        " kg"
+      : "-";
   }
 }
 
@@ -614,5 +593,6 @@ updateClientPerformance();
 document.addEventListener("DOMContentLoaded", function () {
 
 updateDashboardMaterialTotals();
+  updateClientPerformance();
 
 });
