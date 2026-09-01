@@ -458,11 +458,11 @@ calculateCompanyMaterial();
 
 function updateClientPerformance() {
 
-constmaterialRecords = JSON.parse(
+const materialRecords = JSON.parse(
 localStorage.getItem("materialRecords") || "[]"
   );
 
-constlegacyClientRecords = JSON.parse(
+const legacyClientRecords = JSON.parse(
 localStorage.getItem("clientMaterialRecords") || "[]"
   );
 
@@ -470,7 +470,7 @@ localStorage.getItem("clientMaterialRecords") || "[]"
   // Add older client records only when they are not already there.
 const records = [...materialRecords];
 
-constexistingIds = new Set(
+const existingIds = new Set(
 materialRecords.map(record => String(record.id))
   );
 
@@ -480,8 +480,8 @@ records.push(record);
     }
   });
 
-constwashingTotals = {};
-constpelletTotals = {};
+const washingTotals = {};
+const pelletTotals = {};
 
 records.forEach(record => {
 
@@ -534,11 +534,11 @@ pelletTotals[name] =
     }
   });
 
-constbestWashingClient =
+const bestWashingClient =
 Object.entries(washingTotals)
       .sort((a, b) => b[1] - a[1])[0] || null;
 
-constbestPelletClient =
+const bestPelletClient =
 Object.entries(pelletTotals)
       .sort((a, b) => b[1] - a[1])[0] || null;
 
@@ -566,10 +566,10 @@ localStorage.setItem(
 JSON.stringify(performance)
   );
 
-constwashingElement =
+const washingElement =
 document.getElementById("bestWashingClient");
 
-constpelletElement =
+const pelletElement =
 document.getElementById("bestPelletClient");
 
   // Always update the cards, including clearing them when empty.
