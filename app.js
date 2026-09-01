@@ -615,7 +615,7 @@ bestPelletClient[1].toLocaleString() +
 
 document.addEventListener("DOMContentLoaded", function () {
 
-updateDashboardMaterialTotals === "function") {
+if (typeof updateDashboardMaterialTotals === "function") {
   updateDashboardMaterialTotals(
     );
 }
