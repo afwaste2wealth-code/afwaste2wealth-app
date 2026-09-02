@@ -381,7 +381,23 @@ modal.innerHTML = `
 <select id="reportType">
 
 <option value="clientPerformance">
-              Monthly Client Performance
+    Monthly Client Performance
+</option>
+
+<option value="materialReceived">
+    Material Received
+</option>
+
+<option value="clientServices">
+    Client Services
+</option>
+
+<option value="production">
+    Pelletizing / Production
+</option>
+
+<option value="materialProduction">
+    Material & Production Summary
 </option>
 
 </select>
@@ -724,14 +740,14 @@ rgba(0,0,0,0.3);
     }
 
 
-    .performance-table tbodytr:nth-child(even) {
+    .performance-table tbody tr:nth-child(even) {
 
       background: #fafcfb;
 
     }
 
 
-    .performance-table tbodytr:hover { 
+    .performance-table tbody tr:hover { 
 
       background: #f1f7f3;
 
@@ -1095,7 +1111,7 @@ const blob =
         );
 
 
-consturl =
+const url =
 URL.createObjectURL(blob);
 
 
