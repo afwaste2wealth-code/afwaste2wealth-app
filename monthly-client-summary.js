@@ -8,7 +8,7 @@ localStorage.getItem("clientMaterialRecords") || "[]"
   );
 
 const records = [...materialRecords];
-const texistingIds = new Set(
+const existingIds = new Set(
 materialRecords.map(record => String(record.id))
   );
 
