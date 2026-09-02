@@ -8,7 +8,7 @@ localStorage.getItem("clientMaterialRecords") || "[]"
   );
 
 const records = [...materialRecords];
-const existingIds = new Set(
+cons texistingIds = new Set(
 materialRecords.map(record => String(record.id))
   );
 
@@ -19,15 +19,17 @@ records.push(record);
   });
 
 const years = new Set();
+const currentYear = new Date().getFullYear();
 
 records.forEach(record => {
     if (record.date) {
 const year = Number(String(record.date).slice(0, 4));
-      if (year >= 2000) years.add(year);
+      if (year >= 2000) {
+years.add(year);
+      }
     }
   });
 
-const currentYear = new Date().getFullYear();
 years.add(currentYear);
 
 const sortedYears = Array.from(years).sort((a, b) => b - a);
@@ -48,7 +50,9 @@ const dateString = String(record.date);
 const recordYear = Number(dateString.slice(0, 4));
 const recordMonth = Number(dateString.slice(5, 7));
 
-        if (recordYear !== year || recordMonth !== month) return;
+        if (recordYear !== year || recordMonth !== month) {
+          return;
+        }
 
 const name =
 record.clientName ||
@@ -126,7 +130,7 @@ Object.entries(pelletTotals)
           .sort((a, b) => b[1] - a[1])[0] || null;
 
 months.push({
-        month,
+        month: month,
         washing: bestWashing,
         pellet: bestPellet
       });
@@ -172,9 +176,15 @@ item.pellet[1].toLocaleString() +
 
       rows += `
 <tr>
-<td><b>${monthNames[item.month - 1]}</b></td>
-<td>${washing}</td>
-<td>${pellet}</td>
+<td style="padding:11px;border-bottom:1px solid #edf2ef">
+<b>${monthNames[item.month - 1]}</b>
+</td>
+<td style="padding:11px;border-bottom:1px solid #edf2ef">
+            ${washing}
+</td>
+<td style="padding:11px;border-bottom:1px solid #edf2ef">
+            ${pellet}
+</td>
 </tr>
       `;
     });
