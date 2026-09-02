@@ -864,12 +864,47 @@ const reportContent =
 modal.querySelector("#reportContent");
 
 
-  function renderReport() {
+ function renderReport() {
+
+const reportType =
+modal.querySelector("#reportType").value;
+
+  if (reportType === "clientPerformance") {
 
 reportContent.innerHTML =
 buildReport(selectedYear);
 
   }
+
+  else if (reportType === "clientServices") {
+
+reportContent.innerHTML =
+buildClientServicesReport(selectedYear);
+
+  }
+
+  else if (reportType === "materialReceived") {
+
+reportContent.innerHTML =
+buildMaterialReceivedReport(selectedYear);
+
+  }
+
+  else if (reportType === "production") {
+
+reportContent.innerHTML =
+buildProductionReport(selectedYear);
+
+  }
+
+  else if (reportType === "summary") {
+
+reportContent.innerHTML =
+buildSummaryReport(selectedYear);
+
+  }
+
+}
 
 
 renderReport();
