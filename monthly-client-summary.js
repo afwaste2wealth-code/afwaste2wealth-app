@@ -1,14 +1,14 @@
 function monthlyClientSummary() {
-constmaterialRecords = JSON.parse(
+const materialRecords = JSON.parse(
 localStorage.getItem("materialRecords") || "[]"
   );
 
-constlegacyClientRecords = JSON.parse(
+const legacyClientRecords = JSON.parse(
 localStorage.getItem("clientMaterialRecords") || "[]"
   );
 
 const records = [...materialRecords];
-constexistingIds = new Set(
+const existingIds = new Set(
 materialRecords.map(record => String(record.id))
   );
 
@@ -27,10 +27,10 @@ const year = Number(String(record.date).slice(0, 4));
     }
   });
 
-constcurrentYear = new Date().getFullYear();
+const currentYear = new Date().getFullYear();
 years.add(currentYear);
 
-constsortedYears = Array.from(years).sort((a, b) => b - a);
+const sortedYears = Array.from(years).sort((a, b) => b - a);
 
   let selectedYear = currentYear;
 
@@ -38,15 +38,15 @@ constsortedYears = Array.from(years).sort((a, b) => b - a);
 const months = [];
 
     for (let month = 1; month <= 12; month++) {
-constwashingTotals = {};
-constpelletTotals = {};
+const washingTotals = {};
+const pelletTotals = {};
 
 records.forEach(record => {
         if (!record.date) return;
 
-constdateString = String(record.date);
-constrecordYear = Number(dateString.slice(0, 4));
-constrecordMonth = Number(dateString.slice(5, 7));
+const dateString = String(record.date);
+const recordYear = Number(dateString.slice(0, 4));
+const recordMonth = Number(dateString.slice(5, 7));
 
         if (recordYear !== year || recordMonth !== month) return;
 
@@ -72,7 +72,7 @@ record.serviceType ||
           ""
         ).toLowerCase();
 
-constisClient =
+const isClient =
           source === "client" ||
           !!record.clientName ||
           !!record.customerName ||
@@ -117,11 +117,11 @@ pelletTotals[name] =
         }
       });
 
-constbestWashing =
+const bestWashing =
 Object.entries(washingTotals)
           .sort((a, b) => b[1] - a[1])[0] || null;
 
-constbestPellet =
+const bestPellet =
 Object.entries(pelletTotals)
           .sort((a, b) => b[1] - a[1])[0] || null;
 
@@ -138,7 +138,7 @@ months.push({
   function render() {
 const months = calculateYear(selectedYear);
 
-constmonthNames = [
+const monthNames = [
       "January",
       "February",
       "March",
@@ -179,7 +179,7 @@ item.pellet[1].toLocaleString() +
       `;
     });
 
-constyearOptions = sortedYears
+const yearOptions = sortedYears
       .map(year => `
 <option value="${year}" ${
           year === selectedYear ? "selected" : ""
