@@ -1,16 +1,16 @@
 function monthlyClientSummary() {
 
-constmaterialRecords = JSON.parse(
+const materialRecords = JSON.parse(
 localStorage.getItem("materialRecords") || "[]"
   );
 
-constlegacyClientRecords = JSON.parse(
+const legacyClientRecords = JSON.parse(
 localStorage.getItem("clientMaterialRecords") || "[]"
   );
 
 const records = [...materialRecords];
 
-constexistingIds = new Set(
+const existingIds = new Set(
 materialRecords.map(record => String(record.id))
   );
 
@@ -20,7 +20,7 @@ records.push(record);
     }
   });
 
-constcurrentYear = new Date().getFullYear();
+const currentYear = new Date().getFullYear();
 
 const years = new Set();
 
@@ -36,13 +36,13 @@ years.add(year);
 
 years.add(currentYear);
 
-constsortedYears = Array.from(years).sort(
+const sortedYears = Array.from(years).sort(
     (a, b) => b - a
   );
 
   let selectedYear = currentYear;
 
-constmonthNames = [
+const monthNames = [
     "January",
     "February",
     "March",
@@ -63,19 +63,19 @@ const months = [];
 
     for (let month = 1; month <= 12; month++) {
 
-constwashingTotals = {};
-constpelletTotals = {};
+const washingTotals = {};
+const pelletTotals = {};
 
 records.forEach(record => {
 
         if (!record.date) return;
 
-constdateString = String(record.date);
+const dateString = String(record.date);
 
-constrecordYear =
+const recordYear =
           Number(dateString.slice(0, 4));
 
-constrecordMonth =
+const recordMonth =
           Number(dateString.slice(5, 7));
 
         if (
@@ -107,7 +107,7 @@ record.serviceType ||
           ""
         ).toLowerCase();
 
-constisClient =
+const isClient =
           source === "client" ||
           !!record.clientName ||
           !!record.customerName ||
@@ -157,11 +157,11 @@ pelletTotals[name] =
 
       });
 
-constbestWashing =
+const bestWashing =
 Object.entries(washingTotals)
           .sort((a, b) => b[1] - a[1])[0] || null;
 
-constbestPellet =
+const bestPellet =
 Object.entries(pelletTotals)
           .sort((a, b) => b[1] - a[1])[0] || null;
 
@@ -185,22 +185,22 @@ const months = calculateYear(year);
 
 months.forEach(item => {
 
-constwashingName =
+const washingName =
 item.washing
           ? item.washing[0]
           : "—";
 
-constwashingKg =
+const washingKg =
 item.washing
           ? item.washing[1].toLocaleString()
           : "—";
 
-constpelletName =
+const pelletName =
 item.pellet
           ? item.pellet[0]
           : "—";
 
-constpelletKg =
+const pelletKg =
 item.pellet
           ? item.pellet[1].toLocaleString()
           : "—";
@@ -844,7 +844,7 @@ document.head.appendChild(style);
 document.body.appendChild(modal);
 
 
-constreportContent =
+const reportContent =
 modal.querySelector("#reportContent");
 
 
@@ -886,10 +886,10 @@ renderReport();
     .querySelector("#printMonthlySummary")
     .onclick = function () {
 
-constreportHTML =
+const reportHTML =
 reportContent.innerHTML;
 
-constprintWindow =
+const printWindow =
 window.open("", "_blank");
 
       if (!printWindow) {
@@ -1058,22 +1058,22 @@ calculateYear(selectedYear);
 
 months.forEach(item => {
 
-constwashingName =
+const washingName =
 item.washing
             ? item.washing[0]
             : "";
 
-constwashingKg =
+const washingKg =
 item.washing
             ? item.washing[1]
             : "";
 
-constpelletName =
+const pelletName =
 item.pellet
             ? item.pellet[0]
             : "";
 
-constpelletKg =
+const pelletKg =
 item.pellet
             ? item.pellet[1]
             : "";
