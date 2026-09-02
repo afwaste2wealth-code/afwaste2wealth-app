@@ -722,6 +722,20 @@ cursor:pointer;
 >
 ✏ Edit
 </button>
+<button
+onclick="deleteMaterialRecord(${record.id})"
+  style="
+    padding:7px 12px;
+    border:0;
+    border-radius:6px;
+    background:#b42318;
+color:white;
+cursor:pointer;
+    margin-left:5px;
+  "
+>
+🗑 Delete
+</button>
 </td>
 </tr>
       `;
@@ -1319,5 +1333,52 @@ modal.remove();
 viewMaterialRecords();
   };
 }
+
+function deleteMaterialRecord(id) {
+const confirmed = confirm(
+    "Are you sure you want to delete this material record?"
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+const materialRecords = JSON.parse(
+localStorage.getItem("materialRecords") || "[]"
+  );
+
+const legacyClientRecords = JSON.parse(
+localStorage.getItem("clientMaterialRecords") || "[]"
+  );
+
+const updatedMaterialRecords = materialRecords.filter(
+    record => String(record.id) !== String(id)
+  );
+
+const updatedLegacyClientRecords = legacyClientRecords.filter(
+    record => String(record.id) !== String(id)
+  );
+
+localStorage.setItem(
+    "materialRecords",
+JSON.stringify(updatedMaterialRecords)
+  );
+
+localStorage.setItem(
+    "clientMaterialRecords",
+JSON.stringify(updatedLegacyClientRecords)
+  );
+
+updateClientPerformance();
+
+  if (typeof updateDashboardMaterialTotals === "function") {
+updateDashboardMaterialTotals();
+  }
+
+viewMaterialRecords();
+
+  alert("Material record deleted successfully.");
+}
+
 
 
