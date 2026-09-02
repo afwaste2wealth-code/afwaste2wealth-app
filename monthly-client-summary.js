@@ -731,7 +731,7 @@ rgba(0,0,0,0.3);
     }
 
 
-    .performance-table tbodytr:hover {
+    .performance-table tbodytr:hover { 
 
       background: #f1f7f3;
 
