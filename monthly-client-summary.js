@@ -265,19 +265,50 @@ cursor:pointer;
 <div style="
 display:flex;
 align-items:center;
-          gap:10px;
-          margin-bottom:18px;
-        ">
+gap:10px;
+margin-bottom:18px;
+flex-wrap:wrap;
+">
+
 <label><b>Year:</b></label>
 
 <select id="summaryYear"
-            style="
-              padding:9px 12px;
-              border:1px solid #ccd9d2;
-              border-radius:8px;
-              font-size:14px;
-            ">
-            ${yearOptions}
+style="
+padding:9px 12px;
+border:1px solid #ccd9d2;
+border-radius:8px;
+font-size:14px;
+">
+${yearOptions}
+</select>
+
+<button id="printMonthlySummary"
+style="
+padding:9px 14px;
+border:0;
+border-radius:8px;
+background:#2e7d32;
+color:white;
+cursor:pointer;
+font-weight:bold;
+">
+🖨 Print Report
+</button>
+
+<button id="downloadMonthlyCSV"
+style="
+padding:9px 14px;
+border:0;
+border-radius:8px;
+background:#1976d2;
+color:white;
+cursor:pointer;
+font-weight:bold;
+">
+⬇ Download CSV
+</button>
+
+</div>
 </select>
 </div>
 
@@ -338,13 +369,152 @@ modal.remove();
       };
 
     document
-      .getElementById("summaryYear")
-      .onchange = function () {
+      document
+  .getElementById("summaryYear")
+  .onchange = function () {
 selectedYear = Number(this.value);
 modal.remove();
-        render();
-      };
-  }
+    render();
+  };
 
-  render();
+document
+  .getElementById("printMonthlySummary")
+  .onclick = function () {
+
+const printWindow = window.open("", "_blank");
+
+const table = modal.querySelector("table").outerHTML;
+
+printWindow.document.write(`
+<html>
+<head>
+<title>Monthly Client Performance - ${selectedYear}</title>
+
+<style>
+          body {
+            font-family: Arial, sans-serif;
+            padding: 30px;
+          }
+
+          h1 {
+            margin-bottom: 5px;
+          }
+
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+          }
+
+th, td {
+            border: 1px solid #ccc;
+            padding: 10px;
+            text-align: left;
+          }
+
+th {
+            background: #eef8f2;
+          }
+</style>
+
+</head>
+
+<body>
+
+<h1>Monthly Client Performance</h1>
+
+<p>
+          Best washing and pelletizing clients — ${selectedYear}
+</p>
+
+        ${table}
+
+</body>
+</html>
+    `);
+
+printWindow.document.close();
+
+printWindow.focus();
+
+setTimeout(function () {
+printWindow.print();
+    }, 300);
+  };
+
+
+document
+  .getElementById("downloadMonthlyCSV")
+  .onclick = function () {
+
+const months = calculateYear(selectedYear);
+
+const monthNames = [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December"
+    ];
+
+    let csv =
+      "Month,Best Washing Client,Best Washing Kg,Best Pelletizing Client,Best Pelletizing Kg\n";
+
+months.forEach(item => {
+
+const washingName = item.washing
+        ? item.washing[0]
+        : "";
+
+const washingKg = item.washing
+        ? item.washing[1]
+        : "";
+
+const pelletName = item.pellet
+        ? item.pellet[0]
+        : "";
+
+const pelletKg = item.pellet
+        ? item.pellet[1]
+        : "";
+
+      csv +=
+        `"${monthNames[item.month - 1]}","${washingName}",${washingKg},"${pelletName}",${pelletKg}\n`;
+    });
+
+const blob = new Blob(
+      [csv],
+      { type: "text/csv;charset=utf-8;" }
+    );
+
+const url = URL.createObjectURL(blob);
+
+const link = document.createElement("a");
+
+link.href = url;
+
+link.download =
+      "Monthly_Client_Performance_" +
+selectedYear +
+      ".csv";
+
+document.body.appendChild(link);
+
+link.click();
+
+document.body.removeChild(link);
+
+URL.revokeObjectURL(url);
+  };
+
+}
+
+render();
 }
