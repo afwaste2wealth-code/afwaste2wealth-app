@@ -866,7 +866,7 @@ monthlySummary.reduce(
       0
     );
 
-constyearlyProduction =
+const yearlyProduction =
 monthlySummary.reduce(
       (sum, item) => sum + item.productionKg,
       0
