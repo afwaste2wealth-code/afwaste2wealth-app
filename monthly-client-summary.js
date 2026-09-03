@@ -1320,17 +1320,43 @@ rgba(0,0,0,0.3);
 
 
     .performance-table {
-
       width: 100%;
-
       border-collapse: collapse;
-
-      min-width: 750px;
-
+      table-layout: fixed;
       font-size: 14px;
-
     }
 
+    .performance-table th,
+.performance-table td {
+  vertical-align: middle;
+}
+
+.performance-table th:nth-child(1),
+.performance-table td:nth-child(1) {
+  width: 18%;
+}
+
+.performance-table th:nth-child(2),
+.performance-table td:nth-child(2) {
+  width: 18%;
+}
+
+.performance-table th:nth-child(3),
+.performance-table td:nth-child(3) {
+  width: 24%;
+}
+
+.performance-table th:nth-child(4),
+.performance-table td:nth-child(4) {
+  width: 20%;
+  text-align: right;
+}
+
+.performance-table th:nth-child(5),
+.performance-table td:nth-child(5) {
+  width: 20%;
+  text-align: right;
+}
 
     .performance-table th {
 
