@@ -177,76 +177,409 @@ months.push({
   }
 
 
-  function buildReport(year) {
+function buildClientServicesReport(year) {
 
-const months = calculateYear(year);
+const yearlyRecords = records.filter(record => {
+    if (!record.date) return false;
 
-    let rows = "";
+const recordYear =
+      Number(String(record.date).slice(0, 4));
 
-months.forEach(item => {
+const source = String(
+record.materialSource ||
+record.source ||
+      ""
+    ).toLowerCase();
 
-const washingName =
-item.washing
-          ? item.washing[0]
-          : "—";
+const hasClient =
+      !!record.clientName ||
+      !!record.customerName ||
+      !!record.client ||
+      !!record.customer;
 
-const washingKg =
-item.washing
-          ? item.washing[1].toLocaleString()
-          : "—";
+    return (
+recordYear === year &&
+      (source === "client" || hasClient)
+    );
+  });
 
-const pelletName =
-item.pellet
-          ? item.pellet[0]
-          : "—";
+  let rows = "";
 
-const pelletKg =
-item.pellet
-          ? item.pellet[1].toLocaleString()
-          : "—";
+yearlyRecords.forEach(record => {
 
-      rows += `
+const clientName =
+record.clientName ||
+record.customerName ||
+record.client ||
+record.customer ||
+      "—";
+
+const service =
+record.clientService ||
+record.service ||
+record.serviceType ||
+      "—";
+
+const grossWeight = Number(
+record.washingGrossWeight ??
+record.grossWeight ??
+record.receivedWeight ??
+record.weight ??
+      0
+    );
+
+const pelletWeight = Number(
+record.actualPelletWeight ??
+record.pelletWeight ??
+record.pelletsProduced ??
+record.pelletKg ??
+      0
+    );
+
+    rows += `
+<tr>
+<td class="report-cell">
+          ${record.date || "—"}
+</td>
+
+<td class="report-cell">
+          ${clientName}
+</td>
+
+<td class="report-cell">
+          ${service}
+</td>
+
+<td class="report-cell number-cell">
+          ${grossWeight.toLocaleString()}
+</td>
+
+<td class="report-cell number-cell">
+          ${pelletWeight.toLocaleString()}
+</td>
+</tr>
+    `;
+  });
+
+  if (!rows) {
+    rows = `
+<tr>
+<td
+colspan="5"
+          class="report-cell"
+          style="text-align:center;"
+>
+          No client service records found for ${year}.
+</td>
+</tr>
+    `;
+  }
+
+  return `
+<div class="report-heading">
+<h2>Client Services</h2>
+
+<p>
+        Client washing and pelletizing services for ${year}
+</p>
+</div>
+
+<div class="table-wrapper">
+<table class="performance-table">
+
+<thead>
+<tr>
+<th>Date</th>
+<th>Client</th>
+<th>Service</th>
+<th>Received / Washing KG</th>
+<th>Pelletized KG</th>
+</tr>
+</thead>
+
+<tbody>
+          ${rows}
+</tbody>
+
+</table>
+</div>
+  `;
+}
+function buildClientServicesReport(year) {
+
+const yearlyRecords = records.filter(record => {
+    if (!record.date) return false;
+
+const recordYear =
+      Number(String(record.date).slice(0, 4));
+
+const source = String(
+record.materialSource ||
+record.source ||
+      ""
+    ).toLowerCase();
+
+const hasClient =
+      !!record.clientName ||
+      !!record.customerName ||
+      !!record.client ||
+      !!record.customer;
+
+    return (
+recordYear === year &&
+      (source === "client" || hasClient)
+    );
+  });
+
+  let rows = "";
+
+yearlyRecords.forEach(record => {
+
+const clientName =
+record.clientName ||
+record.customerName ||
+record.client ||
+record.customer ||
+      "—";
+
+const service =
+record.clientService ||
+record.service ||
+record.serviceType ||
+      "—";
+
+const grossWeight = Number(
+record.washingGrossWeight ??
+record.grossWeight ??
+record.receivedWeight ??
+record.weight ??
+      0
+    );
+
+const pelletWeight = Number(
+record.actualPelletWeight ??
+record.pelletWeight ??
+record.pelletsProduced ??
+record.pelletKg ??
+      0
+    );
+
+    rows += `
+<tr>
+<td class="report-cell">
+          ${record.date || "—"}
+</td>
+
+<td class="report-cell">
+          ${clientName}
+</td>
+
+<td class="report-cell">
+          ${service}
+</td>
+
+<td class="report-cell number-cell">
+          ${grossWeight.toLocaleString()}
+</td>
+
+<td class="report-cell number-cell">
+          ${pelletWeight.toLocaleString()}
+</td>
+</tr>
+    `;
+  });
+
+  if (!rows) {
+    rows = `
+<tr>
+<td
+colspan="5"
+          class="report-cell"
+          style="text-align:center;"
+>
+          No client service records found for ${year}.
+</td>
+</tr>
+    `;
+  }
+
+  return `
+<div class="report-heading">
+<h2>Client Services</h2>
+
+<p>
+        Client washing and pelletizing services for ${year}
+</p>
+</div>
+
+<div class="table-wrapper">
+<table class="performance-table">
+
+<thead>
+<tr>
+<th>Date</th>
+<th>Client</th>
+<th>Service</th>
+<th>Received / Washing KG</th>
+<th>Pelletized KG</th>
+</tr>
+</thead>
+
+<tbody>
+          ${rows}
+</tbody>
+
+</table>
+</div>
+  `;
+}
+
+
+  function buildMaterialReceivedReport(year) {
+
+const monthlyTotals = [];
+
+  for (let month = 1; month <= 12; month++) {
+
+    let companyKg = 0;
+    let clientKg = 0;
+
+records.forEach(record => {
+
+      if (!record.date) return;
+
+const dateString = String(record.date);
+
+const recordYear =
+        Number(dateString.slice(0, 4));
+
+const recordMonth =
+        Number(dateString.slice(5, 7));
+
+      if (
+recordYear !== year ||
+recordMonth !== month
+      ) {
+        return;
+      }
+
+const source = String(
+record.materialSource ||
+record.source ||
+        ""
+      ).toLowerCase();
+
+const weight = Number(
+record.receivedWeight ??
+record.grossWeight ??
+record.washingGrossWeight ??
+record.weight ??
+        0
+      );
+
+const hasClient =
+        !!record.clientName ||
+        !!record.customerName ||
+        !!record.client ||
+        !!record.customer;
+
+      if (
+        source === "client" ||
+hasClient
+      ) {
+clientKg += weight;
+      } else {
+companyKg += weight;
+      }
+
+    });
+
+monthlyTotals.push({
+      month,
+companyKg,
+clientKg,
+totalKg: companyKg + clientKg
+    });
+
+  }
+
+  let rows = "";
+
+monthlyTotals.forEach(item => {
+
+    rows += `
 <tr>
 
 <td class="report-cell month-cell">
-            ${monthNames[item.month - 1]}
-</td>
-
-<td class="report-cell">
-            ${washingName}
+          ${monthNames[item.month - 1]}
 </td>
 
 <td class="report-cell number-cell">
-            ${washingKg}
-</td>
-
-<td class="report-cell">
-            ${pelletName}
+          ${item.companyKg.toLocaleString()}
 </td>
 
 <td class="report-cell number-cell">
-            ${pelletKg}
+          ${item.clientKg.toLocaleString()}
+</td>
+
+<td class="report-cell number-cell">
+          ${item.totalKg.toLocaleString()}
 </td>
 
 </tr>
-      `;
-    });
+    `;
 
+  });
 
-    return `
+const yearlyCompany =
+monthlyTotals.reduce(
+      (sum, item) => sum + item.companyKg,
+      0
+    );
+
+const yearlyClient =
+monthlyTotals.reduce(
+      (sum, item) => sum + item.clientKg,
+      0
+    );
+
+const yearlyTotal =
+yearlyCompany + yearlyClient;
+
+  rows += `
+<tr>
+
+<td class="report-cell month-cell">
+        YEAR TOTAL
+</td>
+
+<td class="report-cell number-cell">
+        ${yearlyCompany.toLocaleString()}
+</td>
+
+<td class="report-cell number-cell">
+        ${yearlyClient.toLocaleString()}
+</td>
+
+<td class="report-cell number-cell">
+        ${yearlyTotal.toLocaleString()}
+</td>
+
+</tr>
+  `;
+
+  return `
 <div class="report-heading">
 
 <h2>
-          Monthly Client Performance
+        Material Received
 </h2>
 
 <p>
-          Best washing and pelletizing clients
-          for ${year}
+        Monthly material received for ${year}
 </p>
 
 </div>
-
 
 <div class="table-wrapper">
 
@@ -255,57 +588,349 @@ item.pellet
 <thead>
 
 <tr>
-
 <th>Month</th>
-
-<th>
-                Best Washing Client
-</th>
-
-<th>
-                Washing KG
-</th>
-
-<th>
-                Best Pelletizing Client
-</th>
-
-<th>
-                Pelletizing KG
-</th>
-
+<th>Company Material KG</th>
+<th>Client Material KG</th>
+<th>Total Material KG</th>
 </tr>
 
 </thead>
 
 <tbody>
-
-            ${rows}
-
+          ${rows}
 </tbody>
 
 </table>
 
 </div>
+  `;
+}
+function buildProductionReport(year) {
 
+const monthlyProduction = [];
 
-<div class="report-note">
+  for (let month = 1; month <= 12; month++) {
 
-<strong>How the report is calculated:</strong>
+    let pelletKg = 0;
+    let productionKg = 0;
 
-<br><br>
+records.forEach(record => {
 
-        Washing is ranked using the client's
-        actual gross weight received before washing.
+      if (!record.date) return;
 
-<br><br>
+const dateString = String(record.date);
 
-        Pelletizing is ranked using the actual
-        pellet weight produced.
+const recordYear =
+        Number(dateString.slice(0, 4));
+
+const recordMonth =
+        Number(dateString.slice(5, 7));
+
+      if (
+recordYear !== year ||
+recordMonth !== month
+      ) {
+        return;
+      }
+
+const service = String(
+record.clientService ||
+record.service ||
+record.serviceType ||
+        ""
+      ).toLowerCase();
+
+const pelletWeight = Number(
+record.actualPelletWeight ??
+record.pelletWeight ??
+record.pelletsProduced ??
+record.pelletKg ??
+        0
+      );
+
+const finishedWeight = Number(
+record.productionWeight ??
+record.finishedProductWeight ??
+record.outputWeight ??
+record.productWeight ??
+        0
+      );
+
+      if (service.includes("pellet")) {
+pelletKg += pelletWeight;
+      }
+
+productionKg += finishedWeight;
+
+    });
+
+monthlyProduction.push({
+      month,
+pelletKg,
+productionKg
+    });
+
+  }
+
+  let rows = "";
+
+monthlyProduction.forEach(item => {
+
+    rows += `
+<tr>
+
+<td class="report-cell month-cell">
+          ${monthNames[item.month - 1]}
+</td>
+
+<td class="report-cell number-cell">
+          ${item.pelletKg.toLocaleString()}
+</td>
+
+<td class="report-cell number-cell">
+          ${item.productionKg.toLocaleString()}
+</td>
+
+</tr>
+    `;
+
+  });
+
+const yearlyPelletKg =
+monthlyProduction.reduce(
+      (sum, item) => sum + item.pelletKg,
+      0
+    );
+
+const yearlyProductionKg =
+monthlyProduction.reduce(
+      (sum, item) => sum + item.productionKg,
+      0
+    );
+
+  rows += `
+<tr>
+
+<td class="report-cell month-cell">
+        YEAR TOTAL
+</td>
+
+<td class="report-cell number-cell">
+        ${yearlyPelletKg.toLocaleString()}
+</td>
+
+<td class="report-cell number-cell">
+        ${yearlyProductionKg.toLocaleString()}
+</td>
+
+</tr>
+  `;
+
+  return `
+<div class="report-heading">
+
+<h2>
+        Pelletizing / Production
+</h2>
+
+<p>
+        Monthly pelletizing and production output for ${year}
+</p>
 
 </div>
-    `;
+
+<div class="table-wrapper">
+
+<table class="performance-table">
+
+<thead>
+
+<tr>
+<th>Month</th>
+<th>Pelletized KG</th>
+<th>Finished Production KG</th>
+</tr>
+
+</thead>
+
+<tbody>
+          ${rows}
+</tbody>
+
+</table>
+
+</div>
+  `;
+}
+function buildSummaryReport(year) {
+
+const monthlySummary = [];
+
+  for (let month = 1; month <= 12; month++) {
+
+    let materialKg = 0;
+    let pelletKg = 0;
+    let productionKg = 0;
+
+records.forEach(record => {
+
+      if (!record.date) return;
+
+const dateString = String(record.date);
+
+const recordYear =
+        Number(dateString.slice(0, 4));
+
+const recordMonth =
+        Number(dateString.slice(5, 7));
+
+      if (
+recordYear !== year ||
+recordMonth !== month
+      ) {
+        return;
+      }
+
+materialKg += Number(
+record.receivedWeight ??
+record.grossWeight ??
+record.washingGrossWeight ??
+record.weight ??
+        0
+      );
+
+pelletKg += Number(
+record.actualPelletWeight ??
+record.pelletWeight ??
+record.pelletsProduced ??
+record.pelletKg ??
+        0
+      );
+
+productionKg += Number(
+record.productionWeight ??
+record.finishedProductWeight ??
+record.outputWeight ??
+record.productWeight ??
+        0
+      );
+
+    });
+
+monthlySummary.push({
+      month,
+materialKg,
+pelletKg,
+productionKg
+    });
+
   }
+
+  let rows = "";
+
+monthlySummary.forEach(item => {
+
+    rows += `
+<tr>
+
+<td class="report-cell month-cell">
+          ${monthNames[item.month - 1]}
+</td>
+
+<td class="report-cell number-cell">
+          ${item.materialKg.toLocaleString()}
+</td>
+
+<td class="report-cell number-cell">
+          ${item.pelletKg.toLocaleString()}
+</td>
+
+<td class="report-cell number-cell">
+          ${item.productionKg.toLocaleString()}
+</td>
+
+</tr>
+    `;
+
+  });
+
+const yearlyMaterial =
+monthlySummary.reduce(
+      (sum, item) => sum + item.materialKg,
+      0
+    );
+
+const yearlyPellets =
+monthlySummary.reduce(
+      (sum, item) => sum + item.pelletKg,
+      0
+    );
+
+constyearlyProduction =
+monthlySummary.reduce(
+      (sum, item) => sum + item.productionKg,
+      0
+    );
+
+  rows += `
+<tr>
+
+<td class="report-cell month-cell">
+        YEAR TOTAL
+</td>
+
+<td class="report-cell number-cell">
+        ${yearlyMaterial.toLocaleString()}
+</td>
+
+<td class="report-cell number-cell">
+        ${yearlyPellets.toLocaleString()}
+</td>
+
+<td class="report-cell number-cell">
+        ${yearlyProduction.toLocaleString()}
+</td>
+
+</tr>
+  `;
+
+  return `
+<div class="report-heading">
+
+<h2>
+        Material & Production Summary
+</h2>
+
+<p>
+        Monthly material and production summary for ${year}
+</p>
+
+</div>
+
+<div class="table-wrapper">
+
+<table class="performance-table">
+
+<thead>
+
+<tr>
+<th>Month</th>
+<th>Material Received KG</th>
+<th>Pelletized KG</th>
+<th>Finished Production KG</th>
+</tr>
+
+</thead>
+
+<tbody>
+          ${rows}
+</tbody>
+
+</table>
+
+</div>
+  `;
+}
 
 
 const modal = document.createElement("div");
