@@ -1100,21 +1100,21 @@ rgba(0,0,0,0.65);
 
       background: #ffffff;
 
-      width: 100%;
+      width: calc(100% - 40px);
 
-      max-width: 1100px;
+      max-width: 1200px;
 
-      max-height: 94vh;
+      max-height: 92vh;
 
       overflow-y: auto;
 
-      border-radius: 16px;
+      border-radius: 14px;
 
       box-shadow:
-        0 15px 50px
-rgba(0,0,0,0.3);
+        0 14px 35px
+rgba(0,0,0,0.22);
 
-      padding: 25px;
+      padding: 28px 32px;
 
       box-sizing: border-box;
 
@@ -1179,28 +1179,16 @@ rgba(0,0,0,0.3);
 
     }
 
-
     .report-controls {
-
-      display: flex;
-
-      align-items: flex-end;
-
-      gap: 15px;
-
-      flex-wrap: wrap;
-
-      background: #f5f8f6;
-
-      padding: 16px;
-
-      border-radius: 12px;
-
-      margin-bottom: 25px;
-
-    }
-
-
+  display: grid;
+  grid-template-columns: 150px 250px auto;
+  align-items: end;
+  gap: 15px;
+  background: #f5f8f6;
+  padding: 16px;
+  border-radius: 12px;
+  margin-bottom: 25px;
+}
     .control-group {
 
       display: flex;
@@ -1223,35 +1211,22 @@ rgba(0,0,0,0.3);
     }
 
 
-    .control-group select {
-
-      min-width: 150px;
-
-      padding: 10px 12px;
-
-      border:
-        1px solid #ccd8d1;
-
-      border-radius: 8px;
-
-      background: white;
-
-      font-size: 14px;
-
-    }
-
+   .control-group select {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #ccd8d1;
+  border-radius: 8px;
+  background: white;
+  font-size: 14px;
+}
 
     .report-buttons {
-
       display: flex;
-
       gap: 10px;
-
       flex-wrap: wrap;
-
+      justify-content: flex-end;
     }
-
-
     .report-buttons button {
 
       border: none;
