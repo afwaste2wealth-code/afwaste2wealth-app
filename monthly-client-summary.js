@@ -1002,7 +1002,7 @@ modal.innerHTML = `
 <label>
             Report
 </label>
-
+<select id="reportType">
  
 <option value="materialReceived">
     Material Received
@@ -1016,7 +1016,7 @@ modal.innerHTML = `
     Pelletizing / Production
 </option>
 
-<option value="materialProduction">
+<option value="summary">
     Material & Production Summary
 </option>
 
