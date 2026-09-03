@@ -247,7 +247,7 @@ record.pelletKg ??
 </td>
 
 <td class="report-cell">
-          ${service === "washing_pelletizing" ?
+          ${service === "washing_pelletizing" ? 
           "washing + Pelletizing" :
           service === "washing" ?
           "washing Only" : service}
