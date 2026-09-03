@@ -1380,7 +1380,28 @@ rgba(0,0,0,0.22);
       background: #f1f7f3;
 
     }
+    /* Neat layout for 4-column reports such as Material Received */
+.performance-table th:first-child:nth-last-child(4),
+.performance-table td:first-child:nth-last-child(4) {
+  width: 22%;
+  text-align: left;
+}
 
+.performance-table th:first-child:nth-last-child(4) ~ th,
+.performance-table td:first-child:nth-last-child(4) ~ td {
+  width: 26%;
+  text-align: center;
+}
+
+.performance-table th,
+.performance-table td {
+  padding: 12px 14px;
+}
+
+.performance-table th:not(:last-child),
+.performance-table td:not(:last-child) {
+  border-right: 1px solid #e4ebe7;
+}
 
     .month-cell {
 
