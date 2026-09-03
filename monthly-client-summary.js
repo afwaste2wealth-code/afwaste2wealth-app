@@ -1260,7 +1260,7 @@ rgba(0,0,0,0.22);
 
     .report-heading {
 
-      margin-bottom: 18px;
+      margin: 0 16px 18px;
 
     }
 
@@ -1289,8 +1289,8 @@ rgba(0,0,0,0.22);
 
     .table-wrapper {
 
-      width: 100%;
-
+      width: calc(100% - 32px);
+      margin: 0 16px;
       overflow-x: auto;
 
       border:
