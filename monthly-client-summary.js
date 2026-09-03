@@ -247,10 +247,10 @@ record.pelletKg ??
 </td>
 
 <td class="report-cell">
-          ${service === "washing_pelletizing" ? 
-          "washing + Pelletizing" :
-          service === "washing" ?
-          "washing Only" : service}
+          ${service.includes("pellet")
+          ? "washing + Pelletizing" 
+          : service.includes("wash")
+          ? "washing Only" : service}
 </td>
 
 <td class="report-cell number-cell">
