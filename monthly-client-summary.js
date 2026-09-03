@@ -1551,7 +1551,11 @@ selectedYear =
 renderReport();
 
     };
-
+ modal
+    .querySelector("#reportType")
+    .onchange = function () {
+renderReport();
+    };
 
   modal
     .querySelector("#printMonthlySummary")
