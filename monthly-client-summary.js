@@ -378,12 +378,7 @@ modal.innerHTML = `
             Report
 </label>
 
-<select id="reportType">
-
-<option value="clientPerformance">
-    Monthly Client Performance
-</option>
-
+ 
 <option value="materialReceived">
     Material Received
 </option>
