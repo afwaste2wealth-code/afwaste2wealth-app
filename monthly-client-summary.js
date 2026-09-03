@@ -1414,7 +1414,7 @@ rgba(0,0,0,0.22);
 
     .number-cell {
 
-      text-align: right;
+      text-align: center;
 
       font-weight: 600;
 
