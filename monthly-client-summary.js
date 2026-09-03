@@ -959,7 +959,7 @@ modal.innerHTML = `
 </h1>
 
 <div class="report-subtitle">
-            A&F Waste2Wealth Solutions
+            A&F Wekavera Ltd • Waste2Wealth Solutions
 </div>
 
 </div>
@@ -1726,7 +1726,7 @@ th, td {
 <body>
 
 <h1>
-            A&F Waste2Wealth Solutions
+            A&F Wekavera Ltd • Waste2Wealth Solutions
 </h1>
 
           ${reportHTML}
