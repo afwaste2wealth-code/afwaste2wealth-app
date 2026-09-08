@@ -620,6 +620,12 @@ const monthlyProduction = [];
 
     let pelletKg = 0;
     let productionKg = 0;
+    let pole4"x4"x7ftSquare = 0;
+    let pole3"x3"x6ftSquare = 0;
+    let pole4"x7ftRound = 0;
+    let pole3"x3"x2ftSquare = 0;
+    let pole4"x4"x2ftSquare = 0;
+    let pole4"x2ftRound = 0;
 
 records.forEach(record => {
 
@@ -748,24 +754,26 @@ monthlyProduction.reduce(
 
 <div class="table-wrapper">
 
-<table class="performance-table">
+<table class="performance-table production-table">
 
 <thead>
-
 <tr>
 <th>Month</th>
 <th>Pelletized KG</th>
-<th>Finished Production KG</th>
+<th>Poles Produced KG</th>
+<th>4"x4"x7ft Square</th>
+<th>3"x3"x6ft Square</th>
+<th>4"x7ft Round</th>
+<th>3"x3"x2ft Square</th>
+<th>4"x4"x2ft Square</th>
+<th>4"x2ft Round</th>
+<th>Total Poles</th>
 </tr>
-
-</thead>
-
+</head>
 <tbody>
-          ${rows}
+  ${rows}
 </tbody>
-
 </table>
-
 </div>
   `;
 }
@@ -1419,10 +1427,17 @@ rgba(0,0,0,0.22);
       font-weight: 600;
 
     }
-
-
+    /*Center Pelletizing / Production Table only*/
+    .production-table th,
+    .production-table td {
+    text-align: center ! important;
+    vertical-align: middle;
+    }
+    .production-table .month-cell
+    {
+     text-align: center ! important;
+    }
     .report-note {
-
       margin-top: 20px;
 
       background: #f5f8f6;
