@@ -3,6 +3,10 @@ function showMessage(name) {
 recordMaterialIn();
     return;
   }
+  if (name == "Record Production") {
+    recordProduction();
+    return;
+  }
 if (name === "Material & Production") { 
   viewMaterialRecords();
   return;
