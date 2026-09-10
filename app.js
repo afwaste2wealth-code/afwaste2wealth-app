@@ -7,6 +7,10 @@ recordMaterialIn();
     recordProduction();
     return;
   }
+  if (name === "Reports") {
+    monthlyClientSummary();
+    return;
+  }
 if (name === "Material & Production") { 
   viewMaterialRecords();
   return;
