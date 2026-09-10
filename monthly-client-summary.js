@@ -620,12 +620,12 @@ const monthlyProduction = [];
 
     let pelletKg = 0;
     let productionKg = 0;
-    let pole4"x4"x7ftSquare = 0;
-    let pole3"x3"x6ftSquare = 0;
-    let pole4"x7ftRound = 0;
-    let pole3"x3"x2ftSquare = 0;
-    let pole4"x4"x2ftSquare = 0;
-    let pole4"x2ftRound = 0;
+    let pole4x4x7ftSquare = 0;
+    let pole3x3x6ftSquare = 0;
+    let pole4x7ftRound = 0;
+    let pole3x3x2ftSquare = 0;
+    let pole4x4x2ftSquare = 0;
+    let pole4x2ftRound = 0;
 
 records.forEach(record => {
 
