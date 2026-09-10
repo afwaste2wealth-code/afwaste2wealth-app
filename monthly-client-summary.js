@@ -1432,6 +1432,7 @@ rgba(0,0,0,0.22);
     .production-table td {
     text-align: center ! important;
     vertical-align: middle;
+    padding: 8px 5px !important;
     }
     .production-table .month-cell
     {
