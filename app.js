@@ -928,9 +928,7 @@ const record = records.find(
     alert("Material record not found.");
     return;
   }
-
 const modal = document.createElement("div");
-
 modal.style.cssText = `
 position:fixed;
     inset:0;
