@@ -1358,41 +1358,57 @@ calculateTotalPoles
   });
   document.getElementById("productionInputKg").addEventListener("input",calculateTotalPoles);
 }
+function viewProductionRecords() {
+const records = JSON.parse(
+localStorage.getItem("productionRecords") || "[]"
+  );
 
-function viewProductionRecords(){
-  const records =JSON.parse(
-  localStorage.getItem("productionRecords") || "[]");
-  const modal = document.createElement("div");
-  modal.style.cssText = position: fixed;
-  insert: 0;
-  background:
-  rgba(0,0,0,0.55);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-  font-family: Arial;
-  sans-serif;
-  ';
-  modal.innerHTML = ' <div style="background:white;
-  width:95%;
-  max-width:1200px;
-  max-height:90vh;
-  overflow:auto;
-  padding:20px
-  border-radius:10px;
-  ">
-    <h2 style="margin-top:0;">Production Records</h2>
-    <button id="closeProductionRecords"
-    style="
-      float:right;
-      padding:8px 14px;
-      border-radius:6px;
-      cursor:pointer;
-   ">
-     close
-     </button>
-     <table style="width:100%;border-collapse:collapse;margin-top:20px;">
+const modal = document.createElement("div");
+
+modal.style.cssText = `
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    font-family: Arial, sans-serif;
+  `;
+
+modal.innerHTML = `
+<div style="
+background:white;
+      width:95%;
+      max-width:1200px;
+      max-height:90vh;
+overflow:auto;
+      padding:20px;
+      border-radius:10px;
+    ">
+
+<h2 style="margin-top:0;">
+        Production Records
+</h2>
+
+<button
+        id="closeProductionRecords"
+        type="button"
+        style="
+float:right;
+          padding:8px 14px;
+          border-radius:6px;
+cursor:pointer;
+        "
+>
+        Close
+</button>
+
+<table style="
+        width:100%;
+border-collapse:collapse;
+        margin-top:20px;
+      ">
 <thead>
 <tr>
 <th>Date</th>
@@ -1405,20 +1421,23 @@ function viewProductionRecords(){
 <th>3"x3"x2ft Square</th>
 <th>4"x4"x2ft Square</th>
 <th>4"x2ft Round</th>
- <th>Total Poles</th>
+<th>Total Poles</th>
 </tr>
 </thead>
+
 <tbody id="productionRecordsBody">
 </tbody>
 </table>
 
-    </div>
-  ';
-    const productionRecordsBody =
+</div>
+  `;
+
+document.body.appendChild(modal);
+
+const productionRecordsBody =
 modal.querySelector("#productionRecordsBody");
 
 records.forEach(record => {
-
 const row = document.createElement("tr");
 
 row.innerHTML = `
@@ -1433,17 +1452,16 @@ row.innerHTML = `
 <td>${record.pole4x4X2Square || 0}</td>
 <td>${record.pole4x2Round || 0}</td>
 <td>${record.totalPoles || 0}</td>
-  `;
+    `;
 
 productionRecordsBody.appendChild(row);
-});
+  });
 
+modal.querySelector("#closeProductionRecords").onclick = function() {
+modal.remove();
+  };
 }
 
-document.body.appendChild(modal);
-modal.querySelector("#closeProductionRecords").onclick = () => {
-  modal.remove();
-};
 
 /* =========================================================
    EDIT MATERIAL RECORD
