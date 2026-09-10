@@ -1684,7 +1684,7 @@ buildMaterialReceivedReport(selectedYear);
 
 reportContent.innerHTML =
 buildProductionReport(selectedYear);
-
+ 
   }
 
   else if (reportType === "summary") {
