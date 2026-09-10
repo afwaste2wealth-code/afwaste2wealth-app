@@ -1434,10 +1434,42 @@ rgba(0,0,0,0.22);
     vertical-align: middle;
     padding: 8px 5px !important;
     }
+    
     .production-table .month-cell
     {
      text-align: center ! important;
     }
+    /* Compact column widths for Production Report */
+.production-table th:nth-child(1),
+.production-table td:nth-child(1) {
+  width: 8% !important;
+}
+
+.production-table th:nth-child(2),
+.production-table td:nth-child(2) {
+  width: 10% !important;
+}
+
+.production-table th:nth-child(3),
+.production-table td:nth-child(3) {
+  width: 11% !important;
+}
+
+.production-table th:nth-child(n+4):nth-child(-n+9),
+.production-table td:nth-child(n+4):nth-child(-n+9) {
+  width: 10% !important;
+}
+
+.production-table th:nth-child(10),
+.production-table td:nth-child(10) {
+  width: 11% !important;
+}
+
+.production-table th {
+  white-space: normal !important;
+  line-height: 1.2;
+}
+
     .report-note {
       margin-top: 20px;
 
