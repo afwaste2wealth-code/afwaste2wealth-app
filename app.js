@@ -846,8 +846,389 @@ modal.remove();
   };
 }
 /*============================================================
-   PRODUCTION RECORDS
+   PRODUCTION RECORDS   
  =============================================================*/
+function managePoleStandardWeights() {
+
+constsavedWeights = JSON.parse(
+localStorage.getItem("poleStandardWeights") || "{}"
+  );
+
+const modal = document.createElement("div");
+
+modal.style.cssText = `
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    font-family: Arial, sans-serif;
+  `;
+
+modal.innerHTML = `
+<div style="
+background:white;
+      width:95%;
+      max-width:650px;
+      max-height:90vh;
+overflow:auto;
+      padding:24px;
+      border-radius:12px;
+    ">
+
+<h2 style="margin-top:0;">
+        Pole Standard Weights
+</h2>
+
+<p>
+        Director sets the approved standard weight
+        for one pole in each category.
+</p>
+
+<label>4"x4"x7ft Square - KG per Pole</label>
+<input
+        id="weight4X4X7Square"
+        type="number"
+        min="0"
+        step="0.01"
+        value="${savedWeights.pole4X4X7Square ?? ""}"
+>
+
+<br><br>
+
+<label>3"x3"x6ft Square - KG per Pole</label>
+<input
+        id="weight3X3X6Square"
+        type="number"
+        min="0"
+        step="0.01"
+        value="${savedWeights.pole3X3X6Square ?? ""}"
+>
+
+<br><br>
+
+<label>4"x7ft Round - KG per Pole</label>
+<input
+        id="weight4x7Round"
+        type="number"
+        min="0"
+        step="0.01"
+        value="${savedWeights.pole4x7Round ?? ""}"
+>
+
+<br><br>
+
+<label>3"x3"x2ft Square - KG per Pole</label>
+<input
+        id="weight3X3X2Square"
+        type="number"
+        min="0"
+        step="0.01"
+        value="${savedWeights.pole3X3X2Square ?? ""}"
+>
+
+<br><br>
+
+<label>4"x4"x2ft Square - KG per Pole</label>
+<input
+        id="weight4x4X2Square"
+        type="number"
+        min="0"
+        step="0.01"
+        value="${savedWeights.pole4x4X2Square ?? ""}"
+>
+
+<br><br>
+
+<label>4"x2ft Round - KG per Pole</label>
+<input
+        id="weight4x2Round"
+        type="number"
+        min="0"
+        step="0.01"
+        value="${savedWeights.pole4x2Round ?? ""}"
+>
+
+<br><br>
+
+<button id="savePoleWeightsBtn" type="button">
+        Save Standard Weights
+</button>
+
+<button id="closePoleWeightsBtn" type="button">
+        Close
+</button>
+
+</div>
+  `;
+
+document.body.appendChild(modal);
+
+document.getElementById("closePoleWeightsBtn").onclick = function() {
+modal.remove();
+  };
+
+document.getElementById("savePoleWeightsBtn").onclick = function() {
+
+const weights = {
+      pole4X4X7Square:
+        Number(document.getElementById("weight4X4X7Square").value) || 0,
+
+      pole3X3X6Square:
+        Number(document.getElementById("weight3X3X6Square").value) || 0,
+
+      pole4x7Round:
+        Number(document.getElementById("weight4x7Round").value) || 0,
+
+      pole3X3X2Square:
+        Number(document.getElementById("weight3X3X2Square").value) || 0,
+
+      pole4x4X2Square:
+        Number(document.getElementById("weight4x4X2Square").value) || 0,
+
+      pole4x2Round:
+        Number(document.getElementById("weight4x2Round").value) || 0,
+
+updatedAt: new Date().toISOString()
+    };
+
+localStorage.setItem(
+      "poleStandardWeights",
+JSON.stringify(weights)
+    );
+
+    alert("Pole standard weights saved successfully.");
+
+modal.remove();
+  };
+}
+
+function recordProduction() {
+  const poleStandardWeights = JSON.parse(localStorage.getItem("poleStandardWeights") || "{}");
+const modal = document.createElement("div");
+
+modal.style.cssText = `
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    font-family: Arial, sans-serif;
+  `;
+
+modal.innerHTML = `
+<div style="
+background:white;
+      width:95%;
+      max-width:1000px;
+      max-height:90vh;
+overflow:auto;
+      padding:20px;
+      border-radius:10px;
+    ">
+
+<h2 style="margin-top:0;">Record Production</h2>
+
+<label>Date</label>
+<input id="productionDate" type="date">
+
+<label>Shift</label>
+<select id="productionShift">
+<option value="">Select Shift</option>
+<option value="Day">Day</option>
+<option value="Night">Night</option>
+</select>
+
+<label>Staff Who Worked</label>
+<input id="productionStaff" type="text"
+             placeholder="Enter staff names">
+
+<label>Washed Kavera Available (KG)</label>
+<input id="productionAvailableKg"
+             type="number"
+             min="0"
+             step="0.01"
+readonly>
+
+<label>KG Taken Into Production</label>
+<input id="productionInputKg"
+             type="number"
+             min="0"
+             step="0.01">
+
+<label>4"x4"x7ft Square - Number of Poles</label>
+<input id="pole4X4X7Square"
+             type="number"
+             min="0"
+             value="0">
+
+<label>3"x3"x6ft Square - Number of Poles</label>
+<input id="pole3X3X6Square"
+             type="number"
+             min="0"
+             value="0">
+
+<label>4"x7ft Round - Number of Poles</label>
+<input id="pole4x7Round"
+             type="number"
+             min="0"
+             value="0">
+
+<label>3"x3"x2ft Square - Number of Poles</label>
+<input id="pole3X3X2Square"
+             type="number"
+             min="0"
+             value="0">
+
+<label>4"x4"x2ft Square - Number of Poles</label>
+<input id="pole4x4X2Square"
+             type="number"
+             min="0"
+             value="0">
+
+<label>4"x2ft Round - Number of Poles</label>
+<input id="pole4x2Round"
+             type="number"
+             min="0"
+             value="0">
+
+<label>Total Poles Produced</label>
+<input id="totalPolesProduced"
+             type="number"
+             value="0"
+readonly>
+
+<label>Total Production Weight (KG)</label>
+<input id="totalProductionWeight"
+             type="number"
+             value="0"
+             step="0.01"
+readonly>
+
+<label>Production Pending (KG)</label>
+<input id="productionPendingKg"
+             type="number"
+             value="0"
+             step="0.01"
+readonly>
+
+<label>Production Completion (%)</label>
+<input id="productionCompletion"
+             type="number"
+             value="0"
+             step="0.01"
+readonly>
+
+<label>Production Status</label>
+<input id="productionStatus"
+             type="text"
+             value="PENDING"
+readonly>
+
+<br><br>
+
+<button id="saveProductionBtn" type="button">
+        Save Production Record
+</button>
+
+<button id="closeProductionBtn" type="button">
+        Close
+</button>
+
+</div>
+  `;
+
+document.body.appendChild(modal);
+
+document.getElementById("closeProductionBtn").onclick = function() {
+modal.remove();
+  };
+
+  function calculateTotalPoles() {
+const pole4X4X7 =
+      Number(document.getElementById("pole4X4X7Square").value) || 0;
+
+const pole3X3X6 =
+      Number(document.getElementById("pole3X3X6Square").value) || 0;
+
+const pole4x7Round =
+      Number(document.getElementById("pole4x7Round").value) || 0;
+
+const pole3X3X2 =
+      Number(document.getElementById("pole3X3X2Square").value) || 0;
+
+const pole4x4X2 =
+      Number(document.getElementById("pole4x4X2Square").value) || 0;
+
+const pole4x2Round =
+      Number(document.getElementById("pole4x2Round").value) || 0;
+ 
+const totalPoles =
+      pole4X4X7 +
+      pole3X3X6 +
+      pole4x7Round +
+      pole3X3X2 +
+      pole4x4X2 +
+      pole4x2Round;
+
+document.getElementById("totalPolesProduced").value = totalPoles;
+    const totalProductionWeight =
+  (pole4X4X7 * Number(poleStandardWeights.pole4X4X7Square || 0)) +
+  (pole3X3X6 * Number(poleStandardWeights.pole3X3X6Square || 0)) +
+  (pole4x7Round * Number(poleStandardWeights.pole4x7Round || 0)) +
+  (pole3X3X2 * Number(poleStandardWeights.pole3X3X2Square || 0)) +
+  (pole4x4X2 * Number(poleStandardWeights.pole4x4X2Square || 0)) +
+  (pole4x2Round * Number(poleStandardWeights.pole4x2Round || 0));
+
+document.getElementById("totalProductionWeight").value =
+totalProductionWeight.toFixed(2);
+
+const productionInputKg =
+  Number(document.getElementById("productionInputKg").value) || 0;
+
+const productionPendingKg =
+Math.max(productionInputKg - totalProductionWeight, 0);
+
+document.getElementById("productionPendingKg").value =
+productionPendingKg.toFixed(2);
+
+const productionCompletion =
+productionInputKg> 0
+    ? Math.min((totalProductionWeight / productionInputKg) * 100, 100)
+    : 0;
+
+document.getElementById("productionCompletion").value =
+productionCompletion.toFixed(2);
+
+document.getElementById("productionStatus").value =
+productionInputKg> 0 &&productionPendingKg<= 0
+    ? "ALL KAVERA COMPLETE"
+    : "PENDING";
+
+  }
+
+const poleInputs = [
+    "pole4X4X7Square",
+    "pole3X3X6Square",
+    "pole4x7Round",
+    "pole3X3X2Square",
+    "pole4x4X2Square",
+    "pole4x2Round"
+  ];
+
+poleInputs.forEach(function(id) {
+document.getElementById(id).addEventListener(
+      "input",
+calculateTotalPoles
+    );
+  });
+  document.getElementById("productionInputKg").addEventListener("input",calculateTotalPoles);
+}
+
 function viewProductionRecords(){
   const records =JSON.parse(
   localStorage.getItem("productionRecords") || "[]");
@@ -894,7 +1275,7 @@ function viewProductionRecords(){
 <th>3"x3"x2ft Square</th>
 <th>4"x4"x2ft Square</th>
 <th>4"x2ft Round</th>
-<th>Total Poles</th>
+ <th>Total Poles</th>
 </tr>
 </thead>
 <tbody id="productionRecordsBody">
