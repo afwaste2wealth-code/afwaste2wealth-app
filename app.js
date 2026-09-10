@@ -1147,6 +1147,132 @@ document.body.appendChild(modal);
 document.getElementById("closeProductionBtn").onclick = function() {
 modal.remove();
   };
+document.getElementById("saveProductionBtn").onclick = function() {
+
+calculateTotalPoles();
+
+const date = document.getElementById("productionDate").value;
+const shift = document.getElementById("productionShift").value;
+const staff = document.getElementById("productionStaff").value.trim();
+
+const productionAvailableKg =
+    Number(document.getElementById("productionAvailableKg").value) || 0;
+
+const productionInputKg =
+    Number(document.getElementById("productionInputKg").value) || 0;
+
+const pole4X4X7Square =
+    Number(document.getElementById("pole4X4X7Square").value) || 0;
+
+const pole3X3X6Square =
+    Number(document.getElementById("pole3X3X6Square").value) || 0;
+
+const pole4x7Round =
+    Number(document.getElementById("pole4x7Round").value) || 0;
+
+const pole3X3X2Square =
+    Number(document.getElementById("pole3X3X2Square").value) || 0;
+
+const pole4x4X2Square =
+    Number(document.getElementById("pole4x4X2Square").value) || 0;
+
+const pole4x2Round =
+    Number(document.getElementById("pole4x2Round").value) || 0;
+
+const totalPoles =
+    Number(document.getElementById("totalPolesProduced").value) || 0;
+
+const productionWeight =
+    Number(document.getElementById("totalProductionWeight").value) || 0;
+
+const productionPendingKg =
+    Number(document.getElementById("productionPendingKg").value) || 0;
+
+const productionCompletion =
+    Number(document.getElementById("productionCompletion").value) || 0;
+
+const productionStatus =
+document.getElementById("productionStatus").value;
+
+  if (!date) {
+    alert("Please enter the production date.");
+    return;
+  }
+
+  if (!shift) {
+    alert("Please select the shift.");
+    return;
+  }
+
+  if (!staff) {
+    alert("Please enter the staff who worked.");
+    return;
+  }
+
+  if (productionInputKg<= 0) {
+    alert("Please enter KG taken into production.");
+    return;
+  }
+  if (productionInputkg > productionAvailablekg) {
+    alert("KG taken into production cannot be greater than Washed kavera Available.");
+    return;
+  }
+
+const records = JSON.parse(
+localStorage.getItem("productionRecords") || "[]"
+  );
+
+records.push({
+    id: Date.now(),
+    date,
+    shift,
+    staff,
+productionAvailableKg,
+productionInputKg,
+    pole4X4X7Square,
+    pole3X3X6Square,
+    pole4x7Round,
+    pole3X3X2Square,
+    pole4x4X2Square,
+    pole4x2Round,
+totalPoles,
+productionWeight,
+productionPendingKg,
+productionCompletion,
+productionStatus,
+
+standardWeightsUsed: {
+      pole4X4X7Square:
+        Number(poleStandardWeights.pole4X4X7Square || 0),
+
+      pole3X3X6Square:
+        Number(poleStandardWeights.pole3X3X6Square || 0),
+
+      pole4x7Round:
+        Number(poleStandardWeights.pole4x7Round || 0),
+
+      pole3X3X2Square:
+        Number(poleStandardWeights.pole3X3X2Square || 0),
+
+      pole4x4X2Square:
+        Number(poleStandardWeights.pole4x4X2Square || 0),
+
+      pole4x2Round:
+        Number(poleStandardWeights.pole4x2Round || 0)
+    },
+
+createdAt: new Date().toISOString()
+  });
+
+localStorage.setItem(
+    "productionRecords",
+JSON.stringify(records)
+  );
+
+  alert("Production record saved successfully.");
+
+modal.remove();
+};
 
   function calculateTotalPoles() {
 const pole4X4X7 =
@@ -1284,6 +1410,30 @@ function viewProductionRecords(){
 
     </div>
   ';
+    const productionRecordsBody =
+modal.querySelector("#productionRecordsBody");
+
+records.forEach(record => {
+
+const row = document.createElement("tr");
+
+row.innerHTML = `
+<td>${record.date || ""}</td>
+<td>${record.shift || ""}</td>
+<td>${record.staff || ""}</td>
+<td>${Number(record.productionWeight || 0).toFixed(2)}</td>
+<td>${record.pole4X4X7Square || 0}</td>
+<td>${record.pole3X3X6Square || 0}</td>
+<td>${record.pole4x7Round || 0}</td>
+<td>${record.pole3X3X2Square || 0}</td>
+<td>${record.pole4x4X2Square || 0}</td>
+<td>${record.pole4x2Round || 0}</td>
+<td>${record.totalPoles || 0}</td>
+  `;
+
+productionRecordsBody.appendChild(row);
+});
+
 }
 
 document.body.appendChild(modal);
