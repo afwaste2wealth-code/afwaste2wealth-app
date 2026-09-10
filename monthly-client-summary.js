@@ -7,6 +7,9 @@ localStorage.getItem("materialRecords") || "[]"
 const legacyClientRecords = JSON.parse(
 localStorage.getItem("clientMaterialRecords") || "[]"
   );
+  const productionRecords = JSON.parse(
+localStorage.getItem("productionRecords") || "[]"
+  );
 
 const records = [...materialRecords];
 
@@ -620,12 +623,12 @@ const monthlyProduction = [];
 
     let pelletKg = 0;
     let productionKg = 0;
-    let pole4x4x7ftSquare = 0;
-    let pole3x3x6ftSquare = 0;
-    let pole4x7ftRound = 0;
-    let pole3x3x2ftSquare = 0;
-    let pole4x4x2ftSquare = 0;
-    let pole4x2ftRound = 0;
+    let pole4X4X7Square = 0;
+    let pole3X3X6Square = 0;
+    let pole4x7Round = 0;
+    let pole3X3X2Square = 0;
+    let pole4x4X2Square = 0;
+    let pole4x2Round = 0;
 
 records.forEach(record => {
 
@@ -676,6 +679,29 @@ pelletKg += pelletWeight;
 productionKg += finishedWeight;
 
     });
+productionRecords.forEach(record => {
+  if (!record.date) return;
+
+const dateString = String(record.date);
+const recordYear = Number(dateString.slice(0, 4));
+constrecordMonth = Number(dateString.slice(5, 7));
+
+  if (
+recordYear !== year ||
+recordMonth !== month
+  ) {
+    return;
+  }
+
+productionKg += Number(record.productionWeight || 0);
+
+  pole4X4X7Square += Number(record.pole4X4X7Square || 0);
+  pole3X3X6Square += Number(record.pole3X3X6Square || 0);
+  pole4x7Round += Number(record.pole4x7Round || 0);
+  pole3X3X2Square += Number(record.pole3X3X2Square || 0);
+  pole4x4X2Square += Number(record.pole4x4X2Square || 0);
+  pole4x2Round += Number(record.pole4x2Round || 0);
+});
 
 monthlyProduction.push({
   month,
