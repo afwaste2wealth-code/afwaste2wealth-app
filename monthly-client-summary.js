@@ -678,10 +678,16 @@ productionKg += finishedWeight;
     });
 
 monthlyProduction.push({
-      month,
+  month,
 pelletKg,
-productionKg
-    });
+productionKg,
+  pole4X4X7Square,
+  pole3X3X6Square,
+  pole4x7Round,
+  pole3X3X2Square,
+  pole4x4X2Square,
+  pole4x2Round
+});
 
   }
 
@@ -703,6 +709,38 @@ monthlyProduction.forEach(item => {
 <td class="report-cell number-cell">
           ${item.productionKg.toLocaleString()}
 </td>
+<td class="report-cell number-cell">
+          ${item.pole4X4X7Square.toLocaleString()}
+</td>
+
+<td class="report-cell number-cell">
+          ${item.pole3X3X6Square.toLocaleString()}
+</td>
+
+<td class="report-cell number-cell">
+          ${item.pole4x7Round.toLocaleString()}
+</td>
+
+<td class="report-cell number-cell">
+          ${item.pole3X3X2Square.toLocaleString()}
+</td>
+
+<td class="report-cell number-cell">
+          ${item.pole4x4X2Square.toLocaleString()}
+</td>
+
+<td class="report-cell number-cell">
+          ${item.pole4x2Round.toLocaleString()}
+</td>
+
+<td class="report-cell number-cell">
+          ${(item.pole4X4X7Square +
+             item.pole3X3X6Square +
+             item.pole4x7Round +
+             item.pole3X3X2Square +
+             item.pole4x4X2Square +
+             item.pole4x2Round).toLocaleString()}
+</td>
 
 </tr>
     `;
@@ -720,6 +758,29 @@ monthlyProduction.reduce(
       (sum, item) => sum + item.productionKg,
       0
     );
+const yearlyPole4X4X7Square = monthlyProduction.reduce(
+  (sum, item) => sum + item.pole4X4X7Square, 0
+);
+
+const yearlyPole3X3X6Square = monthlyProduction.reduce(
+  (sum, item) => sum + item.pole3X3X6Square, 0
+);
+
+const yearlyPole4x7Round = monthlyProduction.reduce(
+  (sum, item) => sum + item.pole4x7Round, 0
+);
+
+const yearlyPole3X3X2Square = monthlyProduction.reduce(
+  (sum, item) => sum + item.pole3X3X2Square, 0
+);
+
+const yearlyPole4x4X2Square = monthlyProduction.reduce(
+  (sum, item) => sum + item.pole4x4X2Square, 0
+);
+
+const yearlyPole4x2Round = monthlyProduction.reduce(
+  (sum, item) => sum + item.pole4x2Round, 0
+);
 
   rows += `
 <tr>
@@ -734,6 +795,38 @@ monthlyProduction.reduce(
 
 <td class="report-cell number-cell">
         ${yearlyProductionKg.toLocaleString()}
+</td>
+<td class="report-cell number-cell">
+          ${yearlyPole4X4X7Square.toLocaleString()}
+</td>
+
+<td class="report-cell number-cell">
+          ${yearlyPole3X3X6Square.toLocaleString()}
+</td>
+
+<td class="report-cell number-cell">
+          ${yearlyPole4x7Round.toLocaleString()}
+</td>
+
+<td class="report-cell number-cell">
+          ${yearlyPole3X3X2Square.toLocaleString()}
+</td>
+
+<td class="report-cell number-cell">
+          ${yearlyPole4x4X2Square.toLocaleString()}
+</td>
+
+<td class="report-cell number-cell">
+          ${yearlyPole4x2Round.toLocaleString()}
+</td>
+
+<td class="report-cell number-cell">
+          ${(yearlyPole4X4X7Square +
+             yearlyPole3X3X6Square +
+             yearlyPole4x7Round +
+             yearlyPole3X3X2Square +
+             yearlyPole4x4X2Square +
+             yearlyPole4x2Round).toLocaleString()}
 </td>
 
 </tr>
