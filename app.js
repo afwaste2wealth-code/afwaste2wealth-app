@@ -1012,6 +1012,963 @@ JSON.stringify(weights)
 modal.remove();
   };
 }
+/* =========================================================
+   WASHING DEPARTMENT
+   Director Target -> Manager Actual -> Washed Kavera Stock
+   ========================================================= */
+
+function getWashingShiftRecords() {
+  return JSON.parse(
+localStorage.getItem("washingShiftRecords") || "[]"
+  );
+}
+
+function saveWashingShiftRecords(records) {
+localStorage.setItem(
+    "washingShiftRecords",
+JSON.stringify(records)
+  );
+}
+
+function getWashingCycles() {
+  return JSON.parse(
+localStorage.getItem("washingCycles") || "[]"
+  );
+}
+
+function saveWashingCycles(cycles) {
+localStorage.setItem(
+    "washingCycles",
+JSON.stringify(cycles)
+  );
+}
+
+function getWashedKaveraStock() {
+  return Number(
+localStorage.getItem("washedKaveraStock") || 0
+  );
+}
+
+function setWashedKaveraStock(kg) {
+localStorage.setItem(
+    "washedKaveraStock",
+    Number(kg).toFixed(2)
+  );
+}
+
+function getActiveWashingCycle() {
+const cycles = getWashingCycles();
+
+  return cycles.find(cycle =>
+cycle.status === "ACTIVE"
+  ) || null;
+}
+
+function createWashingCycle() {
+const cycles = getWashingCycles();
+
+const cycleNumber =
+    "WC-" + String(cycles.length + 1).padStart(3, "0");
+
+const cycle = {
+    id: Date.now(),
+cycleNumber,
+startedAt: new Date().toISOString(),
+completedAt: null,
+totalTargetKg: 0,
+totalActualWashedKg: 0,
+totalDiscardedKg: 0,
+    status: "ACTIVE"
+  };
+
+cycles.push(cycle);
+saveWashingCycles(cycles);
+
+  return cycle;
+}
+
+
+/* =========================================================
+   DIRECTOR - SET WASHING TARGET
+   ========================================================= */
+
+function setWashingTarget() {
+const modal = document.createElement("div");
+
+modal.style.cssText = `
+position:fixed;
+    inset:0;
+background:rgba(0,0,0,0.55);
+display:flex;
+align-items:center;
+justify-content:center;
+    z-index:9999;
+font-family:Arial,sans-serif;
+  `;
+
+modal.innerHTML = `
+<div style="
+background:white;
+      width:90%;
+      max-width:600px;
+      padding:28px;
+      border-radius:16px;
+      box-shadow:0 12px 35px rgba(0,0,0,0.25);
+    ">
+
+<h2 style="margin-top:0;">
+        Set Washing Target
+</h2>
+
+<p style="color:#666;">
+        Director sets the kavera target for a specific shift.
+</p>
+
+<label style="display:block;margin-bottom:6px;font-weight:600;">
+        Date
+</label>
+
+<input
+        id="washingTargetDate"
+        type="date"
+        style="
+          width:100%;
+          padding:10px;
+          margin-bottom:18px;
+          border:1px solid #ccc;
+          border-radius:8px;
+        "
+>
+
+<label style="display:block;margin-bottom:6px;font-weight:600;">
+        Shift
+</label>
+
+<select
+        id="washingTargetShift"
+        style="
+          width:100%;
+          padding:10px;
+          margin-bottom:18px;
+          border:1px solid #ccc;
+          border-radius:8px;
+        "
+>
+<option value="">Select Shift</option>
+<option value="Day">Day</option>
+<option value="Night">Night</option>
+</select>
+
+<label style="display:block;margin-bottom:6px;font-weight:600;">
+        Target Kavera To Wash (KG)
+</label>
+
+<input
+        id="washingTargetKg"
+        type="number"
+        min="0"
+        step="0.01"
+        placeholder="Enter target KG"
+        style="
+          width:100%;
+          padding:10px;
+          margin-bottom:24px;
+          border:1px solid #ccc;
+          border-radius:8px;
+        "
+>
+
+<div style="
+display:flex;
+justify-content:flex-end;
+        gap:12px;
+      ">
+
+<button
+          id="closeWashingTargetBtn"
+          type="button"
+          style="
+background:white;
+            border:1px solid #ccc;
+            padding:10px 18px;
+            border-radius:8px;
+cursor:pointer;
+          "
+>
+          Close
+</button>
+
+<button
+          id="saveWashingTargetBtn"
+          type="button"
+          style="
+            background:#1976d2;
+color:white;
+border:none;
+            padding:10px 18px;
+            border-radius:8px;
+            font-weight:600;
+cursor:pointer;
+          "
+>
+          Save Target
+</button>
+
+</div>
+</div>
+  `;
+
+document.body.appendChild(modal);
+
+document.getElementById(
+    "closeWashingTargetBtn"
+  ).onclick = function () {
+modal.remove();
+  };
+
+document.getElementById(
+    "saveWashingTargetBtn"
+  ).onclick = function () {
+
+const date =
+document.getElementById(
+        "washingTargetDate"
+      ).value;
+
+const shift =
+document.getElementById(
+        "washingTargetShift"
+      ).value;
+
+const targetKg = Number(
+document.getElementById(
+        "washingTargetKg"
+      ).value
+    );
+
+    if (!date) {
+      alert("Please select the washing date.");
+      return;
+    }
+
+    if (!shift) {
+      alert("Please select the washing shift.");
+      return;
+    }
+
+    if (targetKg<= 0) {
+      alert("Please enter the target KG.");
+      return;
+    }
+
+const records = getWashingShiftRecords();
+
+const duplicate = records.some(record =>
+record.date === date &&
+record.shift === shift &&
+record.status !== "CANCELLED"
+    );
+
+    if (duplicate) {
+      alert(
+        "A washing target already exists for this date and shift."
+      );
+      return;
+    }
+
+records.push({
+      id: Date.now(),
+      date,
+      shift,
+targetKg,
+actualWashedKg: 0,
+discardedKg: 0,
+achievementPercent: 0,
+      staff: "",
+cycleId: null,
+cycleNumber: "",
+targetStatus: "TARGET SET",
+washingComplete: false,
+createdAt: new Date().toISOString()
+    });
+
+saveWashingShiftRecords(records);
+
+    alert(
+      "Washing target saved successfully."
+    );
+
+modal.remove();
+  };
+}
+
+
+/* =========================================================
+   MANAGER - RECORD ACTUAL WASHING
+   ========================================================= */
+
+function recordWashing() {
+const records = getWashingShiftRecords();
+
+const pendingTargets = records.filter(record =>
+record.targetStatus === "TARGET SET"
+  );
+
+  if (pendingTargets.length === 0) {
+    alert(
+      "There is no washing target waiting for the Manager."
+    );
+    return;
+  }
+
+const modal = document.createElement("div");
+
+modal.style.cssText = `
+position:fixed;
+    inset:0;
+background:rgba(0,0,0,0.55);
+display:flex;
+align-items:center;
+justify-content:center;
+    z-index:9999;
+font-family:Arial,sans-serif;
+  `;
+
+const targetOptions = pendingTargets
+    .map(record => `
+<option value="${record.id}">
+        ${record.date} - ${record.shift} Shift - Target ${Number(record.targetKg).toLocaleString()} KG
+</option>
+    `)
+    .join("");
+
+modal.innerHTML = `
+<div style="
+background:white;
+      width:92%;
+      max-width:750px;
+      max-height:90vh;
+overflow:auto;
+      padding:30px;
+      border-radius:16px;
+      box-shadow:0 12px 35px rgba(0,0,0,0.25);
+    ">
+
+<h2 style="margin-top:0;">
+        Record Washing
+</h2>
+
+<label style="display:block;margin-bottom:6px;font-weight:600;">
+        Washing Target
+</label>
+
+<select
+        id="washingTargetRecord"
+        style="
+          width:100%;
+          padding:10px;
+          margin-bottom:18px;
+          border:1px solid #ccc;
+          border-radius:8px;
+        "
+>
+        ${targetOptions}
+</select>
+
+<div style="
+display:grid;
+        grid-template-columns:1fr 1fr;
+        gap:18px;
+        margin-bottom:18px;
+      ">
+
+<div>
+<label style="display:block;margin-bottom:6px;font-weight:600;">
+            Target KG
+</label>
+
+<input
+            id="washingDisplayTargetKg"
+            type="number"
+readonly
+            style="
+              width:100%;
+              padding:10px;
+              border:1px solid #ccc;
+              border-radius:8px;
+              background:#f3f5f4;
+            "
+>
+</div>
+
+<div>
+<label style="display:block;margin-bottom:6px;font-weight:600;">
+            Actual KG Washed
+</label>
+
+<input
+            id="washingActualKg"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="Enter actual KG washed"
+            style="
+              width:100%;
+              padding:10px;
+              border:1px solid #ccc;
+              border-radius:8px;
+            "
+>
+</div>
+
+</div>
+
+<label style="display:block;margin-bottom:6px;font-weight:600;">
+        Staff Who Worked
+</label>
+
+<input
+        id="washingStaff"
+        type="text"
+        placeholder="Enter staff names"
+        style="
+          width:100%;
+          padding:10px;
+          margin-bottom:18px;
+          border:1px solid #ccc;
+          border-radius:8px;
+        "
+>
+
+<div style="
+display:grid;
+        grid-template-columns:1fr 1fr;
+        gap:18px;
+        margin-bottom:20px;
+      ">
+
+<div>
+<label style="display:block;margin-bottom:6px;font-weight:600;">
+            Discarded KG
+</label>
+
+<input
+            id="washingDiscardedKg"
+            type="number"
+            value="0"
+readonly
+            style="
+              width:100%;
+              padding:10px;
+              border:1px solid #ccc;
+              border-radius:8px;
+              background:#f3f5f4;
+            "
+>
+</div>
+
+<div>
+<label style="display:block;margin-bottom:6px;font-weight:600;">
+            Achievement %
+</label>
+
+<input
+            id="washingAchievement"
+            type="number"
+            value="0"
+readonly
+            style="
+              width:100%;
+              padding:10px;
+              border:1px solid #ccc;
+              border-radius:8px;
+              background:#f3f5f4;
+            "
+>
+</div>
+
+</div>
+
+<div style="
+        padding:14px;
+        background:#f7f9f8;
+        border-radius:8px;
+        margin-bottom:20px;
+      ">
+
+<strong>
+          Current Washed Kavera Stock:
+</strong>
+
+<span id="currentWashedStock">
+          ${getWashedKaveraStock().toLocaleString()} KG
+</span>
+
+</div>
+
+<label style="
+display:flex;
+align-items:flex-start;
+        gap:10px;
+        margin-bottom:24px;
+      ">
+
+<input
+          id="washingCycleComplete"
+          type="checkbox"
+          style="margin-top:3px;"
+>
+
+<span>
+<strong>
+            All kavera available for washing is now finished.
+</strong>
+<br>
+<small>
+            Tick this only when the Manager confirms the current washing cycle is complete.
+</small>
+</span>
+
+</label>
+
+<div style="
+display:flex;
+justify-content:flex-end;
+        gap:12px;
+      ">
+
+<button
+          id="closeWashingBtn"
+          type="button"
+          style="
+background:white;
+            border:1px solid #ccc;
+            padding:11px 20px;
+            border-radius:8px;
+cursor:pointer;
+          "
+>
+          Close
+</button>
+
+<button
+          id="saveWashingBtn"
+          type="button"
+          style="
+            background:#1976d2;
+color:white;
+border:none;
+            padding:11px 20px;
+            border-radius:8px;
+            font-weight:600;
+cursor:pointer;
+          "
+>
+          Save Washing Record
+</button>
+
+</div>
+
+</div>
+  `;
+
+document.body.appendChild(modal);
+
+
+  function loadSelectedTarget() {
+const selectedId = Number(
+document.getElementById(
+        "washingTargetRecord"
+      ).value
+    );
+
+const selectedRecord = records.find(
+      record => Number(record.id) === selectedId
+    );
+
+    if (!selectedRecord) return;
+
+document.getElementById(
+      "washingDisplayTargetKg"
+    ).value = selectedRecord.targetKg;
+
+calculateWashingResults();
+  }
+
+
+  function calculateWashingResults() {
+const targetKg = Number(
+document.getElementById(
+        "washingDisplayTargetKg"
+      ).value
+    ) || 0;
+
+const actualKg = Number(
+document.getElementById(
+        "washingActualKg"
+      ).value
+    ) || 0;
+
+const discardedKg =
+Math.max(targetKg - actualKg, 0);
+
+const achievement =
+targetKg> 0
+        ? (actualKg / targetKg) * 100
+        : 0;
+
+document.getElementById(
+      "washingDiscardedKg"
+    ).value = discardedKg.toFixed(2);
+
+document.getElementById(
+      "washingAchievement"
+    ).value = achievement.toFixed(2);
+  }
+
+
+document.getElementById(
+    "washingTargetRecord"
+  ).onchange = loadSelectedTarget;
+
+document.getElementById(
+    "washingActualKg"
+  ).oninput = calculateWashingResults;
+
+document.getElementById(
+    "closeWashingBtn"
+  ).onclick = function () {
+modal.remove();
+  };
+
+loadSelectedTarget();
+
+
+document.getElementById(
+    "saveWashingBtn"
+  ).onclick = function () {
+
+const selectedId = Number(
+document.getElementById(
+        "washingTargetRecord"
+      ).value
+    );
+
+const selectedRecord = records.find(
+      record => Number(record.id) === selectedId
+    );
+
+    if (!selectedRecord) {
+      alert("Please select a washing target.");
+      return;
+    }
+
+const targetKg =
+      Number(selectedRecord.targetKg) || 0;
+
+const actualKg = Number(
+document.getElementById(
+        "washingActualKg"
+      ).value
+    ) || 0;
+
+const staff =
+document.getElementById(
+        "washingStaff"
+      ).value.trim();
+
+const completeCycle =
+document.getElementById(
+        "washingCycleComplete"
+      ).checked;
+
+    if (!staff) {
+      alert(
+        "Please enter the staff who worked."
+      );
+      return;
+    }
+
+    if (actualKg<= 0) {
+      alert(
+        "Please enter the actual KG washed."
+      );
+      return;
+    }
+
+    if (actualKg>targetKg) {
+      alert(
+        "Actual KG washed cannot be greater than the Director's target."
+      );
+      return;
+    }
+
+const discardedKg =
+Math.max(targetKg - actualKg, 0);
+
+const achievement =
+targetKg> 0
+        ? (actualKg / targetKg) * 100
+        : 0;
+
+
+    let activeCycle = getActiveWashingCycle();
+
+    if (!activeCycle) {
+activeCycle = createWashingCycle();
+    }
+
+
+selectedRecord.actualWashedKg =
+      Number(actualKg.toFixed(2));
+
+selectedRecord.discardedKg =
+      Number(discardedKg.toFixed(2));
+
+selectedRecord.achievementPercent =
+      Number(achievement.toFixed(2));
+
+selectedRecord.staff = staff;
+
+selectedRecord.cycleId =
+activeCycle.id;
+
+selectedRecord.cycleNumber =
+activeCycle.cycleNumber;
+
+selectedRecord.targetStatus =
+      "COMPLETED";
+
+selectedRecord.washingComplete = true;
+
+selectedRecord.completedAt =
+      new Date().toISOString();
+
+
+saveWashingShiftRecords(records);
+
+
+const cycles = getWashingCycles();
+
+const cycleIndex = cycles.findIndex(
+      cycle =>
+        Number(cycle.id) ===
+        Number(activeCycle.id)
+    );
+
+    if (cycleIndex !== -1) {
+
+      cycles[cycleIndex].totalTargetKg =
+        Number(cycles[cycleIndex].totalTargetKg || 0)
+        + targetKg;
+
+      cycles[cycleIndex].totalActualWashedKg =
+        Number(
+          cycles[cycleIndex].totalActualWashedKg || 0
+        ) + actualKg;
+
+      cycles[cycleIndex].totalDiscardedKg =
+        Number(
+          cycles[cycleIndex].totalDiscardedKg || 0
+        ) + discardedKg;
+
+
+      if (completeCycle) {
+        cycles[cycleIndex].status =
+          "WASHING COMPLETE";
+
+        cycles[cycleIndex].completedAt =
+          new Date().toISOString();
+      }
+
+saveWashingCycles(cycles);
+    }
+
+
+const currentStock =
+getWashedKaveraStock();
+
+const newStock =
+currentStock + actualKg;
+
+setWashedKaveraStock(newStock);
+
+
+    let message =
+      "Washing record saved successfully.\n\n" +
+      "Target: " +
+targetKg.toFixed(2) +
+      " KG\n" +
+
+      "Actual Washed: " +
+actualKg.toFixed(2) +
+      " KG\n" +
+
+      "Discarded: " +
+discardedKg.toFixed(2) +
+      " KG\n" +
+
+      "Achievement: " +
+achievement.toFixed(2) +
+      "%\n\n" +
+
+      "Washed Kavera Stock: " +
+newStock.toFixed(2) +
+      " KG";
+
+
+    if (completeCycle) {
+      message +=
+        "\n\nWashing Cycle " +
+activeCycle.cycleNumber +
+        " is COMPLETE.";
+    }
+
+
+    alert(message);
+
+modal.remove();
+  };
+}
+
+
+/* =========================================================
+   VIEW WASHING RECORDS
+   ========================================================= */
+
+function viewWashingRecords() {
+const records = getWashingShiftRecords();
+
+const modal = document.createElement("div");
+
+modal.style.cssText = `
+position:fixed;
+    inset:0;
+background:rgba(0,0,0,0.55);
+display:flex;
+align-items:center;
+justify-content:center;
+    z-index:9999;
+font-family:Arial,sans-serif;
+  `;
+
+const rows = records.length
+    ? records.map(record => `
+<tr>
+<td>${record.date || ""}</td>
+<td>${record.shift || ""}</td>
+<td>${record.cycleNumber || "-"}</td>
+<td>${Number(record.targetKg || 0).toLocaleString()}</td>
+<td>${Number(record.actualWashedKg || 0).toLocaleString()}</td>
+<td>${Number(record.discardedKg || 0).toLocaleString()}</td>
+<td>${Number(record.achievementPercent || 0).toFixed(2)}%</td>
+<td>${record.staff || ""}</td>
+<td>${record.targetStatus || ""}</td>
+</tr>
+    `).join("")
+    : `
+<tr>
+<td colspan="9" style="text-align:center;">
+          No washing records found.
+</td>
+</tr>
+    `;
+
+modal.innerHTML = `
+<div style="
+background:white;
+      width:95%;
+      max-width:1100px;
+      max-height:90vh;
+overflow:auto;
+      padding:28px;
+      border-radius:16px;
+    ">
+
+<h2 style="margin-top:0;">
+        Washing Records
+</h2>
+
+<div style="
+        margin-bottom:18px;
+        padding:12px;
+        background:#f3f5f4;
+        border-radius:8px;
+      ">
+<strong>
+          Current Washed Kavera Stock:
+</strong>
+        ${getWashedKaveraStock().toLocaleString()} KG
+</div>
+
+<div style="overflow-x:auto;">
+<table style="
+          width:100%;
+border-collapse:collapse;
+        ">
+
+<thead>
+<tr>
+<th>Date</th>
+<th>Shift</th>
+<th>Cycle</th>
+<th>Target KG</th>
+<th>Actual Washed KG</th>
+<th>Discarded KG</th>
+<th>Achievement</th>
+<th>Staff</th>
+<th>Status</th>
+</tr>
+</thead>
+
+<tbody>
+            ${rows}
+</tbody>
+
+</table>
+</div>
+
+<div style="
+text-align:right;
+        margin-top:20px;
+      ">
+<button
+          id="closeWashingRecordsBtn"
+          type="button"
+          style="
+            padding:10px 18px;
+            border:1px solid #ccc;
+            border-radius:8px;
+background:white;
+cursor:pointer;
+          "
+>
+          Close
+</button>
+</div>
+
+</div>
+  `;
+
+document.body.appendChild(modal);
+
+modal.querySelectorAll("th,td").forEach(cell => {
+cell.style.border =
+      "1px solid #ddd";
+
+cell.style.padding =
+      "9px";
+
+cell.style.textAlign =
+      "center";
+  });
+
+document.getElementById(
+    "closeWashingRecordsBtn"
+  ).onclick = function () {
+modal.remove();
+  };
+}
 
 function recordProduction() {
   const poleStandardWeights = JSON.parse(localStorage.getItem("poleStandardWeights") || "{}");
@@ -1031,43 +1988,88 @@ modal.style.cssText = `
 modal.innerHTML = `
 <div style="
 background:white;
-      width:95%;
-      max-width:1000px;
+      width:92%;
+      max-width:950px;
       max-height:90vh;
 overflow:auto;
-      padding:20px;
-      border-radius:10px;
+      padding:30px;
+      border-radius:16px;
+      box-shadow:0 12px 35px
+      rgba(0,0,0,0.25);
     ">
 
 <h2 style="margin-top:0;">Record Production</h2>
 
-<label>Date</label>
-<input id="productionDate" type="date">
+<div style="
+display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:20px;
+  margin-bottom:18px;
+">
+<div>
+<label style="display:block;margin-bottom:6px;font-weight:600;">Date</label>
+<input id="productionDate" type="date"
+      style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;">
+</div>
 
-<label>Shift</label>
-<select id="productionShift">
+<div>
+<label style="display:block;margin-bottom:6px;font-weight:600;">Shift</label>
+<select id="productionShift"
+      style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;">
 <option value="">Select Shift</option>
 <option value="Day">Day</option>
 <option value="Night">Night</option>
 </select>
+</div>
+</div>
 
-<label>Staff Who Worked</label>
+<div style="
+display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:20px;
+  margin-bottom:18px;
+">
+<div>
+<label style="display:block;margin-bottom:6px;font-weight:600;">
+      Staff Who Worked
+</label>
 <input id="productionStaff" type="text"
-             placeholder="Enter staff names">
+      placeholder="Enter staff names"
+      style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;">
+</div>
 
-<label>Washed Kavera Available (KG)</label>
+<div>
+<label style="display:block;margin-bottom:6px;font-weight:600;">
+      Washed Kavera Available (KG)
+</label>
 <input id="productionAvailableKg"
-             type="number"
-             min="0"
-             step="0.01"
-readonly>
+      type="number"
+      min="0"
+      step="0.01"
+readonly
+      style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;background:#f3f5f4;">
+</div>
+</div>
 
-<label>KG Taken Into Production</label>
+<div style="margin-bottom:22px;">
+<label style="display:block;margin-bottom:6px;font-weight:600;">
+    KG Taken Into Production
+</label>
 <input id="productionInputKg"
-             type="number"
-             min="0"
-             step="0.01">
+    type="number"
+    min="0"
+    step="0.01"
+    placeholder="Enter KG processed"
+    style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;">
+</div>
 
+<h3 style="margin:5px 0 14px;font-size:16px;">
+  Pole Quantities Produced
+</h3>
+<div style=" display:grid; grid-template-columns:repeat(3,1fr);
+gap:16px;
+margin-bottom:24px;
+">
 <label>4"x4"x7ft Square - Number of Poles</label>
 <input id="pole4X4X7Square"
              type="number"
@@ -1103,7 +2105,14 @@ readonly>
              type="number"
              min="0"
              value="0">
-
+</div>
+<h3 style="margin:8px 0 14px; font-size:16px;">
+Production Summary
+</h3>
+<div style="display:grid; grid-template-columns:repeat(3 1fr);
+gap:16px;
+margin-bottom:20px;
+">
 <label>Total Poles Produced</label>
 <input id="totalPolesProduced"
              type="number"
@@ -1136,20 +2145,38 @@ readonly>
              type="text"
              value="PENDING"
 readonly>
-
-<br><br>
-
-<button id="saveProductionBtn" type="button">
+</div>
+<div style="display:flex;
+justify-content:flex-end;
+gap:12px;
+margin-top:24px;
+">
+<button id="saveProductionBtn" type="button"
+style="
+background:#1976d2;
+color:white;
+border:none;
+padding:11px 20px;
+border-radius:8px;
+font-weight:600;
+cursor:pointer;
+">
         Save Production Record
 </button>
-
-<button id="closeProductionBtn" type="button">
+<button id="closeProductionBtn" type="button"
+style="
+background:white;
+color:#333;
+border:1px solid #ccc;
+padding:11px 20px;
+border-radius:8px;
+font-weight:600;
+cursor:pointer;
+">
         Close
 </button>
-
 </div>
   `;
-
 document.body.appendChild(modal);
 
 document.getElementById("closeProductionBtn").onclick = function() {
