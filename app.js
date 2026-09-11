@@ -3,7 +3,7 @@ function showMessage(name) {
 recordMaterialIn();
     return;
   }
-  if (name == "Record Production") {
+  if (name == "Record Production") { 
     recordProduction();
     return;
   }
@@ -315,11 +315,17 @@ const dirtPercentValue =
 
 const netKg =
 grossKg * (1 - dirtPercentValue / 100);
-
+const newBatchNumber = isClient ? "" :
+getNextMaterialBatchNumber();
 const record = {
 
       id: Date.now(),
-
+batchNumber: newBatchNumber,
+washingCycleNumber:
+isClient ? "" :
+washingCycleFromBatch(newBatchNumber),
+batchStatus:
+isClient ? "" : "AVAILABLE FOR WASHING",
       date:
 modal.querySelector("#materialDate").value ||
         new Date().toISOString().split("T")[0],
@@ -858,7 +864,7 @@ modal.remove();
  =============================================================*/
 function managePoleStandardWeights() {
 
-constsavedWeights = JSON.parse(
+const savedWeights = JSON.parse(
 localStorage.getItem("poleStandardWeights") || "{}"
   );
 
@@ -1013,8 +1019,8 @@ modal.remove();
   };
 }
 /* =========================================================
-   WASHING DEPARTMENT
-   Director Target -> Manager Actual -> Washed Kavera Stock
+   WASHING DEPARTMENT - BATCH BASED
+   Material Batch KB001 -> Washing Cycle WCKB001
    ========================================================= */
 
 function getWashingShiftRecords() {
@@ -1052,39 +1058,504 @@ localStorage.getItem("washedKaveraStock") || 0
 function setWashedKaveraStock(kg) {
 localStorage.setItem(
     "washedKaveraStock",
-    Number(kg).toFixed(2)
+Math.max(Number(kg) || 0, 0).toFixed(2)
   );
 }
 
-function getActiveWashingCycle() {
-const cycles = getWashingCycles();
 
-  return cycles.find(cycle =>
-cycle.status === "ACTIVE"
+/* =========================================================
+   MATERIAL BATCH NUMBER
+   KB001, KB002, KB003...
+   ========================================================= */
+
+function formatBatchNumber(number) {
+  return "KB" +
+    String(number).padStart(3, "0");
+}
+
+
+/* =========================================================
+   WASHING CYCLE NUMBER
+   KB001 -> WCKB001
+   ========================================================= */
+
+function washingCycleFromBatch(batchNumber) {
+  return batchNumber
+    ? "WC" + batchNumber
+    : "";
+}
+
+
+/* =========================================================
+   GET NEXT MATERIAL BATCH
+   ========================================================= */
+
+function getNextMaterialBatchNumber() {
+
+const records = JSON.parse(
+localStorage.getItem("materialRecords") || "[]"
+  );
+
+  let highest = 0;
+
+records.forEach(record => {
+
+const match =
+      String(
+record.batchNumber || ""
+      ).match(/^KB(\d+)$/i);
+
+    if (match) {
+      highest = Math.max(
+        highest,
+        Number(match[1]) || 0
+      );
+    }
+
+  });
+
+  return formatBatchNumber(
+    highest + 1
+  );
+}
+
+
+/* =========================================================
+   COMPANY MATERIAL BATCHES
+   ========================================================= */
+
+function getMaterialBatchRecords() {
+
+const records = JSON.parse(
+localStorage.getItem("materialRecords") || "[]"
+  );
+
+  return records.filter(record =>
+record.materialSource === "company" &&
+record.batchNumber
+  );
+}
+
+
+/* =========================================================
+   TOTAL KAVERA FOR WASHING
+
+   IMPORTANT:
+   We use NET USABLE KG.
+   Example:
+   Gross = 5,000 KG
+   Net after dirt = 4,000 KG
+   WCKB total = 4,000 KG
+   ========================================================= */
+
+function getBatchTotalKg(batch) {
+
+  if (!batch) {
+    return 0;
+  }
+
+  return Number(
+batch.netWeight ??
+batch.grossWeight ??
+    0
+  ) || 0;
+}
+
+
+/* =========================================================
+   FIND WASHING CYCLE
+   ========================================================= */
+
+function getWashingCycleForBatch(
+batchNumber
+) {
+
+const cycles =
+getWashingCycles();
+
+  return cycles.find(
+    cycle =>
+cycle.batchNumber ===
+batchNumber
   ) || null;
 }
 
-function createWashingCycle() {
-const cycles = getWashingCycles();
 
-const cycleNumber =
-    "WC-" + String(cycles.length + 1).padStart(3, "0");
+/* =========================================================
+   TOTAL ACTUAL WASHED FOR BATCH
+   ========================================================= */
 
-const cycle = {
+function getBatchWashedKg(
+batchNumber
+) {
+
+  return getWashingShiftRecords()
+
+    .filter(record =>
+
+record.batchNumber ===
+batchNumber&&
+
+record.targetStatus ===
+        "COMPLETED" &&
+
+record.status !==
+        "CANCELLED"
+    )
+
+    .reduce(
+      (sum, record) =>
+        sum +
+        (
+          Number(
+record.actualWashedKg
+          ) || 0
+        ),
+      0
+    );
+}
+
+
+/* =========================================================
+   PENDING WASHING KG
+
+   Pending =
+   Net usable batch KG -
+   Actual washed so far
+   ========================================================= */
+
+function getBatchPendingKg(
+batchNumber
+) {
+
+const batch =
+getMaterialBatchRecords()
+      .find(
+        record =>
+record.batchNumber ===
+batchNumber
+      );
+
+  if (!batch) {
+    return 0;
+  }
+
+  return Math.max(
+
+getBatchTotalKg(batch) -
+
+getBatchWashedKg(
+batchNumber
+    ),
+
+    0
+  );
+}
+
+
+/* =========================================================
+   CREATE WASHING CYCLE FOR MATERIAL BATCH
+   ========================================================= */
+
+function ensureWashingCycleForBatch(
+  batch
+) {
+
+  let cycles =
+getWashingCycles();
+
+  let cycle =
+cycles.find(
+      item =>
+item.batchNumber ===
+batch.batchNumber
+    );
+
+  if (cycle) {
+    return cycle;
+  }
+
+  cycle = {
+
     id: Date.now(),
-cycleNumber,
-startedAt: new Date().toISOString(),
-completedAt: null,
-totalTargetKg: 0,
+
+batchId:
+batch.id,
+
+batchNumber:
+batch.batchNumber,
+
+cycleNumber:
+washingCycleFromBatch(
+batch.batchNumber
+      ),
+
+totalBatchKg:
+      Number(
+getBatchTotalKg(batch)
+          .toFixed(2)
+      ),
+
 totalActualWashedKg: 0,
-totalDiscardedKg: 0,
-    status: "ACTIVE"
+
+pendingKg:
+      Number(
+getBatchTotalKg(batch)
+          .toFixed(2)
+      ),
+
+closingVarianceKg: 0,
+
+manualComplete: false,
+
+    status:
+      "ACTIVE",
+
+startedAt:
+      new Date().toISOString(),
+
+completedAt: null
   };
 
 cycles.push(cycle);
-saveWashingCycles(cycles);
+
+saveWashingCycles(
+    cycles
+  );
 
   return cycle;
+}
+
+
+/* =========================================================
+   RECALCULATE WASHING CYCLE
+   ========================================================= */
+
+function recalculateWashingCycle(
+batchNumber
+) {
+
+const batches =
+getMaterialBatchRecords();
+
+const batch =
+batches.find(
+      item =>
+item.batchNumber ===
+batchNumber
+    );
+
+  if (!batch) {
+    return null;
+  }
+
+  let cycle =
+ensureWashingCycleForBatch(
+      batch
+    );
+
+const cycles =
+getWashingCycles();
+
+const index =
+cycles.findIndex(
+      item =>
+item.batchNumber ===
+batchNumber
+    );
+
+  if (index === -1) {
+    return cycle;
+  }
+
+const totalBatchKg =
+getBatchTotalKg(
+      batch
+    );
+
+const totalWashedKg =
+getBatchWashedKg(
+batchNumber
+    );
+
+const pendingKg =
+Math.max(
+totalBatchKg -
+totalWashedKg,
+      0
+    );
+
+  cycles[index].totalBatchKg =
+    Number(
+totalBatchKg.toFixed(2)
+    );
+
+  cycles[index]
+    .totalActualWashedKg =
+    Number(
+totalWashedKg.toFixed(2)
+    );
+
+  cycles[index].pendingKg =
+    Number(
+pendingKg.toFixed(2)
+    );
+
+
+  if (
+pendingKg<= 0.01
+  ) {
+
+    cycles[index].status =
+      "WASHING COMPLETE";
+
+    cycles[index].completedAt =
+      cycles[index].completedAt ||
+      new Date().toISOString();
+
+    cycles[index]
+      .closingVarianceKg = 0;
+
+  } else if (
+    !cycles[index]
+      .manualComplete
+  ) {
+
+    cycles[index].status =
+      "ACTIVE";
+
+    cycles[index].completedAt =
+      null;
+
+    cycles[index]
+      .closingVarianceKg = 0;
+  }
+
+
+saveWashingCycles(
+    cycles
+  );
+
+  return cycles[index];
+}
+
+
+/* =========================================================
+   MANUALLY CLOSE WASHING CYCLE
+
+   Used when physical kavera is finished but
+   the weighing figures leave a small balance.
+   ========================================================= */
+
+function markWashingCycleComplete(
+batchNumber
+) {
+
+const batch =
+getMaterialBatchRecords()
+      .find(
+        item =>
+item.batchNumber ===
+batchNumber
+      );
+
+  if (!batch) {
+    return null;
+  }
+
+
+ensureWashingCycleForBatch(
+    batch
+  );
+
+
+const cycles =
+getWashingCycles();
+
+
+const index =
+cycles.findIndex(
+      item =>
+item.batchNumber ===
+batchNumber
+    );
+
+
+  if (index === -1) {
+    return null;
+  }
+
+
+const pendingKg =
+getBatchPendingKg(
+batchNumber
+    );
+
+
+  cycles[index]
+    .manualComplete = true;
+
+
+  cycles[index].status =
+    "WASHING COMPLETE";
+
+
+  cycles[index].pendingKg =
+    Number(
+pendingKg.toFixed(2)
+    );
+
+
+  cycles[index]
+    .closingVarianceKg =
+    Number(
+pendingKg.toFixed(2)
+    );
+
+
+  cycles[index]
+    .completedAt =
+    new Date().toISOString();
+
+
+saveWashingCycles(
+    cycles
+  );
+
+
+  return cycles[index];
+}
+
+
+/* =========================================================
+   GET BATCHES STILL AVAILABLE FOR WASHING
+   ========================================================= */
+
+function getOpenMaterialBatches() {
+
+  return getMaterialBatchRecords()
+    .filter(batch => {
+
+const cycle =
+getWashingCycleForBatch(
+batch.batchNumber
+        );
+
+const pending =
+getBatchPendingKg(
+batch.batchNumber
+        );
+
+      return (
+        pending > 0.01 &&
+        (
+          !cycle ||
+cycle.status !==
+            "WASHING COMPLETE"
+        )
+      );
+
+    });
 }
 
 
@@ -1093,12 +1564,34 @@ saveWashingCycles(cycles);
    ========================================================= */
 
 function setWashingTarget() {
-const modal = document.createElement("div");
+
+const batches =
+getOpenMaterialBatches();
+
+
+  if (
+batches.length === 0
+  ) {
+
+    alert(
+      "There is no open company material batch available for washing.\n\n" +
+      "Record new company material first so the system can create a batch such as KB001."
+    );
+
+    return;
+  }
+
+
+const modal =
+document.createElement(
+      "div"
+    );
+
 
 modal.style.cssText = `
 position:fixed;
     inset:0;
-background:rgba(0,0,0,0.55);
+background:rgba(0,0,0,.55);
 display:flex;
 align-items:center;
 justify-content:center;
@@ -1106,46 +1599,66 @@ justify-content:center;
 font-family:Arial,sans-serif;
   `;
 
+
+const batchOptions =
+batches.map(batch => `
+
+<option
+        value="${batch.batchNumber}"
+>
+
+        ${batch.batchNumber}
+        -
+        ${batch.materialType || "Kavera"}
+        -
+        ${getBatchTotalKg(batch).toLocaleString()}
+        KG
+
+</option>
+
+    `).join("");
+
+
 modal.innerHTML = `
+
 <div style="
 background:white;
-      width:90%;
-      max-width:600px;
+      width:94%;
+      max-width:760px;
+      max-height:92vh;
+overflow:auto;
       padding:28px;
       border-radius:16px;
-      box-shadow:0 12px 35px rgba(0,0,0,0.25);
+      box-shadow:
+      0 12px 35px
+rgba(0,0,0,.25);
     ">
 
-<h2 style="margin-top:0;">
+<h2 style="
+        margin-top:0;
+      ">
         Set Washing Target
 </h2>
 
-<p style="color:#666;">
-        Director sets the kavera target for a specific shift.
+<p style="
+        color:#666;
+      ">
+        Director sets a fresh target
+        for each shift from an open
+        material batch.
 </p>
 
-<label style="display:block;margin-bottom:6px;font-weight:600;">
-        Date
-</label>
 
-<input
-        id="washingTargetDate"
-        type="date"
-        style="
-          width:100%;
-          padding:10px;
-          margin-bottom:18px;
-          border:1px solid #ccc;
-          border-radius:8px;
-        "
->
-
-<label style="display:block;margin-bottom:6px;font-weight:600;">
-        Shift
+<label style="
+display:block;
+        margin-bottom:6px;
+        font-weight:600;
+      ">
+        Material Batch
 </label>
 
 <select
-        id="washingTargetShift"
+        id="washingBatch"
         style="
           width:100%;
           padding:10px;
@@ -1154,12 +1667,206 @@ background:white;
           border-radius:8px;
         "
 >
-<option value="">Select Shift</option>
-<option value="Day">Day</option>
-<option value="Night">Night</option>
+
+        ${batchOptions}
+
 </select>
 
-<label style="display:block;margin-bottom:6px;font-weight:600;">
+
+<div style="
+display:grid;
+        grid-template-columns:
+        repeat(2,1fr);
+        gap:14px;
+        margin-bottom:20px;
+      ">
+
+
+<div>
+
+<label style="
+display:block;
+            margin-bottom:6px;
+            font-weight:600;
+          ">
+            Washing Cycle
+</label>
+
+<input
+            id="targetCycleNumber"
+readonly
+            style="
+              width:100%;
+              padding:10px;
+              border:1px solid #ccc;
+              border-radius:8px;
+              background:#f3f5f4;
+            "
+>
+
+</div>
+
+
+<div>
+
+<label style="
+display:block;
+            margin-bottom:6px;
+            font-weight:600;
+          ">
+            Total WC Kavera (KG)
+</label>
+
+<input
+            id="targetTotalKg"
+readonly
+            style="
+              width:100%;
+              padding:10px;
+              border:1px solid #ccc;
+              border-radius:8px;
+              background:#f3f5f4;
+            "
+>
+
+</div>
+
+
+<div>
+
+<label style="
+display:block;
+            margin-bottom:6px;
+            font-weight:600;
+          ">
+            Total Washed So Far (KG)
+</label>
+
+<input
+            id="targetWashedKg"
+readonly
+            style="
+              width:100%;
+              padding:10px;
+              border:1px solid #ccc;
+              border-radius:8px;
+              background:#f3f5f4;
+            "
+>
+
+</div>
+
+
+<div>
+
+<label style="
+display:block;
+            margin-bottom:6px;
+            font-weight:600;
+          ">
+            Pending WC Kavera (KG)
+</label>
+
+<input
+            id="targetPendingKg"
+readonly
+            style="
+              width:100%;
+              padding:10px;
+              border:1px solid #ccc;
+              border-radius:8px;
+              background:#f3f5f4;
+            "
+>
+
+</div>
+
+</div>
+
+
+<div style="
+display:grid;
+        grid-template-columns:
+        1fr 1fr;
+        gap:14px;
+      ">
+
+
+<div>
+
+<label style="
+display:block;
+            margin-bottom:6px;
+            font-weight:600;
+          ">
+            Date
+</label>
+
+<input
+            id="washingTargetDate"
+            type="date"
+            value="${
+              new Date()
+                .toISOString()
+                .split("T")[0]
+            }"
+            style="
+              width:100%;
+              padding:10px;
+              margin-bottom:18px;
+              border:1px solid #ccc;
+              border-radius:8px;
+            "
+>
+
+</div>
+
+
+<div>
+
+<label style="
+display:block;
+            margin-bottom:6px;
+            font-weight:600;
+          ">
+            Shift
+</label>
+
+<select
+            id="washingTargetShift"
+            style="
+              width:100%;
+              padding:10px;
+              margin-bottom:18px;
+              border:1px solid #ccc;
+              border-radius:8px;
+            "
+>
+
+<option value="">
+              Select Shift
+</option>
+
+<option value="Day">
+              Day
+</option>
+
+<option value="Night">
+              Night
+</option>
+
+</select>
+
+</div>
+
+</div>
+
+
+<label style="
+display:block;
+        margin-bottom:6px;
+        font-weight:600;
+      ">
         Target Kavera To Wash (KG)
 </label>
 
@@ -1177,6 +1884,7 @@ background:white;
           border-radius:8px;
         "
 >
+
 
 <div style="
 display:flex;
@@ -1198,6 +1906,7 @@ cursor:pointer;
           Close
 </button>
 
+
 <button
           id="saveWashingTargetBtn"
           type="button"
@@ -1215,91 +1924,314 @@ cursor:pointer;
 </button>
 
 </div>
+
 </div>
   `;
 
-document.body.appendChild(modal);
 
-document.getElementById(
-    "closeWashingTargetBtn"
-  ).onclick = function () {
-modal.remove();
-  };
+document.body.appendChild(
+    modal
+  );
 
-document.getElementById(
-    "saveWashingTargetBtn"
-  ).onclick = function () {
+
+  function refreshBatchSummary() {
+
+const batchNumber =
+modal.querySelector(
+        "#washingBatch"
+      ).value;
+
+
+const batch =
+batches.find(
+        item =>
+item.batchNumber ===
+batchNumber
+      );
+
+
+    if (!batch) {
+      return;
+    }
+
+
+const cycle =
+ensureWashingCycleForBatch(
+        batch
+      );
+
+
+const totalKg =
+getBatchTotalKg(
+        batch
+      );
+
+
+const washedKg =
+getBatchWashedKg(
+batchNumber
+      );
+
+
+const pendingKg =
+Math.max(
+totalKg -
+washedKg,
+        0
+      );
+
+
+modal.querySelector(
+      "#targetCycleNumber"
+    ).value =
+cycle.cycleNumber;
+
+
+modal.querySelector(
+      "#targetTotalKg"
+    ).value =
+totalKg.toFixed(2);
+
+
+modal.querySelector(
+      "#targetWashedKg"
+    ).value =
+washedKg.toFixed(2);
+
+
+modal.querySelector(
+      "#targetPendingKg"
+    ).value =
+pendingKg.toFixed(2);
+  }
+
+
+modal.querySelector(
+    "#washingBatch"
+  ).onchange =
+refreshBatchSummary;
+
+
+modal.querySelector(
+    "#closeWashingTargetBtn"
+  ).onclick =
+    () =>modal.remove();
+
+
+modal.querySelector(
+    "#saveWashingTargetBtn"
+  ).onclick =
+    function () {
+
+
+const batchNumber =
+modal.querySelector(
+          "#washingBatch"
+        ).value;
+
+
+const batch =
+batches.find(
+          item =>
+item.batchNumber ===
+batchNumber
+        );
+
 
 const date =
-document.getElementById(
-        "washingTargetDate"
-      ).value;
+modal.querySelector(
+          "#washingTargetDate"
+        ).value;
+
 
 const shift =
-document.getElementById(
-        "washingTargetShift"
-      ).value;
+modal.querySelector(
+          "#washingTargetShift"
+        ).value;
 
-const targetKg = Number(
-document.getElementById(
-        "washingTargetKg"
-      ).value
-    );
 
-    if (!date) {
-      alert("Please select the washing date.");
-      return;
-    }
+const targetKg =
+        Number(
+modal.querySelector(
+            "#washingTargetKg"
+          ).value
+        ) || 0;
 
-    if (!shift) {
-      alert("Please select the washing shift.");
-      return;
-    }
 
-    if (targetKg<= 0) {
-      alert("Please enter the target KG.");
-      return;
-    }
+      if (!batch) {
 
-const records = getWashingShiftRecords();
+        alert(
+          "Please select a material batch."
+        );
 
-const duplicate = records.some(record =>
-record.date === date &&
-record.shift === shift &&
-record.status !== "CANCELLED"
-    );
+        return;
+      }
 
-    if (duplicate) {
-      alert(
-        "A washing target already exists for this date and shift."
-      );
-      return;
-    }
+
+      if (!date) {
+
+        alert(
+          "Please select the washing date."
+        );
+
+        return;
+      }
+
+
+      if (!shift) {
+
+        alert(
+          "Please select the washing shift."
+        );
+
+        return;
+      }
+
+
+      if (
+targetKg<= 0
+      ) {
+
+        alert(
+          "Please enter the target KG."
+        );
+
+        return;
+      }
+
+
+const pendingKg =
+getBatchPendingKg(
+batchNumber
+        );
+
+
+      if (
+targetKg>
+pendingKg + 0.01
+      ) {
+
+        alert(
+          "Target KG cannot be greater than the Pending WC Kavera of " +
+pendingKg.toFixed(2) +
+          " KG."
+        );
+
+        return;
+      }
+
+
+const records =
+getWashingShiftRecords();
+
+
+const duplicate =
+records.some(
+          record =>
+
+record.batchNumber ===
+batchNumber&&
+
+record.date ===
+              date &&
+
+record.shift ===
+              shift &&
+
+record.targetStatus !==
+              "CANCELLED"
+        );
+
+
+      if (duplicate) {
+
+        alert(
+          "A washing target already exists for " +
+batchNumber +
+          " on this date and shift."
+        );
+
+        return;
+      }
+
+
+const cycle =
+ensureWashingCycleForBatch(
+          batch
+        );
+
 
 records.push({
-      id: Date.now(),
-      date,
-      shift,
-targetKg,
+
+        id: Date.now(),
+
+batchId:
+batch.id,
+
+batchNumber,
+
+cycleId:
+cycle.id,
+
+cycleNumber:
+cycle.cycleNumber,
+
+        date,
+
+        shift,
+
+targetKg:
+          Number(
+targetKg.toFixed(2)
+          ),
+
 actualWashedKg: 0,
+
 discardedKg: 0,
+
 achievementPercent: 0,
-      staff: "",
-cycleId: null,
-cycleNumber: "",
-targetStatus: "TARGET SET",
+
+        staff: "",
+
+targetStatus:
+          "TARGET SET",
+
 washingComplete: false,
-createdAt: new Date().toISOString()
-    });
 
-saveWashingShiftRecords(records);
+correctionHistory: [],
 
-    alert(
-      "Washing target saved successfully."
-    );
+createdAt:
+          new Date().toISOString()
+      });
+
+
+saveWashingShiftRecords(
+        records
+      );
+
+
+      alert(
+        "Washing target saved successfully.\n\n" +
+
+        "Batch: " +
+batchNumber +
+        "\n" +
+
+        "Cycle: " +
+cycle.cycleNumber +
+        "\n" +
+
+        "Target: " +
+targetKg.toFixed(2) +
+        " KG"
+      );
+
 
 modal.remove();
-  };
+    };
+
+
+refreshBatchSummary();
 }
 
 
@@ -1308,25 +2240,41 @@ modal.remove();
    ========================================================= */
 
 function recordWashing() {
-const records = getWashingShiftRecords();
 
-const pendingTargets = records.filter(record =>
-record.targetStatus === "TARGET SET"
-  );
+const records =
+getWashingShiftRecords();
 
-  if (pendingTargets.length === 0) {
+
+const pendingTargets =
+records.filter(
+      record =>
+record.targetStatus ===
+        "TARGET SET"
+    );
+
+
+  if (
+pendingTargets.length === 0
+  ) {
+
     alert(
       "There is no washing target waiting for the Manager."
     );
+
     return;
   }
 
-const modal = document.createElement("div");
+
+const modal =
+document.createElement(
+      "div"
+    );
+
 
 modal.style.cssText = `
 position:fixed;
     inset:0;
-background:rgba(0,0,0,0.55);
+background:rgba(0,0,0,.55);
 display:flex;
 align-items:center;
 justify-content:center;
@@ -1334,62 +2282,119 @@ justify-content:center;
 font-family:Arial,sans-serif;
   `;
 
-const targetOptions = pendingTargets
-    .map(record => `
-<option value="${record.id}">
-        ${record.date} - ${record.shift} Shift - Target ${Number(record.targetKg).toLocaleString()} KG
+
+const targetOptions =
+pendingTargets.map(
+      record => `
+
+<option
+          value="${record.id}"
+>
+
+          ${
+record.batchNumber ||
+            "Legacy"
+          }
+
+          -
+
+          ${
+record.cycleNumber ||
+            ""
+          }
+
+          -
+
+          ${record.date}
+
+          -
+
+          ${record.shift}
+
+          -
+
+          Target
+          ${
+            Number(
+record.targetKg
+            ).toLocaleString()
+          }
+          KG
+
 </option>
-    `)
-    .join("");
+
+      `
+    ).join("");
+
 
 modal.innerHTML = `
+
 <div style="
 background:white;
-      width:92%;
-      max-width:750px;
-      max-height:90vh;
+      width:94%;
+      max-width:850px;
+      max-height:92vh;
 overflow:auto;
       padding:30px;
       border-radius:16px;
-      box-shadow:0 12px 35px rgba(0,0,0,0.25);
+      box-shadow:
+      0 12px 35px
+rgba(0,0,0,.25);
     ">
 
-<h2 style="margin-top:0;">
+<h2 style="
+        margin-top:0;
+      ">
         Record Washing
 </h2>
 
-<label style="display:block;margin-bottom:6px;font-weight:600;">
+
+<label style="
+display:block;
+        margin-bottom:6px;
+        font-weight:600;
+      ">
         Washing Target
 </label>
+
 
 <select
         id="washingTargetRecord"
         style="
           width:100%;
           padding:10px;
-          margin-bottom:18px;
+          margin-bottom:20px;
           border:1px solid #ccc;
           border-radius:8px;
         "
 >
+
         ${targetOptions}
+
 </select>
+
 
 <div style="
 display:grid;
-        grid-template-columns:1fr 1fr;
-        gap:18px;
-        margin-bottom:18px;
+        grid-template-columns:
+        repeat(2,1fr);
+        gap:14px;
+        margin-bottom:20px;
       ">
 
+
 <div>
-<label style="display:block;margin-bottom:6px;font-weight:600;">
-            Target KG
+
+<label style="
+display:block;
+            margin-bottom:6px;
+            font-weight:600;
+          ">
+            Material Batch
 </label>
 
 <input
-            id="washingDisplayTargetKg"
-            type="number"
+            id="washingDisplayBatch"
 readonly
             style="
               width:100%;
@@ -1399,10 +2404,183 @@ readonly
               background:#f3f5f4;
             "
 >
+
 </div>
 
+
 <div>
-<label style="display:block;margin-bottom:6px;font-weight:600;">
+
+<label style="
+display:block;
+            margin-bottom:6px;
+            font-weight:600;
+          ">
+            Washing Cycle
+</label>
+
+<input
+            id="washingDisplayCycle"
+readonly
+            style="
+              width:100%;
+              padding:10px;
+              border:1px solid #ccc;
+              border-radius:8px;
+              background:#f3f5f4;
+            "
+>
+
+</div>
+
+
+<div>
+
+<label style="
+display:block;
+            margin-bottom:6px;
+            font-weight:600;
+          ">
+            Total WC Kavera (KG)
+</label>
+
+<input
+            id="washingTotalCycleKg"
+readonly
+            style="
+              width:100%;
+              padding:10px;
+              border:1px solid #ccc;
+              border-radius:8px;
+              background:#f3f5f4;
+            "
+>
+
+</div>
+
+
+<div>
+
+<label style="
+display:block;
+            margin-bottom:6px;
+            font-weight:600;
+          ">
+            Total Washed So Far (KG)
+</label>
+
+<input
+            id="washingTotalWashedKg"
+readonly
+            style="
+              width:100%;
+              padding:10px;
+              border:1px solid #ccc;
+              border-radius:8px;
+              background:#f3f5f4;
+            "
+>
+
+</div>
+
+
+<div>
+
+<label style="
+display:block;
+            margin-bottom:6px;
+            font-weight:600;
+          ">
+            Pending WC Kavera (KG)
+</label>
+
+<input
+            id="washingPendingCycleKg"
+readonly
+            style="
+              width:100%;
+              padding:10px;
+              border:1px solid #ccc;
+              border-radius:8px;
+              background:#f3f5f4;
+            "
+>
+
+</div>
+
+
+<div>
+
+<label style="
+display:block;
+            margin-bottom:6px;
+            font-weight:600;
+          ">
+            Current Washed Kavera Stock
+            (KG)
+</label>
+
+<input
+            id="currentWashedStock"
+readonly
+            value="${
+getWashedKaveraStock()
+                .toFixed(2)
+            }"
+            style="
+              width:100%;
+              padding:10px;
+              border:1px solid #ccc;
+              border-radius:8px;
+              background:#f3f5f4;
+            "
+>
+
+</div>
+
+</div>
+
+
+<div style="
+display:grid;
+        grid-template-columns:
+        1fr 1fr;
+        gap:14px;
+        margin-bottom:18px;
+      ">
+
+
+<div>
+
+<label style="
+display:block;
+            margin-bottom:6px;
+            font-weight:600;
+          ">
+            Current Shift Target (KG)
+</label>
+
+<input
+            id="washingDisplayTargetKg"
+readonly
+            style="
+              width:100%;
+              padding:10px;
+              border:1px solid #ccc;
+              border-radius:8px;
+              background:#f3f5f4;
+            "
+>
+
+</div>
+
+
+<div>
+
+<label style="
+display:block;
+            margin-bottom:6px;
+            font-weight:600;
+          ">
             Actual KG Washed
 </label>
 
@@ -1419,13 +2597,20 @@ readonly
               border-radius:8px;
             "
 >
-</div>
 
 </div>
 
-<label style="display:block;margin-bottom:6px;font-weight:600;">
+</div>
+
+
+<label style="
+display:block;
+        margin-bottom:6px;
+        font-weight:600;
+      ">
         Staff Who Worked
 </label>
+
 
 <input
         id="washingStaff"
@@ -1440,23 +2625,30 @@ readonly
         "
 >
 
+
 <div style="
 display:grid;
-        grid-template-columns:1fr 1fr;
-        gap:18px;
+        grid-template-columns:
+        1fr 1fr;
+        gap:14px;
         margin-bottom:20px;
       ">
 
+
 <div>
-<label style="display:block;margin-bottom:6px;font-weight:600;">
-            KG Not Washed KG
+
+<label style="
+display:block;
+            margin-bottom:6px;
+            font-weight:600;
+          ">
+            KG Not Washed
 </label>
 
 <input
             id="washingDiscardedKg"
-            type="number"
-            value="0"
 readonly
+            value="0"
             style="
               width:100%;
               padding:10px;
@@ -1465,18 +2657,24 @@ readonly
               background:#f3f5f4;
             "
 >
+
 </div>
 
+
 <div>
-<label style="display:block;margin-bottom:6px;font-weight:600;">
+
+<label style="
+display:block;
+            margin-bottom:6px;
+            font-weight:600;
+          ">
             Achievement %
 </label>
 
 <input
             id="washingAchievement"
-            type="number"
-            value="0"
 readonly
+            value="0"
             style="
               width:100%;
               padding:10px;
@@ -1485,57 +2683,59 @@ readonly
               background:#f3f5f4;
             "
 >
-</div>
 
 </div>
 
-<div style="
-        padding:14px;
-        background:#f7f9f8;
-        border-radius:8px;
-        margin-bottom:20px;
-      ">
-
-<strong>
-          Current Washed Kavera Stock:
-</strong>
-
-<span id="currentWashedStock">
-          ${getWashedKaveraStock().toLocaleString()} KG
-</span>
-
 </div>
+
 
 <label style="
 display:flex;
 align-items:flex-start;
         gap:10px;
         margin-bottom:24px;
+        padding:12px;
+        background:#fff8e1;
+        border-radius:8px;
       ">
+
 
 <input
           id="washingCycleComplete"
           type="checkbox"
-          style="margin-top:3px;"
+          style="
+            margin-top:3px;
+          "
 >
 
+
 <span>
+
 <strong>
-            All kavera available for washing is now finished.
+            All kavera in this material
+            batch is now finished.
 </strong>
+
 <br>
+
 <small>
-            Tick this only when the Manager confirms the current washing cycle is complete.
+            Tick only when the physical
+            batch is finished. Any remaining
+            system balance will be recorded
+            as the cycle closing variance.
 </small>
+
 </span>
 
 </label>
+
 
 <div style="
 display:flex;
 justify-content:flex-end;
         gap:12px;
       ">
+
 
 <button
           id="closeWashingBtn"
@@ -1550,6 +2750,7 @@ cursor:pointer;
 >
           Close
 </button>
+
 
 <button
           id="saveWashingBtn"
@@ -1572,263 +2773,1348 @@ cursor:pointer;
 </div>
   `;
 
-document.body.appendChild(modal);
+
+document.body.appendChild(
+    modal
+  );
+
+
+  function getSelectedRecord() {
+
+const selectedId =
+      Number(
+modal.querySelector(
+          "#washingTargetRecord"
+        ).value
+      );
+
+
+    return records.find(
+      record =>
+        Number(record.id) ===
+selectedId
+    ) || null;
+  }
 
 
   function loadSelectedTarget() {
-const selectedId = Number(
-document.getElementById(
-        "washingTargetRecord"
-      ).value
-    );
 
-const selectedRecord = records.find(
-      record => Number(record.id) === selectedId
-    );
+const record =
+getSelectedRecord();
 
-    if (!selectedRecord) return;
 
-document.getElementById(
-      "washingDisplayTargetKg"
-    ).value = selectedRecord.targetKg;
+    if (!record) {
+      return;
+    }
+
+
+const batch =
+getMaterialBatchRecords()
+        .find(
+          item =>
+item.batchNumber ===
+record.batchNumber
+        );
+
+
+const totalKg =
+      batch
+        ? getBatchTotalKg(batch)
+        : 0;
+
+
+const washedKg =
+record.batchNumber
+        ? getBatchWashedKg(
+record.batchNumber
+          )
+        : 0;
+
+
+const pendingKg =
+record.batchNumber
+        ? getBatchPendingKg(
+record.batchNumber
+          )
+        : 0;
+
+
+modal.querySelector(
+      "#washingDisplayBatch"
+    ).value =
+record.batchNumber ||
+      "Legacy Record";
+
+
+modal.querySelector(
+      "#washingDisplayCycle"
+    ).value =
+record.cycleNumber ||
+      "Legacy Cycle";
+
+
+modal.querySelector(
+      "#washingTotalCycleKg"
+    ).value =
+totalKg.toFixed(2);
+
+
+modal.querySelector(
+      "#washingTotalWashedKg"
+    ).value =
+washedKg.toFixed(2);
+
+
+modal.querySelector(
+      "#washingPendingCycleKg"
+    ).value =
+pendingKg.toFixed(2);
+
+
+modal.querySelector(
+      "#washingDisplayTargetKg"
+    ).value =
+      Number(
+record.targetKg || 0
+      ).toFixed(2);
+
+
+modal.querySelector(
+      "#washingActualKg"
+    ).value = "";
+
+
+modal.querySelector(
+      "#washingStaff"
+    ).value = "";
+
+
+modal.querySelector(
+      "#washingCycleComplete"
+    ).checked = false;
+
 
 calculateWashingResults();
   }
 
 
   function calculateWashingResults() {
-const targetKg = Number(
-document.getElementById(
-        "washingDisplayTargetKg"
-      ).value
-    ) || 0;
 
-const actualKg = Number(
-document.getElementById(
-        "washingActualKg"
-      ).value
-    ) || 0;
+const targetKg =
+      Number(
+modal.querySelector(
+          "#washingDisplayTargetKg"
+        ).value
+      ) || 0;
 
-const discardedKg =
-Math.max(targetKg - actualKg, 0);
+
+const actualKg =
+      Number(
+modal.querySelector(
+          "#washingActualKg"
+        ).value
+      ) || 0;
+
+
+const notWashedKg =
+Math.max(
+targetKg -
+actualKg,
+        0
+      );
+
 
 const achievement =
 targetKg> 0
-        ? (actualKg / targetKg) * 100
+        ? (
+actualKg /
+targetKg
+          ) * 100
         : 0;
 
-document.getElementById(
-      "washingDiscardedKg"
-    ).value = discardedKg.toFixed(2);
 
-document.getElementById(
-      "washingAchievement"
-    ).value = achievement.toFixed(2);
+modal.querySelector(
+      "#washingDiscardedKg"
+    ).value =
+notWashedKg.toFixed(2);
+
+
+modal.querySelector(
+      "#washingAchievement"
+    ).value =
+achievement.toFixed(2);
   }
 
 
-document.getElementById(
-    "washingTargetRecord"
-  ).onchange = loadSelectedTarget;
-
-document.getElementById(
-    "washingActualKg"
-  ).oninput = calculateWashingResults;
-
-document.getElementById(
-    "closeWashingBtn"
-  ).onclick = function () {
-modal.remove();
-  };
-
-loadSelectedTarget();
+modal.querySelector(
+    "#washingTargetRecord"
+  ).onchange =
+loadSelectedTarget;
 
 
-document.getElementById(
-    "saveWashingBtn"
-  ).onclick = function () {
+modal.querySelector(
+    "#washingActualKg"
+  ).oninput =
+calculateWashingResults;
 
-const selectedId = Number(
-document.getElementById(
-        "washingTargetRecord"
-      ).value
-    );
 
-const selectedRecord = records.find(
-      record => Number(record.id) === selectedId
-    );
+modal.querySelector(
+    "#closeWashingBtn"
+  ).onclick =
+    () =>modal.remove();
 
-    if (!selectedRecord) {
-      alert("Please select a washing target.");
-      return;
-    }
+
+modal.querySelector(
+    "#saveWashingBtn"
+  ).onclick =
+    function () {
+
+
+const selectedRecord =
+getSelectedRecord();
+
+
+      if (!selectedRecord) {
+
+        alert(
+          "Please select a washing target."
+        );
+
+        return;
+      }
+
 
 const targetKg =
-      Number(selectedRecord.targetKg) || 0;
+        Number(
+selectedRecord.targetKg
+        ) || 0;
 
-const actualKg = Number(
-document.getElementById(
-        "washingActualKg"
-      ).value
-    ) || 0;
+
+const actualKg =
+        Number(
+modal.querySelector(
+            "#washingActualKg"
+          ).value
+        ) || 0;
+
 
 const staff =
-document.getElementById(
-        "washingStaff"
-      ).value.trim();
+modal.querySelector(
+          "#washingStaff"
+        ).value.trim();
+
 
 const completeCycle =
-document.getElementById(
-        "washingCycleComplete"
-      ).checked;
+modal.querySelector(
+          "#washingCycleComplete"
+        ).checked;
 
-    if (!staff) {
-      alert(
-        "Please enter the staff who worked."
-      );
-      return;
-    }
 
-    if (actualKg<= 0) {
-      alert(
-        "Please enter the actual KG washed."
-      );
-      return;
-    }
+      if (!staff) {
 
-    if (actualKg>targetKg) {
-      alert(
-        "Actual KG washed cannot be greater than the Director's target."
-      );
-      return;
-    }
+        alert(
+          "Please enter the staff who worked."
+        );
 
-const discardedKg =
-Math.max(targetKg - actualKg, 0);
+        return;
+      }
+
+
+      if (
+actualKg<= 0
+      ) {
+
+        alert(
+          "Please enter the actual KG washed."
+        );
+
+        return;
+      }
+
+
+      if (
+actualKg>
+targetKg + 0.01
+      ) {
+
+        alert(
+          "Actual KG washed cannot be greater than the Director's target."
+        );
+
+        return;
+      }
+
+
+      if (
+selectedRecord.batchNumber
+      ) {
+
+const batchPending =
+getBatchPendingKg(
+selectedRecord.batchNumber
+          );
+
+
+        if (
+actualKg>
+batchPending + 0.01
+        ) {
+
+          alert(
+            "Actual KG washed cannot be greater than the Pending WC Kavera of " +
+batchPending.toFixed(2) +
+            " KG."
+          );
+
+          return;
+        }
+      }
+
+
+const notWashedKg =
+Math.max(
+targetKg -
+actualKg,
+          0
+        );
+
 
 const achievement =
 targetKg> 0
-        ? (actualKg / targetKg) * 100
-        : 0;
+          ? (
+actualKg /
+targetKg
+            ) * 100
+          : 0;
 
 
-    let activeCycle = getActiveWashingCycle();
-
-    if (!activeCycle) {
-activeCycle = createWashingCycle();
-    }
-
-
-selectedRecord.actualWashedKg =
-      Number(actualKg.toFixed(2));
-
-selectedRecord.discardedKg =
-      Number(discardedKg.toFixed(2));
-
-selectedRecord.achievementPercent =
-      Number(achievement.toFixed(2));
-
-selectedRecord.staff = staff;
-
-selectedRecord.cycleId =
-activeCycle.id;
-
-selectedRecord.cycleNumber =
-activeCycle.cycleNumber;
-
-selectedRecord.targetStatus =
-      "COMPLETED";
-
-selectedRecord.washingComplete = true;
-
-selectedRecord.completedAt =
-      new Date().toISOString();
-
-
-saveWashingShiftRecords(records);
-
-
-const cycles = getWashingCycles();
-
-const cycleIndex = cycles.findIndex(
-      cycle =>
-        Number(cycle.id) ===
-        Number(activeCycle.id)
-    );
-
-    if (cycleIndex !== -1) {
-
-      cycles[cycleIndex].totalTargetKg =
-        Number(cycles[cycleIndex].totalTargetKg || 0)
-        + targetKg;
-
-      cycles[cycleIndex].totalActualWashedKg =
+selectedRecord
+        .actualWashedKg =
         Number(
-          cycles[cycleIndex].totalActualWashedKg || 0
-        ) + actualKg;
+actualKg.toFixed(2)
+        );
 
-      cycles[cycleIndex].totalDiscardedKg =
+
+selectedRecord
+        .discardedKg =
         Number(
-          cycles[cycleIndex].totalDiscardedKg || 0
-        ) + discardedKg;
+notWashedKg.toFixed(2)
+        );
 
 
-      if (completeCycle) {
-        cycles[cycleIndex].status =
-          "WASHING COMPLETE";
+selectedRecord
+        .achievementPercent =
+        Number(
+achievement.toFixed(2)
+        );
 
-        cycles[cycleIndex].completedAt =
-          new Date().toISOString();
+
+selectedRecord.staff =
+        staff;
+
+
+selectedRecord
+        .targetStatus =
+        "COMPLETED";
+
+
+selectedRecord
+        .washingComplete =
+        true;
+
+
+selectedRecord
+        .completedAt =
+        new Date().toISOString();
+
+
+saveWashingShiftRecords(
+        records
+      );
+
+
+      let cycle = null;
+
+
+      if (
+selectedRecord.batchNumber
+      ) {
+
+        cycle =
+recalculateWashingCycle(
+selectedRecord.batchNumber
+          );
+
+
+        if (completeCycle) {
+
+          cycle =
+markWashingCycleComplete(
+selectedRecord.batchNumber
+            );
+        }
       }
 
-saveWashingCycles(cycles);
-    }
-
-
-const currentStock =
-getWashedKaveraStock();
 
 const newStock =
-currentStock + actualKg;
+getWashedKaveraStock() +
+actualKg;
 
-setWashedKaveraStock(newStock);
+
+setWashedKaveraStock(
+newStock
+      );
 
 
-    let message =
-      "Washing record saved successfully.\n\n" +
-      "Target: " +
+const pendingAfter =
+selectedRecord.batchNumber
+          ? getBatchPendingKg(
+selectedRecord.batchNumber
+            )
+          : 0;
+
+
+      let message =
+
+        "Washing record saved successfully.\n\n" +
+
+        "Batch: " +
+        (
+selectedRecord.batchNumber ||
+          "Legacy"
+        ) +
+        "\n" +
+
+        "Cycle: " +
+        (
+selectedRecord.cycleNumber ||
+          "Legacy"
+        ) +
+        "\n" +
+
+        "Target: " +
 targetKg.toFixed(2) +
-      " KG\n" +
+        " KG\n" +
 
-      "Actual Washed: " +
+        "Actual Washed: " +
 actualKg.toFixed(2) +
-      " KG\n" +
+        " KG\n" +
 
-      "Discarded: " +
-discardedKg.toFixed(2) +
-      " KG\n" +
+        "KG Not Washed: " +
+notWashedKg.toFixed(2) +
+        " KG\n" +
 
-      "Achievement: " +
+        "Achievement: " +
 achievement.toFixed(2) +
-      "%\n\n" +
+        "%\n" +
 
-      "Washed Kavera Stock: " +
+        "Pending WC: " +
+pendingAfter.toFixed(2) +
+        " KG\n\n" +
+
+        "Washed Kavera Stock: " +
 newStock.toFixed(2) +
-      " KG";
+        " KG";
 
 
-    if (completeCycle) {
-      message +=
-        "\n\nWashing Cycle " +
-activeCycle.cycleNumber +
-        " is COMPLETE.";
-    }
+      if (
+        cycle &&
+cycle.status ===
+          "WASHING COMPLETE"
+      ) {
+
+        message +=
+
+          "\n\nWashing Cycle " +
+cycle.cycleNumber +
+          " is WASHING COMPLETE.";
 
 
-    alert(message);
+        if (
+          Number(
+cycle.closingVarianceKg ||
+            0
+          ) > 0
+        ) {
+
+          message +=
+
+            "\nClosing variance: " +
+
+            Number(
+cycle.closingVarianceKg
+            ).toFixed(2) +
+
+            " KG.";
+        }
+      }
+
+
+      alert(message);
 
 modal.remove();
-  };
+    };
+
+
+loadSelectedTarget();
+}
+
+
+/* =========================================================
+   DIRECTOR - CORRECT SAVED WASHING RECORD
+   ========================================================= */
+
+function editWashingRecord(
+recordId
+) {
+
+const records =
+getWashingShiftRecords();
+
+
+const record =
+records.find(
+      item =>
+        Number(item.id) ===
+        Number(recordId)
+    );
+
+
+  if (!record) {
+
+    alert(
+      "Washing record not found."
+    );
+
+    return;
+  }
+
+
+const modal =
+document.createElement(
+      "div"
+    );
+
+
+modal.style.cssText = `
+position:fixed;
+    inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+align-items:center;
+justify-content:center;
+    z-index:10000;
+font-family:Arial,sans-serif;
+  `;
+
+
+modal.innerHTML = `
+
+<div style="
+background:white;
+      width:94%;
+      max-width:720px;
+      max-height:92vh;
+overflow:auto;
+      padding:28px;
+      border-radius:16px;
+    ">
+
+<h2 style="
+        margin-top:0;
+      ">
+        Director Correction -
+        Washing Record
+</h2>
+
+
+<p style="
+        background:#fff8e1;
+        padding:12px;
+        border-radius:8px;
+        color:#6b5200;
+      ">
+        Every correction keeps
+        the old figures and the
+        reason in the correction history.
+</p>
+
+
+<div style="
+display:grid;
+        grid-template-columns:
+        1fr 1fr;
+        gap:14px;
+      ">
+
+
+<div>
+
+<label>
+            Material Batch
+</label>
+
+<input
+readonly
+            value="${
+record.batchNumber ||
+              "Legacy"
+            }"
+            style="
+              width:100%;
+              padding:10px;
+              background:#f3f5f4;
+              border:1px solid #ccc;
+              border-radius:8px;
+            "
+>
+
+</div>
+
+
+<div>
+
+<label>
+            Washing Cycle
+</label>
+
+<input
+readonly
+            value="${
+record.cycleNumber ||
+              "Legacy"
+            }"
+            style="
+              width:100%;
+              padding:10px;
+              background:#f3f5f4;
+              border:1px solid #ccc;
+              border-radius:8px;
+            "
+>
+
+</div>
+
+
+<div>
+
+<label>
+            Date
+</label>
+
+<input
+            id="editWashDate"
+            type="date"
+            value="${
+record.date || ""
+            }"
+            style="
+              width:100%;
+              padding:10px;
+              border:1px solid #ccc;
+              border-radius:8px;
+            "
+>
+
+</div>
+
+
+<div>
+
+<label>
+            Shift
+</label>
+
+<select
+            id="editWashShift"
+            style="
+              width:100%;
+              padding:10px;
+              border:1px solid #ccc;
+              border-radius:8px;
+            "
+>
+
+<option
+              value="Day"
+              ${
+record.shift ===
+                "Day"
+                  ? "selected"
+                  : ""
+              }
+>
+              Day
+</option>
+
+<option
+              value="Night"
+              ${
+record.shift ===
+                "Night"
+                  ? "selected"
+                  : ""
+              }
+>
+              Night
+</option>
+
+</select>
+
+</div>
+
+
+<div>
+
+<label>
+            Target KG
+</label>
+
+<input
+            id="editWashTarget"
+            type="number"
+            min="0"
+            step="0.01"
+            value="${
+              Number(
+record.targetKg ||
+                0
+              )
+            }"
+            style="
+              width:100%;
+              padding:10px;
+              border:1px solid #ccc;
+              border-radius:8px;
+            "
+>
+
+</div>
+
+
+<div>
+
+<label>
+            Actual KG Washed
+</label>
+
+<input
+            id="editWashActual"
+            type="number"
+            min="0"
+            step="0.01"
+            value="${
+              Number(
+record.actualWashedKg ||
+                0
+              )
+            }"
+            style="
+              width:100%;
+              padding:10px;
+              border:1px solid #ccc;
+              border-radius:8px;
+            "
+>
+
+</div>
+
+</div>
+
+
+<label style="
+display:block;
+        margin-top:16px;
+      ">
+        Staff Who Worked
+</label>
+
+
+<input
+        id="editWashStaff"
+        value="${
+          String(
+record.staff || ""
+          ).replace(
+            /"/g,
+            "&quot;"
+          )
+        }"
+        style="
+          width:100%;
+          padding:10px;
+          border:1px solid #ccc;
+          border-radius:8px;
+        "
+>
+
+
+<label style="
+display:block;
+        margin-top:16px;
+        font-weight:600;
+      ">
+        Reason for Correction *
+</label>
+
+
+<textarea
+        id="editWashReason"
+        rows="3"
+        placeholder="Example: Actual weight was typed as 8,000 KG instead of 800 KG"
+        style="
+          width:100%;
+          padding:10px;
+          border:1px solid #ccc;
+          border-radius:8px;
+        "
+></textarea>
+
+
+<div style="
+display:flex;
+justify-content:flex-end;
+        gap:12px;
+        margin-top:22px;
+      ">
+
+
+<button
+          id="cancelWashEdit"
+          type="button"
+          style="
+background:white;
+            border:1px solid #ccc;
+            padding:10px 18px;
+            border-radius:8px;
+          "
+>
+          Cancel
+</button>
+
+
+<button
+          id="saveWashEdit"
+          type="button"
+          style="
+            background:#0b5d3b;
+color:white;
+border:none;
+            padding:10px 18px;
+            border-radius:8px;
+            font-weight:600;
+          "
+>
+          Save Director Correction
+</button>
+
+</div>
+
+</div>
+  `;
+
+
+document.body.appendChild(
+    modal
+  );
+
+
+modal.querySelector(
+    "#cancelWashEdit"
+  ).onclick =
+    () =>modal.remove();
+
+
+modal.querySelector(
+    "#saveWashEdit"
+  ).onclick =
+    function () {
+
+
+const newDate =
+modal.querySelector(
+          "#editWashDate"
+        ).value;
+
+
+const newShift =
+modal.querySelector(
+          "#editWashShift"
+        ).value;
+
+
+const newTarget =
+        Number(
+modal.querySelector(
+            "#editWashTarget"
+          ).value
+        ) || 0;
+
+
+const newActual =
+        Number(
+modal.querySelector(
+            "#editWashActual"
+          ).value
+        ) || 0;
+
+
+const newStaff =
+modal.querySelector(
+          "#editWashStaff"
+        ).value.trim();
+
+
+const reason =
+modal.querySelector(
+          "#editWashReason"
+        ).value.trim();
+
+
+      if (!newDate) {
+
+        alert(
+          "Please enter the date."
+        );
+
+        return;
+      }
+
+
+      if (
+newTarget<= 0
+      ) {
+
+        alert(
+          "Target KG must be greater than zero."
+        );
+
+        return;
+      }
+
+
+      if (
+newActual< 0
+      ) {
+
+        alert(
+          "Actual KG cannot be negative."
+        );
+
+        return;
+      }
+
+
+      if (
+newActual>
+newTarget + 0.01
+      ) {
+
+        alert(
+          "Actual KG washed cannot be greater than the target KG."
+        );
+
+        return;
+      }
+
+
+      if (!newStaff) {
+
+        alert(
+          "Please enter the staff who worked."
+        );
+
+        return;
+      }
+
+
+      if (!reason) {
+
+        alert(
+          "Please enter the reason for the correction."
+        );
+
+        return;
+      }
+
+
+const duplicate =
+records.some(
+          item =>
+
+            Number(item.id) !==
+              Number(record.id) &&
+
+item.batchNumber ===
+record.batchNumber&&
+
+item.date ===
+newDate&&
+
+item.shift ===
+newShift&&
+
+item.targetStatus !==
+              "CANCELLED"
+        );
+
+
+      if (duplicate) {
+
+        alert(
+          "Another washing record already exists for this batch, date and shift."
+        );
+
+        return;
+      }
+
+
+const oldActual =
+        Number(
+record.actualWashedKg ||
+          0
+        );
+
+
+const stockDelta =
+newActual -
+oldActual;
+
+
+const proposedStock =
+getWashedKaveraStock() +
+stockDelta;
+
+
+      if (
+proposedStock< -0.01
+      ) {
+
+        alert(
+          "This correction would make Washed Kavera Stock negative. Check whether some washed stock has already been used in Production."
+        );
+
+        return;
+      }
+
+
+const oldValues = {
+
+        date:
+record.date,
+
+        shift:
+record.shift,
+
+targetKg:
+          Number(
+record.targetKg ||
+            0
+          ),
+
+actualWashedKg:
+oldActual,
+
+        staff:
+record.staff || "",
+
+discardedKg:
+          Number(
+record.discardedKg ||
+            0
+          ),
+
+achievementPercent:
+          Number(
+record.achievementPercent ||
+            0
+          )
+      };
+
+
+const notWashedKg =
+Math.max(
+newTarget -
+newActual,
+          0
+        );
+
+
+const achievement =
+newTarget> 0
+          ? (
+newActual /
+newTarget
+            ) * 100
+          : 0;
+
+
+record.date =
+newDate;
+
+
+record.shift =
+newShift;
+
+
+record.targetKg =
+        Number(
+newTarget.toFixed(2)
+        );
+
+
+record.actualWashedKg =
+        Number(
+newActual.toFixed(2)
+        );
+
+
+record.staff =
+newStaff;
+
+
+record.discardedKg =
+        Number(
+notWashedKg.toFixed(2)
+        );
+
+
+record.achievementPercent =
+        Number(
+achievement.toFixed(2)
+        );
+
+
+record.correctedAt =
+        new Date().toISOString();
+
+
+      if (
+        !Array.isArray(
+record.correctionHistory
+        )
+      ) {
+
+record.correctionHistory =
+          [];
+      }
+
+
+record.correctionHistory
+        .push({
+
+correctedAt:
+record.correctedAt,
+
+correctedBy:
+            "Director",
+
+          reason,
+
+oldValues,
+
+newValues: {
+
+            date:
+record.date,
+
+            shift:
+record.shift,
+
+targetKg:
+record.targetKg,
+
+actualWashedKg:
+record.actualWashedKg,
+
+            staff:
+record.staff,
+
+discardedKg:
+record.discardedKg,
+
+achievementPercent:
+record.achievementPercent
+          }
+
+        });
+
+
+saveWashingShiftRecords(
+        records
+      );
+
+
+setWashedKaveraStock(
+proposedStock
+      );
+
+
+      if (
+record.batchNumber
+      ) {
+
+recalculateWashingCycle(
+record.batchNumber
+        );
+      }
+
+
+      alert(
+
+        "Washing record corrected successfully.\n\n" +
+
+        "Old Actual: " +
+oldActual.toFixed(2) +
+        " KG\n" +
+
+        "New Actual: " +
+newActual.toFixed(2) +
+        " KG\n" +
+
+        "Washed Stock adjustment: " +
+
+        (
+stockDelta>= 0
+            ? "+"
+            : ""
+        ) +
+
+stockDelta.toFixed(2) +
+        " KG"
+      );
+
+
+modal.remove();
+
+
+      document
+        .querySelectorAll(
+          "[data-washing-records-modal='true']"
+        )
+        .forEach(
+          item =>
+item.remove()
+        );
+
+
+viewWashingRecords();
+    };
+}
+
+
+/* =========================================================
+   VIEW DIRECTOR CORRECTION HISTORY
+   ========================================================= */
+
+function viewWashingCorrectionHistory(
+recordId
+) {
+
+const record =
+getWashingShiftRecords()
+      .find(
+        item =>
+          Number(item.id) ===
+          Number(recordId)
+      );
+
+
+  if (!record) {
+
+    alert(
+      "Washing record not found."
+    );
+
+    return;
+  }
+
+
+const history =
+Array.isArray(
+record.correctionHistory
+    )
+      ? record.correctionHistory
+      : [];
+
+
+  if (
+history.length === 0
+  ) {
+
+    alert(
+      "This washing record has no corrections."
+    );
+
+    return;
+  }
+
+
+const text =
+history.map(
+      (item, index) =>
+
+        "Correction " +
+        (index + 1) +
+        "\n" +
+
+        "Date: " +
+        new Date(
+item.correctedAt
+        ).toLocaleString() +
+        "\n" +
+
+        "By: " +
+        (
+item.correctedBy ||
+          "Director"
+        ) +
+        "\n" +
+
+        "Reason: " +
+item.reason +
+        "\n" +
+
+        "Actual KG: " +
+
+        Number(
+item.oldValues
+            ?.actualWashedKg ||
+          0
+        ).toFixed(2) +
+
+        " -> " +
+
+        Number(
+item.newValues
+            ?.actualWashedKg ||
+          0
+        ).toFixed(2) +
+
+        "\n" +
+
+        "Target KG: " +
+
+        Number(
+item.oldValues
+            ?.targetKg ||
+          0
+        ).toFixed(2) +
+
+        " -> " +
+
+        Number(
+item.newValues
+            ?.targetKg ||
+          0
+        ).toFixed(2)
+
+    ).join(
+      "\n\n--------------------\n\n"
+    );
+
+
+  alert(text);
 }
 
 
@@ -1837,14 +4123,27 @@ modal.remove();
    ========================================================= */
 
 function viewWashingRecords() {
-const records = getWashingShiftRecords();
 
-const modal = document.createElement("div");
+const records =
+getWashingShiftRecords();
+
+
+const modal =
+document.createElement(
+      "div"
+    );
+
+
+modal.setAttribute(
+    "data-washing-records-modal",
+    "true"
+  );
+
 
 modal.style.cssText = `
 position:fixed;
     inset:0;
-background:rgba(0,0,0,0.55);
+background:rgba(0,0,0,.55);
 display:flex;
 align-items:center;
 justify-content:center;
@@ -1852,86 +4151,431 @@ justify-content:center;
 font-family:Arial,sans-serif;
   `;
 
-const rows = records.length
-    ? records.map(record => `
+
+const rows =
+records.length
+
+      ? records.map(
+          record => {
+
+
+const cycle =
+record.batchNumber
+
+                ? getWashingCycleForBatch(
+record.batchNumber
+                  )
+
+                : null;
+
+
+const historyCount =
+Array.isArray(
+record.correctionHistory
+              )
+
+                ? record
+                    .correctionHistory
+                    .length
+
+                : 0;
+
+
+            return `
+
 <tr>
-<td>${record.date || ""}</td>
-<td>${record.shift || ""}</td>
-<td>${record.cycleNumber || "-"}</td>
-<td>${Number(record.targetKg || 0).toLocaleString()}</td>
-<td>${Number(record.actualWashedKg || 0).toLocaleString()}</td>
-<td>${Number(record.discardedKg || 0).toLocaleString()}</td>
-<td>${Number(record.achievementPercent || 0).toFixed(2)}%</td>
-<td>${record.staff || ""}</td>
-<td>${record.targetStatus || ""}</td>
-</tr>
-    `).join("")
-    : `
-<tr>
-<td colspan="9" style="text-align:center;">
-          No washing records found.
+
+<td>
+                  ${
+record.date ||
+                    ""
+                  }
 </td>
+
+<td>
+                  ${
+record.shift ||
+                    ""
+                  }
+</td>
+
+<td>
+                  ${
+record.batchNumber ||
+                    "Legacy"
+                  }
+</td>
+
+<td>
+                  ${
+record.cycleNumber ||
+                    "Legacy"
+                  }
+</td>
+
+<td>
+                  ${
+                    Number(
+record.targetKg ||
+                      0
+                    ).toLocaleString()
+                  }
+</td>
+
+<td>
+                  ${
+                    Number(
+record.actualWashedKg ||
+                      0
+                    ).toLocaleString()
+                  }
+</td>
+
+<td>
+                  ${
+                    Number(
+record.discardedKg ||
+                      0
+                    ).toLocaleString()
+                  }
+</td>
+
+<td>
+                  ${
+                    Number(
+record.achievementPercent ||
+                      0
+                    ).toFixed(2)
+                  }%
+</td>
+
+<td>
+                  ${
+record.staff ||
+                    ""
+                  }
+</td>
+
+<td>
+                  ${
+record.targetStatus ||
+                    ""
+                  }
+</td>
+
+<td>
+                  ${
+                    cycle
+                      ? cycle.status
+                      : "Legacy"
+                  }
+</td>
+
+<td style="
+white-space:nowrap;
+                ">
+
+                  ${
+record.targetStatus ===
+                    "COMPLETED"
+
+                      ? `
+<button
+                          type="button"
+onclick="editWashingRecord(${record.id})"
+                          style="
+                            padding:6px 9px;
+                            margin:2px;
+cursor:pointer;
+                          "
+>
+                          Director Edit
+</button>
+                      `
+
+                      : ""
+                  }
+
+
+                  ${
+historyCount> 0
+
+                      ? `
+<button
+                          type="button"
+onclick="viewWashingCorrectionHistory(${record.id})"
+                          style="
+                            padding:6px 9px;
+                            margin:2px;
+cursor:pointer;
+                          "
+>
+                          History
+                          (${historyCount})
+</button>
+                      `
+
+                      : ""
+                  }
+
+</td>
+
 </tr>
-    `;
+            `;
+          }
+        ).join("")
+
+      : `
+
+<tr>
+
+<td
+colspan="12"
+            style="
+text-align:center;
+            "
+>
+            No washing records found.
+</td>
+
+</tr>
+      `;
+
+
+const activeCycles =
+getWashingCycles()
+      .filter(
+        cycle =>
+cycle.batchNumber
+      );
+
+
+const cycleSummary =
+activeCycles.length
+
+      ? activeCycles.map(
+          cycle => `
+
+<div style="
+              border:1px solid #e1e7e3;
+              border-radius:8px;
+              padding:10px;
+              min-width:210px;
+            ">
+
+<strong>
+                ${cycle.cycleNumber}
+</strong>
+
+<br>
+
+<small>
+                ${cycle.batchNumber}
+                •
+                ${cycle.status}
+</small>
+
+<br>
+
+<span>
+                Total:
+                ${
+                  Number(
+cycle.totalBatchKg ||
+                    0
+                  ).toLocaleString()
+                }
+                KG
+</span>
+
+<br>
+
+<span>
+                Washed:
+                ${
+                  Number(
+cycle.totalActualWashedKg ||
+                    0
+                  ).toLocaleString()
+                }
+                KG
+</span>
+
+<br>
+
+<span>
+                Pending:
+                ${
+                  Number(
+cycle.pendingKg ||
+                    0
+                  ).toLocaleString()
+                }
+                KG
+</span>
+
+</div>
+
+          `
+        ).join("")
+
+      : `
+
+<span style="
+          color:#666;
+        ">
+          No KB/WCKB cycles created yet.
+</span>
+
+      `;
+
 
 modal.innerHTML = `
+
 <div style="
 background:white;
-      width:95%;
-      max-width:1100px;
-      max-height:90vh;
+      width:97%;
+      max-width:1400px;
+      max-height:92vh;
 overflow:auto;
       padding:28px;
       border-radius:16px;
     ">
 
-<h2 style="margin-top:0;">
+
+<h2 style="
+        margin-top:0;
+      ">
         Washing Records
 </h2>
+
 
 <div style="
         margin-bottom:18px;
         padding:12px;
-        background:#f3f5f4;
+        background:#eef8f2;
         border-radius:8px;
       ">
+
 <strong>
           Current Washed Kavera Stock:
 </strong>
-        ${getWashedKaveraStock().toLocaleString()} KG
+
+        ${
+getWashedKaveraStock()
+            .toLocaleString()
+        }
+        KG
+
 </div>
 
-<div style="overflow-x:auto;">
+
+<h3 style="
+        font-size:15px;
+        margin-bottom:10px;
+      ">
+        Washing Cycle Summary
+</h3>
+
+
+<div style="
+display:flex;
+        gap:10px;
+        overflow-x:auto;
+        margin-bottom:20px;
+      ">
+
+        ${cycleSummary}
+
+</div>
+
+
+<div style="
+        overflow-x:auto;
+      ">
+
 <table style="
           width:100%;
 border-collapse:collapse;
+          min-width:1250px;
         ">
 
+
 <thead>
+
 <tr>
-<th>Date</th>
-<th>Shift</th>
-<th>Cycle</th>
-<th>Target KG</th>
-<th>Actual Washed KG</th>
-<th>KG Not Washed</th>
-<th>Achievement</th>
-<th>Staff</th>
-<th>Status</th>
+
+<th>
+                Date
+</th>
+
+<th>
+                Shift
+</th>
+
+<th>
+                Batch
+</th>
+
+<th>
+                Cycle
+</th>
+
+<th>
+                Target KG
+</th>
+
+<th>
+                Actual Washed KG
+</th>
+
+<th>
+                KG Not Washed
+</th>
+
+<th>
+                Achievement
+</th>
+
+<th>
+                Staff
+</th>
+
+<th>
+                Record Status
+</th>
+
+<th>
+                Cycle Status
+</th>
+
+<th>
+                Director Controls
+</th>
+
 </tr>
+
 </thead>
 
+
 <tbody>
+
             ${rows}
+
 </tbody>
 
+
 </table>
+
 </div>
+
 
 <div style="
 text-align:right;
         margin-top:20px;
       ">
+
+
 <button
           id="closeWashingRecordsBtn"
           type="button"
@@ -1945,30 +4589,41 @@ cursor:pointer;
 >
           Close
 </button>
+
 </div>
 
 </div>
   `;
 
-document.body.appendChild(modal);
 
-modal.querySelectorAll("th,td").forEach(cell => {
+document.body.appendChild(
+    modal
+  );
+
+
+modal.querySelectorAll(
+    "th,td"
+  ).forEach(
+    cell => {
+
 cell.style.border =
-      "1px solid #ddd";
+        "1px solid #ddd";
 
 cell.style.padding =
-      "9px";
+        "9px";
 
 cell.style.textAlign =
-      "center";
-  });
+        "center";
+    }
+  );
 
-document.getElementById(
-    "closeWashingRecordsBtn"
-  ).onclick = function () {
-modal.remove();
-  };
+
+modal.querySelector(
+    "#closeWashingRecordsBtn"
+  ).onclick =
+    () =>modal.remove();
 }
+
 
 function recordProduction() {
   const poleStandardWeights = JSON.parse(localStorage.getItem("poleStandardWeights") || "{}");
