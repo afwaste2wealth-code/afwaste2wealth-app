@@ -1449,7 +1449,7 @@ display:grid;
 
 <div>
 <label style="display:block;margin-bottom:6px;font-weight:600;">
-            Discarded KG
+            KG Not Washed KG
 </label>
 
 <input
