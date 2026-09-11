@@ -1914,7 +1914,7 @@ border-collapse:collapse;
 <th>Cycle</th>
 <th>Target KG</th>
 <th>Actual Washed KG</th>
-<th>Discarded KG</th>
+<th>KG Not Washed</th>
 <th>Achievement</th>
 <th>Staff</th>
 <th>Status</th>
