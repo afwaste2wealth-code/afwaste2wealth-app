@@ -315,17 +315,14 @@ const dirtPercentValue =
 
 const netKg =
 grossKg * (1 - dirtPercentValue / 100);
-const newBatchNumber = isClient ? "" :
-getNextMaterialBatchNumber();
+const newBatchNumber = getNextMaterialBatchNumber();
 const record = {
 
       id: Date.now(),
 batchNumber: newBatchNumber,
 washingCycleNumber:
-isClient ? "" :
 washingCycleFromBatch(newBatchNumber),
-batchStatus:
-isClient ? "" : "AVAILABLE FOR WASHING",
+batchStatus: "AVAILABLE FOR WASHING",
       date:
 modal.querySelector("#materialDate").value ||
         new Date().toISOString().split("T")[0],
@@ -1061,8 +1058,55 @@ localStorage.setItem(
 Math.max(Number(kg) || 0, 0).toFixed(2)
   );
 }
+/* =========================================================
+   WASHED KAVERA STOCK BY OWNER
+   Separates A&F stock from Client stock
+   ========================================================= */
 
+function getCompanyWashedKaveraStock() {
+  return Number(
+localStorage.getItem("companyWashedKaveraStock") || 0
+  );
+}
 
+function setCompanyWashedKaveraStock(kg) {
+localStorage.setItem(
+    "companyWashedKaveraStock",
+Math.max(Number(kg) || 0, 0).toFixed(2)
+  );
+}
+
+function getClientWashedKaveraStock() {
+  return Number(
+localStorage.getItem("clientWashedKaveraStock") || 0
+  );
+}
+
+function setClientWashedKaveraStock(kg) {
+localStorage.setItem(
+    "clientWashedKaveraStock",
+Math.max(Number(kg) || 0, 0).toFixed(2)
+  );
+}
+
+function getBatchOwnerType(batchNumber) {
+
+const records = JSON.parse(
+localStorage.getItem("materialRecords") || "[]"
+  );
+
+const batch = records.find(
+    record =>record.batchNumber === batchNumber
+  );
+
+  if (!batch) {
+    return "unknown";
+  }
+
+  return batch.materialSource === "client"
+    ? "client"
+    : "company";
+}
 /* =========================================================
    MATERIAL BATCH NUMBER
    KB001, KB002, KB003...
@@ -1121,7 +1165,7 @@ record.batchNumber || ""
 
 
 /* =========================================================
-   COMPANY MATERIAL BATCHES
+   ALL MATERIAL BATCHES COMPANY + CLIENT
    ========================================================= */
 
 function getMaterialBatchRecords() {
@@ -1131,7 +1175,6 @@ localStorage.getItem("materialRecords") || "[]"
   );
 
   return records.filter(record =>
-record.materialSource === "company" &&
 record.batchNumber
   );
 }
@@ -3156,15 +3199,52 @@ selectedRecord.batchNumber
       }
 
 
+const ownerType =
+getBatchOwnerType(
+selectedRecord.batchNumber
+);
+
+let ownerStockAfter = 0;
+
+if (ownerType === "client") {
+
+const currentClientStock =
+getClientWashedKaveraStock();
+
+ownerStockAfter =
+currentClientStock +
+actualKg;
+
+setClientWashedKaveraStock(
+ownerStockAfter
+  );
+
+} else {
+
+const currentCompanyStock =
+getCompanyWashedKaveraStock();
+
+ownerStockAfter =
+currentCompanyStock +
+actualKg;
+
+setCompanyWashedKaveraStock(
+ownerStockAfter
+  );
+}
+
+
+/*
+ * Keep the old combined stock temporarily
+ * because some existing screens still use it.
+ */
 const newStock =
 getWashedKaveraStock() +
 actualKg;
 
-
 setWashedKaveraStock(
 newStock
-      );
-
+);
 
 const pendingAfter =
 selectedRecord.batchNumber
