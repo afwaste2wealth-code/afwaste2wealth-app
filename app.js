@@ -192,17 +192,17 @@ modal.querySelector("#shiftSettingsBtn").onclick = () => {
 
 function systemSettingsButtonStyle() {
   return `
-    min-height:145px;
+    min-height:120px;
     border:1px solid #d9e5de;
     background:#f7fbf9;
     border-radius:12px;
-    padding:18px;
+    padding:15px;
 cursor:pointer;
 text-align:left;
 display:flex;
 flex-direction:column;
-    gap:9px;
-    font-size:26px;
+    gap:6px;
+    font-size:16px;
     box-shadow:0 2px 8px rgba(0,0,0,.04);
   `;
 }
