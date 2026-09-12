@@ -1180,21 +1180,453 @@ function editEmployeeAsDirector(employeeId) {
 
 const employees = getEmployees();
 
-const employee = employees.find(
+const employeeIndex = employees.findIndex(
     item =>item.employeeId === employeeId
   );
 
-  if (!employee) {
+  if (employeeIndex === -1) {
     alert("Employee record not found.");
     return;
   }
 
-  alert(
-    "Edit Employee will open for:\\n\\n" +
-employee.fullName +
-    "\\nEmployee ID: " +
-employee.employeeId
-  );
+const employee = employees[employeeIndex];
+
+const modal =
+document.createElement("div");
+
+modal.style.cssText = `
+position:fixed;
+    inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+align-items:center;
+justify-content:center;
+    z-index:9999;
+font-family:Arial,sans-serif;
+    padding:10px;
+box-sizing:border-box;
+  `;
+
+modal.innerHTML = `
+<div style="
+background:white;
+      width:100%;
+      max-width:900px;
+      max-height:94vh;
+overflow:auto;
+      border-radius:14px;
+      padding:20px;
+box-sizing:border-box;
+      box-shadow:0 10px 40px rgba(0,0,0,.3);
+    ">
+
+<h2 style="
+        margin-top:0;
+        color:#0b5d3b;
+text-align:center;
+      ">
+        Edit Employee
+</h2>
+
+<div style="
+        background:#fff3cd;
+        color:#664d03;
+        padding:10px;
+        border-radius:8px;
+        margin-bottom:15px;
+text-align:center;
+font-weight:bold;
+      ">
+        Director Only
+</div>
+
+<div style="
+display:grid;
+        grid-template-columns:
+          repeat(auto-fit,minmax(240px,1fr));
+        gap:12px;
+      ">
+
+<div>
+<label>Employee ID</label>
+<input
+            value="${escapeSettingsText(employee.employeeId)}"
+            disabled
+            style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>Full Name *</label>
+<input
+            id="editEmployeeName"
+            value="${escapeSettingsText(employee.fullName)}"
+            style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>Phone Number *</label>
+<input
+            id="editEmployeePhone"
+            value="${escapeSettingsText(employee.phone)}"
+            style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>Gender</label>
+<select
+            id="editEmployeeGender"
+            style="${settingsInputStyle()}"
+>
+<option value="">Select Gender</option>
+<option ${employee.gender === "Male" ? "selected" : ""}>
+              Male
+</option>
+<option ${employee.gender === "Female" ? "selected" : ""}>
+              Female
+</option>
+</select>
+</div>
+
+<div>
+<label>Date of Birth</label>
+<input
+            id="editEmployeeDob"
+            type="date"
+            value="${escapeSettingsText(employee.dateOfBirth || "")}"
+            style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>Nationality</label>
+<input
+            id="editEmployeeNationality"
+            value="${escapeSettingsText(employee.nationality || "")}"
+            style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>NIN / National ID</label>
+<input
+            id="editEmployeeNin"
+            value="${escapeSettingsText(employee.nin || "")}"
+            style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>Residential Address</label>
+<input
+            id="editEmployeeAddress"
+            value="${escapeSettingsText(employee.residentialAddress || "")}"
+            style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>Job / Position *</label>
+<input
+            id="editEmployeePosition"
+            value="${escapeSettingsText(employee.position)}"
+            style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>Department / Work Area</label>
+<input
+            id="editEmployeeDepartment"
+            value="${escapeSettingsText(employee.department || "")}"
+            style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>Employment Type</label>
+<input
+            id="editEmployeeEmploymentType"
+            value="${escapeSettingsText(employee.employmentType || "")}"
+            style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>Date Joined</label>
+<input
+            id="editEmployeeDateJoined"
+            type="date"
+            value="${escapeSettingsText(employee.dateJoined || "")}"
+            style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>System Role</label>
+<select
+            id="editEmployeeRole"
+            style="${settingsInputStyle()}"
+>
+            ${["Employee","TeamLeader","Secretary","Manager","Director"]
+              .map(role => `
+<option
+                  ${employee.role === role ? "selected" : ""}
+>
+                  ${role}
+</option>
+              `).join("")}
+</select>
+</div>
+
+<div>
+<label>Employment Status</label>
+<select
+            id="editEmployeeStatus"
+            style="${settingsInputStyle()}"
+>
+<option
+              value="active"
+              ${employee.employmentStatus === "active" ? "selected" : ""}
+>
+              Active
+</option>
+
+<option
+              value="inactive"
+              ${employee.employmentStatus === "inactive" ? "selected" : ""}
+>
+              Inactive
+</option>
+</select>
+</div>
+
+<div>
+<label>Monthly Allowance (UGX)</label>
+<input
+            id="editEmployeeMonthlyAllowance"
+            type="number"
+            min="0"
+            value="${Number(employee.monthlyAllowance || 0)}"
+            style="${settingsInputStyle()}"
+>
+</div>
+
+</div>
+
+<hr style="margin:20px 0;">
+
+<label>
+        Reason for Correction *
+</label>
+
+<textarea
+        id="editEmployeeReason"
+        placeholder="Director must explain why this employee record is being changed."
+        style="${settingsInputStyle()};
+          min-height:80px;
+resize:vertical;
+        "
+></textarea>
+
+<div style="
+display:flex;
+        gap:10px;
+justify-content:space-between;
+        margin-top:18px;
+flex-wrap:wrap;
+      ">
+
+<button
+          id="cancelEmployeeEdit"
+          type="button"
+          style="
+            border:0;
+            background:#6c757d;
+color:white;
+            padding:10px 18px;
+            border-radius:7px;
+cursor:pointer;
+font-weight:bold;
+          "
+>
+          Cancel
+</button>
+
+<button
+          id="saveEmployeeEdit"
+          type="button"
+          style="
+            border:0;
+            background:#0b5d3b;
+color:white;
+            padding:10px 18px;
+            border-radius:7px;
+cursor:pointer;
+font-weight:bold;
+          "
+>
+          Save Changes
+</button>
+
+</div>
+</div>
+  `;
+
+document.body.appendChild(modal);
+
+
+modal.querySelector(
+    "#cancelEmployeeEdit"
+  ).onclick = () => {
+modal.remove();
+  };
+
+
+modal.querySelector(
+    "#saveEmployeeEdit"
+  ).onclick = () => {
+
+const reason =
+modal.querySelector(
+        "#editEmployeeReason"
+      ).value.trim();
+
+    if (!reason) {
+      alert(
+        "Please enter the reason for this correction."
+      );
+      return;
+    }
+
+const updatedEmployee = {
+      ...employee,
+
+fullName:
+modal.querySelector(
+          "#editEmployeeName"
+        ).value.trim(),
+
+      phone:
+modal.querySelector(
+          "#editEmployeePhone"
+        ).value.trim(),
+
+      gender:
+modal.querySelector(
+          "#editEmployeeGender"
+        ).value,
+
+dateOfBirth:
+modal.querySelector(
+          "#editEmployeeDob"
+        ).value,
+
+      nationality:
+modal.querySelector(
+          "#editEmployeeNationality"
+        ).value.trim(),
+
+nin:
+modal.querySelector(
+          "#editEmployeeNin"
+        ).value.trim(),
+
+residentialAddress:
+modal.querySelector(
+          "#editEmployeeAddress"
+        ).value.trim(),
+
+      position:
+modal.querySelector(
+          "#editEmployeePosition"
+        ).value.trim(),
+
+      department:
+modal.querySelector(
+          "#editEmployeeDepartment"
+        ).value.trim(),
+
+employmentType:
+modal.querySelector(
+          "#editEmployeeEmploymentType"
+        ).value.trim(),
+
+dateJoined:
+modal.querySelector(
+          "#editEmployeeDateJoined"
+        ).value,
+
+      role:
+modal.querySelector(
+          "#editEmployeeRole"
+        ).value,
+
+employmentStatus:
+modal.querySelector(
+          "#editEmployeeStatus"
+        ).value,
+
+monthlyAllowance:
+        Number(
+modal.querySelector(
+            "#editEmployeeMonthlyAllowance"
+          ).value
+        ) || 0
+    };
+
+    if (
+      !updatedEmployee.fullName ||
+      !updatedEmployee.phone ||
+      !updatedEmployee.position
+    ) {
+      alert(
+        "Full Name, Phone Number and Job / Position are required."
+      );
+      return;
+    }
+
+const history =
+JSON.parse(
+localStorage.getItem(
+          "employeeChangeHistory"
+        ) || "[]"
+      );
+
+history.push({
+      id: Date.now(),
+employeeId: employee.employeeId,
+employeeName: employee.fullName,
+oldValues: employee,
+newValues: updatedEmployee,
+      reason: reason,
+correctedBy: "Director",
+correctedAt:
+        new Date().toISOString()
+    });
+
+localStorage.setItem(
+      "employeeChangeHistory",
+JSON.stringify(history)
+    );
+
+    employees[employeeIndex] =
+updatedEmployee;
+
+saveEmployees(
+      employees
+    );
+
+    alert(
+      "Employee record updated successfully."
+    );
+
+modal.remove();
+
+manageEmployeeAccounts();
+  };
 }
 
 /* =========================================================
