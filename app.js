@@ -15,13 +15,841 @@ if (name === "Material & Production") {
   viewMaterialRecords();
   return;
 }
+  if (name === "System Settings") {
+    systemSettings();
+  return;
+  }
   alert(
     name +
       " module selected. This prototype is ready to be connected to the A&F data and backend."
   );
 } 
-  
- 
+/* =========================================================
+   SYSTEM SETTINGS
+   ========================================================= */
+
+function systemSettings() {
+
+const modal = document.createElement("div");
+
+modal.style.cssText = `
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    font-family: Arial, sans-serif;
+  `;
+
+modal.innerHTML = `
+<div style="
+background:white;
+      width:720px;
+      max-width:94%;
+      max-height:92vh;
+overflow:auto;
+      border-radius:14px;
+      padding:24px;
+      box-shadow:0 10px 40px rgba(0,0,0,.3);
+    ">
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:center;
+        margin-bottom:20px;
+      ">
+<div>
+<h2 style="margin:0;color:#0b5d3b;">
+            System Settings
+</h2>
+
+<div style="
+            margin-top:5px;
+            color:#666;
+            font-size:13px;
+          ">
+            Factory administration and configuration
+</div>
+</div>
+
+<button id="closeSystemSettings"
+          style="
+            border:0;
+            background:#eee;
+            padding:8px 12px;
+            border-radius:7px;
+cursor:pointer;
+font-weight:bold;
+          ">
+✕ Close
+</button>
+</div>
+
+<div style="
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
+        gap:14px;
+      ">
+
+<button id="teamSettingsBtn"
+          style="${systemSettingsButtonStyle()}">
+👥
+<strong>Teams & Team Leaders</strong>
+<span>Create teams, leaders and members</span>
+</button>
+
+<button id="employeeAccountsBtn"
+          style="${systemSettingsButtonStyle()}">
+👤
+<strong>Employee Accounts</strong>
+<span>Employee IDs and login accounts</span>
+</button>
+
+<button id="rolesPermissionsBtn"
+          style="${systemSettingsButtonStyle()}">
+🔐
+<strong>Roles & Permissions</strong>
+<span>Director, Manager, Leader and Employee</span>
+</button>
+
+<button id="shiftSettingsBtn"
+          style="${systemSettingsButtonStyle()}">
+🕒
+<strong>Shift & Working Hours</strong>
+<span>Day/Night shifts and working hours</span>
+</button>
+
+<button id="poleWeightsBtn"
+          style="${systemSettingsButtonStyle()}">
+🏗️
+<strong>Pole Standard Weights</strong>
+<span>Configure standard pole weights</span>
+</button>
+
+<button id="teamPerformanceBtn"
+          style="${systemSettingsButtonStyle()}">
+🏆
+<strong>Team Performance Settings</strong>
+<span>Configure Team of the Month scoring</span>
+</button>
+
+</div>
+
+</div>
+  `;
+
+document.body.appendChild(modal);
+
+modal.querySelector("#closeSystemSettings").onclick = () => {
+modal.remove();
+  };
+
+modal.querySelector("#teamSettingsBtn").onclick = () => {
+modal.remove();
+manageTeams();
+  };
+
+modal.querySelector("#poleWeightsBtn").onclick = () => {
+modal.remove();
+
+    if (typeofmanagePoleStandardWeights === "function") {
+managePoleStandardWeights();
+    } else {
+      alert("Pole Standard Weights module could not be found.");
+    }
+  };
+
+modal.querySelector("#teamPerformanceBtn").onclick = () => {
+modal.remove();
+manageTeamPerformanceSettings();
+  };
+
+modal.querySelector("#employeeAccountsBtn").onclick = () => {
+    alert(
+      "Employee Accounts will be connected next.\n\n" +
+      "Employees will receive an Employee ID and activate their own password."
+    );
+  };
+
+modal.querySelector("#rolesPermissionsBtn").onclick = () => {
+    alert(
+      "Roles & Permissions will be connected next.\n\n" +
+      "Roles: Director, Manager, Team Leader and Employee."
+    );
+  };
+
+modal.querySelector("#shiftSettingsBtn").onclick = () => {
+    alert(
+      "Shift & Working Hours will be connected next.\n\n" +
+      "This will control Day Shift, Night Shift, attendance, shortfall and overtime."
+    );
+  };
+}
+
+
+function systemSettingsButtonStyle() {
+  return `
+    min-height:145px;
+    border:1px solid #d9e5de;
+    background:#f7fbf9;
+    border-radius:12px;
+    padding:18px;
+cursor:pointer;
+text-align:left;
+display:flex;
+flex-direction:column;
+    gap:9px;
+    font-size:26px;
+    box-shadow:0 2px 8px rgba(0,0,0,.04);
+  `;
+}
+
+
+/* =========================================================
+   TEAM MANAGEMENT
+   ========================================================= */
+
+function getTeams() {
+  return JSON.parse(
+localStorage.getItem("factoryTeams") || "[]"
+  );
+}
+
+
+function saveTeams(teams) {
+localStorage.setItem(
+    "factoryTeams",
+JSON.stringify(teams)
+  );
+}
+
+
+function manageTeams() {
+
+const teams = getTeams();
+
+const modal = document.createElement("div");
+
+modal.style.cssText = `
+position:fixed;
+    inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+align-items:center;
+justify-content:center;
+    z-index:9999;
+font-family:Arial,sans-serif;
+  `;
+
+modal.innerHTML = `
+<div style="
+background:white;
+      width:700px;
+      max-width:94%;
+      max-height:92vh;
+overflow:auto;
+      border-radius:14px;
+      padding:24px;
+      box-shadow:0 10px 40px rgba(0,0,0,.3);
+    ">
+
+<h2 style="margin-top:0;color:#0b5d3b;">
+        Teams & Team Leaders
+</h2>
+
+<div style="
+        background:#eef8f2;
+        padding:14px;
+        border-radius:9px;
+        margin-bottom:18px;
+        font-size:14px;
+      ">
+        A team is separate from a shift.
+        For example, Team 1 may work the Day Shift today
+        and Night Shift on another schedule.
+</div>
+
+<label>Team Name</label>
+<input id="teamName"
+        type="text"
+        placeholder="Example: Team 1"
+        style="${settingsInputStyle()}">
+
+<label>Team Leader</label>
+<input id="teamLeader"
+        type="text"
+        placeholder="Enter team leader name"
+        style="${settingsInputStyle()}">
+
+<label>Team Members</label>
+<textarea id="teamMembers"
+        rows="4"
+        placeholder="Enter employee names separated by commas"
+        style="${settingsInputStyle()}"></textarea>
+
+<label>Status</label>
+<select id="teamStatus"
+        style="${settingsInputStyle()}">
+<option value="active">Active</option>
+<option value="inactive">Inactive</option>
+</select>
+
+<button id="saveTeam"
+        style="
+          width:100%;
+          padding:12px;
+          border:0;
+          border-radius:8px;
+          background:#0b5d3b;
+color:white;
+font-weight:bold;
+cursor:pointer;
+          margin-bottom:22px;
+        ">
+        Save Team
+</button>
+
+<h3 style="color:#0b5d3b;">
+        Existing Teams
+</h3>
+
+<div id="teamsList"></div>
+
+<div style="
+display:flex;
+        gap:10px;
+        margin-top:20px;
+      ">
+
+<button id="backToSettings"
+          style="
+            flex:1;
+            padding:11px;
+            border:1px solid #0b5d3b;
+background:white;
+            color:#0b5d3b;
+            border-radius:8px;
+cursor:pointer;
+          ">
+          Back to System Settings
+</button>
+
+<button id="closeTeams"
+          style="
+            flex:1;
+            padding:11px;
+            border:0;
+            background:#555;
+color:white;
+            border-radius:8px;
+cursor:pointer;
+          ">
+          Close
+</button>
+
+</div>
+
+</div>
+  `;
+
+document.body.appendChild(modal);
+
+  function renderTeams() {
+
+const list = modal.querySelector("#teamsList");
+const currentTeams = getTeams();
+
+    if (!currentTeams.length) {
+list.innerHTML = `
+<div style="
+          padding:15px;
+          background:#f5f5f5;
+          border-radius:8px;
+          color:#666;
+        ">
+          No teams have been created yet.
+</div>
+      `;
+      return;
+    }
+
+list.innerHTML = currentTeams.map(team => `
+<div style="
+        border:1px solid #ddd;
+        border-radius:9px;
+        padding:14px;
+        margin-bottom:10px;
+      ">
+
+<div style="
+display:flex;
+justify-content:space-between;
+          gap:10px;
+align-items:center;
+        ">
+
+<div>
+<strong style="font-size:17px;">
+              ${escapeSettingsText(team.name)}
+</strong>
+
+<div style="margin-top:5px;">
+              Leader:
+<b>${escapeSettingsText(team.leader)}</b>
+</div>
+
+<div style="
+              margin-top:5px;
+              font-size:13px;
+              color:#666;
+            ">
+              Members:
+              ${
+team.members.length
+                  ? team.members
+                      .map(member =>escapeSettingsText(member))
+                      .join(", ")
+                  : "No members assigned"
+              }
+</div>
+
+<div style="
+              margin-top:7px;
+              font-size:13px;
+            ">
+              Status:
+<b>${team.status === "active" ? "ACTIVE" : "INACTIVE"}</b>
+</div>
+</div>
+
+<button
+            data-delete-team="${team.id}"
+            style="
+              border:0;
+              background:#b42318;
+color:white;
+              padding:8px 10px;
+              border-radius:7px;
+cursor:pointer;
+            ">
+            Delete
+</button>
+
+</div>
+</div>
+    `).join("");
+
+    list
+      .querySelectorAll("[data-delete-team]")
+      .forEach(button => {
+
+button.onclick = () => {
+
+const teamId =
+            Number(button.dataset.deleteTeam);
+
+const team =
+getTeams().find(item =>item.id === teamId);
+
+          if (!team) return;
+
+const confirmed = confirm(
+            "Delete " +
+team.name +
+            "?\n\n" +
+            "Only delete a team if it was created by mistake."
+          );
+
+          if (!confirmed) return;
+
+const updated =
+getTeams().filter(
+              item =>item.id !== teamId
+            );
+
+saveTeams(updated);
+renderTeams();
+        };
+      });
+  }
+
+
+modal.querySelector("#saveTeam").onclick = () => {
+
+const name =
+modal.querySelector("#teamName").value.trim();
+
+const leader =
+modal.querySelector("#teamLeader").value.trim();
+
+const membersText =
+modal.querySelector("#teamMembers").value.trim();
+
+const status =
+modal.querySelector("#teamStatus").value;
+
+    if (!name) {
+      alert("Please enter the Team Name.");
+      return;
+    }
+
+    if (!leader) {
+      alert("Please enter the Team Leader.");
+      return;
+    }
+
+const existingTeams = getTeams();
+
+const alreadyExists =
+existingTeams.some(
+        team =>
+team.name.toLowerCase() ===
+name.toLowerCase()
+      );
+
+    if (alreadyExists) {
+      alert("A team with this name already exists.");
+      return;
+    }
+
+const members =
+membersText
+        ? membersText
+            .split(",")
+            .map(member =>member.trim())
+            .filter(Boolean)
+        : [];
+
+existingTeams.push({
+      id: Date.now(),
+      name: name,
+      leader: leader,
+      members: members,
+      status: status,
+createdAt: new Date().toISOString()
+    });
+
+saveTeams(existingTeams);
+
+modal.querySelector("#teamName").value = "";
+modal.querySelector("#teamLeader").value = "";
+modal.querySelector("#teamMembers").value = "";
+modal.querySelector("#teamStatus").value = "active";
+
+renderTeams();
+
+    alert("Team saved successfully.");
+  };
+
+
+modal.querySelector("#backToSettings").onclick = () => {
+modal.remove();
+systemSettings();
+  };
+
+modal.querySelector("#closeTeams").onclick = () => {
+modal.remove();
+  };
+
+renderTeams();
+}
+
+
+/* =========================================================
+   TEAM PERFORMANCE SETTINGS
+   ========================================================= */
+
+function getTeamPerformanceSettings() {
+
+const saved = JSON.parse(
+localStorage.getItem(
+      "teamPerformanceSettings"
+    ) || "{}"
+  );
+
+  return {
+outputWeight:
+      Number(saved.outputWeight ?? 50),
+
+attendanceWeight:
+      Number(saved.attendanceWeight ?? 25),
+
+wasteWeight:
+      Number(saved.wasteWeight ?? 15),
+
+qualityWeight:
+      Number(saved.qualityWeight ?? 10)
+  };
+}
+
+
+function manageTeamPerformanceSettings() {
+
+const settings =
+getTeamPerformanceSettings();
+
+const modal =
+document.createElement("div");
+
+modal.style.cssText = `
+position:fixed;
+    inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+align-items:center;
+justify-content:center;
+    z-index:9999;
+font-family:Arial,sans-serif;
+  `;
+
+modal.innerHTML = `
+<div style="
+background:white;
+      width:520px;
+      max-width:94%;
+      border-radius:14px;
+      padding:24px;
+      box-shadow:0 10px 40px rgba(0,0,0,.3);
+    ">
+
+<h2 style="
+        margin-top:0;
+        color:#0b5d3b;
+      ">
+        Team Performance Settings
+</h2>
+
+<p style="
+        background:#eef8f2;
+        padding:12px;
+        border-radius:8px;
+        font-size:13px;
+      ">
+        These percentages will later be used to calculate
+        Best Performing Team and Team of the Month.
+        The total must equal 100%.
+</p>
+
+<label>
+        Production / Washing Achievement (%)
+</label>
+
+<input id="outputWeight"
+        type="number"
+        min="0"
+        max="100"
+        value="${settings.outputWeight}"
+        style="${settingsInputStyle()}">
+
+<label>
+        Attendance & Punctuality (%)
+</label>
+
+<input id="attendanceWeight"
+        type="number"
+        min="0"
+        max="100"
+        value="${settings.attendanceWeight}"
+        style="${settingsInputStyle()}">
+
+<label>
+        Low Waste / Shortfall (%)
+</label>
+
+<input id="wasteWeight"
+        type="number"
+        min="0"
+        max="100"
+        value="${settings.wasteWeight}"
+        style="${settingsInputStyle()}">
+
+<label>
+        Quality / Discipline (%)
+</label>
+
+<input id="qualityWeight"
+        type="number"
+        min="0"
+        max="100"
+        value="${settings.qualityWeight}"
+        style="${settingsInputStyle()}">
+
+<div id="performanceTotal"
+        style="
+          padding:12px;
+          background:#f5f5f5;
+          border-radius:8px;
+          margin-bottom:15px;
+font-weight:bold;
+        ">
+</div>
+
+<div style="
+display:flex;
+        gap:10px;
+      ">
+
+<button id="savePerformanceSettings"
+          style="
+            flex:1;
+            padding:12px;
+            border:0;
+            border-radius:8px;
+            background:#0b5d3b;
+color:white;
+font-weight:bold;
+cursor:pointer;
+          ">
+          Save
+</button>
+
+<button id="cancelPerformanceSettings"
+          style="
+            flex:1;
+            padding:12px;
+            border:1px solid #ccc;
+            border-radius:8px;
+background:white;
+cursor:pointer;
+          ">
+          Cancel
+</button>
+
+</div>
+
+</div>
+  `;
+
+document.body.appendChild(modal);
+
+const output =
+modal.querySelector("#outputWeight");
+
+const attendance =
+modal.querySelector("#attendanceWeight");
+
+const waste =
+modal.querySelector("#wasteWeight");
+
+const quality =
+modal.querySelector("#qualityWeight");
+
+const totalDisplay =
+modal.querySelector("#performanceTotal");
+
+
+  function updateTotal() {
+
+const total =
+      (Number(output.value) || 0) +
+      (Number(attendance.value) || 0) +
+      (Number(waste.value) || 0) +
+      (Number(quality.value) || 0);
+
+totalDisplay.textContent =
+      "Total Weight: " + total + "%";
+
+totalDisplay.style.color =
+      total === 100
+        ? "#0b5d3b"
+        : "#b42318";
+  }
+
+
+  [output, attendance, waste, quality]
+    .forEach(input => {
+input.addEventListener(
+        "input",
+updateTotal
+      );
+    });
+
+
+modal.querySelector(
+    "#savePerformanceSettings"
+  ).onclick = () => {
+
+const values = {
+outputWeight:
+        Number(output.value) || 0,
+
+attendanceWeight:
+        Number(attendance.value) || 0,
+
+wasteWeight:
+        Number(waste.value) || 0,
+
+qualityWeight:
+        Number(quality.value) || 0
+    };
+
+const total =
+values.outputWeight +
+values.attendanceWeight +
+values.wasteWeight +
+values.qualityWeight;
+
+    if (total !== 100) {
+      alert(
+        "The performance percentages must total exactly 100%."
+      );
+      return;
+    }
+
+localStorage.setItem(
+      "teamPerformanceSettings",
+JSON.stringify(values)
+    );
+
+    alert(
+      "Team Performance Settings saved successfully."
+    );
+
+modal.remove();
+systemSettings();
+  };
+
+
+modal.querySelector(
+    "#cancelPerformanceSettings"
+  ).onclick = () => {
+modal.remove();
+systemSettings();
+  };
+
+updateTotal();
+}
+
+
+/* =========================================================
+   SYSTEM SETTINGS HELPERS
+   ========================================================= */
+
+function settingsInputStyle() {
+  return `
+    width:100%;
+box-sizing:border-box;
+    padding:10px;
+    margin:6px 0 14px;
+    border:1px solid #ccc;
+    border-radius:7px;
+font-family:Arial,sans-serif;
+  `;
+}
+
+
+function escapeSettingsText(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 /* =========================================================
    RECORD MATERIAL IN
    ========================================================= */
