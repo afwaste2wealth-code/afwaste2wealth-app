@@ -1053,6 +1053,7 @@ text-align:left;
 <th style="padding:10px;">Role</th>
 <th style="padding:10px;">Status</th>
 <th style="padding:10px;">Login</th>
+<th style="padding:10px;">Action</th>
 </tr>
 </thead>
 
@@ -1115,6 +1116,25 @@ employee.accountStatus === "activated"
                   }
 </td>
 
+<td style="padding:10px;">
+<button
+    type="button"
+onclick="editEmployeeAsDirector('${employee.employeeId}')"
+    style="
+      border:0;
+      background:#0b5d3b;
+color:white;
+      padding:7px 12px;
+      border-radius:6px;
+cursor:pointer;
+font-weight:bold;
+    "
+>
+    Edit
+</button>
+</td>
+
+
 </tr>
             `).join("")}
 
@@ -1156,6 +1176,26 @@ modal.remove();
 renderEmployees();
 }
 
+function editEmployeeAsDirector(employeeId) {
+
+const employees = getEmployees();
+
+const employee = employees.find(
+    item =>item.employeeId === employeeId
+  );
+
+  if (!employee) {
+    alert("Employee record not found.");
+    return;
+  }
+
+  alert(
+    "Edit Employee will open for:\\n\\n" +
+employee.fullName +
+    "\\nEmployee ID: " +
+employee.employeeId
+  );
+}
 
 /* =========================================================
    REGISTER NEW EMPLOYEE
