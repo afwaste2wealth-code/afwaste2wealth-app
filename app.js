@@ -1166,6 +1166,8 @@ function registerNewEmployee() {
 const employeeId =
 getNextEmployeeId();
 
+  let passportPhotoData = "";
+
 const modal =
 document.createElement("div");
 
@@ -1178,153 +1180,631 @@ align-items:center;
 justify-content:center;
     z-index:9999;
 font-family:Arial,sans-serif;
+    padding:10px;
+box-sizing:border-box;
   `;
 
 modal.innerHTML = `
 <div style="
 background:white;
-      width:600px;
-      max-width:94%;
-      max-height:92vh;
+      width:100%;
+      max-width:900px;
+      max-height:94vh;
 overflow:auto;
       border-radius:14px;
-      padding:24px;
+      padding:20px;
+box-sizing:border-box;
       box-shadow:0 10px 40px rgba(0,0,0,.3);
     ">
 
 <h2 style="
         margin-top:0;
         color:#0b5d3b;
+text-align:center;
       ">
         Register New Employee
 </h2>
 
-<label>Employee ID</label>
-
-<input id="newEmployeeId"
-        type="text"
-        value="${employeeId}"
-readonly
-        style="${settingsInputStyle()}">
-
-<label>Full Name</label>
-
-<input id="newEmployeeName"
-        type="text"
-        placeholder="Employee full name"
-        style="${settingsInputStyle()}">
-
-<label>Phone Number</label>
-
-<input id="newEmployeePhone"
-        type="text"
-        placeholder="Example: 07XXXXXXXX"
-        style="${settingsInputStyle()}">
-
-<label>Job / Position</label>
-
-<input id="newEmployeePosition"
-        type="text"
-        placeholder="Example: Machine Operator"
-        style="${settingsInputStyle()}">
-
-<label>Date Joined</label>
-
-<input id="newEmployeeDateJoined"
-        type="date"
-        value="${
-          new Date()
-            .toISOString()
-            .split("T")[0]
-        }"
-        style="${settingsInputStyle()}">
-
-<label>System Role</label>
-
-<select id="newEmployeeRole"
-        style="${settingsInputStyle()}">
-
-<option value="Employee">
-          Employee
-</option>
-
-<option value="Team Leader">
-          Team Leader
-</option>
-
-<option value="Secretary">
-          Secretary
-</option>
-
-<option value="Manager">
-          Manager
-</option>
-
-<option value="Director">
-          Director
-</option>
-
-</select>
-
-<label>Employment Status</label>
-
-<select id="newEmploymentStatus"
-        style="${settingsInputStyle()}">
-
-<option value="active">
-          Active
-</option>
-
-<option value="inactive">
-          Inactive
-</option>
-
-</select>
+<!-- ==================================
+           PASSPORT PHOTO
+           ================================== -->
 
 <div style="
-        background:#eef8f2;
-        padding:12px;
-        border-radius:8px;
-        margin:5px 0 18px;
-        font-size:13px;
+text-align:center;
+        margin-bottom:18px;
       ">
-<b>Login Account:</b>
-        Not Activated<br><br>
 
-        The employee will later use their
-        Employee ID to activate their account
-        and create their own private password.
+<div
+          id="employeePhotoPreview"
+          style="
+            width:120px;
+            height:140px;
+            margin:0 auto 10px;
+            border:2px dashed #bbb;
+            border-radius:10px;
+display:flex;
+align-items:center;
+justify-content:center;
+overflow:hidden;
+            background:#f7f7f7;
+            color:#777;
+            font-size:13px;
+          "
+>
+          Passport Photo
+</div>
+
+<label
+          for="newEmployeePhoto"
+          style="
+display:inline-block;
+            background:#0d6efd;
+color:white;
+            padding:9px 16px;
+            border-radius:7px;
+cursor:pointer;
+font-weight:bold;
+          "
+>
+          Upload Passport Photo
+</label>
+
+<input
+          id="newEmployeePhoto"
+          type="file"
+          accept="image/*"
+          style="display:none"
+>
+
+<div style="
+          margin-top:6px;
+          font-size:12px;
+          color:#666;
+        ">
+          JPG or PNG recommended.
+</div>
+
+</div>
+
+
+<!-- ==================================
+           SECTION 1 - BASIC INFORMATION
+           ================================== -->
+
+<div style="
+        border:1px solid #cfe2ff;
+        border-radius:10px;
+        margin-bottom:16px;
+overflow:hidden;
+      ">
+
+<div style="
+          background:#eaf3ff;
+          padding:11px 14px;
+          color:#084298;
+font-weight:bold;
+          font-size:17px;
+        ">
+          1. Basic Information
+</div>
+
+<div style="
+display:grid;
+          grid-template-columns:
+            repeat(auto-fit,minmax(240px,1fr));
+          gap:12px;
+          padding:14px;
+        ">
+
+<div>
+<label>Employee ID</label>
+<input
+              value="${employeeId}"
+              disabled
+              style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>Full Name *</label>
+<input
+              id="newEmployeeName"
+              type="text"
+              placeholder="Enter full name"
+              style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>Gender</label>
+<select
+              id="newEmployeeGender"
+              style="${settingsInputStyle()}"
+>
+<option value="">Select Gender</option>
+<option>Male</option>
+<option>Female</option>
+</select>
+</div>
+
+<div>
+<label>Date of Birth</label>
+<input
+              id="newEmployeeDob"
+              type="date"
+              style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>Nationality</label>
+<input
+              id="newEmployeeNationality"
+              type="text"
+              value="Ugandan"
+              placeholder="Example: Ugandan"
+              style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>NIN / National ID</label>
+<input
+              id="newEmployeeNin"
+              type="text"
+              placeholder="Enter NIN"
+              style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>Phone Number *</label>
+<input
+              id="newEmployeePhone"
+              type="text"
+              placeholder="Example: 07XXXXXXXX"
+              style="${settingsInputStyle()}"
+>
+</div>
+
+<div style="
+            grid-column:
+              span 1;
+          ">
+<label>Residential Address</label>
+<textarea
+              id="newEmployeeAddress"
+              placeholder="Village, town, district"
+              style="${settingsInputStyle()};
+                min-height:70px;
+resize:vertical;
+              "
+></textarea>
+</div>
+
+</div>
+</div>
+
+
+<!-- ==================================
+           SECTION 2 - PRIVATE INFORMATION
+           ================================== -->
+
+<div style="
+        border:1px solid #f5c2c7;
+        border-radius:10px;
+        margin-bottom:16px;
+overflow:hidden;
+      ">
+
+<div style="
+          background:#f8d7da;
+          padding:11px 14px;
+          color:#842029;
+font-weight:bold;
+          font-size:17px;
+        ">
+🔒 2. Family & Emergency Information
+<div style="
+            font-size:12px;
+            margin-top:3px;
+font-weight:normal;
+          ">
+            Director & Secretary Only
+</div>
+</div>
+
+<div style="
+display:grid;
+          grid-template-columns:
+            repeat(auto-fit,minmax(240px,1fr));
+          gap:12px;
+          padding:14px;
+        ">
+
+<div>
+<label>Son / Daughter of</label>
+<input
+              id="newEmployeeParent"
+              type="text"
+              placeholder="Parent / guardian name"
+              style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>Parent / Guardian Contact</label>
+<input
+              id="newEmployeeParentPhone"
+              type="text"
+              placeholder="Phone number"
+              style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>Next of Kin</label>
+<input
+              id="newEmployeeNextKin"
+              type="text"
+              placeholder="Next of kin name"
+              style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>Relationship</label>
+<input
+              id="newEmployeeNextKinRelationship"
+              type="text"
+              placeholder="Example: Wife, Brother, Mother"
+              style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>Next-of-Kin Contact</label>
+<input
+              id="newEmployeeNextKinPhone"
+              type="text"
+              placeholder="Phone number"
+              style="${settingsInputStyle()}"
+>
 </div>
 
 <div style="
 display:flex;
-        gap:10px;
+align-items:center;
+            padding-top:22px;
+          ">
+<label style="
+display:flex;
+align-items:center;
+              gap:8px;
+cursor:pointer;
+            ">
+<input
+                id="sameAsNextKin"
+                type="checkbox"
+>
+              Emergency contact is same as Next of Kin
+</label>
+</div>
+
+<div>
+<label>Emergency Contact Name</label>
+<input
+              id="newEmployeeEmergencyName"
+              type="text"
+              placeholder="Emergency contact name"
+              style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>Emergency Relationship</label>
+<input
+              id="newEmployeeEmergencyRelationship"
+              type="text"
+              placeholder="Relationship"
+              style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>Emergency Primary Phone</label>
+<input
+              id="newEmployeeEmergencyPhone"
+              type="text"
+              placeholder="Primary phone"
+              style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>Emergency Alternative Phone</label>
+<input
+              id="newEmployeeEmergencyAltPhone"
+              type="text"
+              placeholder="Alternative phone"
+              style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>Emergency Contact Address</label>
+<input
+              id="newEmployeeEmergencyAddress"
+              type="text"
+              placeholder="Village / location"
+              style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>Referred By</label>
+<input
+              id="newEmployeeReferredBy"
+              type="text"
+              placeholder="Referee name"
+              style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>Referee Contact Number</label>
+<input
+              id="newEmployeeRefereePhone"
+              type="text"
+              placeholder="Phone number"
+              style="${settingsInputStyle()}"
+>
+</div>
+
+</div>
+</div>
+
+
+<!-- ==================================
+           SECTION 3 - EMPLOYMENT
+           ================================== -->
+
+<div style="
+        border:1px solid #badbcc;
+        border-radius:10px;
+        margin-bottom:16px;
+overflow:hidden;
       ">
 
-<button id="saveNewEmployee"
-          style="
-            flex:1;
-            padding:12px;
-            border:0;
-            border-radius:8px;
-            background:#0b5d3b;
-color:white;
+<div style="
+          background:#d1e7dd;
+          padding:11px 14px;
+          color:#0f5132;
 font-weight:bold;
-cursor:pointer;
+          font-size:17px;
+        ">
+          3. Employment Information
+</div>
+
+<div style="
+display:grid;
+          grid-template-columns:
+            repeat(auto-fit,minmax(240px,1fr));
+          gap:12px;
+          padding:14px;
+        ">
+
+<div>
+<label>Date Joined *</label>
+<input
+              id="newEmployeeDateJoined"
+              type="date"
+              value="${
+                new Date()
+                  .toISOString()
+                  .split("T")[0]
+              }"
+              style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>Job / Position *</label>
+<input
+              id="newEmployeePosition"
+              type="text"
+              placeholder="Example: Machine Operator"
+              style="${settingsInputStyle()}"
+>
+</div>
+
+<div>
+<label>Department / Work Area</label>
+<select
+              id="newEmployeeDepartment"
+              style="${settingsInputStyle()}"
+>
+<option value="">
+                Select Department
+</option>
+<option>Sorting</option>
+<option>Washing</option>
+<option>Production</option>
+<option>Pelletizing</option>
+<option>Maintenance</option>
+<option>Administration</option>
+<option>Sales & Marketing</option>
+<option>Security</option>
+<option>Other</option>
+</select>
+</div>
+
+<div>
+<label>Employment Type</label>
+<select
+              id="newEmployeeEmploymentType"
+              style="${settingsInputStyle()}"
+>
+<option value="">
+                Select Employment Type
+</option>
+<option>Permanent</option>
+<option>Temporary</option>
+<option>Casual</option>
+<option>Probation</option>
+</select>
+</div>
+
+<div>
+<label>System Role *</label>
+<select
+              id="newEmployeeRole"
+              style="${settingsInputStyle()}"
+>
+<option>Employee</option>
+<option>Team Leader</option>
+<option>Secretary</option>
+<option>Manager</option>
+<option>Director</option>
+</select>
+</div>
+
+<div>
+<label>Employment Status *</label>
+<select
+              id="newEmployeeStatus"
+              style="${settingsInputStyle()}"
+>
+<option value="active">
+                Active
+</option>
+<option value="inactive">
+                Inactive
+</option>
+</select>
+</div>
+
+<div>
+<label>Monthly Allowance (UGX)</label>
+<input
+              id="newEmployeeMonthlyAllowance"
+              type="number"
+              min="0"
+              step="1000"
+              value="0"
+              placeholder="Example: 100000"
+              style="${settingsInputStyle()}"
+>
+
+<div style="
+              font-size:11px;
+              color:#666;
+              margin-top:3px;
+            ">
+              Normal monthly allowance rate.
+              Payments and balances will be recorded separately.
+</div>
+</div>
+
+</div>
+</div>
+
+
+<!-- ==================================
+           SECTION 4 - LOGIN
+           ================================== -->
+
+<div style="
+        border:1px solid #d3c2f3;
+        border-radius:10px;
+        margin-bottom:18px;
+overflow:hidden;
+      ">
+
+<div style="
+          background:#eee5ff;
+          padding:11px 14px;
+          color:#59359a;
+font-weight:bold;
+          font-size:17px;
+        ">
+          4. Employee Login Account
+</div>
+
+<div style="
+          padding:14px;
+          background:#faf8ff;
+        ">
+
+<div style="margin-bottom:7px;">
+<strong>Account Status:</strong>
+<span style="
+              background:#ffc107;
+              padding:3px 8px;
+              border-radius:12px;
+              font-size:12px;
+            ">
+              Not Activated
+</span>
+</div>
+
+<div style="margin-bottom:7px;">
+<strong>Employee Login ID:</strong>
+            ${employeeId}
+</div>
+
+<div style="
+            font-size:13px;
+            color:#555;
           ">
-          Save Employee
+            The employee will use this Employee ID
+            to activate their account and create
+            their own private password later.
+</div>
+
+</div>
+</div>
+
+
+<!-- BUTTONS -->
+
+<div style="
+display:flex;
+flex-wrap:wrap;
+        gap:10px;
+justify-content:space-between;
+      ">
+
+<button
+          id="cancelNewEmployee"
+          type="button"
+          style="
+            padding:11px 18px;
+            border:0;
+            border-radius:7px;
+            background:#6c757d;
+color:white;
+cursor:pointer;
+font-weight:bold;
+          "
+>
+          Cancel
 </button>
 
-<button id="cancelNewEmployee"
+<button
+          id="saveEmployeeBtn"
+          type="button"
           style="
-            flex:1;
-            padding:12px;
-            border:1px solid #ccc;
-            border-radius:8px;
-background:white;
+            padding:11px 20px;
+            border:0;
+            border-radius:7px;
+            background:#0d6efd;
+color:white;
 cursor:pointer;
-          ">
-          Cancel
+font-weight:bold;
+          "
+>
+          Save Employee
 </button>
 
 </div>
@@ -1335,8 +1815,142 @@ cursor:pointer;
 document.body.appendChild(modal);
 
 
+  /* ==================================
+     PASSPORT PHOTO
+     ================================== */
+
 modal.querySelector(
-    "#saveNewEmployee"
+    "#newEmployeePhoto"
+  ).onchange = event => {
+
+const file =
+event.target.files[0];
+
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      alert(
+        "Please select an image file."
+      );
+event.target.value = "";
+      return;
+    }
+
+const reader =
+      new FileReader();
+
+reader.onload = e => {
+
+const image =
+        new Image();
+
+image.onload = () => {
+
+const canvas =
+document.createElement("canvas");
+
+const size = 300;
+
+canvas.width = size;
+canvas.height = size;
+
+const ctx =
+canvas.getContext("2d");
+
+const scale =
+Math.max(
+            size / image.width,
+            size / image.height
+          );
+
+const width =
+image.width * scale;
+
+const height =
+image.height * scale;
+
+const x =
+          (size - width) / 2;
+
+const y =
+          (size - height) / 2;
+
+ctx.drawImage(
+          image,
+          x,
+          y,
+          width,
+          height
+        );
+
+passportPhotoData =
+canvas.toDataURL(
+            "image/jpeg",
+            0.72
+          );
+
+modal.querySelector(
+          "#employeePhotoPreview"
+        ).innerHTML = `
+<img
+src="${passportPhotoData}"
+            style="
+              width:100%;
+              height:100%;
+object-fit:cover;
+            "
+>
+        `;
+      };
+
+image.src = e.target.result;
+    };
+
+reader.readAsDataURL(file);
+  };
+
+
+  /* ==================================
+     SAME AS NEXT OF KIN
+     ================================== */
+
+modal.querySelector(
+    "#sameAsNextKin"
+  ).onchange = event => {
+
+    if (!event.target.checked) {
+      return;
+    }
+
+modal.querySelector(
+      "#newEmployeeEmergencyName"
+    ).value =
+modal.querySelector(
+        "#newEmployeeNextKin"
+      ).value;
+
+modal.querySelector(
+      "#newEmployeeEmergencyRelationship"
+    ).value =
+modal.querySelector(
+        "#newEmployeeNextKinRelationship"
+      ).value;
+
+modal.querySelector(
+      "#newEmployeeEmergencyPhone"
+    ).value =
+modal.querySelector(
+        "#newEmployeeNextKinPhone"
+      ).value;
+  };
+
+
+  /* ==================================
+     SAVE EMPLOYEE
+     ================================== */
+
+modal.querySelector(
+    "#saveEmployeeBtn"
   ).onclick = () => {
 
 const fullName =
@@ -1366,9 +1980,8 @@ modal.querySelector(
 
 const employmentStatus =
 modal.querySelector(
-        "#newEmploymentStatus"
+        "#newEmployeeStatus"
       ).value;
-
 
     if (!fullName) {
       alert(
@@ -1377,14 +1990,12 @@ modal.querySelector(
       return;
     }
 
-
     if (!phone) {
       alert(
         "Please enter the employee's phone number."
       );
       return;
     }
-
 
     if (!position) {
       alert(
@@ -1393,18 +2004,25 @@ modal.querySelector(
       return;
     }
 
+    if (!dateJoined) {
+      alert(
+        "Please enter the date joined."
+      );
+      return;
+    }
 
 const employees =
 getEmployees();
 
+const cleanPhone =
+phone.replace(/\s/g, "");
 
 const duplicatePhone =
 employees.some(employee =>
-        String(employee.phone)
+        String(employee.phone || "")
           .replace(/\s/g, "") ===
-phone.replace(/\s/g, "")
+cleanPhone
       );
-
 
     if (duplicatePhone) {
       alert(
@@ -1413,58 +2031,177 @@ phone.replace(/\s/g, "")
       return;
     }
 
-
 employees.push({
 
       id: Date.now(),
 
-employeeId: employeeId,
+employeeId:
+employeeId,
 
-fullName: fullName,
+passportPhoto:
+passportPhotoData,
 
-      phone: phone,
+fullName:
+fullName,
 
-      position: position,
+      gender:
+modal.querySelector(
+          "#newEmployeeGender"
+        ).value,
 
-dateJoined: dateJoined,
+dateOfBirth:
+modal.querySelector(
+          "#newEmployeeDob"
+        ).value,
 
-      role: role,
+      nationality:
+modal.querySelector(
+          "#newEmployeeNationality"
+        ).value.trim(),
+
+nin:
+modal.querySelector(
+          "#newEmployeeNin"
+        ).value.trim(),
+
+      phone:
+        phone,
+
+residentialAddress:
+modal.querySelector(
+          "#newEmployeeAddress"
+        ).value.trim(),
+
+parentGuardianName:
+modal.querySelector(
+          "#newEmployeeParent"
+        ).value.trim(),
+
+parentGuardianPhone:
+modal.querySelector(
+          "#newEmployeeParentPhone"
+        ).value.trim(),
+
+nextOfKinName:
+modal.querySelector(
+          "#newEmployeeNextKin"
+        ).value.trim(),
+
+nextOfKinRelationship:
+modal.querySelector(
+          "#newEmployeeNextKinRelationship"
+        ).value.trim(),
+
+nextOfKinPhone:
+modal.querySelector(
+          "#newEmployeeNextKinPhone"
+        ).value.trim(),
+
+emergencyContactName:
+modal.querySelector(
+          "#newEmployeeEmergencyName"
+        ).value.trim(),
+
+emergencyRelationship:
+modal.querySelector(
+          "#newEmployeeEmergencyRelationship"
+        ).value.trim(),
+
+emergencyPhone:
+modal.querySelector(
+          "#newEmployeeEmergencyPhone"
+        ).value.trim(),
+
+emergencyAlternativePhone:
+modal.querySelector(
+          "#newEmployeeEmergencyAltPhone"
+        ).value.trim(),
+
+emergencyAddress:
+modal.querySelector(
+          "#newEmployeeEmergencyAddress"
+        ).value.trim(),
+
+referredBy:
+modal.querySelector(
+          "#newEmployeeReferredBy"
+        ).value.trim(),
+
+refereePhone:
+modal.querySelector(
+          "#newEmployeeRefereePhone"
+        ).value.trim(),
+
+      position:
+        position,
+
+      department:
+modal.querySelector(
+          "#newEmployeeDepartment"
+        ).value,
+
+employmentType:
+modal.querySelector(
+          "#newEmployeeEmploymentType"
+        ).value,
+
+dateJoined:
+dateJoined,
+
+      role:
+        role,
 
 employmentStatus:
 employmentStatus,
 
+monthlyAllowance:
+        Number(
+modal.querySelector(
+            "#newEmployeeMonthlyAllowance"
+          ).value
+        ) || 0,
+
 accountStatus:
         "not_activated",
 
-teamId: null,
+teamId:
+        null,
 
-teamName: "",
+teamName:
+        "",
 
 createdAt:
         new Date().toISOString()
 
     });
 
-
-saveEmployees(employees);
+saveEmployees(
+      employees
+    );
 
     alert(
-      "Employee registered successfully!\n\n" +
-      "Employee: " + fullName + "\n" +
-      "Employee ID: " + employeeId + "\n" +
+      "Employee registered successfully!\\n\\n" +
+      "Employee: " + fullName + "\\n" +
+      "Employee ID: " + employeeId + "\\n" +
       "Role: " + role
     );
 
 modal.remove();
+
 manageEmployeeAccounts();
   };
 
+
+  /* ==================================
+     CANCEL
+     ================================== */
 
 modal.querySelector(
     "#cancelNewEmployee"
   ).onclick = () => {
 
 modal.remove();
+
 manageEmployeeAccounts();
   };
 }
