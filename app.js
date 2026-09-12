@@ -168,16 +168,14 @@ manageTeamPerformanceSettings();
   };
 
 modal.querySelector("#employeeAccountsBtn").onclick = () => {
-    alert(
-      "Employee Accounts will be connected next.\n\n" +
-      "Employees will receive an Employee ID and activate their own password."
-    );
+modal.remove();
+manageEmployeeAccounts();
   };
 
 modal.querySelector("#rolesPermissionsBtn").onclick = () => {
     alert(
       "Roles & Permissions will be connected next.\n\n" +
-      "Roles: Director, Manager, Team Leader and Employee."
+      "Roles: Director, Manager, Secretary, Team Leader and Employee."
     );
   };
 
@@ -848,6 +846,627 @@ function escapeSettingsText(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+/* =========================================================
+   EMPLOYEE ACCOUNTS
+   ========================================================= */
+
+function getEmployees() {
+  return JSON.parse(
+localStorage.getItem("employees") || "[]"
+  );
+}
+
+
+function saveEmployees(employees) {
+localStorage.setItem(
+    "employees",
+JSON.stringify(employees)
+  );
+}
+
+
+function getNextEmployeeId() {
+
+const employees = getEmployees();
+
+  let highest = 0;
+
+employees.forEach(employee => {
+
+const match =
+      String(employee.employeeId || "")
+        .match(/^EMP(\d+)$/i);
+
+    if (match) {
+      highest = Math.max(
+        highest,
+        Number(match[1])
+      );
+    }
+  });
+
+  return "EMP" +
+    String(highest + 1).padStart(3, "0");
+}
+
+
+function manageEmployeeAccounts() {
+
+const modal =
+document.createElement("div");
+
+modal.style.cssText = `
+position:fixed;
+    inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+align-items:center;
+justify-content:center;
+    z-index:9999;
+font-family:Arial,sans-serif;
+  `;
+
+modal.innerHTML = `
+<div style="
+background:white;
+      width:800px;
+      max-width:94%;
+      max-height:92vh;
+overflow:auto;
+      border-radius:14px;
+      padding:24px;
+      box-shadow:0 10px 40px rgba(0,0,0,.3);
+    ">
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:center;
+        gap:15px;
+        margin-bottom:20px;
+      ">
+
+<div>
+<h2 style="
+            margin:0;
+            color:#0b5d3b;
+          ">
+            Employee Accounts
+</h2>
+
+<div style="
+            color:#666;
+            font-size:13px;
+            margin-top:5px;
+          ">
+            Register and manage company employees
+</div>
+</div>
+
+<button id="registerNewEmployee"
+          style="
+            border:0;
+            background:#0b5d3b;
+color:white;
+            padding:11px 15px;
+            border-radius:8px;
+cursor:pointer;
+font-weight:bold;
+          ">
+          + Register New Employee
+</button>
+
+</div>
+
+<div id="employeeList"></div>
+
+<div style="
+display:flex;
+        gap:10px;
+        margin-top:20px;
+      ">
+
+<button id="backEmployeeSettings"
+          style="
+            flex:1;
+            padding:11px;
+            border:1px solid #0b5d3b;
+background:white;
+            color:#0b5d3b;
+            border-radius:8px;
+cursor:pointer;
+          ">
+          Back to System Settings
+</button>
+
+<button id="closeEmployeeAccounts"
+          style="
+            flex:1;
+            padding:11px;
+            border:0;
+            background:#555;
+color:white;
+            border-radius:8px;
+cursor:pointer;
+          ">
+          Close
+</button>
+
+</div>
+
+</div>
+  `;
+
+document.body.appendChild(modal);
+
+
+  function renderEmployees() {
+
+const list =
+modal.querySelector("#employeeList");
+
+const employees =
+getEmployees();
+
+    if (!employees.length) {
+
+list.innerHTML = `
+<div style="
+          padding:25px;
+text-align:center;
+          background:#f5f5f5;
+          border-radius:9px;
+          color:#666;
+        ">
+          No employees registered yet.<br><br>
+          Click <b>+ Register New Employee</b>
+          to add the first employee.
+</div>
+      `;
+
+      return;
+    }
+
+
+list.innerHTML = `
+<div style="
+overflow:auto;
+        border:1px solid #ddd;
+        border-radius:9px;
+      ">
+
+<table style="
+          width:100%;
+border-collapse:collapse;
+          font-size:13px;
+        ">
+
+<thead>
+<tr style="
+              background:#eef8f2;
+text-align:left;
+            ">
+<th style="padding:10px;">ID</th>
+<th style="padding:10px;">Employee</th>
+<th style="padding:10px;">Position</th>
+<th style="padding:10px;">Role</th>
+<th style="padding:10px;">Status</th>
+<th style="padding:10px;">Login</th>
+</tr>
+</thead>
+
+<tbody>
+
+            ${employees.map(employee => `
+<tr style="
+                border-top:1px solid #eee;
+              ">
+
+<td style="padding:10px;">
+<b>
+                    ${escapeSettingsText(
+employee.employeeId
+                    )}
+</b>
+</td>
+
+<td style="padding:10px;">
+                  ${escapeSettingsText(
+employee.fullName
+                  )}
+
+<div style="
+                    color:#777;
+                    font-size:11px;
+                    margin-top:3px;
+                  ">
+                    ${escapeSettingsText(
+employee.phone
+                    )}
+</div>
+</td>
+
+<td style="padding:10px;">
+                  ${escapeSettingsText(
+employee.position
+                  )}
+</td>
+
+<td style="padding:10px;">
+                  ${escapeSettingsText(
+employee.role
+                  )}
+</td>
+
+<td style="padding:10px;">
+                  ${
+employee.employmentStatus === "active"
+                      ? "Active"
+                      : "Inactive"
+                  }
+</td>
+
+<td style="padding:10px;">
+                  ${
+employee.accountStatus === "activated"
+                      ? "Activated"
+                      : "Not Activated"
+                  }
+</td>
+
+</tr>
+            `).join("")}
+
+</tbody>
+
+</table>
+
+</div>
+    `;
+  }
+
+
+modal.querySelector(
+    "#registerNewEmployee"
+  ).onclick = () => {
+
+modal.remove();
+registerNewEmployee();
+  };
+
+
+modal.querySelector(
+    "#backEmployeeSettings"
+  ).onclick = () => {
+
+modal.remove();
+systemSettings();
+  };
+
+
+modal.querySelector(
+    "#closeEmployeeAccounts"
+  ).onclick = () => {
+
+modal.remove();
+  };
+
+
+renderEmployees();
+}
+
+
+/* =========================================================
+   REGISTER NEW EMPLOYEE
+   ========================================================= */
+
+function registerNewEmployee() {
+
+const employeeId =
+getNextEmployeeId();
+
+const modal =
+document.createElement("div");
+
+modal.style.cssText = `
+position:fixed;
+    inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+align-items:center;
+justify-content:center;
+    z-index:9999;
+font-family:Arial,sans-serif;
+  `;
+
+modal.innerHTML = `
+<div style="
+background:white;
+      width:600px;
+      max-width:94%;
+      max-height:92vh;
+overflow:auto;
+      border-radius:14px;
+      padding:24px;
+      box-shadow:0 10px 40px rgba(0,0,0,.3);
+    ">
+
+<h2 style="
+        margin-top:0;
+        color:#0b5d3b;
+      ">
+        Register New Employee
+</h2>
+
+<label>Employee ID</label>
+
+<input id="newEmployeeId"
+        type="text"
+        value="${employeeId}"
+readonly
+        style="${settingsInputStyle()}">
+
+<label>Full Name</label>
+
+<input id="newEmployeeName"
+        type="text"
+        placeholder="Employee full name"
+        style="${settingsInputStyle()}">
+
+<label>Phone Number</label>
+
+<input id="newEmployeePhone"
+        type="text"
+        placeholder="Example: 07XXXXXXXX"
+        style="${settingsInputStyle()}">
+
+<label>Job / Position</label>
+
+<input id="newEmployeePosition"
+        type="text"
+        placeholder="Example: Machine Operator"
+        style="${settingsInputStyle()}">
+
+<label>Date Joined</label>
+
+<input id="newEmployeeDateJoined"
+        type="date"
+        value="${
+          new Date()
+            .toISOString()
+            .split("T")[0]
+        }"
+        style="${settingsInputStyle()}">
+
+<label>System Role</label>
+
+<select id="newEmployeeRole"
+        style="${settingsInputStyle()}">
+
+<option value="Employee">
+          Employee
+</option>
+
+<option value="Team Leader">
+          Team Leader
+</option>
+
+<option value="Secretary">
+          Secretary
+</option>
+
+<option value="Manager">
+          Manager
+</option>
+
+<option value="Director">
+          Director
+</option>
+
+</select>
+
+<label>Employment Status</label>
+
+<select id="newEmploymentStatus"
+        style="${settingsInputStyle()}">
+
+<option value="active">
+          Active
+</option>
+
+<option value="inactive">
+          Inactive
+</option>
+
+</select>
+
+<div style="
+        background:#eef8f2;
+        padding:12px;
+        border-radius:8px;
+        margin:5px 0 18px;
+        font-size:13px;
+      ">
+<b>Login Account:</b>
+        Not Activated<br><br>
+
+        The employee will later use their
+        Employee ID to activate their account
+        and create their own private password.
+</div>
+
+<div style="
+display:flex;
+        gap:10px;
+      ">
+
+<button id="saveNewEmployee"
+          style="
+            flex:1;
+            padding:12px;
+            border:0;
+            border-radius:8px;
+            background:#0b5d3b;
+color:white;
+font-weight:bold;
+cursor:pointer;
+          ">
+          Save Employee
+</button>
+
+<button id="cancelNewEmployee"
+          style="
+            flex:1;
+            padding:12px;
+            border:1px solid #ccc;
+            border-radius:8px;
+background:white;
+cursor:pointer;
+          ">
+          Cancel
+</button>
+
+</div>
+
+</div>
+  `;
+
+document.body.appendChild(modal);
+
+
+modal.querySelector(
+    "#saveNewEmployee"
+  ).onclick = () => {
+
+const fullName =
+modal.querySelector(
+        "#newEmployeeName"
+      ).value.trim();
+
+const phone =
+modal.querySelector(
+        "#newEmployeePhone"
+      ).value.trim();
+
+const position =
+modal.querySelector(
+        "#newEmployeePosition"
+      ).value.trim();
+
+const dateJoined =
+modal.querySelector(
+        "#newEmployeeDateJoined"
+      ).value;
+
+const role =
+modal.querySelector(
+        "#newEmployeeRole"
+      ).value;
+
+const employmentStatus =
+modal.querySelector(
+        "#newEmploymentStatus"
+      ).value;
+
+
+    if (!fullName) {
+      alert(
+        "Please enter the employee's full name."
+      );
+      return;
+    }
+
+
+    if (!phone) {
+      alert(
+        "Please enter the employee's phone number."
+      );
+      return;
+    }
+
+
+    if (!position) {
+      alert(
+        "Please enter the employee's job or position."
+      );
+      return;
+    }
+
+
+const employees =
+getEmployees();
+
+
+const duplicatePhone =
+employees.some(employee =>
+        String(employee.phone)
+          .replace(/\s/g, "") ===
+phone.replace(/\s/g, "")
+      );
+
+
+    if (duplicatePhone) {
+      alert(
+        "An employee with this phone number is already registered."
+      );
+      return;
+    }
+
+
+employees.push({
+
+      id: Date.now(),
+
+employeeId: employeeId,
+
+fullName: fullName,
+
+      phone: phone,
+
+      position: position,
+
+dateJoined: dateJoined,
+
+      role: role,
+
+employmentStatus:
+employmentStatus,
+
+accountStatus:
+        "not_activated",
+
+teamId: null,
+
+teamName: "",
+
+createdAt:
+        new Date().toISOString()
+
+    });
+
+
+saveEmployees(employees);
+
+    alert(
+      "Employee registered successfully!\n\n" +
+      "Employee: " + fullName + "\n" +
+      "Employee ID: " + employeeId + "\n" +
+      "Role: " + role
+    );
+
+modal.remove();
+manageEmployeeAccounts();
+  };
+
+
+modal.querySelector(
+    "#cancelNewEmployee"
+  ).onclick = () => {
+
+modal.remove();
+manageEmployeeAccounts();
+  };
 }
 
 /* =========================================================
