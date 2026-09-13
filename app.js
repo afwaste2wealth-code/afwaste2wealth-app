@@ -364,6 +364,19 @@ display:flex;
         gap:10px;
         margin-top:20px;
       ">
+<button id="transferEmployeeBtn"
+        style="
+          flex:1;
+          padding:11px;
+          border:0;
+          background:#0b5d3b;
+color:white;
+          border-radius:8px;
+cursor:pointer;
+font-weight:bold;
+        ">
+  Transfer Employee
+</button>
 
 <button id="backToSettings"
           style="
@@ -694,6 +707,10 @@ renderTeams();
     alert("Team saved successfully.");
   };
 
+modal.querySelector("#transferEmployeeBtn").onclick = () => {
+modal.remove();
+transferEmployeeBetweenTeams();
+};
 
 modal.querySelector("#backToSettings").onclick = () => {
 modal.remove();
@@ -735,6 +752,662 @@ qualityWeight:
   };
 }
 
+/* =========================================================
+   EMPLOYEE TEAM TRANSFER
+   ========================================================= */
+
+function transferEmployeeBetweenTeams() {
+
+const teams = getTeams().filter(
+    team =>
+      String(team.status || "").toLowerCase() === "active"
+  );
+
+const employees = getEmployees().filter(
+    employee =>employee.employmentStatus === "active"
+  );
+
+  if (teams.length< 2) {
+    alert(
+      "At least two active teams are required before an employee can be transferred."
+    );
+    return;
+  }
+
+const modal =
+document.createElement("div");
+
+modal.style.cssText = `
+position:fixed;
+    inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+align-items:center;
+justify-content:center;
+    z-index:10000;
+font-family:Arial,sans-serif;
+    padding:10px;
+  `;
+
+modal.innerHTML = `
+<div style="
+background:white;
+      width:650px;
+      max-width:94%;
+      max-height:92vh;
+overflow:auto;
+      border-radius:14px;
+      padding:24px;
+      box-shadow:0 10px 40px rgba(0,0,0,.3);
+    ">
+
+<h2 style="
+        margin-top:0;
+        color:#0b5d3b;
+      ">
+        Transfer Employee
+</h2>
+
+<div style="
+        background:#eef8f2;
+        padding:12px;
+        border-radius:8px;
+        margin-bottom:18px;
+      ">
+        Move an employee from one active team to another.
+        The transfer will be recorded in the transfer history.
+</div>
+
+<label>Employee</label>
+
+<select
+        id="transferEmployee"
+        style="${settingsInputStyle()}"
+>
+<option value="">
+          Select employee
+</option>
+
+        ${employees.map(employee => `
+<option value="${
+escapeSettingsText(
+employee.employeeId
+            )
+          }">
+            ${
+escapeSettingsText(
+employee.employeeId
+              )
+            } - ${
+escapeSettingsText(
+employee.fullName
+              )
+            }
+</option>
+        `).join("")}
+
+</select>
+
+<br><br>
+
+<label>From Team</label>
+
+<select
+        id="transferFromTeam"
+        style="${settingsInputStyle()}"
+>
+<option value="">
+          Select current team
+</option>
+
+        ${teams.map(team => `
+<option value="${
+escapeSettingsText(team.id)
+          }">
+            ${escapeSettingsText(team.name)}
+</option>
+        `).join("")}
+
+</select>
+
+<br><br>
+
+<label>To Team</label>
+
+<select
+        id="transferToTeam"
+        style="${settingsInputStyle()}"
+>
+<option value="">
+          Select new team
+</option>
+
+        ${teams.map(team => `
+<option value="${
+escapeSettingsText(team.id)
+          }">
+            ${escapeSettingsText(team.name)}
+</option>
+        `).join("")}
+
+</select>
+
+<br><br>
+
+<div
+        id="replacementLeaderArea"
+        style="
+display:none;
+          background:#fff8e6;
+          padding:12px;
+          border-radius:8px;
+          margin-bottom:16px;
+        "
+>
+
+<strong>
+          Replacement Team Leader Required
+</strong>
+
+<p style="
+          font-size:13px;
+          margin:8px 0;
+        ">
+          The employee being transferred is the current
+          Team Leader. Select another member of the old
+          team to become Team Leader.
+</p>
+
+<select
+          id="replacementLeader"
+          style="${settingsInputStyle()}"
+>
+<option value="">
+            Select replacement leader
+</option>
+</select>
+
+</div>
+
+<label>Reason for Transfer *</label>
+
+<textarea
+        id="transferReason"
+        rows="3"
+        placeholder="Enter reason for transfer"
+        style="${settingsInputStyle()}"
+></textarea>
+
+<br><br>
+
+<div style="
+display:flex;
+        gap:10px;
+      ">
+
+<button
+          id="confirmTransfer"
+          style="
+            flex:1;
+            padding:12px;
+            border:0;
+            border-radius:8px;
+            background:#0b5d3b;
+color:white;
+font-weight:bold;
+cursor:pointer;
+          "
+>
+          Transfer Employee
+</button>
+
+<button
+          id="cancelTransfer"
+          style="
+            flex:1;
+            padding:12px;
+            border:0;
+            border-radius:8px;
+            background:#555;
+color:white;
+cursor:pointer;
+          "
+>
+          Cancel
+</button>
+
+</div>
+
+</div>
+  `;
+
+document.body.appendChild(modal);
+
+
+  function findTeamById(teamId) {
+    return getTeams().find(
+      team =>
+        String(team.id) === String(teamId)
+    );
+  }
+
+
+  function employeeBelongsToTeam(
+employeeId,
+    team
+  ) {
+
+    if (!team) return false;
+
+    if (
+      String(team.leaderEmployeeId) ===
+      String(employeeId)
+    ) {
+      return true;
+    }
+
+    return (
+Array.isArray(team.memberEmployeeIds) &&
+team.memberEmployeeIds.some(
+        id =>
+          String(id) === String(employeeId)
+      )
+    );
+  }
+
+
+  function updateReplacementLeaderBox() {
+
+const employeeId =
+modal.querySelector(
+        "#transferEmployee"
+      ).value;
+
+const fromTeamId =
+modal.querySelector(
+        "#transferFromTeam"
+      ).value;
+
+const area =
+modal.querySelector(
+        "#replacementLeaderArea"
+      );
+
+const replacementSelect =
+modal.querySelector(
+        "#replacementLeader"
+      );
+
+area.style.display = "none";
+
+replacementSelect.innerHTML = `
+<option value="">
+        Select replacement leader
+</option>
+    `;
+
+    if (!employeeId || !fromTeamId) {
+      return;
+    }
+
+const fromTeam =
+findTeamById(fromTeamId);
+
+    if (!fromTeam) return;
+
+const isLeader =
+      String(
+fromTeam.leaderEmployeeId
+      ) === String(employeeId);
+
+    if (!isLeader) return;
+
+const possibleReplacementIds =
+Array.isArray(
+fromTeam.memberEmployeeIds
+      )
+        ? fromTeam.memberEmployeeIds.filter(
+            id =>
+              String(id) !==
+              String(employeeId)
+          )
+        : [];
+
+const possibleReplacements =
+possibleReplacementIds
+        .map(id =>
+employees.find(
+            employee =>
+              String(employee.employeeId) ===
+              String(id)
+          )
+        )
+        .filter(Boolean);
+
+area.style.display = "block";
+
+possibleReplacements.forEach(
+      employee => {
+
+const option =
+document.createElement("option");
+
+option.value =
+employee.employeeId;
+
+option.textContent =
+employee.employeeId +
+          " - " +
+employee.fullName;
+
+replacementSelect.appendChild(
+          option
+        );
+      }
+    );
+  }
+
+
+modal.querySelector(
+    "#transferEmployee"
+  ).onchange =
+updateReplacementLeaderBox;
+
+modal.querySelector(
+    "#transferFromTeam"
+  ).onchange =
+updateReplacementLeaderBox;
+
+
+modal.querySelector(
+    "#cancelTransfer"
+  ).onclick = () => {
+modal.remove();
+  };
+
+
+modal.querySelector(
+    "#confirmTransfer"
+  ).onclick = () => {
+
+const employeeId =
+modal.querySelector(
+        "#transferEmployee"
+      ).value;
+
+const fromTeamId =
+modal.querySelector(
+        "#transferFromTeam"
+      ).value;
+
+const toTeamId =
+modal.querySelector(
+        "#transferToTeam"
+      ).value;
+
+const reason =
+modal.querySelector(
+        "#transferReason"
+      ).value.trim();
+
+const replacementLeaderId =
+modal.querySelector(
+        "#replacementLeader"
+      ).value;
+
+
+    if (!employeeId) {
+      alert("Please select an employee.");
+      return;
+    }
+
+    if (!fromTeamId) {
+      alert("Please select the current team.");
+      return;
+    }
+
+    if (!toTeamId) {
+      alert("Please select the new team.");
+      return;
+    }
+
+    if (
+      String(fromTeamId) ===
+      String(toTeamId)
+    ) {
+      alert(
+        "The current team and new team cannot be the same."
+      );
+      return;
+    }
+
+    if (!reason) {
+      alert(
+        "Please enter the reason for the transfer."
+      );
+      return;
+    }
+
+
+const allTeams = getTeams();
+
+const fromTeamIndex =
+allTeams.findIndex(
+        team =>
+          String(team.id) ===
+          String(fromTeamId)
+      );
+
+const toTeamIndex =
+allTeams.findIndex(
+        team =>
+          String(team.id) ===
+          String(toTeamId)
+      );
+
+    if (
+fromTeamIndex === -1 ||
+toTeamIndex === -1
+    ) {
+      alert("Team record not found.");
+      return;
+    }
+
+const fromTeam =
+allTeams[fromTeamIndex];
+
+const toTeam =
+allTeams[toTeamIndex];
+
+
+    if (
+      !employeeBelongsToTeam(
+employeeId,
+fromTeam
+      )
+    ) {
+      alert(
+        "This employee does not belong to " +
+fromTeam.name +
+        "."
+      );
+      return;
+    }
+
+
+const employee =
+employees.find(
+        item =>
+          String(item.employeeId) ===
+          String(employeeId)
+      );
+
+    if (!employee) {
+      alert("Employee record not found.");
+      return;
+    }
+
+
+const employeeWasLeader =
+      String(
+fromTeam.leaderEmployeeId
+      ) === String(employeeId);
+
+
+    if (employeeWasLeader) {
+
+      if (!replacementLeaderId) {
+        alert(
+          "Please select a replacement Team Leader for " +
+fromTeam.name +
+          "."
+        );
+        return;
+      }
+
+const replacementLeader =
+employees.find(
+          item =>
+            String(item.employeeId) ===
+            String(replacementLeaderId)
+        );
+
+      if (!replacementLeader) {
+        alert(
+          "Replacement Team Leader record not found."
+        );
+        return;
+      }
+
+fromTeam.leaderEmployeeId =
+replacementLeader.employeeId;
+
+fromTeam.leader =
+replacementLeader.fullName;
+    }
+
+
+fromTeam.memberEmployeeIds =
+Array.isArray(
+fromTeam.memberEmployeeIds
+      )
+        ? fromTeam.memberEmployeeIds.filter(
+            id =>
+              String(id) !==
+              String(employeeId)
+          )
+        : [];
+
+fromTeam.members =
+Array.isArray(fromTeam.members)
+        ? fromTeam.members.filter(
+            name =>
+              String(name) !==
+              String(employee.fullName)
+          )
+        : [];
+
+
+    if (
+      !Array.isArray(
+toTeam.memberEmployeeIds
+      )
+    ) {
+toTeam.memberEmployeeIds = [];
+    }
+
+    if (
+      !toTeam.memberEmployeeIds.some(
+        id =>
+          String(id) ===
+          String(employeeId)
+      )
+    ) {
+toTeam.memberEmployeeIds.push(
+employee.employeeId
+      );
+    }
+
+
+    if (!Array.isArray(toTeam.members)) {
+toTeam.members = [];
+    }
+
+    if (
+      !toTeam.members.includes(
+employee.fullName
+      )
+    ) {
+toTeam.members.push(
+employee.fullName
+      );
+    }
+
+
+allTeams[fromTeamIndex] =
+fromTeam;
+
+allTeams[toTeamIndex] =
+toTeam;
+
+saveTeams(allTeams);
+
+
+const transferHistory =
+JSON.parse(
+localStorage.getItem(
+          "teamTransferHistory"
+        ) || "[]"
+      );
+
+transferHistory.push({
+      id: Date.now(),
+employeeId:
+employee.employeeId,
+employeeName:
+employee.fullName,
+fromTeamId:
+fromTeam.id,
+fromTeamName:
+fromTeam.name,
+toTeamId:
+toTeam.id,
+toTeamName:
+toTeam.name,
+      reason:
+        reason,
+wasTeamLeader:
+employeeWasLeader,
+replacementLeaderId:
+employeeWasLeader
+          ? replacementLeaderId
+          : "",
+transferredAt:
+        new Date().toISOString()
+    });
+
+localStorage.setItem(
+      "teamTransferHistory",
+JSON.stringify(
+transferHistory
+      )
+    );
+
+
+    alert(
+employee.fullName +
+      " transferred successfully from " +
+fromTeam.name +
+      " to " +
+toTeam.name +
+      "."
+    );
+
+modal.remove();
+
+manageTeams();
+  };
+}
 
 function manageTeamPerformanceSettings() {
 
