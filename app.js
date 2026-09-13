@@ -178,15 +178,534 @@ modal.querySelector("#rolesPermissionsBtn").onclick = () => {
       "Roles: Director, Manager, Secretary, Team Leader and Employee."
     );
   };
-
 modal.querySelector("#shiftSettingsBtn").onclick = () => {
-    alert(
-      "Shift & Working Hours will be connected next.\n\n" +
-      "This will control Day Shift, Night Shift, attendance, shortfall and overtime."
-    );
-  };
+modal.remove();
+manageShiftSettings();
+};
+
+/* =========================================================
+   SHIFT & WORKING HOURS SETTINGS
+   ========================================================= */
+
+function getShiftSettings() {
+  return JSON.parse(
+localStorage.getItem("shiftSettings") || "[]"
+  );
 }
 
+function saveShiftSettings(shifts) {
+localStorage.setItem(
+    "shiftSettings",
+JSON.stringify(shifts)
+  );
+}
+
+function manageShiftSettings() {
+
+const shifts = getShiftSettings();
+
+const modal =
+document.createElement("div");
+
+modal.style.cssText = `
+position:fixed;
+    inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+align-items:center;
+justify-content:center;
+    z-index:10000;
+font-family:Arial,sans-serif;
+    padding:10px;
+  `;
+
+modal.innerHTML = `
+<div style="
+background:white;
+      width:760px;
+      max-width:95%;
+      max-height:92vh;
+overflow:auto;
+      border-radius:14px;
+      padding:24px;
+      box-shadow:0 10px 40px rgba(0,0,0,.3);
+    ">
+
+<h2 style="
+        margin-top:0;
+        color:#0b5d3b;
+      ">
+        Shift & Working Hours
+</h2>
+
+<div style="
+        background:#eef8f2;
+        padding:12px;
+        border-radius:8px;
+        margin-bottom:18px;
+      ">
+        Configure the official working times used by attendance,
+        shortfall and overtime calculations.
+</div>
+
+<label>Shift Name</label>
+<input
+        id="shiftName"
+        type="text"
+        placeholder="Example: Day Shift"
+        style="${settingsInputStyle()}"
+>
+
+<br><br>
+
+<label>Start Time</label>
+<input
+        id="shiftStartTime"
+        type="time"
+        style="${settingsInputStyle()}"
+>
+
+<br><br>
+
+<label>End Time</label>
+<input
+        id="shiftEndTime"
+        type="time"
+        style="${settingsInputStyle()}"
+>
+
+<br><br>
+
+<label>Break Duration (Minutes)</label>
+<input
+        id="shiftBreakMinutes"
+        type="number"
+        min="0"
+        value="60"
+        style="${settingsInputStyle()}"
+>
+
+<br><br>
+
+<label>Grace Period for Late Arrival (Minutes)</label>
+<input
+        id="shiftGraceMinutes"
+        type="number"
+        min="0"
+        value="10"
+        style="${settingsInputStyle()}"
+>
+
+<br><br>
+
+<label>Status</label>
+<select
+        id="shiftStatus"
+        style="${settingsInputStyle()}"
+>
+<option value="active">Active</option>
+<option value="inactive">Inactive</option>
+</select>
+
+<br><br>
+
+<button
+        id="saveShift"
+        style="
+          width:100%;
+          padding:12px;
+          border:0;
+          border-radius:8px;
+          background:#0b5d3b;
+color:white;
+font-weight:bold;
+cursor:pointer;
+        "
+>
+        Save Shift
+</button>
+
+<h3 style="
+        color:#0b5d3b;
+        margin-top:24px;
+      ">
+        Existing Shifts
+</h3>
+
+<div id="shiftList"></div>
+
+<div style="
+display:flex;
+        gap:10px;
+        margin-top:20px;
+      ">
+
+<button
+          id="backToSystemSettingsFromShift"
+          style="
+            flex:1;
+            padding:11px;
+            border:1px solid #0b5d3b;
+background:white;
+            color:#0b5d3b;
+            border-radius:8px;
+cursor:pointer;
+          "
+>
+          Back to System Settings
+</button>
+
+<button
+          id="closeShiftSettings"
+          style="
+            flex:1;
+            padding:11px;
+            border:0;
+            background:#555;
+color:white;
+            border-radius:8px;
+cursor:pointer;
+          "
+>
+          Close
+</button>
+
+</div>
+
+</div>
+  `;
+
+document.body.appendChild(modal);
+
+
+  function calculateShiftHours(
+startTime,
+endTime,
+breakMinutes
+  ) {
+
+    if (!startTime || !endTime) {
+      return 0;
+    }
+
+const [startHour, startMinute] =
+startTime.split(":").map(Number);
+
+const [endHour, endMinute] =
+endTime.split(":").map(Number);
+
+    let start =
+startHour * 60 + startMinute;
+
+    let end =
+endHour * 60 + endMinute;
+
+    /*
+     * Night shift:
+     * if end time is earlier than start time,
+     * the shift finishes the following day.
+     */
+    if (end <= start) {
+      end += 24 * 60;
+    }
+
+const totalMinutes =
+Math.max(
+        end -
+        start -
+        Number(breakMinutes || 0),
+        0
+      );
+
+    return totalMinutes / 60;
+  }
+
+
+  function renderShifts() {
+
+const list =
+modal.querySelector("#shiftList");
+
+const currentShifts =
+getShiftSettings();
+
+    if (!currentShifts.length) {
+list.innerHTML = `
+<div style="
+          padding:14px;
+          background:#f5f5f5;
+          border-radius:8px;
+          color:#666;
+        ">
+          No shifts have been created yet.
+</div>
+      `;
+      return;
+    }
+
+list.innerHTML =
+currentShifts.map(shift => `
+
+<div style="
+          border:1px solid #ddd;
+          border-radius:10px;
+          padding:14px;
+          margin-bottom:10px;
+display:flex;
+justify-content:space-between;
+          gap:15px;
+align-items:center;
+        ">
+
+<div>
+<strong>
+              ${escapeSettingsText(shift.name)}
+</strong>
+
+<div style="
+              margin-top:5px;
+              font-size:13px;
+              line-height:1.6;
+            ">
+              Time:
+              ${escapeSettingsText(shift.startTime)}
+              -
+              ${escapeSettingsText(shift.endTime)}
+<br>
+
+              Break:
+              ${Number(shift.breakMinutes || 0)}
+              minutes
+<br>
+
+              Normal Working Hours:
+              ${Number(shift.normalHours || 0).toFixed(2)}
+              hours
+<br>
+
+              Grace Period:
+              ${Number(shift.graceMinutes || 0)}
+              minutes
+<br>
+
+              Status:
+<strong>
+                ${String(shift.status || "").toUpperCase()}
+</strong>
+</div>
+</div>
+
+<button
+            class="deleteShiftBtn"
+            data-id="${shift.id}"
+            style="
+              border:0;
+              background:#b53b3b;
+color:white;
+              padding:8px 12px;
+              border-radius:6px;
+cursor:pointer;
+            "
+>
+            Delete
+</button>
+
+</div>
+
+      `).join("");
+
+
+list.querySelectorAll(
+      ".deleteShiftBtn"
+    ).forEach(button => {
+
+button.onclick = () => {
+
+const shiftId =
+button.dataset.id;
+
+const confirmed =
+          confirm(
+            "Delete this shift?"
+          );
+
+        if (!confirmed) return;
+
+const updated =
+getShiftSettings().filter(
+            shift =>
+              String(shift.id) !==
+              String(shiftId)
+          );
+
+saveShiftSettings(updated);
+
+renderShifts();
+      };
+    });
+  }
+
+
+modal.querySelector(
+    "#saveShift"
+  ).onclick = () => {
+
+const name =
+modal.querySelector(
+        "#shiftName"
+      ).value.trim();
+
+const startTime =
+modal.querySelector(
+        "#shiftStartTime"
+      ).value;
+
+const endTime =
+modal.querySelector(
+        "#shiftEndTime"
+      ).value;
+
+const breakMinutes =
+      Number(
+modal.querySelector(
+          "#shiftBreakMinutes"
+        ).value
+      );
+
+const graceMinutes =
+      Number(
+modal.querySelector(
+          "#shiftGraceMinutes"
+        ).value
+      );
+
+const status =
+modal.querySelector(
+        "#shiftStatus"
+      ).value;
+
+
+    if (!name) {
+      alert(
+        "Please enter the Shift Name."
+      );
+      return;
+    }
+
+    if (!startTime) {
+      alert(
+        "Please enter the Start Time."
+      );
+      return;
+    }
+
+    if (!endTime) {
+      alert(
+        "Please enter the End Time."
+      );
+      return;
+    }
+
+
+const existingShifts =
+getShiftSettings();
+
+const duplicate =
+existingShifts.some(
+        shift =>
+          String(shift.name)
+            .toLowerCase() ===
+name.toLowerCase()
+      );
+
+    if (duplicate) {
+      alert(
+        "A shift with this name already exists."
+      );
+      return;
+    }
+
+
+const normalHours =
+calculateShiftHours(
+startTime,
+endTime,
+breakMinutes
+      );
+
+
+existingShifts.push({
+      id: Date.now(),
+      name: name,
+startTime: startTime,
+endTime: endTime,
+breakMinutes:
+Math.max(breakMinutes || 0, 0),
+graceMinutes:
+Math.max(graceMinutes || 0, 0),
+normalHours:
+normalHours,
+      status: status,
+createdAt:
+        new Date().toISOString()
+    });
+
+
+saveShiftSettings(
+existingShifts
+    );
+
+
+modal.querySelector(
+      "#shiftName"
+    ).value = "";
+
+modal.querySelector(
+      "#shiftStartTime"
+    ).value = "";
+
+modal.querySelector(
+      "#shiftEndTime"
+    ).value = "";
+
+modal.querySelector(
+      "#shiftBreakMinutes"
+    ).value = "60";
+
+modal.querySelector(
+      "#shiftGraceMinutes"
+    ).value = "10";
+
+modal.querySelector(
+      "#shiftStatus"
+    ).value = "active";
+
+
+renderShifts();
+
+    alert(
+      "Shift saved successfully."
+    );
+  };
+
+
+modal.querySelector(
+    "#backToSystemSettingsFromShift"
+  ).onclick = () => {
+modal.remove();
+systemSettings();
+  };
+
+
+modal.querySelector(
+    "#closeShiftSettings"
+  ).onclick = () => {
+modal.remove();
+  };
+
+
+renderShifts();
+}
 
 function systemSettingsButtonStyle() {
   return `
