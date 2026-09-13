@@ -259,20 +259,66 @@ overflow:auto;
 <br><br>
 
 <label>Start Time</label>
-<input
-        id="shiftStartTime"
-        type="time"
-        style="${settingsInputStyle()}"
+<div style="display:flex;gap:8px;">
+<select
+    id="shiftStartHour"
+    style="${settingsInputStyle()}"
 >
+    ${Array.from({ length: 12 }, (_, i) =>
+      `<option value="${i + 1}">${i + 1}</option>`
+    ).join("")}
+</select>
+
+<select
+    id="shiftStartMinute"
+    style="${settingsInputStyle()}"
+>
+    ${Array.from({ length: 12 }, (_, i) => {
+const minute = String(i * 5).padStart(2, "0");
+      return `<option value="${minute}">${minute}</option>`;
+    }).join("")}
+</select>
+
+<select
+    id="shiftStartPeriod"
+    style="${settingsInputStyle()}"
+>
+<option value="AM">AM</option>
+<option value="PM">PM</option>
+</select>
+</div>
 
 <br><br>
 
 <label>End Time</label>
-<input
-        id="shiftEndTime"
-        type="time"
-        style="${settingsInputStyle()}"
+<div style="display:flex;gap:8px;">
+<select
+    id="shiftEndHour"
+    style="${settingsInputStyle()}"
 >
+    ${Array.from({ length: 12 }, (_, i) =>
+      `<option value="${i + 1}">${i + 1}</option>`
+    ).join("")}
+</select>
+
+<select
+    id="shiftEndMinute"
+    style="${settingsInputStyle()}"
+>
+    ${Array.from({ length: 12 }, (_, i) => {
+const minute = String(i * 5).padStart(2, "0");
+      return `<option value="${minute}">${minute}</option>`;
+    }).join("")}
+</select>
+
+<select
+    id="shiftEndPeriod"
+    style="${settingsInputStyle()}"
+>
+<option value="AM">AM</option>
+<option value="PM">PM</option>
+</select>
+</div>
 
 <br><br>
 
@@ -377,6 +423,38 @@ cursor:pointer;
 
 document.body.appendChild(modal);
 
+function convert12HourTo24(timeValue, period) {
+const value = String(timeValue || "").trim();
+
+const match = value.match(
+    /^(0?[1-9]|1[0-2]):([0-5]\d)$/
+  );
+
+  if (!match) {
+    return "";
+  }
+
+  let hour = Number(match[1]);
+const minute = match[2];
+
+  if (period === "AM") {
+    if (hour === 12) {
+      hour = 0;
+    }
+  } else if (period === "PM") {
+    if (hour !== 12) {
+      hour += 12;
+    }
+  } else {
+    return "";
+  }
+
+  return (
+    String(hour).padStart(2, "0") +
+    ":" +
+    minute
+  );
+}
 
   function calculateShiftHours(
 startTime,
@@ -555,15 +633,56 @@ modal.querySelector(
         "#shiftName"
       ).value.trim();
 
-const startTime =
+const startHour =
 modal.querySelector(
-        "#shiftStartTime"
-      ).value;
+  "#shiftStartHour"
+).value;
+
+const startMinute =
+modal.querySelector(
+  "#shiftStartMinute"
+).value;
+
+const startPeriod =
+modal.querySelector(
+  "#shiftStartPeriod"
+).value;
+
+const endHour =
+modal.querySelector(
+  "#shiftEndHour"
+).value;
+
+const endMinute =
+modal.querySelector(
+  "#shiftEndMinute"
+).value;
+const startPeriod = 
+  modal.querySelector(
+    "#shiftStartPeriod"
+    ).value;
+const startTimeInput =
+startHour + ":" + startMinute;
+
+const endTimeInput =
+endHour + ":" + endMinute;
+
+const endPeriod =
+modal.querySelector(
+  "#shiftEndPeriod"
+).value;
+
+const startTime =
+convert12HourTo24(
+startTimeInput,
+startPeriod
+);
 
 const endTime =
-modal.querySelector(
-        "#shiftEndTime"
-      ).value;
+convert12HourTo24(
+endTimeInput,
+endPeriod
+);
 
 const breakMinutes =
       Number(
@@ -660,13 +779,13 @@ modal.querySelector(
       "#shiftName"
     ).value = "";
 
-modal.querySelector(
-      "#shiftStartTime"
-    ).value = "";
+modal.querySelector("#shiftStartHour").value = "1";
+modal.querySelector("#shiftStartMinute").value = "00";
+modal.querySelector("#shiftStartPeriod").value = "AM";
 
-modal.querySelector(
-      "#shiftEndTime"
-    ).value = "";
+modal.querySelector("#shiftEndHour").value = "1";
+modal.querySelector("#shiftEndMinute").value = "00";
+modal.querySelector("#shiftEndPeriod").value = "AM";
 
 modal.querySelector(
       "#shiftBreakMinutes"
