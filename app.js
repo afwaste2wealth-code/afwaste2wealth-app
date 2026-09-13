@@ -182,7 +182,7 @@ modal.querySelector("#shiftSettingsBtn").onclick = () => {
 modal.remove();
 manageShiftSettings();
 };
-
+}
 /* =========================================================
    SHIFT & WORKING HOURS SETTINGS
    ========================================================= */
