@@ -291,24 +291,44 @@ overflow:auto;
 </select>
 
 <label>Team Members</label>
-<select id="teamMembers"
-        multiple
-        size="6"
-        style="${settingsInputStyle()}">
-  ${employees.map(employee => `
-<option value="${escapeSettingsText(employee.employeeId)}">
-      ${escapeSettingsText(employee.employeeId)} - ${escapeSettingsText(employee.fullName)}
-</option>
-  `).join("")}
-</select>
 
-<div style="
-  font-size:12px;
-  color:#666;
-  margin-top:-6px;
-  margin-bottom:12px;
-">
-  Hold Ctrl while clicking to select more than one team member.
+<div id="teamMembers"
+     style="
+       border:1px solid #ccc;
+       border-radius:8px;
+       padding:10px;
+       margin-bottom:12px;
+       max-height:180px;
+       overflow-y:auto;
+background:white;
+     ">
+
+  ${employees.map(employee => `
+<label style="
+display:flex;
+align-items:center;
+      gap:10px;
+      padding:7px 4px;
+cursor:pointer;
+      border-bottom:1px solid #eee;
+    ">
+<input
+        type="checkbox"
+        class="teamMemberCheckbox"
+        value="${escapeSettingsText(employee.employeeId)}"
+        style="
+          width:18px;
+          height:18px;
+cursor:pointer;
+        "
+>
+<span>
+        ${escapeSettingsText(employee.employeeId)}
+        - ${escapeSettingsText(employee.fullName)}
+</span>
+</label>
+  `).join("")}
+
 </div>
 
 <label>Status</label>
@@ -514,9 +534,11 @@ employee.employeeId === leaderEmployeeId
 
 const memberEmployeeIds =
 Array.from(
-modal.querySelector("#teamMembers").selectedOptions
+modal.querySelectorAll('#teamMembers 
+  input[type="checkbox"]:checked')
+  )
   ).map(
-    option =>option.value
+    checkbox => checkbox.value
   );
 
 const status =
@@ -584,10 +606,10 @@ saveTeams(existingTeams);
 
 modal.querySelector("#teamName").value = "";
 modal.querySelector("#teamLeader").value = "";
-Array.from(
-  modal.querySelector("#teamMembers").options
-  ).forEach(option => {
-  option.selected = false;
+modal.querySelectorAll('#teamMembers 
+ input[type="checkbox"]'
+  ).forEach(checkbox => {
+  checkbox.checked = false;
 });
 modal.querySelector("#teamStatus").value = "active";
 
