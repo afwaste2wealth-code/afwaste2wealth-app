@@ -226,9 +226,12 @@ JSON.stringify(teams)
 
 
 function manageTeams() {
-
 const teams = getTeams();
 
+const employees = 
+ getEmployees().filter( 
+   employee => 
+     employee.employmentStatus === "active");
 const modal = document.createElement("div");
 
 modal.style.cssText = `
@@ -277,16 +280,36 @@ overflow:auto;
         style="${settingsInputStyle()}">
 
 <label>Team Leader</label>
-<input id="teamLeader"
-        type="text"
-        placeholder="Enter team leader name"
+<select id="teamLeader"
         style="${settingsInputStyle()}">
+<option value="">Select registered employee</option>
+  ${employees.map(employee => `
+<option value="${escapeSettingsText(employee.employeeId)}">
+      ${escapeSettingsText(employee.employeeId)} - ${escapeSettingsText(employee.fullName)}
+</option>
+  `).join("")}
+</select>
 
 <label>Team Members</label>
-<textarea id="teamMembers"
-        rows="4"
-        placeholder="Enter employee names separated by commas"
-        style="${settingsInputStyle()}"></textarea>
+<select id="teamMembers"
+        multiple
+        size="6"
+        style="${settingsInputStyle()}">
+  ${employees.map(employee => `
+<option value="${escapeSettingsText(employee.employeeId)}">
+      ${escapeSettingsText(employee.employeeId)} - ${escapeSettingsText(employee.fullName)}
+</option>
+  `).join("")}
+</select>
+
+<div style="
+  font-size:12px;
+  color:#666;
+  margin-top:-6px;
+  margin-bottom:12px;
+">
+  Hold Ctrl while clicking to select more than one team member.
+</div>
 
 <label>Status</label>
 <select id="teamStatus"
@@ -480,11 +503,21 @@ modal.querySelector("#saveTeam").onclick = () => {
 const name =
 modal.querySelector("#teamName").value.trim();
 
-const leader =
-modal.querySelector("#teamLeader").value.trim();
+const leaderEmployeeId =
+modal.querySelector("#teamLeader").value;
 
-const membersText =
-modal.querySelector("#teamMembers").value.trim();
+const leaderEmployee =
+employees.find(
+    employee =>
+employee.employeeId === leaderEmployeeId
+  );
+
+const memberEmployeeIds =
+Array.from(
+modal.querySelector("#teamMembers").selectedOptions
+  ).map(
+    option =>option.value
+  );
 
 const status =
 modal.querySelector("#teamStatus").value;
@@ -494,8 +527,8 @@ modal.querySelector("#teamStatus").value;
       return;
     }
 
-    if (!leader) {
-      alert("Please enter the Team Leader.");
+    if (!leaderEmployee) {
+      alert("Please select a registered Team Leader.");
       return;
     }
 
@@ -513,28 +546,49 @@ name.toLowerCase()
       return;
     }
 
-const members =
-membersText
-        ? membersText
-            .split(",")
-            .map(member =>member.trim())
-            .filter(Boolean)
-        : [];
+const members = memberEmployeeIds
+  .map(employeeId =>
+employees.find(
+      employee =>
+employee.employeeId === employeeId
+    )
+  )
+  .filter(Boolean);
+
+const memberNames =
+members.map(employee =>employee.fullName);
 
 existingTeams.push({
-      id: Date.now(),
-      name: name,
-      leader: leader,
-      members: members,
-      status: status,
-createdAt: new Date().toISOString()
-    });
+  id: Date.now(),
+  name: name,
+
+leaderEmployeeId:
+leaderEmployee.employeeId,
+
+  leader:
+leaderEmployee.fullName,
+
+memberEmployeeIds:
+memberEmployeeIds,
+
+  members:
+memberNames,
+
+  status: status,
+
+createdAt:
+    new Date().toISOString()
+});
 
 saveTeams(existingTeams);
 
 modal.querySelector("#teamName").value = "";
 modal.querySelector("#teamLeader").value = "";
-modal.querySelector("#teamMembers").value = "";
+Array.from(
+  modal.querySelector("#teamMembers").options
+  ).forEach(option => {
+  option.selected = false;
+});
 modal.querySelector("#teamStatus").value = "active";
 
 renderTeams();
