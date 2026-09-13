@@ -565,6 +565,84 @@ name.toLowerCase()
       alert("A team with this name already exists.");
       return;
     }
+const selectedEmployeeIds = Array.from(
+  new Set([
+leaderEmployeeId,
+    ...memberEmployeeIds
+  ])
+);
+
+const conflictingTeam =
+existingTeams.find(team => {
+
+  if (
+    String(team.status || "").toLowerCase()
+    !== "active"
+  ) {
+    return false;
+  }
+
+const assignedEmployeeIds =
+Array.from(
+    new Set([
+team.leaderEmployeeId,
+      ...(
+Array.isArray(team.memberEmployeeIds)
+          ? team.memberEmployeeIds
+          : []
+      )
+    ])
+  );
+
+  return selectedEmployeeIds.some(
+employeeId =>
+assignedEmployeeIds.includes(employeeId)
+  );
+});
+
+if (conflictingTeam) {
+
+const assignedEmployeeIds =
+Array.from(
+    new Set([
+conflictingTeam.leaderEmployeeId,
+      ...(
+Array.isArray(
+conflictingTeam.memberEmployeeIds
+        )
+          ? conflictingTeam.memberEmployeeIds
+          : []
+      )
+    ])
+  );
+
+const conflictingEmployeeId =
+selectedEmployeeIds.find(
+employeeId =>
+assignedEmployeeIds.includes(employeeId)
+  );
+
+const conflictingEmployee =
+employees.find(
+    employee =>
+employee.employeeId ===
+conflictingEmployeeId
+  );
+
+const employeeName =
+conflictingEmployee
+      ? conflictingEmployee.fullName
+      : conflictingEmployeeId;
+
+  alert(
+employeeName +
+    " already belongs to " +
+conflictingTeam.name +
+    ". Remove or transfer the employee from that team first."
+  );
+
+  return;
+}
 
 const members = memberEmployeeIds
   .map(employeeId =>
