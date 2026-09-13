@@ -534,9 +534,10 @@ employee.employeeId === leaderEmployeeId
 
 const memberEmployeeIds =
 Array.from(
-modal.querySelectorAll('#teamMembers input[type="checkbox"]').forEach(checkbox => {
-  checkbox.checked = false;
-});
+modal.querySelectorAll('#teamMembers input[type="checkbox"]:checked')
+  ).map(checkbox => 
+  checkbox.value
+);
 
 const status =
 modal.querySelector("#teamStatus").value;
