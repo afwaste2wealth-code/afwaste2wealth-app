@@ -534,11 +534,9 @@ employee.employeeId === leaderEmployeeId
 
 const memberEmployeeIds =
 Array.from(
-modal.querySelectorAll('#teamMembers input[type="checkbox"]:checked')
-  
-  ).map(
-    checkbox => checkbox.value
-  );
+modal.querySelectorAll('#teamMembers input[type="checkbox"]').forEach(checkbox => {
+  checkbox.checked = false;
+});
 
 const status =
 modal.querySelector("#teamStatus").value;
@@ -605,12 +603,12 @@ saveTeams(existingTeams);
 
 modal.querySelector("#teamName").value = "";
 modal.querySelector("#teamLeader").value = "";
-modal.querySelectorAll('#teamMembers 
- input[type="checkbox"]'
-  ).forEach(checkbox => {
-  checkbox.checked = false;
-});
-modal.querySelector("#teamStatus").value = "active";
+modal.querySelectorAll('#teamMembers input[type="checkbox"]')
+  .forEach(checkbox => {
+checkbox.checked = false;
+  });
+
+  modal.querySelector("#teamStatus").value = "active";
 
 renderTeams();
 
