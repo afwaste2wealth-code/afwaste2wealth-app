@@ -657,10 +657,6 @@ const endMinute =
 modal.querySelector(
   "#shiftEndMinute"
 ).value;
-const startPeriod = 
-  modal.querySelector(
-    "#shiftStartPeriod"
-    ).value;
 const startTimeInput =
 startHour + ":" + startMinute;
 
