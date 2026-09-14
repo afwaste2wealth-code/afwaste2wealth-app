@@ -457,6 +457,28 @@ const minute = match[2];
     minute
   );
 }
+function convert24HourTo12(timeValue) {
+const value = String(timeValue || "").trim();
+
+const match = value.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+
+  if (!match) {
+    return value;
+  }
+
+  let hour = Number(match[1]);
+const minute = match[2];
+
+const period = hour >= 12 ? "PM" : "AM";
+
+  hour = hour % 12;
+
+  if (hour === 0) {
+    hour = 12;
+  }
+
+  return hour + ":" + minute + " " + period;
+}
 
   function calculateShiftHours(
 startTime,
@@ -548,9 +570,9 @@ align-items:center;
               line-height:1.6;
             ">
               Time:
-              ${escapeSettingsText(shift.startTime)}
+              ${escapeSettingsText(convert24HourTo12(shift.startTime))}
               -
-              ${escapeSettingsText(shift.endTime)}
+              ${escapeSettingsText(convert24HourTo12(shift.endTime))}
 <br>
 
               Break:
