@@ -1174,6 +1174,20 @@ team.members.length
 <b>${team.status === "active" ? "ACTIVE" : "INACTIVE"}</b>
 </div>
 </div>
+<button
+  data-edit-team="${team.id}"
+  style="
+    border:0;
+    background:#0b5d3b;
+color:white;
+    padding:8px 10px;
+    border-radius:7px;
+cursor:pointer;
+    margin-right:6px;
+  "
+>
+  Edit
+</button>
 
 <button
             data-delete-team="${team.id}"
@@ -1191,6 +1205,54 @@ cursor:pointer;
 </div>
 </div>
     `).join("");
+list
+  .querySelectorAll("[data-edit-team]")
+  .forEach(button => {
+
+button.onclick = () => {
+
+const teamId =
+        Number(button.dataset.editTeam);
+
+const team =
+getTeams().find(
+          item =>item.id === teamId
+        );
+
+      if (!team) return;
+
+modal.querySelector("#teamName").value =
+team.name || "";
+
+modal.querySelector("#teamLeader").value =
+team.leaderEmployeeId || "";
+
+modal.querySelector("#teamShift").value =
+team.shiftId || "";
+
+modal.querySelector("#teamStatus").value =
+team.status || "active";
+
+      modal
+        .querySelectorAll(
+          '#teamMembers input[type="checkbox"]'
+        )
+        .forEach(checkbox => {
+checkbox.checked =
+            (team.memberEmployeeIds || [])
+              .includes(checkbox.value);
+        });
+
+modal.querySelector("#saveTeam")
+        .dataset.editTeamId = team.id;
+
+modal.querySelector("#teamName")
+        .scrollIntoView({
+          behavior: "smooth",
+          block: "center"
+        });
+    };
+  });
 
     list
       .querySelectorAll("[data-delete-team]")
@@ -1268,12 +1330,16 @@ modal.querySelector("#teamStatus").value;
     }
 
 const existingTeams = getTeams();
-
+const editTeamId = Number(
+  modal.querySelector("#saveTeam")
+  .dataset.editTeamId || 0
+  );
 const alreadyExists =
 existingTeams.some(
         team =>
 team.name.toLowerCase() ===
-name.toLowerCase()
+name.toLowerCase() && 
+          Number(team.id) !== editTeam Id
       );
 
     if (alreadyExists) {
@@ -1289,7 +1355,12 @@ leaderEmployeeId,
 
 const conflictingTeam =
 existingTeams.find(team => {
-
+if (
+  editTeamId && Number(team.id) ===
+  editTeamId
+) {
+  return false;
+}
   if (
     String(team.status || "").toLowerCase()
     !== "active"
@@ -1371,30 +1442,77 @@ employee.employeeId === employeeId
 const memberNames =
 members.map(employee =>employee.fullName);
 
-existingTeams.push({
-  id: Date.now(),
-  name: name,
+if (editTeamId) {
+
+const teamIndex = existingTeams.findIndex(
+    team => Number(team.id) === editTeamId
+  );
+
+  if (teamIndex !== -1) {
+
+existingTeams[teamIndex] = {
+      ...existingTeams[teamIndex],
+
+      name: name,
+
 shiftId: shiftId,
-  shiftName: selectedShift
-    ? selectedShift.name
-    :"",
+
+shiftName: selectedShift
+        ? selectedShift.name
+        : "",
+
 leaderEmployeeId:
 leaderEmployee.employeeId,
 
-  leader:
+      leader:
 leaderEmployee.fullName,
 
 memberEmployeeIds:
 memberEmployeeIds,
 
-  members:
+      members:
 memberNames,
 
-  status: status,
+      status:
+        status,
+
+updatedAt:
+        new Date().toISOString()
+    };
+  }
+
+} else {
+
+existingTeams.push({
+    id: Date.now(),
+
+    name: name,
+
+shiftId: shiftId,
+
+shiftName: selectedShift
+      ? selectedShift.name
+      : "",
+
+leaderEmployeeId:
+leaderEmployee.employeeId,
+
+    leader:
+leaderEmployee.fullName,
+
+memberEmployeeIds:
+memberEmployeeIds,
+
+    members:
+memberNames,
+
+    status:
+      status,
 
 createdAt:
-    new Date().toISOString()
-});
+      new Date().toISOString()
+  });
+}
 
 saveTeams(existingTeams);
 
@@ -1407,7 +1525,9 @@ checkbox.checked = false;
   });
 
   modal.querySelector("#teamStatus").value = "active";
-
+delet
+  modal.querySelector("#saveTeam)
+  .dataset.editTeamId;
 renderTeams();
 
     alert("Team saved successfully.");
