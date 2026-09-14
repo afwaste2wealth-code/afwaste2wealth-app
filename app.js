@@ -907,6 +907,10 @@ const employees =
  getEmployees().filter( 
    employee => 
      employee.employmentStatus === "active");
+  const shifts = getShiftSettings().filter(
+    shift => shift.status === 
+      "active"
+      );
 const modal = document.createElement("div");
 
 modal.style.cssText = `
@@ -953,6 +957,23 @@ overflow:auto;
         type="text"
         placeholder="Example: Team 1"
         style="${settingsInputStyle()}">
+<br><br>
+
+<label>Assigned Shift</label>
+<select
+  id="teamShift"
+  style="${settingsInputStyle()}"
+>
+<option value="">Select working shift</option>
+
+  ${shifts.map(shift => `
+<option value="${escapeSettingsText(shift.id)}">
+      ${escapeSettingsText(shift.name)}
+</option>
+  `).join("")}
+</select>
+
+<br><br>
 
 <label>Team Leader</label>
 <select id="teamLeader"
@@ -1213,7 +1234,13 @@ modal.querySelector("#teamName").value.trim();
 
 const leaderEmployeeId =
 modal.querySelector("#teamLeader").value;
-
+const shiftId = 
+  modal.querySelector("#teamShift").value;
+const selectedShift = shifts.find(
+  shift => string(shift.id)
+    === String(shiftId)
+    );
+  
 const leaderEmployee =
 employees.find(
     employee =>
@@ -1347,7 +1374,10 @@ members.map(employee =>employee.fullName);
 existingTeams.push({
   id: Date.now(),
   name: name,
-
+shiftId: shiftId,
+  shiftName: selectedShift
+    ? selectedShift.name
+    :"",
 leaderEmployeeId:
 leaderEmployee.employeeId,
 
@@ -1370,6 +1400,7 @@ saveTeams(existingTeams);
 
 modal.querySelector("#teamName").value = "";
 modal.querySelector("#teamLeader").value = "";
+  modal.querySelector("#teamShift").value = "";
 modal.querySelectorAll('#teamMembers input[type="checkbox"]')
   .forEach(checkbox => {
 checkbox.checked = false;
