@@ -1299,7 +1299,7 @@ modal.querySelector("#teamLeader").value;
 const shiftId = 
   modal.querySelector("#teamShift").value;
 const selectedShift = shifts.find(
-  shift => string(shift.id)
+  shift => String(shift.id)
     === String(shiftId)
     );
   
