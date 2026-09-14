@@ -1339,7 +1339,7 @@ existingTeams.some(
         team =>
 team.name.toLowerCase() ===
 name.toLowerCase() && 
-          Number(team.id) !== editTeam Id
+          Number(team.id) !== editTeamId
       );
 
     if (alreadyExists) {
@@ -1525,8 +1525,8 @@ checkbox.checked = false;
   });
 
   modal.querySelector("#teamStatus").value = "active";
-delet
-  modal.querySelector("#saveTeam)
+delete
+  modal.querySelector("#saveTeam")
   .dataset.editTeamId;
 renderTeams();
 
