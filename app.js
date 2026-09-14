@@ -1150,6 +1150,14 @@ align-items:center;
               Leader:
 <b>${escapeSettingsText(team.leader)}</b>
 </div>
+<div style="margin-top:5px;">
+  Shift:
+<b>${
+team.shiftName
+      ? escapeSettingsText(team.shiftName)
+      : "Not assigned"
+  }</b>
+</div>
 
 <div style="
               margin-top:5px;
