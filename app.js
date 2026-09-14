@@ -119,7 +119,9 @@ grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
           style="${systemSettingsButtonStyle()}">
 🕒
 <strong>Shift & Working Hours</strong>
-<span>Day/Night shifts and working hours</span>
+<span id="shiftSettingsSummary">
+${getShiftSettingsSummary()}
+</span>
 </button>
 
 <button id="poleWeightsBtn"
@@ -839,6 +841,23 @@ flex-direction:column;
   `;
 }
 
+function getShiftSettingsSummary() {
+const shifts = JSON.parse(
+localStorage.getItem("shiftSettings") || "[]"
+  );
+
+const activeShifts = shifts.filter(
+    shift =>shift.status === "active"
+  );
+
+  if (activeShifts.length === 0) {
+    return "No working shifts configured";
+  }
+
+  return activeShifts.map(shift => {
+    return `${shift.name}: ${shift.startTime} - ${shift.endTime}`;
+  }).join(" | ");
+}
 
 /* =========================================================
    TEAM MANAGEMENT
