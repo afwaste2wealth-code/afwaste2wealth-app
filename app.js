@@ -2243,6 +2243,892 @@ manageTeams();
   };
 }
 
+/* =========================================================
+   EMPLOYEE ATTENDANCE, SHORTFALL, OVERTIME & ALLOWANCE
+   ========================================================= */
+
+function getAttendanceRecords() {
+  return JSON.parse(
+localStorage.getItem("attendanceRecords") || "[]"
+  );
+}
+
+function saveAttendanceRecords(records) {
+localStorage.setItem(
+    "attendanceRecords",
+JSON.stringify(records)
+  );
+}
+
+function attendanceTimeToMinutes(time) {
+  if (!time) return null;
+
+const parts = String(time).split(":");
+  if (parts.length< 2) return null;
+
+  return (
+    Number(parts[0]) * 60 +
+    Number(parts[1])
+  );
+}
+
+function getEmployeeTeamForAttendance(employeeId) {
+const teams = getTeams();
+
+  return teams.find(team => {
+const leaderMatch =
+      String(team.leaderEmployeeId || "") ===
+      String(employeeId);
+
+const memberMatch =
+Array.isArray(team.memberEmployeeIds) &&
+team.memberEmployeeIds.some(
+        id => String(id) === String(employeeId)
+      );
+
+    return leaderMatch || memberMatch;
+  }) || null;
+}
+
+function getAttendanceShift(team) {
+  if (!team) return null;
+
+const shifts =
+typeofgetShiftSettings === "function"
+      ? getShiftSettings()
+      : [];
+
+  if (!Array.isArray(shifts)) return null;
+
+  return shifts.find(shift =>
+    String(shift.id || "") ===
+      String(team.shiftId || "") ||
+    String(shift.name || "").toLowerCase() ===
+      String(team.shiftName || "").toLowerCase()
+  ) || null;
+}
+
+function calculateAttendanceTimes(
+  shift,
+timeIn,
+timeOut,
+  status
+) {
+  if (
+    String(status).toLowerCase() === "absent"
+  ) {
+    return {
+workedMinutes: 0,
+shortfallMinutes: 0,
+overtimeMinutes: 0,
+lateMinutes: 0,
+earlyLeaveMinutes: 0
+    };
+  }
+
+  if (!shift || !timeIn || !timeOut) {
+    return {
+workedMinutes: 0,
+shortfallMinutes: 0,
+overtimeMinutes: 0,
+lateMinutes: 0,
+earlyLeaveMinutes: 0
+    };
+  }
+
+const shiftStart =
+attendanceTimeToMinutes(
+shift.startTime || shift.start
+    );
+
+  let shiftEnd =
+attendanceTimeToMinutes(
+shift.endTime || shift.end
+    );
+
+  let actualIn =
+attendanceTimeToMinutes(timeIn);
+
+  let actualOut =
+attendanceTimeToMinutes(timeOut);
+
+  if (
+shiftStart === null ||
+shiftEnd === null ||
+actualIn === null ||
+actualOut === null
+  ) {
+    return {
+workedMinutes: 0,
+shortfallMinutes: 0,
+overtimeMinutes: 0,
+lateMinutes: 0,
+earlyLeaveMinutes: 0
+    };
+  }
+
+  /*
+   * Handles night shifts crossing midnight.
+   */
+  if (shiftEnd<= shiftStart) {
+shiftEnd += 1440;
+
+    if (actualOut<= actualIn) {
+actualOut += 1440;
+    }
+
+    if (actualIn<shiftStart) {
+actualIn += 1440;
+actualOut += 1440;
+    }
+  } else if (actualOut<actualIn) {
+actualOut += 1440;
+  }
+
+const graceMinutes =
+    Number(
+shift.gracePeriod ??
+shift.graceMinutes ??
+      0
+    ) || 0;
+
+const breakMinutes =
+    Number(
+shift.breakDuration ??
+shift.breakMinutes ??
+      0
+    ) || 0;
+
+const scheduledMinutes =
+Math.max(
+shiftEnd -
+shiftStart -
+breakMinutes,
+      0
+    );
+
+const workedMinutes =
+Math.max(
+actualOut -
+actualIn -
+breakMinutes,
+      0
+    );
+
+const rawLate =
+Math.max(actualIn - shiftStart, 0);
+
+const lateMinutes =
+rawLate<= graceMinutes
+      ? 0
+      : rawLate;
+
+const earlyLeaveMinutes =
+Math.max(shiftEnd - actualOut, 0);
+
+const shortfallMinutes =
+Math.max(
+lateMinutes + earlyLeaveMinutes,
+      0
+    );
+
+const overtimeMinutes =
+Math.max(
+workedMinutes -
+scheduledMinutes,
+      0
+    );
+
+  return {
+workedMinutes,
+shortfallMinutes,
+overtimeMinutes,
+lateMinutes,
+earlyLeaveMinutes
+  };
+}
+
+function getEmployeeMonthlyAttendanceSummary(
+employeeId,
+  year,
+  month
+) {
+const employee = getEmployees().find(
+    item =>
+      String(item.employeeId) ===
+      String(employeeId)
+  );
+
+  if (!employee) return null;
+
+const records =
+getAttendanceRecords().filter(record => {
+const date = new Date(
+record.date + "T00:00:00"
+      );
+
+      return (
+        String(record.employeeId) ===
+          String(employeeId) &&
+date.getFullYear() === Number(year) &&
+date.getMonth() === Number(month)
+      );
+    });
+
+const totalOvertimeMinutes =
+records.reduce(
+      (sum, record) =>
+        sum +
+        Number(record.overtimeMinutes || 0),
+      0
+    );
+
+const totalShortfallMinutes =
+records.reduce(
+      (sum, record) =>
+        sum +
+        Number(record.shortfallMinutes || 0),
+      0
+    );
+
+const absentDays =
+records.filter(
+      record =>
+        String(record.status)
+          .toLowerCase() === "absent"
+    ).length;
+
+const netOvertimeMinutes =
+Math.max(
+totalOvertimeMinutes -
+totalShortfallMinutes,
+      0
+    );
+
+const monthlyAllowance =
+    Number(employee.monthlyAllowance || 0);
+
+  /*
+ * Daily allowance is based on the actual calenda days in the selected month.
+ * Every absence causes the same deduction,
+ * whether approved or unapproved.
+ */
+
+const daysInMonth =
+  new Date(number(year),
+           Number(month)+1,
+           0).getDate();
+
+const dailyAllowance = 
+daysInMonth> 0
+    ? monthlyAllowance / daysInMonth
+    : 0;
+
+const absenceDeduction =
+dailyAllowance * absentDays;
+
+const earnedAllowance =
+Math.max(
+monthlyAllowance - absenceDeduction,
+    0
+  );
+
+  return {
+employeeId: employee.employeeId,
+employeeName: employee.fullName,
+monthlyAllowance,
+daysInMonth,
+absentDays,
+absenceDeduction,
+earnedAllowance,
+totalOvertimeMinutes,
+totalShortfallMinutes,
+netOvertimeMinutes
+  };
+}
+
+function recordAttendance() {
+const employees = getEmployees().filter(
+    employee =>
+      String(
+employee.employmentStatus || ""
+      ).toLowerCase() === "active"
+  );
+
+  if (!employees.length) {
+    alert(
+      "No active employees are registered."
+    );
+    return;
+  }
+
+const modal =
+document.createElement("div");
+
+modal.style.cssText = `
+position:fixed;
+    inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+align-items:center;
+justify-content:center;
+    z-index:100000;
+font-family:Arial,sans-serif;
+    padding:10px;
+  `;
+
+modal.innerHTML = `
+<div style="
+background:white;
+      width:700px;
+      max-width:96%;
+      max-height:94vh;
+overflow:auto;
+      border-radius:14px;
+      padding:24px;
+      box-shadow:0 10px 40px rgba(0,0,0,.3);
+    ">
+
+<h2 style="
+        margin-top:0;
+        color:#0b5d3b;
+      ">
+        Employee Attendance
+</h2>
+
+<p style="
+        background:#eef8f2;
+        padding:12px;
+        border-radius:8px;
+      ">
+        Record the employee's actual attendance.
+        Working hours, shortfall and overtime are
+        calculated automatically.
+</p>
+
+<label>Date</label>
+<input
+        id="attendanceDate"
+        type="date"
+        style="${settingsInputStyle()}"
+>
+
+<br><br>
+
+<label>Employee</label>
+<select
+        id="attendanceEmployee"
+        style="${settingsInputStyle()}"
+>
+<option value="">
+          Select employee
+</option>
+
+        ${employees.map(employee => `
+<option value="${
+escapeSettingsText(
+employee.employeeId
+            )
+          }">
+            ${
+escapeSettingsText(
+employee.employeeId
+              )
+            } - ${
+escapeSettingsText(
+employee.fullName
+              )
+            }
+</option>
+        `).join("")}
+</select>
+
+<br><br>
+
+<div
+        id="attendanceEmployeeInfo"
+        style="
+          background:#f7f7f7;
+          padding:12px;
+          border-radius:8px;
+        "
+>
+        Select an employee to view Team and Shift.
+</div>
+
+<br>
+
+<label>Attendance Status</label>
+<select
+        id="attendanceStatus"
+        style="${settingsInputStyle()}"
+>
+<option value="Present">
+          Present
+</option>
+<option value="Absent">
+          Absent
+</option>
+</select>
+
+<br><br>
+
+<div id="attendanceTimeArea">
+
+<label>Time In</label>
+<input
+          id="attendanceTimeIn"
+          type="time"
+          style="${settingsInputStyle()}"
+>
+
+<br><br>
+
+<label>Time Out</label>
+<input
+          id="attendanceTimeOut"
+          type="time"
+          style="${settingsInputStyle()}"
+>
+
+</div>
+
+<div
+        id="absenceReasonArea"
+        style="display:none;"
+>
+<label>Absence Reason</label>
+
+<select
+          id="absenceReason"
+          style="${settingsInputStyle()}"
+>
+<option value="">
+            Select reason
+</option>
+<option value="Sick">
+            Sick
+</option>
+<option value="Approved Leave">
+            Approved Leave
+</option>
+<option value="Permission">
+            Permission
+</option>
+<option value="Unapproved Absence">
+            Unapproved Absence
+</option>
+<option value="Other">
+            Other
+</option>
+</select>
+</div>
+
+<br>
+
+<label>Manager Remarks</label>
+<textarea
+        id="attendanceRemarks"
+        rows="3"
+        style="${settingsInputStyle()}"
+        placeholder="Optional remarks"
+></textarea>
+
+<br><br>
+
+<button
+        id="saveAttendance"
+        style="
+          border:0;
+          background:#0b5d3b;
+color:white;
+          padding:12px 18px;
+          border-radius:8px;
+cursor:pointer;
+font-weight:bold;
+        "
+>
+        Save Attendance
+</button>
+
+<button
+        id="viewAttendanceSummary"
+        style="
+          border:0;
+          background:#0d6efd;
+color:white;
+          padding:12px 18px;
+          border-radius:8px;
+cursor:pointer;
+font-weight:bold;
+          margin-left:6px;
+        "
+>
+        Monthly Summary
+</button>
+
+<button
+        id="closeAttendance"
+        style="
+          border:0;
+          background:#6c757d;
+color:white;
+          padding:12px 18px;
+          border-radius:8px;
+cursor:pointer;
+font-weight:bold;
+          margin-left:6px;
+        "
+>
+        Close
+</button>
+
+</div>
+  `;
+
+document.body.appendChild(modal);
+
+const dateInput =
+modal.querySelector("#attendanceDate");
+
+dateInput.value =
+    new Date().toISOString().slice(0, 10);
+
+const employeeSelect =
+modal.querySelector(
+      "#attendanceEmployee"
+    );
+
+const statusSelect =
+modal.querySelector(
+      "#attendanceStatus"
+    );
+
+const timeArea =
+modal.querySelector(
+      "#attendanceTimeArea"
+    );
+
+const reasonArea =
+modal.querySelector(
+      "#absenceReasonArea"
+    );
+
+  function updateEmployeeInfo() {
+const employeeId =
+employeeSelect.value;
+
+const info =
+modal.querySelector(
+        "#attendanceEmployeeInfo"
+      );
+
+    if (!employeeId) {
+info.innerHTML =
+        "Select an employee to view Team and Shift.";
+      return;
+    }
+
+const team =
+getEmployeeTeamForAttendance(
+employeeId
+      );
+
+const shift =
+getAttendanceShift(team);
+
+info.innerHTML = `
+<strong>Team:</strong>
+      ${
+        team
+          ? escapeSettingsText(team.name)
+          : "Not Assigned"
+      }
+<br>
+
+<strong>Shift:</strong>
+      ${
+        shift
+          ? escapeSettingsText(
+shift.name ||
+team.shiftName ||
+              "Assigned"
+            )
+          : (
+              team &&
+team.shiftName
+                ? escapeSettingsText(
+team.shiftName
+                  )
+                : "Not Assigned"
+            )
+      }
+    `;
+  }
+
+employeeSelect.onchange =
+updateEmployeeInfo;
+
+statusSelect.onchange = () => {
+const absent =
+statusSelect.value === "Absent";
+
+timeArea.style.display =
+      absent ? "none" : "block";
+
+reasonArea.style.display =
+      absent ? "block" : "none";
+  };
+
+modal.querySelector(
+    "#closeAttendance"
+  ).onclick = () => {
+modal.remove();
+  };
+
+modal.querySelector(
+    "#saveAttendance"
+  ).onclick = () => {
+const employeeId =
+employeeSelect.value;
+
+const date =
+dateInput.value;
+
+const status =
+statusSelect.value;
+
+    if (!employeeId || !date) {
+      alert(
+        "Please select employee and date."
+      );
+      return;
+    }
+
+const employee =
+employees.find(
+        item =>
+          String(item.employeeId) ===
+          String(employeeId)
+      );
+
+const team =
+getEmployeeTeamForAttendance(
+employeeId
+      );
+
+const shift =
+getAttendanceShift(team);
+
+    if (!team) {
+      alert(
+        "This employee is not assigned to a team."
+      );
+      return;
+    }
+
+    if (!shift) {
+      alert(
+        "The employee's team does not have a valid shift."
+      );
+      return;
+    }
+
+    let timeIn = "";
+    let timeOut = "";
+    let absenceReason = "";
+
+    if (status === "Present") {
+timeIn =
+modal.querySelector(
+          "#attendanceTimeIn"
+        ).value;
+
+timeOut =
+modal.querySelector(
+          "#attendanceTimeOut"
+        ).value;
+
+      if (!timeIn || !timeOut) {
+        alert(
+          "Please enter Time In and Time Out."
+        );
+        return;
+      }
+    } else {
+absenceReason =
+modal.querySelector(
+          "#absenceReason"
+        ).value;
+
+      if (!absenceReason) {
+        alert(
+          "Please select the absence reason."
+        );
+        return;
+      }
+    }
+
+const records =
+getAttendanceRecords();
+
+const duplicate =
+records.some(record =>
+        String(record.employeeId) ===
+          String(employeeId) &&
+record.date === date
+      );
+
+    if (duplicate) {
+      alert(
+        "Attendance for this employee has already been recorded for this date."
+      );
+      return;
+    }
+
+const calculations =
+calculateAttendanceTimes(
+        shift,
+timeIn,
+timeOut,
+        status
+      );
+
+const record = {
+      id: Date.now(),
+      date,
+employeeId:
+employee.employeeId,
+employeeName:
+employee.fullName,
+teamId:
+team.id || "",
+teamName:
+team.name || "",
+shiftId:
+shift.id || "",
+shiftName:
+shift.name ||
+team.shiftName ||
+        "",
+      status,
+absenceReason,
+timeIn,
+timeOut,
+workedMinutes:
+calculations.workedMinutes,
+shortfallMinutes:
+calculations.shortfallMinutes,
+overtimeMinutes:
+calculations.overtimeMinutes,
+lateMinutes:
+calculations.lateMinutes,
+earlyLeaveMinutes:
+calculations.earlyLeaveMinutes,
+      remarks:
+modal.querySelector(
+          "#attendanceRemarks"
+        ).value.trim(),
+recordedAt:
+        new Date().toISOString()
+    };
+
+records.push(record);
+saveAttendanceRecords(records);
+
+    alert(
+      "Attendance saved successfully.\n\n" +
+      "Worked: " +
+      (
+record.workedMinutes / 60
+      ).toFixed(2) +
+      " hrs\n" +
+      "Shortfall: " +
+      (
+record.shortfallMinutes / 60
+      ).toFixed(2) +
+      " hrs\n" +
+      "Overtime: " +
+      (
+record.overtimeMinutes / 60
+      ).toFixed(2) +
+      " hrs"
+    );
+
+modal.remove();
+  };
+
+modal.querySelector(
+    "#viewAttendanceSummary"
+  ).onclick = () => {
+const employeeId =
+employeeSelect.value;
+
+    if (!employeeId) {
+      alert(
+        "Select an employee first."
+      );
+      return;
+    }
+
+const selectedDate =
+      new Date(
+dateInput.value + "T00:00:00"
+      );
+
+const summary =
+getEmployeeMonthlyAttendanceSummary(
+employeeId,
+selectedDate.getFullYear(),
+selectedDate.getMonth()
+      );
+
+    if (!summary) {
+      alert(
+        "Unable to calculate summary."
+      );
+      return;
+    }
+
+    alert(
+summary.employeeName +
+      "\n\nMonthly Allowance: UGX " +
+summary.monthlyAllowance
+        .toLocaleString() +
+      "\nRecorded Days: " +
+summary.recordedDays +
+      "\nAbsent Days: " +
+summary.absentDays +
+      "\nAbsence Deduction: UGX " +
+Math.round(
+summary.absenceDeduction
+      ).toLocaleString() +
+      "\nAllowance Earned: UGX " +
+Math.round(
+summary.earnedAllowance
+      ).toLocaleString() +
+      "\nTotal Overtime: " +
+      (
+summary.totalOvertimeMinutes /
+        60
+      ).toFixed(2) +
+      " hrs" +
+      "\nTotal Shortfall: " +
+      (
+summary.totalShortfallMinutes /
+        60
+      ).toFixed(2) +
+      " hrs" +
+      "\nNet Overtime: " +
+      (
+summary.netOvertimeMinutes /
+        60
+      ).toFixed(2) +
+      " hrs"
+    );
+  };
+}
+
 function manageTeamPerformanceSettings() {
 
 const settings =
