@@ -2549,6 +2549,60 @@ const match =
     String(highest + 1).padStart(3, "0");
 }
 
+function getEmployeeBirthdayReminders() {
+const employees = getEmployees();
+const today = new Date();
+
+today.setHours(0, 0, 0, 0);
+
+const reminders = [];
+
+employees.forEach(employee => {
+    if (!employee.dateOfBirth) return;
+
+const parts = employee.dateOfBirth.split("-");
+    if (parts.length !== 3) return;
+
+const birthMonth = Number(parts[1]) - 1;
+const birthDay = Number(parts[2]);
+
+    let nextBirthday = new Date(
+today.getFullYear(),
+birthMonth,
+birthDay
+    );
+
+nextBirthday.setHours(0, 0, 0, 0);
+
+    if (nextBirthday< today) {
+nextBirthday = new Date(
+today.getFullYear() + 1,
+birthMonth,
+birthDay
+      );
+    }
+
+const daysRemaining = Math.round(
+      (nextBirthday - today) /
+      (1000 * 60 * 60 * 24)
+    );
+
+    if (
+daysRemaining === 0 ||
+daysRemaining === 1 ||
+daysRemaining === 7
+    ) {
+reminders.push({
+employeeId: employee.employeeId,
+fullName: employee.fullName,
+dateOfBirth: employee.dateOfBirth,
+daysRemaining: daysRemaining
+      });
+    }
+  });
+
+  return reminders;
+}
 
 function manageEmployeeAccounts() {
 
@@ -2603,6 +2657,42 @@ align-items:center;
 </div>
 </div>
 
+${getEmployeeBirthdayReminders().length > 0 ? `
+<div style="
+    margin:14px 0;
+    padding:12px 14px;
+    background:#fff8e1;
+    border:1px solid #f0c36d;
+    border-radius:8px;
+  ">
+<div style="
+font-weight:bold;
+      color:#8a5a00;
+      margin-bottom:8px;
+    ">
+🎂 Birthday Reminders
+</div>
+
+    ${getEmployeeBirthdayReminders()
+      .map(reminder => `
+<div style="
+          padding:5px 0;
+          font-size:14px;
+          color:#333;
+        ">
+          ${
+reminder.daysRemaining === 0
+              ? `🎉 Today is ${escapeSettingsText(reminder.fullName)}'s birthday!`
+              : reminder.daysRemaining === 1
+                ? `🎂 ${escapeSettingsText(reminder.fullName)}'s birthday is tomorrow.`
+                : `🎂 ${escapeSettingsText(reminder.fullName)}'s birthday is in ${reminder.daysRemaining} days.`
+          }
+</div>
+      `)
+      .join("")}
+</div>
+` : ""}
+
 <button id="registerNewEmployee"
           style="
             border:0;
@@ -2614,6 +2704,19 @@ cursor:pointer;
 font-weight:bold;
           ">
           + Register New Employee
+</button>
+<button id="printBlankEmployeeForm"
+  style="
+    border:0;
+    background:#198754;
+color:white;
+    padding:11px 15px;
+    border-radius:8px;
+cursor:pointer;
+font-weight:bold;
+    margin-left:8px;
+  ">
+📄 Print Blank Employee Form
 </button>
 
 </div>
@@ -2814,6 +2917,11 @@ modal.remove();
 registerNewEmployee();
   };
 
+modal.querySelector(
+  "#printBlankEmployeeForm"
+).onclick = () => {
+printBlankEmployeeForm();
+};
 
 modal.querySelector(
     "#backEmployeeSettings"
@@ -2833,6 +2941,417 @@ modal.remove();
 
 
 renderEmployees();
+}
+function printBlankEmployeeForm() {
+const printWindow = window.open("", "_blank");
+
+  if (!printWindow) {
+    alert("Please allow pop-ups to print the employee form.");
+    return;
+  }
+
+printWindow.document.write(`
+<!DOCTYPE html>
+<html>
+<head>
+<title>Employee Registration Form</title>
+
+<style>
+    @page {
+      size: A4;
+      margin: 12mm;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      color: #111;
+      margin: 0;
+      font-size: 12px;
+    }
+
+    .header {
+      text-align: center;
+      border-bottom: 2px solid #0b5d3b;
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 20px;
+      color: #0b5d3b;
+    }
+
+    .header h2 {
+      margin: 5px 0 0;
+      font-size: 15px;
+    }
+
+    .top-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .employee-id {
+      width: 65%;
+    }
+
+    .photo-box {
+      width: 110px;
+      height: 130px;
+      border: 1px solid #333;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    .section {
+      margin-top: 12px;
+      page-break-inside: avoid;
+    }
+
+    .section-title {
+      background: #e7f3ed;
+      border: 1px solid #999;
+      padding: 6px;
+      font-weight: bold;
+      font-size: 13px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px 18px;
+      padding-top: 8px;
+    }
+
+    .field {
+      min-height: 32px;
+    }
+
+    .label {
+      font-weight: bold;
+      margin-bottom: 14px;
+    }
+
+    .line {
+      border-bottom: 1px solid #333;
+      height: 10px;
+    }
+
+    .full {
+      grid-column: 1 / -1;
+    }
+
+    .declaration {
+      line-height: 1.5;
+      margin-top: 8px;
+    }
+
+    .signature-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 30px;
+      margin-top: 28px;
+    }
+
+    .signature {
+      border-top: 1px solid #333;
+      padding-top: 4px;
+    }
+
+    .no-print {
+      text-align: center;
+      margin: 15px 0;
+    }
+
+    .print-button {
+      padding: 10px 22px;
+      background: #0b5d3b;
+      color: white;
+      border: 0;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    @media print {
+      .no-print {
+        display: none;
+      }
+    }
+</style>
+</head>
+
+<body>
+
+<div class="no-print">
+<button
+      class="print-button"
+onclick="window.print()"
+>
+      Print / Save as PDF
+</button>
+</div>
+
+<div class="header">
+<h1>A&F WEKAVERA LTD</h1>
+<h2>EMPLOYEE REGISTRATION FORM</h2>
+</div>
+
+<div class="top-row">
+
+<div class="employee-id">
+<strong>Employee ID:</strong>
+      ___________________________
+
+<br><br>
+
+<strong>Date of Registration:</strong>
+      ___________________________
+</div>
+
+<div class="photo-box">
+      Attach<br>
+      Passport<br>
+      Photo
+</div>
+
+</div>
+
+<div class="section">
+
+<div class="section-title">
+      1. BASIC INFORMATION
+</div>
+
+<div class="grid">
+
+<div class="field">
+<div class="label">Full Name</div>
+<div class="line"></div>
+</div>
+
+<div class="field">
+<div class="label">Gender</div>
+<div class="line"></div>
+</div>
+
+<div class="field">
+<div class="label">Date of Birth</div>
+<div class="line"></div>
+</div>
+
+<div class="field">
+<div class="label">Nationality</div>
+<div class="line"></div>
+</div>
+
+<div class="field">
+<div class="label">NIN / National ID</div>
+<div class="line"></div>
+</div>
+
+<div class="field">
+<div class="label">Phone Number</div>
+<div class="line"></div>
+</div>
+
+<div class="field full">
+<div class="label">Residential Address</div>
+<div class="line"></div>
+</div>
+
+</div>
+</div>
+
+<div class="section">
+
+<div class="section-title">
+      2. FAMILY & EMERGENCY INFORMATION
+</div>
+
+<div class="grid">
+
+<div class="field">
+<div class="label">Son / Daughter of</div>
+<div class="line"></div>
+</div>
+
+<div class="field">
+<div class="label">Parent / Guardian Contact</div>
+<div class="line"></div>
+</div>
+
+<div class="field">
+<div class="label">Next of Kin</div>
+<div class="line"></div>
+</div>
+
+<div class="field">
+<div class="label">Relationship</div>
+<div class="line"></div>
+</div>
+
+<div class="field">
+<div class="label">Next-of-Kin Contact</div>
+<div class="line"></div>
+</div>
+
+<div class="field">
+<div class="label">Emergency Contact Name</div>
+<div class="line"></div>
+</div>
+
+<div class="field">
+<div class="label">Emergency Relationship</div>
+<div class="line"></div>
+</div>
+
+<div class="field">
+<div class="label">Emergency Primary Phone</div>
+<div class="line"></div>
+</div>
+
+<div class="field">
+<div class="label">Emergency Alternative Phone</div>
+<div class="line"></div>
+</div>
+
+<div class="field">
+<div class="label">Emergency Contact Address</div>
+<div class="line"></div>
+</div>
+
+<div class="field">
+<div class="label">Referred By</div>
+<div class="line"></div>
+</div>
+
+<div class="field">
+<div class="label">Referee Contact Number</div>
+<div class="line"></div>
+</div>
+
+</div>
+</div>
+
+<div class="section">
+
+<div class="section-title">
+      3. EMPLOYMENT INFORMATION
+</div>
+
+<div class="grid">
+
+<div class="field">
+<div class="label">Date Joined</div>
+<div class="line"></div>
+</div>
+
+<div class="field">
+<div class="label">Job / Position</div>
+<div class="line"></div>
+</div>
+
+<div class="field">
+<div class="label">Department / Work Area</div>
+<div class="line"></div>
+</div>
+
+<div class="field">
+<div class="label">Employment Type</div>
+<div class="line"></div>
+</div>
+
+<div class="field">
+<div class="label">System Role</div>
+<div class="line"></div>
+</div>
+
+<div class="field">
+<div class="label">Employment Status</div>
+<div class="line"></div>
+</div>
+
+<div class="field">
+<div class="label">Monthly Allowance (UGX)</div>
+<div class="line"></div>
+</div>
+
+</div>
+</div>
+
+<div class="section">
+
+<div class="section-title">
+      4. EMPLOYEE DECLARATION
+</div>
+
+<div class="declaration">
+      I declare that the information provided in this
+      employee registration form is true and correct
+      to the best of my knowledge.
+</div>
+
+<div class="signature-grid">
+
+<div class="signature">
+        Employee Signature / Thumbprint
+</div>
+
+<div class="signature">
+        Date
+</div>
+
+</div>
+</div>
+
+<div class="section">
+
+<div class="section-title">
+      5. FOR OFFICIAL USE
+</div>
+
+<div class="grid">
+
+<div class="field">
+<div class="label">Registered / Checked By</div>
+<div class="line"></div>
+</div>
+
+<div class="field">
+<div class="label">Designation</div>
+<div class="line"></div>
+</div>
+
+</div>
+
+<div class="signature-grid">
+
+<div class="signature">
+        Authorized Signature
+</div>
+
+<div class="signature">
+        Date
+</div>
+
+</div>
+</div>
+
+</body>
+</html>
+  `);
+
+printWindow.document.close();
+printWindow.focus();
 }
 
 function editEmployeeAsDirector(employeeId) {
@@ -3712,6 +4231,8 @@ overflow:hidden;
           padding:11px 14px;
           color:#0f5132;
 font-weight:bold;
+
+
           font-size:17px;
         ">
           3. Employment Information
