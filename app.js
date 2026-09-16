@@ -1,29 +1,315 @@
-function showMessage(name) { 
+function showMessage(name) {
+
   if (name === "Record Material In") {
 recordMaterialIn();
     return;
   }
-  if (name == "Record Production") { 
-    recordProduction();
+
+  if (name === "Record Production") {
+recordProduction();
     return;
   }
+
   if (name === "Reports") {
-    monthlyClientSummary();
+monthlyClientSummary();
     return;
   }
-if (name === "Material & Production") { 
-  viewMaterialRecords();
-  return;
-}
-  if (name === "System Settings") {
-    systemSettings();
-  return;
+
+  if (name === "Material & Production") {
+viewMaterialRecords();
+    return;
   }
+
+  if (name === "Staff & HR") {
+staffHR();
+    return;
+  }
+
+  if (name === "System Settings") {
+systemSettings();
+    return;
+  }
+
   alert(
     name +
       " module selected. This prototype is ready to be connected to the A&F data and backend."
   );
-} 
+}
+/* =========================================================
+   STAFF & HR
+   ========================================================= */
+
+function staffHR() {
+
+const modal = document.createElement("div");
+
+modal.style.cssText = `
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    font-family: Arial, sans-serif;
+    padding: 10px;
+  `;
+
+modal.innerHTML = `
+<div style="
+background:white;
+      width:820px;
+      max-width:96%;
+      max-height:92vh;
+overflow:auto;
+      border-radius:14px;
+      padding:24px;
+      box-shadow:0 10px 40px rgba(0,0,0,.3);
+    ">
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:center;
+        margin-bottom:20px;
+      ">
+
+<div>
+<h2 style="
+            margin:0;
+            color:#0b5d3b;
+          ">
+            Staff & HR
+</h2>
+
+<div style="
+            margin-top:5px;
+            color:#666;
+            font-size:13px;
+          ">
+            Employees, teams, attendance and payroll management
+</div>
+</div>
+
+<button id="closeStaffHR"
+          style="
+            border:0;
+            background:#eee;
+            padding:8px 12px;
+            border-radius:7px;
+cursor:pointer;
+font-weight:bold;
+          ">
+✕ Close
+</button>
+
+</div>
+
+<div style="
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+        gap:14px;
+      ">
+
+<button id="employeeAccountsHRBtn"
+          style="${systemSettingsButtonStyle()}">
+👤
+<strong>Employee Accounts</strong>
+<span>Register and manage employees</span>
+</button>
+
+<button id="teamsHRBtn"
+          style="${systemSettingsButtonStyle()}">
+👥
+<strong>Teams & Team Leaders</strong>
+<span>Manage teams, leaders and members</span>
+</button>
+
+<button id="shiftsHRBtn"
+          style="${systemSettingsButtonStyle()}">
+🕒
+<strong>Shift & Working Hours</strong>
+<span>Manage official working shifts</span>
+</button>
+
+<button id="attendanceHRBtn"
+          style="${systemSettingsButtonStyle()}">
+📋
+<strong>Attendance</strong>
+<span>Record and review employee attendance</span>
+</button>
+
+<button id="allowanceHRBtn"
+          style="${systemSettingsButtonStyle()}">
+💰
+<strong>Employee Allowance</strong>
+<span>Manage monthly allowance and earnings</span>
+</button>
+
+<button id="advancesHRBtn"
+          style="${systemSettingsButtonStyle()}">
+💳
+<strong>Advances & Deductions</strong>
+<span>Manage employee advances and recoveries</span>
+</button>
+
+<button id="payrollHRBtn"
+          style="${systemSettingsButtonStyle()}">
+📒
+<strong>Payroll Ledger</strong>
+<span>Track payable, paid and carried-forward balances</span>
+</button>
+
+<button id="performanceHRBtn"
+          style="${systemSettingsButtonStyle()}">
+🏆
+<strong>Employee & Team Performance</strong>
+<span>Targets, overtime and Team of the Month</span>
+</button>
+
+<button id="rolesHRBtn"
+          style="${systemSettingsButtonStyle()}">
+🔐
+<strong>Roles & Permissions</strong>
+<span>Director, Manager, Secretary, Team Leader and Employee</span>
+</button>
+
+<button id="portalHRBtn"
+          style="${systemSettingsButtonStyle()}">
+📱
+<strong>Employee Portal</strong>
+<span>Employee login and personal information</span>
+</button>
+
+<button id="documentsHRBtn"
+          style="${systemSettingsButtonStyle()}">
+📄
+<strong>Employee Documents & Records</strong>
+<span>Manage employee documents and records</span>
+</button>
+
+<button id="birthdayHRBtn"
+          style="${systemSettingsButtonStyle()}">
+🎂
+<strong>Birthday Reminders</strong>
+<span>View upcoming employee birthdays</span>
+</button>
+
+<button id="hrReportsBtn"
+          style="${systemSettingsButtonStyle()}">
+📊
+<strong>HR Reports</strong>
+<span>Attendance, allowance and staff reports</span>
+</button>
+
+</div>
+
+</div>
+  `;
+
+document.body.appendChild(modal);
+
+modal.querySelector("#closeStaffHR").onclick = () => {
+modal.remove();
+  };
+
+modal.querySelector("#employeeAccountsHRBtn").onclick = () => {
+modal.remove();
+manageEmployeeAccounts();
+  };
+
+modal.querySelector("#teamsHRBtn").onclick = () => {
+modal.remove();
+manageTeams();
+  };
+
+modal.querySelector("#shiftsHRBtn").onclick = () => {
+modal.remove();
+manageShiftSettings();
+  };
+
+modal.querySelector("#attendanceHRBtn").onclick = () => {
+modal.remove();
+recordAttendance();
+  };
+
+modal.querySelector("#allowanceHRBtn").onclick = () => {
+    alert(
+      "Employee Allowance module will be connected to the attendance and payroll system."
+    );
+  };
+
+modal.querySelector("#advancesHRBtn").onclick = () => {
+    alert(
+      "Employee Advances & Deductions module will be connected next."
+    );
+  };
+
+modal.querySelector("#payrollHRBtn").onclick = () => {
+    alert(
+      "Payroll Ledger will track monthly earnings, deductions, advances, payments and carried-forward balances."
+    );
+  };
+
+modal.querySelector("#performanceHRBtn").onclick = () => {
+manageTeamPerformanceSettings();
+  };
+
+modal.querySelector("#rolesHRBtn").onclick = () => {
+    alert(
+      "Roles & Permissions\\n\\n" +
+      "Director\\n" +
+      "Manager\\n" +
+      "Secretary\\n" +
+      "Team Leader\\n" +
+      "Employee"
+    );
+  };
+
+modal.querySelector("#portalHRBtn").onclick = () => {
+    alert(
+      "Employee Portal will be connected to employee login and personal records."
+    );
+  };
+
+modal.querySelector("#documentsHRBtn").onclick = () => {
+    alert(
+      "Employee Documents & Records module will be connected next."
+    );
+  };
+
+modal.querySelector("#birthdayHRBtn").onclick = () => {
+
+const reminders =
+typeofgetEmployeeBirthdayReminders === "function"
+        ? getEmployeeBirthdayReminders()
+        : [];
+
+    if (!reminders.length) {
+      alert("There are no upcoming employee birthdays.");
+      return;
+    }
+
+    alert(
+reminders.map(reminder =>
+reminder.message ||
+        (
+reminder.employeeName +
+          " — " +
+reminder.daysRemaining +
+          " day(s)"
+        )
+      ).join("\\n")
+    );
+  };
+
+modal.querySelector("#hrReportsBtn").onclick = () => {
+    alert(
+      "HR Reports will include attendance, allowance, overtime, deductions, advances and payroll information."
+    );
+  };
+}
+
 /* =========================================================
    SYSTEM SETTINGS
    ========================================================= */
