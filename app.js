@@ -234,19 +234,22 @@ recordAttendance();
   };
 
 modal.querySelector("#allowanceHRBtn").onclick = () => {
-    alert(
+    modal.remove();
+    manageEmployeeAllowance();
       "Employee Allowance module will be connected to the attendance and payroll system."
     );
   };
 
 modal.querySelector("#advancesHRBtn").onclick = () => {
-    alert(
+    module.remove();
+  manageEmployeeAdvancesAndDeductions();
       "Employee Advances & Deductions module will be connected next."
     );
   };
 
 modal.querySelector("#payrollHRBtn").onclick = () => {
-    alert(
+    modal.remove();
+  managePayrollLedger();
       "Payroll Ledger will track monthly earnings, deductions, advances, payments and carried-forward balances."
     );
   };
@@ -304,7 +307,18 @@ reminder.daysRemaining +
   };
 
 modal.querySelector("#hrReportsBtn").onclick = () => {
-    alert(
+modal.remove();
+
+  alert(
+    "HR Reports will include:\n\n" +
+    "• Attendance reports\n" +
+    "• Employee allowance reports\n" +
+    "• Overtime and shortfall reports\n" +
+    "• Advances and deductions\n" +
+    "• Payroll ledger\n" +
+    "• Employee and team performance"
+  );
+};
       "HR Reports will include attendance, allowance, overtime, deductions, advances and payroll information."
     );
   };
@@ -443,7 +457,7 @@ manageTeams();
 modal.querySelector("#poleWeightsBtn").onclick = () => {
 modal.remove();
 
-    if (typeofmanagePoleStandardWeights === "function") {
+    if (typeof managePoleStandardWeights === "function") {
 managePoleStandardWeights();
     } else {
       alert("Pole Standard Weights module could not be found.");
@@ -2580,7 +2594,7 @@ function getAttendanceShift(team) {
   if (!team) return null;
 
 const shifts =
-typeofgetShiftSettings === "function"
+typeof getShiftSettings === "function"
       ? getShiftSettings()
       : [];
 
@@ -2801,7 +2815,7 @@ const monthlyAllowance =
  */
 
 const daysInMonth =
-  new Date(number(year),
+  new Date(Number(year),
            Number(month)+1,
            0).getDate();
 
