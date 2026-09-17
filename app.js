@@ -3415,6 +3415,1708 @@ summary.netOvertimeMinutes /
   };
 }
 
+ /* =========================================================
+   EMPLOYEE ALLOWANCE + ADVANCES + DEDUCTIONS + PAYROLL
+   ========================================================= */
+
+function getPayrollRecords() {
+  return JSON.parse(
+localStorage.getItem("payrollRecords") || "[]"
+  );
+}
+
+function savePayrollRecords(records) {
+localStorage.setItem(
+    "payrollRecords",
+JSON.stringify(records)
+  );
+}
+
+function getEmployeeAdvances() {
+  return JSON.parse(
+localStorage.getItem("employeeAdvances") || "[]"
+  );
+}
+
+function saveEmployeeAdvances(records) {
+localStorage.setItem(
+    "employeeAdvances",
+JSON.stringify(records)
+  );
+}
+
+function getAdvanceRecoveries() {
+  return JSON.parse(
+localStorage.getItem("advanceRecoveries") || "[]"
+  );
+}
+
+function saveAdvanceRecoveries(records) {
+localStorage.setItem(
+    "advanceRecoveries",
+JSON.stringify(records)
+  );
+}
+
+function getEmployeeDeductions() {
+  return JSON.parse(
+localStorage.getItem("employeeDeductions") || "[]"
+  );
+}
+
+function saveEmployeeDeductions(records) {
+localStorage.setItem(
+    "employeeDeductions",
+JSON.stringify(records)
+  );
+}
+
+function payrollMonthName(year, month) {
+  return new Date(
+    Number(year),
+    Number(month),
+    1
+  ).toLocaleString("en-US", {
+    month: "long"
+  }) + " " + year;
+}
+
+function formatPayrollMoney(amount) {
+  return "UGX " +
+    Number(amount || 0).toLocaleString();
+}
+
+function getPayrollPeriodValues() {
+const now = new Date();
+
+  return {
+    year: now.getFullYear(),
+    month: now.getMonth()
+  };
+}
+
+function getEmployeePayrollAdjustments(
+employeeId,
+  year,
+  month
+) {
+const deductions =
+getEmployeeDeductions().filter(
+      item =>
+item.employeeId === employeeId&&
+        Number(item.year) === Number(year) &&
+        Number(item.month) === Number(month) &&
+        String(item.status || "APPROVED")
+          .toUpperCase() === "APPROVED"
+    );
+
+const deductionTotal =
+deductions.reduce(
+      (total, item) =>
+        total + Number(item.amount || 0),
+      0
+    );
+
+const recoveries =
+getAdvanceRecoveries().filter(
+      item =>
+item.employeeId === employeeId&&
+        Number(item.year) === Number(year) &&
+        Number(item.month) === Number(month)
+    );
+
+const recoveryTotal =
+recoveries.reduce(
+      (total, item) =>
+        total + Number(item.amount || 0),
+      0
+    );
+
+  return {
+    deductions,
+    recoveries,
+deductionTotal,
+recoveryTotal
+  };
+}
+
+function getEmployeeAdvanceOutstanding(
+advanceId
+) {
+const advances = getEmployeeAdvances();
+
+const advance = advances.find(
+    item =>item.id === advanceId
+  );
+
+  if (!advance) return 0;
+
+const recoveries =
+getAdvanceRecoveries().filter(
+      item =>item.advanceId === advanceId
+    );
+
+const recovered =
+recoveries.reduce(
+      (total, item) =>
+        total + Number(item.amount || 0),
+      0
+    );
+
+  return Math.max(
+    Number(advance.amount || 0) -
+    recovered,
+    0
+  );
+}
+
+function calculateEmployeePayroll(
+employeeId,
+  year,
+  month
+) {
+const employees = getEmployees();
+
+const employee = employees.find(
+    item =>item.employeeId === employeeId
+  );
+
+  if (!employee) {
+    return null;
+  }
+
+const attendance =
+getEmployeeMonthlyAttendanceSummary(
+employeeId,
+      year,
+      month
+    );
+
+const monthlyAllowance =
+    Number(
+employee.monthlyAllowance || 0
+    );
+
+const daysInMonth =
+    new Date(
+      Number(year),
+      Number(month) + 1,
+      0
+    ).getDate();
+
+const absentDays =
+    Number(
+      attendance?.absentDays || 0
+    );
+
+const dailyAllowance =
+daysInMonth> 0
+      ? monthlyAllowance / daysInMonth
+      : 0;
+
+const absenceDeduction =
+dailyAllowance * absentDays;
+
+const earnedAllowance =
+Math.max(
+monthlyAllowance -
+absenceDeduction,
+      0
+    );
+
+const adjustments =
+getEmployeePayrollAdjustments(
+employeeId,
+      year,
+      month
+    );
+
+const approvedDeductions =
+adjustments.deductionTotal;
+
+const advanceRecovery =
+adjustments.recoveryTotal;
+
+const netPayable =
+Math.max(
+earnedAllowance -
+approvedDeductions -
+advanceRecovery,
+      0
+    );
+
+const netOvertimeMinutes =
+    Number(
+      attendance?.netOvertimeMinutes || 0
+    );
+
+const netOvertimeHours =
+netOvertimeMinutes / 60;
+
+const payrollRecords =
+getPayrollRecords();
+
+const existing =
+payrollRecords.find(
+      item =>
+item.employeeId === employeeId&&
+        Number(item.year) === Number(year) &&
+        Number(item.month) === Number(month)
+    );
+
+const amountPaid =
+    Number(existing?.amountPaid || 0);
+
+const balance =
+Math.max(
+netPayable - amountPaid,
+      0
+    );
+
+  let status = "UNPAID";
+
+  if (balance <= 0 &&netPayable> 0) {
+    status = "PAID";
+  } else if (amountPaid> 0) {
+    status = "PARTIALLY PAID";
+  }
+
+  return {
+employeeId,
+employeeName:
+employee.fullName || "",
+    employee,
+    year: Number(year),
+    month: Number(month),
+monthName:
+payrollMonthName(year, month),
+monthlyAllowance,
+daysInMonth,
+dailyAllowance,
+absentDays,
+absenceDeduction,
+earnedAllowance,
+approvedDeductions,
+advanceRecovery,
+netPayable,
+amountPaid,
+    balance,
+    status,
+totalOvertimeMinutes:
+      Number(
+        attendance?.totalOvertimeMinutes || 0
+      ),
+totalShortfallMinutes:
+      Number(
+        attendance?.totalShortfallMinutes || 0
+      ),
+netOvertimeMinutes,
+netOvertimeHours,
+createdAt:
+      existing?.createdAt ||
+      new Date().toISOString()
+  };
+}
+
+function getPreviousUnpaidPayrollBalance(
+employeeId,
+  year,
+  month
+) {
+const records =
+getPayrollRecords();
+
+  return records
+    .filter(item => {
+const itemPeriod =
+        Number(item.year) * 12 +
+        Number(item.month);
+
+const currentPeriod =
+        Number(year) * 12 +
+        Number(month);
+
+      return (
+item.employeeId === employeeId&&
+itemPeriod<currentPeriod&&
+        Number(item.balance || 0) > 0
+      );
+    })
+    .reduce(
+      (total, item) =>
+        total + Number(item.balance || 0),
+      0
+    );
+}
+
+function saveCalculatedPayroll(
+  payroll
+) {
+const records =
+getPayrollRecords();
+
+const index =
+records.findIndex(
+      item =>
+item.employeeId ===
+payroll.employeeId&&
+        Number(item.year) ===
+          Number(payroll.year) &&
+        Number(item.month) ===
+          Number(payroll.month)
+    );
+
+const record = {
+    id:
+      index >= 0
+        ? records[index].id
+        : Date.now(),
+employeeId:
+payroll.employeeId,
+employeeName:
+payroll.employeeName,
+    year:
+payroll.year,
+    month:
+payroll.month,
+monthName:
+payroll.monthName,
+monthlyAllowance:
+payroll.monthlyAllowance,
+daysInMonth:
+payroll.daysInMonth,
+absentDays:
+payroll.absentDays,
+absenceDeduction:
+payroll.absenceDeduction,
+earnedAllowance:
+payroll.earnedAllowance,
+approvedDeductions:
+payroll.approvedDeductions,
+advanceRecovery:
+payroll.advanceRecovery,
+netPayable:
+payroll.netPayable,
+amountPaid:
+payroll.amountPaid,
+    balance:
+payroll.balance,
+    status:
+payroll.status,
+totalOvertimeMinutes:
+payroll.totalOvertimeMinutes,
+totalShortfallMinutes:
+payroll.totalShortfallMinutes,
+netOvertimeMinutes:
+payroll.netOvertimeMinutes,
+netOvertimeHours:
+payroll.netOvertimeHours,
+createdAt:
+payroll.createdAt,
+updatedAt:
+      new Date().toISOString()
+  };
+
+  if (index >= 0) {
+    records[index] = record;
+  } else {
+records.push(record);
+  }
+
+savePayrollRecords(records);
+
+  return record;
+}
+
+
+/* =========================================================
+   EMPLOYEE ALLOWANCE
+   ========================================================= */
+
+function manageEmployeeAllowance() {
+const employees = getEmployees();
+
+  if (!employees.length) {
+    alert(
+      "No employees have been registered yet."
+    );
+    return;
+  }
+
+const period =
+getPayrollPeriodValues();
+
+const modal =
+document.createElement("div");
+
+modal.style.cssText = `
+position:fixed;
+    inset:0;
+background:rgba(0,0,0,.65);
+    z-index:9999;
+display:flex;
+align-items:center;
+justify-content:center;
+    padding:20px;
+  `;
+
+modal.innerHTML = `
+<div style="
+background:white;
+width:min(950px,100%);
+      max-height:92vh;
+overflow:auto;
+      border-radius:14px;
+      padding:22px;
+      box-shadow:0 20px 50px rgba(0,0,0,.25);
+    ">
+<h2 style="margin-top:0;">
+        Employee Allowance & Monthly Earnings
+</h2>
+
+<div style="
+display:grid;
+        grid-template-columns:
+          repeat(auto-fit,minmax(180px,1fr));
+        gap:10px;
+        margin-bottom:15px;
+      ">
+<div>
+<label>Employee</label>
+<select id="allowanceEmployee"
+            style="width:100%;padding:10px;">
+            ${employees.map(employee => `
+<option value="${employee.employeeId}">
+                ${employee.fullName}
+                (${employee.employeeId})
+</option>
+            `).join("")}
+</select>
+</div>
+
+<div>
+<label>Year</label>
+<input id="allowanceYear"
+            type="number"
+            value="${period.year}"
+            style="width:100%;padding:10px;">
+</div>
+
+<div>
+<label>Month</label>
+<select id="allowanceMonth"
+            style="width:100%;padding:10px;">
+            ${Array.from(
+              {length:12},
+              (_,i) => `
+<option value="${i}"
+                  ${i === period.month ? "selected" : ""}>
+                  ${new Date(
+                    2020,i,1
+                  ).toLocaleString(
+                    "en-US",
+                    {month:"long"}
+                  )}
+</option>
+              `
+            ).join("")}
+</select>
+</div>
+</div>
+
+<button id="calculateAllowance"
+        style="
+          background:#198754;
+color:white;
+          border:0;
+          padding:11px 18px;
+          border-radius:7px;
+font-weight:bold;
+cursor:pointer;
+        ">
+        Calculate Allowance
+</button>
+
+<div id="allowanceResult"
+        style="margin-top:18px;"></div>
+
+<div style="text-align:right;margin-top:18px;">
+<button id="closeAllowance"
+          style="
+            padding:10px 18px;
+            border:0;
+            border-radius:7px;
+cursor:pointer;
+          ">
+          Close
+</button>
+</div>
+</div>
+  `;
+
+document.body.appendChild(modal);
+
+modal.querySelector(
+    "#calculateAllowance"
+  ).onclick = () => {
+const employeeId =
+modal.querySelector(
+        "#allowanceEmployee"
+      ).value;
+
+const year =
+      Number(
+modal.querySelector(
+          "#allowanceYear"
+        ).value
+      );
+
+const month =
+      Number(
+modal.querySelector(
+          "#allowanceMonth"
+        ).value
+      );
+
+const payroll =
+calculateEmployeePayroll(
+employeeId,
+        year,
+        month
+      );
+
+    if (!payroll) {
+      alert(
+        "Unable to calculate allowance."
+      );
+      return;
+    }
+
+const previousBalance =
+getPreviousUnpaidPayrollBalance(
+employeeId,
+        year,
+        month
+      );
+
+modal.querySelector(
+      "#allowanceResult"
+    ).innerHTML = `
+<div style="
+display:grid;
+        grid-template-columns:
+          repeat(auto-fit,minmax(200px,1fr));
+        gap:10px;
+      ">
+<div style="padding:15px;background:#f5f5f5;border-radius:8px;">
+<b>Monthly Allowance</b>
+<div>${formatPayrollMoney(
+payroll.monthlyAllowance
+          )}</div>
+</div>
+
+<div style="padding:15px;background:#f5f5f5;border-radius:8px;">
+<b>Absent Days</b>
+<div>${payroll.absentDays}</div>
+</div>
+
+<div style="padding:15px;background:#f5f5f5;border-radius:8px;">
+<b>Absence Deduction</b>
+<div>${formatPayrollMoney(
+payroll.absenceDeduction
+          )}</div>
+</div>
+
+<div style="padding:15px;background:#f5f5f5;border-radius:8px;">
+<b>Earned Allowance</b>
+<div>${formatPayrollMoney(
+payroll.earnedAllowance
+          )}</div>
+</div>
+
+<div style="padding:15px;background:#f5f5f5;border-radius:8px;">
+<b>Approved Deductions</b>
+<div>${formatPayrollMoney(
+payroll.approvedDeductions
+          )}</div>
+</div>
+
+<div style="padding:15px;background:#f5f5f5;border-radius:8px;">
+<b>Advance Recovery</b>
+<div>${formatPayrollMoney(
+payroll.advanceRecovery
+          )}</div>
+</div>
+
+<div style="padding:15px;background:#e8f5e9;border-radius:8px;">
+<b>Net Payable</b>
+<div style="font-size:20px;font-weight:bold;">
+            ${formatPayrollMoney(
+payroll.netPayable
+            )}
+</div>
+</div>
+
+<div style="padding:15px;background:#fff3cd;border-radius:8px;">
+<b>Previous Unpaid Balance</b>
+<div>${formatPayrollMoney(
+previousBalance
+          )}</div>
+</div>
+
+<div style="padding:15px;background:#eef4ff;border-radius:8px;">
+<b>Net Overtime</b>
+<div>
+            ${payroll.netOvertimeHours.toFixed(2)}
+            hours
+</div>
+</div>
+</div>
+
+<p style="
+        margin-top:15px;
+        padding:12px;
+        background:#f8f9fa;
+        border-radius:8px;
+      ">
+<b>Total Amount Due Including Previous
+        Unpaid Balance:</b>
+        ${formatPayrollMoney(
+previousBalance +
+payroll.netPayable
+        )}
+</p>
+    `;
+  };
+
+modal.querySelector(
+    "#closeAllowance"
+  ).onclick = () =>modal.remove();
+}
+
+
+/* =========================================================
+   ADVANCES & DEDUCTIONS
+   ========================================================= */
+
+function manageEmployeeAdvancesAndDeductions() {
+const employees = getEmployees();
+
+const modal =
+document.createElement("div");
+
+modal.style.cssText = `
+position:fixed;
+    inset:0;
+background:rgba(0,0,0,.65);
+    z-index:9999;
+display:flex;
+align-items:center;
+justify-content:center;
+    padding:20px;
+  `;
+
+modal.innerHTML = `
+<div style="
+background:white;
+width:min(1100px,100%);
+      max-height:94vh;
+overflow:auto;
+      border-radius:14px;
+      padding:22px;
+    ">
+<h2 style="margin-top:0;">
+        Employee Advances & Deductions
+</h2>
+
+<div style="
+display:grid;
+        grid-template-columns:
+          repeat(auto-fit,minmax(180px,1fr));
+        gap:10px;
+      ">
+<div>
+<label>Employee</label>
+<select id="payrollEmployee"
+            style="width:100%;padding:9px;">
+            ${employees.map(employee => `
+<option value="${employee.employeeId}">
+                ${employee.fullName}
+                (${employee.employeeId})
+</option>
+            `).join("")}
+</select>
+</div>
+
+<div>
+<label>Type</label>
+<select id="adjustmentType"
+            style="width:100%;padding:9px;">
+<option value="advance">
+              Advance
+</option>
+<option value="deduction">
+              Deduction
+</option>
+</select>
+</div>
+
+<div>
+<label>Date</label>
+<input id="adjustmentDate"
+            type="date"
+            value="${new Date()
+              .toISOString()
+              .slice(0,10)}"
+            style="width:100%;padding:9px;">
+</div>
+
+<div>
+<label>Amount (UGX)</label>
+<input id="adjustmentAmount"
+            type="number"
+            min="0"
+            style="width:100%;padding:9px;">
+</div>
+
+<div>
+<label>Payroll Year</label>
+<input id="adjustmentYear"
+            type="number"
+            value="${new Date().getFullYear()}"
+            style="width:100%;padding:9px;">
+</div>
+
+<div>
+<label>Payroll Month</label>
+<select id="adjustmentMonth"
+            style="width:100%;padding:9px;">
+            ${Array.from(
+              {length:12},
+              (_,i) => `
+<option value="${i}">
+                  ${new Date(
+                    2020,i,1
+                  ).toLocaleString(
+                    "en-US",
+                    {month:"long"}
+                  )}
+</option>
+              `
+            ).join("")}
+</select>
+</div>
+
+<div>
+<label>Reason</label>
+<input id="adjustmentReason"
+            type="text"
+            style="width:100%;padding:9px;">
+</div>
+
+<div>
+<label>Approved By</label>
+<input id="adjustmentApprovedBy"
+            type="text"
+            style="width:100%;padding:9px;">
+</div>
+
+<div style="grid-column:1/-1;">
+<label>Remarks</label>
+<textarea id="adjustmentRemarks"
+            style="width:100%;padding:9px;"></textarea>
+</div>
+</div>
+
+<button id="saveAdjustment"
+        style="
+          margin-top:14px;
+          background:#198754;
+color:white;
+          border:0;
+          padding:11px 18px;
+          border-radius:7px;
+font-weight:bold;
+        ">
+        Save Transaction
+</button>
+
+<h3 style="margin-top:25px;">
+        Current Advances
+</h3>
+
+<div style="overflow:auto;">
+<table style="
+          width:100%;
+border-collapse:collapse;
+        ">
+<thead>
+<tr>
+<th style="padding:8px;text-align:left;">Employee</th>
+<th style="padding:8px;">Date</th>
+<th style="padding:8px;">Amount</th>
+<th style="padding:8px;">Recovered This Month</th>
+<th style="padding:8px;">Outstanding</th>
+<th style="padding:8px;">Reason</th>
+</tr>
+</thead>
+<tbody id="advanceTableBody"></tbody>
+</table>
+</div>
+
+<h3 style="margin-top:25px;">
+        Deductions
+</h3>
+
+<div style="overflow:auto;">
+<table style="
+          width:100%;
+border-collapse:collapse;
+        ">
+<thead>
+<tr>
+<th style="padding:8px;">Employee</th>
+<th style="padding:8px;">Month</th>
+<th style="padding:8px;">Amount</th>
+<th style="padding:8px;">Reason</th>
+<th style="padding:8px;">Approved By</th>
+</tr>
+</thead>
+<tbody id="deductionTableBody"></tbody>
+</table>
+</div>
+
+<div style="text-align:right;margin-top:20px;">
+<button id="closeAdjustments"
+          style="
+            padding:10px 18px;
+            border:0;
+            border-radius:7px;
+          ">
+          Close
+</button>
+</div>
+</div>
+  `;
+
+document.body.appendChild(modal);
+
+  function refreshTables() {
+const employeeMap = {};
+
+employees.forEach(employee => {
+employeeMap[employee.employeeId] =
+employee.fullName;
+    });
+
+const advances =
+getEmployeeAdvances();
+
+const recoveries =
+getAdvanceRecoveries();
+
+const year =
+      Number(
+modal.querySelector(
+          "#adjustmentYear"
+        ).value
+      );
+
+const month =
+      Number(
+modal.querySelector(
+          "#adjustmentMonth"
+        ).value
+      );
+
+modal.querySelector(
+      "#advanceTableBody"
+    ).innerHTML =
+advances.map(advance => {
+const recoveredThisMonth =
+          recoveries
+            .filter(
+              item =>
+item.advanceId ===
+advance.id&&
+                Number(item.year) === year &&
+                Number(item.month) === month
+            )
+            .reduce(
+              (total,item) =>
+                total +
+                Number(item.amount || 0),
+              0
+            );
+
+const outstanding =
+getEmployeeAdvanceOutstanding(
+advance.id
+          );
+
+        return `
+<tr style="border-top:1px solid #ddd;">
+<td style="padding:8px;">
+              ${employeeMap[
+advance.employeeId
+              ] || advance.employeeName}
+</td>
+<td style="padding:8px;">
+              ${advance.date || ""}
+</td>
+<td style="padding:8px;">
+              ${formatPayrollMoney(
+advance.amount
+              )}
+</td>
+<td style="padding:8px;">
+              ${formatPayrollMoney(
+recoveredThisMonth
+              )}
+</td>
+<td style="
+              padding:8px;
+font-weight:bold;
+            ">
+              ${formatPayrollMoney(
+                outstanding
+              )}
+</td>
+<td style="padding:8px;">
+              ${advance.reason || ""}
+</td>
+</tr>
+        `;
+      }).join("");
+
+const deductions =
+getEmployeeDeductions()
+        .filter(
+          item =>
+            Number(item.year) === year &&
+            Number(item.month) === month
+        );
+
+modal.querySelector(
+      "#deductionTableBody"
+    ).innerHTML =
+deductions.map(item => `
+<tr style="border-top:1px solid #ddd;">
+<td style="padding:8px;">
+            ${employeeMap[
+item.employeeId
+            ] || item.employeeName}
+</td>
+<td style="padding:8px;">
+            ${payrollMonthName(
+              year,
+              month
+            )}
+</td>
+<td style="padding:8px;">
+            ${formatPayrollMoney(
+item.amount
+            )}
+</td>
+<td style="padding:8px;">
+            ${item.reason || ""}
+</td>
+<td style="padding:8px;">
+            ${item.approvedBy || ""}
+</td>
+</tr>
+      `).join("");
+  }
+
+modal.querySelector(
+    "#adjustmentMonth"
+  ).value =
+    new Date().getMonth();
+
+modal.querySelector(
+    "#saveAdjustment"
+  ).onclick = () => {
+const employeeId =
+modal.querySelector(
+        "#payrollEmployee"
+      ).value;
+
+const employee =
+employees.find(
+        item =>
+item.employeeId ===
+employeeId
+      );
+
+const type =
+modal.querySelector(
+        "#adjustmentType"
+      ).value;
+
+const amount =
+      Number(
+modal.querySelector(
+          "#adjustmentAmount"
+        ).value
+      );
+
+    if (!amount || amount <= 0) {
+      alert(
+        "Please enter a valid amount."
+      );
+      return;
+    }
+
+const date =
+modal.querySelector(
+        "#adjustmentDate"
+      ).value;
+
+const year =
+      Number(
+modal.querySelector(
+          "#adjustmentYear"
+        ).value
+      );
+
+const month =
+      Number(
+modal.querySelector(
+          "#adjustmentMonth"
+        ).value
+      );
+
+const reason =
+modal.querySelector(
+        "#adjustmentReason"
+      ).value.trim();
+
+const approvedBy =
+modal.querySelector(
+        "#adjustmentApprovedBy"
+      ).value.trim();
+
+const remarks =
+modal.querySelector(
+        "#adjustmentRemarks"
+      ).value.trim();
+
+    if (type === "advance") {
+const advances =
+getEmployeeAdvances();
+
+const advance = {
+        id: Date.now(),
+employeeId,
+employeeName:
+          employee?.fullName || "",
+        date,
+        amount,
+        reason,
+approvedBy,
+        remarks,
+createdAt:
+          new Date().toISOString()
+      };
+
+advances.push(advance);
+saveEmployeeAdvances(advances);
+
+const initialRecovery =
+        prompt(
+          "Enter advance recovery for this month, or enter 0:",
+          "0"
+        );
+
+const recoveryAmount =
+        Number(initialRecovery || 0);
+
+      if (
+recoveryAmount> 0
+      ) {
+const recoveries =
+getAdvanceRecoveries();
+
+recoveries.push({
+          id: Date.now() + 1,
+advanceId:
+advance.id,
+employeeId,
+employeeName:
+            employee?.fullName || "",
+          year,
+          month,
+          amount:
+Math.min(
+recoveryAmount,
+              amount
+            ),
+          date,
+approvedBy,
+          remarks,
+createdAt:
+            new Date().toISOString()
+        });
+
+saveAdvanceRecoveries(
+          recoveries
+        );
+      }
+    } else {
+const deductions =
+getEmployeeDeductions();
+
+deductions.push({
+        id: Date.now(),
+employeeId,
+employeeName:
+          employee?.fullName || "",
+        date,
+        year,
+        month,
+        amount,
+        reason,
+approvedBy,
+        remarks,
+        status: "APPROVED",
+createdAt:
+          new Date().toISOString()
+      });
+
+saveEmployeeDeductions(
+        deductions
+      );
+    }
+
+    alert(
+      type === "advance"
+        ? "Employee advance saved successfully."
+        : "Employee deduction saved successfully."
+    );
+
+refreshTables();
+  };
+
+modal.querySelector(
+    "#adjustmentYear"
+  ).onchange = refreshTables;
+
+modal.querySelector(
+    "#adjustmentMonth"
+  ).onchange = refreshTables;
+
+modal.querySelector(
+    "#closeAdjustments"
+  ).onclick = () =>modal.remove();
+
+refreshTables();
+}
+
+
+/* =========================================================
+   PAYROLL LEDGER
+   ========================================================= */
+
+function managePayrollLedger() {
+const employees = getEmployees();
+
+const period =
+getPayrollPeriodValues();
+
+const modal =
+document.createElement("div");
+
+modal.style.cssText = `
+position:fixed;
+    inset:0;
+background:rgba(0,0,0,.65);
+    z-index:9999;
+display:flex;
+align-items:center;
+justify-content:center;
+    padding:20px;
+  `;
+
+modal.innerHTML = `
+<div style="
+background:white;
+width:min(1200px,100%);
+      max-height:94vh;
+overflow:auto;
+      border-radius:14px;
+      padding:22px;
+    ">
+<h2 style="margin-top:0;">
+        Payroll Ledger
+</h2>
+
+<div style="
+display:grid;
+        grid-template-columns:
+          repeat(auto-fit,minmax(180px,1fr));
+        gap:10px;
+        margin-bottom:15px;
+      ">
+<div>
+<label>Employee</label>
+<select id="ledgerEmployee"
+            style="width:100%;padding:9px;">
+<option value="">
+              Select Employee
+</option>
+
+            ${employees.map(employee => `
+<option value="${employee.employeeId}">
+                ${employee.fullName}
+                (${employee.employeeId})
+</option>
+            `).join("")}
+</select>
+</div>
+
+<div>
+<label>Year</label>
+<input id="ledgerYear"
+            type="number"
+            value="${period.year}"
+            style="width:100%;padding:9px;">
+</div>
+
+<div>
+<label>Month</label>
+<select id="ledgerMonth"
+            style="width:100%;padding:9px;">
+            ${Array.from(
+              {length:12},
+              (_,i) => `
+<option value="${i}"
+                  ${i === period.month ? "selected" : ""}>
+                  ${new Date(
+                    2020,i,1
+                  ).toLocaleString(
+                    "en-US",
+                    {month:"long"}
+                  )}
+</option>
+              `
+            ).join("")}
+</select>
+</div>
+</div>
+
+<button id="calculatePayroll"
+        style="
+          background:#198754;
+color:white;
+          border:0;
+          padding:11px 18px;
+          border-radius:7px;
+font-weight:bold;
+        ">
+        Calculate & Save Payroll
+</button>
+
+<div id="payrollResult"
+        style="margin-top:18px;"></div>
+
+<h3 style="margin-top:30px;">
+        Payroll History
+</h3>
+
+<div style="overflow:auto;">
+<table style="
+          width:100%;
+border-collapse:collapse;
+          min-width:900px;
+        ">
+<thead>
+<tr>
+<th style="padding:8px;">Month</th>
+<th style="padding:8px;">Employee</th>
+<th style="padding:8px;">Earned</th>
+<th style="padding:8px;">Deductions</th>
+<th style="padding:8px;">Advance Recovery</th>
+<th style="padding:8px;">Net Payable</th>
+<th style="padding:8px;">Paid</th>
+<th style="padding:8px;">Balance</th>
+<th style="padding:8px;">Status</th>
+<th style="padding:8px;">Action</th>
+</tr>
+</thead>
+
+<tbody id="payrollLedgerBody"></tbody>
+</table>
+</div>
+
+<div style="
+text-align:right;
+        margin-top:20px;
+      ">
+<button id="closeLedger"
+          style="
+            padding:10px 18px;
+            border:0;
+            border-radius:7px;
+          ">
+          Close
+</button>
+</div>
+</div>
+  `;
+
+document.body.appendChild(modal);
+
+  function refreshLedger() {
+const records =
+getPayrollRecords();
+
+const employeeMap = {};
+
+employees.forEach(employee => {
+employeeMap[employee.employeeId] =
+employee.fullName;
+    });
+
+modal.querySelector(
+      "#payrollLedgerBody"
+    ).innerHTML =
+      records
+        .slice()
+        .sort(
+          (a,b) =>
+            Number(b.year) * 12 +
+            Number(b.month) -
+            (
+              Number(a.year) * 12 +
+              Number(a.month)
+            )
+        )
+        .map(record => `
+<tr style="
+            border-top:1px solid #ddd;
+          ">
+<td style="padding:8px;">
+              ${record.monthName}
+</td>
+
+<td style="padding:8px;">
+              ${employeeMap[
+record.employeeId
+              ] || record.employeeName}
+</td>
+
+<td style="padding:8px;">
+              ${formatPayrollMoney(
+record.earnedAllowance
+              )}
+</td>
+
+<td style="padding:8px;">
+              ${formatPayrollMoney(
+record.approvedDeductions
+              )}
+</td>
+
+<td style="padding:8px;">
+              ${formatPayrollMoney(
+record.advanceRecovery
+              )}
+</td>
+
+<td style="
+              padding:8px;
+font-weight:bold;
+            ">
+              ${formatPayrollMoney(
+record.netPayable
+              )}
+</td>
+
+<td style="padding:8px;">
+              ${formatPayrollMoney(
+record.amountPaid
+              )}
+</td>
+
+<td style="
+              padding:8px;
+font-weight:bold;
+            ">
+              ${formatPayrollMoney(
+record.balance
+              )}
+</td>
+
+<td style="padding:8px;">
+              ${record.status}
+</td>
+
+<td style="padding:8px;">
+              ${
+                Number(record.balance || 0) > 0
+                  ? `
+<button
+onclick="recordPayrollPayment(
+                        '${record.id}'
+                      )"
+                      style="
+                        background:#198754;
+color:white;
+                        border:0;
+                        padding:7px 10px;
+                        border-radius:6px;
+                      ">
+                      Record Payment
+</button>
+                  `
+                  : "—"
+              }
+</td>
+</tr>
+        `)
+        .join("");
+  }
+
+modal.querySelector(
+    "#calculatePayroll"
+  ).onclick = () => {
+const employeeId =
+modal.querySelector(
+        "#ledgerEmployee"
+      ).value;
+
+    if (!employeeId) {
+      alert(
+        "Please select an employee."
+      );
+      return;
+    }
+
+const year =
+      Number(
+modal.querySelector(
+          "#ledgerYear"
+        ).value
+      );
+
+const month =
+      Number(
+modal.querySelector(
+          "#ledgerMonth"
+        ).value
+      );
+
+const payroll =
+calculateEmployeePayroll(
+employeeId,
+        year,
+        month
+      );
+
+    if (!payroll) {
+      alert(
+        "Payroll could not be calculated."
+      );
+      return;
+    }
+
+const saved =
+saveCalculatedPayroll(
+        payroll
+      );
+
+const previousBalance =
+getPreviousUnpaidPayrollBalance(
+employeeId,
+        year,
+        month
+      );
+
+modal.querySelector(
+      "#payrollResult"
+    ).innerHTML = `
+<div style="
+        padding:16px;
+        background:#f8f9fa;
+        border-radius:10px;
+      ">
+<h3>
+          ${saved.employeeName}
+          — ${saved.monthName}
+</h3>
+
+<p>
+          Monthly allowance:
+<b>${formatPayrollMoney(
+saved.monthlyAllowance
+          )}</b>
+</p>
+
+<p>
+          Absence deduction:
+<b>${formatPayrollMoney(
+saved.absenceDeduction
+          )}</b>
+</p>
+
+<p>
+          Earned allowance:
+<b>${formatPayrollMoney(
+saved.earnedAllowance
+          )}</b>
+</p>
+
+<p>
+          Approved deductions:
+<b>${formatPayrollMoney(
+saved.approvedDeductions
+          )}</b>
+</p>
+
+<p>
+          Advance recovery:
+<b>${formatPayrollMoney(
+saved.advanceRecovery
+          )}</b>
+</p>
+
+<p style="
+          font-size:20px;
+font-weight:bold;
+          color:#198754;
+        ">
+          Net payable:
+          ${formatPayrollMoney(
+saved.netPayable
+          )}
+</p>
+
+<p>
+          Previous unpaid balance:
+<b>${formatPayrollMoney(
+previousBalance
+          )}</b>
+</p>
+
+<p>
+          Total amount due including
+          previous unpaid balance:
+<b>${formatPayrollMoney(
+previousBalance +
+saved.netPayable
+          )}</b>
+</p>
+
+<p>
+          Net overtime:
+<b>
+            ${saved.netOvertimeHours.toFixed(2)}
+            hours
+</b>
+</p>
+</div>
+    `;
+
+refreshLedger();
+  };
+
+modal.querySelector(
+    "#closeLedger"
+  ).onclick = () =>modal.remove();
+
+refreshLedger();
+}
+
+
+/* =========================================================
+   RECORD PAYROLL PAYMENT
+   ========================================================= */
+
+function recordPayrollPayment(
+payrollId
+) {
+const records =
+getPayrollRecords();
+
+const index =
+records.findIndex(
+      item =>
+        String(item.id) ===
+        String(payrollId)
+    );
+
+  if (index < 0) {
+    alert(
+      "Payroll record not found."
+    );
+    return;
+  }
+
+const record =
+    records[index];
+
+const payment =
+    Number(
+      prompt(
+        "Enter amount paid in UGX:",
+        String(
+record.balance || 0
+        )
+      )
+    );
+
+  if (!payment || payment <= 0) {
+    return;
+  }
+
+  if (
+    payment >
+    Number(record.balance || 0)
+  ) {
+    alert(
+      "Payment cannot exceed the outstanding balance for this payroll month."
+    );
+    return;
+  }
+
+record.amountPaid =
+    Number(record.amountPaid || 0) +
+    payment;
+
+record.balance =
+Math.max(
+      Number(record.netPayable || 0) -
+record.amountPaid,
+      0
+    );
+
+record.paymentDate =
+    new Date().toISOString();
+
+record.status =
+record.balance<= 0
+      ? "PAID"
+      : "PARTIALLY PAID";
+
+record.updatedAt =
+    new Date().toISOString();
+
+  records[index] = record;
+
+savePayrollRecords(records);
+
+  alert(
+    "Payroll payment recorded successfully."
+  );
+
+managePayrollLedger();
+}
+
+
+/* =========================================================
+   END PAYROLL SYSTEM
+   ========================================================= */
+
 function manageTeamPerformanceSettings() {
 
 const settings =
