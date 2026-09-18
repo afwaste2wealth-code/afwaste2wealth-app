@@ -1136,7 +1136,7 @@ modal.innerHTML = `
 <label>
             Report
 </label>
-<select id="">
+<select id="reportType">
  
 <option value="materialReceived">
     Material Received
