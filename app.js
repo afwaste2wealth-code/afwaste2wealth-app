@@ -234,77 +234,75 @@ recordAttendance();
   };
 
 modal.querySelector("#allowanceHRBtn").onclick = () => {
-    modal.remove();
-    manageEmployeeAllowance();
-      "Employee Allowance module will be connected to the attendance and payroll system."
-    );
-  };
+modal.remove();
+manageEmployeeAllowance();
+};
 
 modal.querySelector("#advancesHRBtn").onclick = () => {
-    module.remove();
-  manageEmployeeAdvancesAndDeductions();
-      "Employee Advances & Deductions module will be connected next."
-    );
-  };
+modal.remove();
+manageEmployeeAdvancesAndDeductions();
+};
 
 modal.querySelector("#payrollHRBtn").onclick = () => {
-    modal.remove();
-  managePayrollLedger();
-      "Payroll Ledger will track monthly earnings, deductions, advances, payments and carried-forward balances."
-    );
-  };
+modal.remove();
+managePayrollLedger();
+};
 
 modal.querySelector("#performanceHRBtn").onclick = () => {
+modal.remove();
 manageTeamPerformanceSettings();
-  };
+};
 
 modal.querySelector("#rolesHRBtn").onclick = () => {
-    alert(
-      "Roles & Permissions\\n\\n" +
-      "Director\\n" +
-      "Manager\\n" +
-      "Secretary\\n" +
-      "Team Leader\\n" +
-      "Employee"
-    );
-  };
+  alert(
+    "Roles & Permissions\n\n" +
+    "Director\n" +
+    "Manager\n" +
+    "Secretary\n" +
+    "Team Leader\n" +
+    "Employee"
+  );
+};
 
 modal.querySelector("#portalHRBtn").onclick = () => {
-    alert(
-      "Employee Portal will be connected to employee login and personal records."
-    );
-  };
+  alert(
+    "Employee Portal will be connected to employee login and personal records."
+  );
+};
 
 modal.querySelector("#documentsHRBtn").onclick = () => {
-    alert(
-      "Employee Documents & Records module will be connected next."
-    );
-  };
+  alert(
+    "Employee Documents & Records module will be connected next."
+  );
+};
 
 modal.querySelector("#birthdayHRBtn").onclick = () => {
 
 const reminders =
-typeofgetEmployeeBirthdayReminders === "function"
-        ? getEmployeeBirthdayReminders()
-        : [];
+typeof getEmployeeBirthdayReminders === "function"
+      ? getEmployeeBirthdayReminders()
+      : [];
 
-    if (!reminders.length) {
-      alert("There are no upcoming employee birthdays.");
-      return;
-    }
+  if (!reminders.length) {
+    alert("There are no upcoming employee birthdays.");
+    return;
+  }
 
-    alert(
-reminders.map(reminder =>
+  alert(
+    reminders
+      .map(
+        reminder =>
 reminder.message ||
-        (
+          (
 reminder.employeeName +
-          " — " +
+            " — " +
 reminder.daysRemaining +
-          " day(s)"
-        )
-      ).join("\\n")
-    );
-  };
+            " day(s)"
+          )
+      )
+      .join("\n")
+  );
+};
 
 modal.querySelector("#hrReportsBtn").onclick = () => {
 modal.remove();
@@ -319,10 +317,6 @@ modal.remove();
     "• Employee and team performance"
   );
 };
-      "HR Reports will include attendance, allowance, overtime, deductions, advances and payroll information."
-    );
-  };
-}
 
 /* =========================================================
    SYSTEM SETTINGS
