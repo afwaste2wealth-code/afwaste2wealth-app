@@ -1,6 +1,6 @@
 function showMessage(name) {
 
-  if (name === "Record Material In") {
+  if (name === "Record Material In") { 
 recordMaterialIn();
     return;
   }
