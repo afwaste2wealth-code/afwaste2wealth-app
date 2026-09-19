@@ -14186,6 +14186,6 @@ viewMaterialRecords();
 
   alert("Material record deleted successfully.");
 }
-showAFLoginScreen();
+
 
 
