@@ -294,7 +294,7 @@ typeof getEmployeeBirthdayReminders === "function"
         reminder =>
 reminder.message ||
           (
-reminder.employeeName +
+reminder.fullName +
             " — " +
 reminder.daysRemaining +
             " day(s)"
@@ -5472,6 +5472,7 @@ const daysRemaining = Math.round(
     if (
 daysRemaining === 0 ||
 daysRemaining === 1 ||
+daysRemaining === 2 ||      
 daysRemaining === 7
     ) {
 reminders.push({
