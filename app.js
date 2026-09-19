@@ -388,6 +388,145 @@ loginScreen
   );
 
 }
+function showAFCreatePasswordScreen(employee) {
+
+const screen = document.createElement("div");
+
+screen.id = "afCreatePasswordScreen";
+
+screen.style.cssText = `
+position:fixed;
+    inset:0;
+    background:#f4f7f5;
+    z-index:999999;
+display:flex;
+align-items:center;
+justify-content:center;
+    padding:20px;
+font-family:Arial,sans-serif;
+  `;
+
+screen.innerHTML = `
+
+<div style="
+      width:100%;
+      max-width:430px;
+background:white;
+      border-radius:14px;
+      padding:30px;
+      box-shadow:0 8px 30px rgba(0,0,0,0.12);
+    ">
+
+<div style="
+text-align:center;
+        margin-bottom:25px;
+      ">
+
+<div style="
+          font-size:42px;
+          margin-bottom:10px;
+        ">
+🔐
+</div>
+
+<h2 style="
+          margin:0;
+          color:#0b5d3b;
+        ">
+          Create Your Password
+</h2>
+
+<p style="
+          color:#666;
+          margin-top:8px;
+        ">
+          Welcome, ${employee.fullName}.
+</p>
+
+</div>
+
+<label style="
+display:block;
+font-weight:bold;
+        margin-bottom:6px;
+      ">
+        New Password
+</label>
+
+<input
+        id="afNewPassword"
+        type="password"
+        autocomplete="new-password"
+        placeholder="Enter your password"
+        style="
+          width:100%;
+box-sizing:border-box;
+          padding:12px;
+          border:1px solid #ccc;
+          border-radius:7px;
+          margin-bottom:15px;
+          font-size:15px;
+        "
+>
+
+<label style="
+display:block;
+font-weight:bold;
+        margin-bottom:6px;
+      ">
+        Confirm Password
+</label>
+
+<input
+        id="afConfirmPassword"
+        type="password"
+        autocomplete="new-password"
+        placeholder="Re-enter your password"
+        style="
+          width:100%;
+box-sizing:border-box;
+          padding:12px;
+          border:1px solid #ccc;
+          border-radius:7px;
+          margin-bottom:15px;
+          font-size:15px;
+        "
+>
+
+<div
+        id="afCreatePasswordMessage"
+        style="
+          min-height:22px;
+          margin-bottom:15px;
+          font-size:14px;
+text-align:center;
+        "
+></div>
+
+<button
+        id="afCreatePasswordButton"
+        type="button"
+        style="
+          width:100%;
+          border:0;
+          background:#0b5d3b;
+color:white;
+          padding:13px;
+          border-radius:7px;
+cursor:pointer;
+          font-size:16px;
+font-weight:bold;
+        "
+>
+        CREATE PASSWORD
+</button>
+
+</div>
+  `;
+
+document.body.appendChild(screen);
+
+}
 
 function showMessage(name) {
 
