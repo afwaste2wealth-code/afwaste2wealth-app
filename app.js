@@ -258,6 +258,7 @@ modal.querySelector("#rolesHRBtn").onclick = () => {
     "Roles & Permissions\n\n" +
     "Director\n" +
     "Manager\n" +
+    "HR\n" +
     "Secretary\n" +
     "Team Leader\n" +
     "Employee"
