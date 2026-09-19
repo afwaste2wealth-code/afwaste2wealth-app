@@ -1,3 +1,348 @@
+/* =========================================================
+   A&F STAFF & HR LOGIN SCREEN
+   ========================================================= */
+
+function showAFLoginScreen() {
+
+  /* Remove any existing login screen */
+const oldLogin = document.getElementById("afLoginScreen");
+
+  if (oldLogin) {
+oldLogin.remove();
+  }
+
+const loginScreen = document.createElement("div");
+
+loginScreen.id = "afLoginScreen";
+
+loginScreen.style.cssText = `
+position:fixed;
+    inset:0;
+background:linear-gradient(135deg,#062f20,#0b5d3b);
+display:flex;
+align-items:center;
+justify-content:center;
+    z-index:999999;
+font-family:Arial,sans-serif;
+    padding:20px;
+box-sizing:border-box;
+  `;
+
+loginScreen.innerHTML = `
+
+<div style="
+      width:420px;
+      max-width:100%;
+background:white;
+      border-radius:18px;
+      padding:35px;
+box-sizing:border-box;
+      box-shadow:0 15px 50px rgba(0,0,0,.35);
+    ">
+
+<!-- LOGO / COMPANY NAME -->
+
+<div style="
+text-align:center;
+        margin-bottom:28px;
+      ">
+
+<div style="
+          width:70px;
+          height:70px;
+          margin:0 auto 15px;
+          border-radius:50%;
+          background:#0b5d3b;
+color:white;
+display:flex;
+align-items:center;
+justify-content:center;
+          font-size:25px;
+font-weight:bold;
+        ">
+          A&F
+</div>
+
+<h1 style="
+          margin:0;
+          color:#0b5d3b;
+          font-size:25px;
+        ">
+          A&F Wekavera Ltd
+</h1>
+
+<div style="
+          margin-top:7px;
+          color:#666;
+          font-size:14px;
+        ">
+          Waste2Wealth Solutions
+</div>
+
+<div style="
+          margin-top:18px;
+          font-size:20px;
+font-weight:bold;
+          color:#222;
+        ">
+          Staff & HR Login
+</div>
+
+</div>
+
+
+<!-- EMPLOYEE ID -->
+
+<label style="
+display:block;
+font-weight:bold;
+        margin-bottom:7px;
+        color:#333;
+      ">
+        Employee ID
+</label>
+
+<input
+        id="afLoginEmployeeId"
+        type="text"
+        placeholder="Enter your Employee ID"
+        autocomplete="username"
+        style="
+          width:100%;
+          padding:13px;
+box-sizing:border-box;
+          border:1px solid #ccc;
+          border-radius:8px;
+          font-size:15px;
+outline:none;
+          margin-bottom:18px;
+        "
+>
+
+
+<!-- PASSWORD -->
+
+<label style="
+display:block;
+font-weight:bold;
+        margin-bottom:7px;
+        color:#333;
+      ">
+        Password
+</label>
+
+<div style="
+position:relative;
+        margin-bottom:12px;
+      ">
+
+<input
+          id="afLoginPassword"
+          type="password"
+          placeholder="Enter your password"
+          autocomplete="current-password"
+          style="
+            width:100%;
+            padding:13px;
+            padding-right:50px;
+box-sizing:border-box;
+            border:1px solid #ccc;
+            border-radius:8px;
+            font-size:15px;
+outline:none;
+          "
+>
+
+<button
+          id="afTogglePassword"
+          type="button"
+          style="
+position:absolute;
+            right:8px;
+            top:7px;
+            border:0;
+background:transparent;
+cursor:pointer;
+            font-size:18px;
+            padding:6px;
+          "
+          title="Show password"
+>
+👁
+</button>
+
+</div>
+
+
+<!-- LOGIN MESSAGE -->
+
+<div
+        id="afLoginMessage"
+        style="
+          min-height:20px;
+          margin-bottom:12px;
+          font-size:13px;
+text-align:center;
+        "
+></div>
+
+
+<!-- LOGIN BUTTON -->
+
+<button
+        id="afLoginButton"
+        type="button"
+        style="
+          width:100%;
+          padding:14px;
+          border:0;
+          border-radius:8px;
+          background:#0b5d3b;
+color:white;
+          font-size:16px;
+font-weight:bold;
+cursor:pointer;
+        "
+>
+        LOGIN
+</button>
+
+
+<!-- FORGOT PASSWORD -->
+
+<button
+        id="afForgotPasswordButton"
+        type="button"
+        style="
+display:block;
+          margin:18px auto 0;
+          border:0;
+background:none;
+          color:#0b5d3b;
+cursor:pointer;
+          font-size:13px;
+        "
+>
+        Forgot Password?
+</button>
+
+
+<div style="
+        margin-top:25px;
+        padding-top:15px;
+        border-top:1px solid #eee;
+text-align:center;
+        color:#888;
+        font-size:11px;
+      ">
+        A&F Wekavera Ltd • Staff & HR Management System
+</div>
+
+</div>
+  `;
+
+document.body.appendChild(loginScreen);
+
+
+  /* ---------- SHOW / HIDE PASSWORD ---------- */
+
+loginScreen.querySelector("#afTogglePassword").onclick = () => {
+
+const passwordInput =
+loginScreen.querySelector("#afLoginPassword");
+
+const toggleButton =
+loginScreen.querySelector("#afTogglePassword");
+
+    if (passwordInput.type === "password") {
+
+passwordInput.type = "text";
+toggleButton.textContent = "🙈";
+toggleButton.title = "Hide password";
+
+    } else {
+
+passwordInput.type = "password";
+toggleButton.textContent = "👁";
+toggleButton.title = "Show password";
+
+    }
+  };
+
+
+  /* ---------- LOGIN BUTTON ---------- */
+
+loginScreen.querySelector("#afLoginButton").onclick = () => {
+
+const employeeId =
+loginScreen.querySelector("#afLoginEmployeeId")
+        .value
+        .trim();
+
+const password =
+loginScreen.querySelector("#afLoginPassword")
+        .value;
+
+const message =
+loginScreen.querySelector("#afLoginMessage");
+
+
+    if (!employeeId) {
+
+message.style.color = "#b00020";
+message.textContent =
+        "Please enter your Employee ID.";
+
+      return;
+    }
+
+
+    if (!password) {
+
+message.style.color = "#b00020";
+message.textContent =
+        "Please enter your password.";
+
+      return;
+    }
+
+
+message.style.color = "#0b5d3b";
+message.textContent =
+      "Login system is being connected...";
+  };
+
+
+  /* ---------- FORGOT PASSWORD ---------- */
+
+loginScreen.querySelector("#afForgotPasswordButton").onclick = () => {
+
+    alert(
+      "Password recovery will be connected to the Employee Account system."
+    );
+
+  };
+
+
+  /* ---------- ENTER KEY ---------- */
+
+loginScreen.querySelector("#afLoginPassword").addEventListener(
+    "keydown",
+    function(event) {
+
+      if (event.key === "Enter") {
+
+loginScreen
+          .querySelector("#afLoginButton")
+          .click();
+
+      }
+
+    }
+  );
+
+}
+
 function showMessage(name) {
 
   if (name === "Record Material In") { 
