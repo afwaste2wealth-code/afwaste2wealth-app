@@ -6108,6 +6108,71 @@ localStorage.setItem(
 JSON.stringify(employees)
   );
 }
+function activateEmployeeAccount(employeeId) {
+
+const employees = getEmployees();
+
+const employee = employees.find(
+    employee =>employee.employeeId === employeeId
+  );
+
+  if (!employee) {
+    alert("Employee account could not be found.");
+    return;
+  }
+
+const confirmed = confirm(
+    `Activate the login account for ${employee.fullName} (${employee.employeeId})?`
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+employee.accountStatus = "activated";
+
+saveEmployees(employees);
+
+  alert(
+    `${employee.fullName}'s account has been activated.`
+  );
+
+manageEmployeeAccounts();
+}
+
+
+function deactivateEmployeeAccount(employeeId) {
+
+const employees = getEmployees();
+
+const employee = employees.find(
+    employee =>employee.employeeId === employeeId
+  );
+
+  if (!employee) {
+    alert("Employee account could not be found.");
+    return;
+  }
+
+const confirmed = confirm(
+    `Deactivate the login account for ${employee.fullName} (${employee.employeeId})?\n\n` +
+    `The employee's records will be kept, but the account will no longer be allowed to log in.`
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+employee.accountStatus = "deactivated";
+
+saveEmployees(employees);
+
+  alert(
+    `${employee.fullName}'s account has been deactivated.`
+  );
+
+manageEmployeeAccounts();
+}
 
 
 function getNextEmployeeId() {
@@ -6464,26 +6529,74 @@ employee.employmentStatus === "active"
                   ${
 employee.accountStatus === "activated"
                       ? "Activated"
+                      : employee.accountStatus === "deactivated"
+                      ? "Deactivated"
                       : "Not Activated"
                   }
 </td>
 
 <td style="padding:10px;">
+<div style="
+display:flex;
+    gap:6px;
+flex-wrap:wrap;
+  ">
+
 <button
-    type="button"
+      type="button"
 onclick="editEmployeeAsDirector('${employee.employeeId}')"
-    style="
-      border:0;
-      background:#0b5d3b;
+      style="
+        border:0;
+        background:#0b5d3b;
 color:white;
-      padding:7px 12px;
-      border-radius:6px;
+        padding:7px 12px;
+        border-radius:6px;
 cursor:pointer;
 font-weight:bold;
-    "
+      "
 >
-    Edit
+      Edit
 </button>
+
+    ${
+employee.accountStatus === "activated"
+        ? `
+<button
+            type="button"
+onclick="deactivateEmployeeAccount('${employee.employeeId}')"
+            style="
+              border:0;
+              background:#dc3545;
+color:white;
+              padding:7px 12px;
+              border-radius:6px;
+cursor:pointer;
+font-weight:bold;
+            "
+>
+            Deactivate
+</button>
+        `
+        : `
+<button
+            type="button"
+onclick="activateEmployeeAccount('${employee.employeeId}')"
+            style="
+              border:0;
+              background:#198754;
+color:white;
+              padding:7px 12px;
+              border-radius:6px;
+cursor:pointer;
+font-weight:bold;
+            "
+>
+            Activate
+</button>
+        `
+    }
+
+</div>
 </td>
 
 
