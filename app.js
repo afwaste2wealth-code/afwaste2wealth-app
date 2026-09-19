@@ -254,15 +254,372 @@ manageTeamPerformanceSettings();
 };
 
 modal.querySelector("#rolesHRBtn").onclick = () => {
-  alert(
-    "Roles & Permissions\n\n" +
-    "Director\n" +
-    "Manager\n" +
-    "HR\n" +
-    "Secretary\n" +
-    "Team Leader\n" +
+
+const roles = [
+    "Director",
+    "Manager",
+    "HR",
+    "Secretary",
+    "Team Leader",
     "Employee"
+  ];
+
+const permissions = [
+    ["employeeAccounts", "Employee Accounts"],
+    ["teams", "Teams & Team Leaders"],
+    ["attendance", "Attendance"],
+    ["allowance", "Employee Allowance"],
+    ["advances", "Advances & Deductions"],
+    ["payroll", "Payroll Ledger"],
+    ["performance", "Employee & Team Performance"],
+    ["portal", "Employee Portal"],
+    ["documents", "Employee Documents & Records"],
+    ["birthdays", "Birthday Reminders"],
+    ["hrReports", "HR Reports"]
+  ];
+
+const defaultPermissions = {
+    Director: {
+employeeAccounts: true,
+      teams: true,
+      attendance: true,
+      allowance: true,
+      advances: true,
+      payroll: true,
+      performance: true,
+      portal: true,
+      documents: true,
+      birthdays: true,
+hrReports: true
+    },
+
+    Manager: {
+employeeAccounts: false,
+      teams: true,
+      attendance: true,
+      allowance: false,
+      advances: false,
+      payroll: true,
+      performance: true,
+      portal: false,
+      documents: false,
+      birthdays: false,
+hrReports: true
+    },
+
+    HR: {
+employeeAccounts: true,
+      teams: true,
+      attendance: true,
+      allowance: true,
+      advances: true,
+      payroll: true,
+      performance: true,
+      portal: true,
+      documents: true,
+      birthdays: true,
+hrReports: true
+    },
+
+    Secretary: {
+employeeAccounts: true,
+      teams: false,
+      attendance: true,
+      allowance: true,
+      advances: true,
+      payroll: true,
+      performance: false,
+      portal: true,
+      documents: true,
+      birthdays: true,
+hrReports: true
+    },
+
+    "Team Leader": {
+employeeAccounts: false,
+      teams: false,
+      attendance: true,
+      allowance: false,
+      advances: false,
+      payroll: false,
+      performance: true,
+      portal: true,
+      documents: false,
+      birthdays: false,
+hrReports: false
+    },
+
+    Employee: {
+employeeAccounts: false,
+      teams: false,
+      attendance: false,
+      allowance: false,
+      advances: false,
+      payroll: false,
+      performance: false,
+      portal: true,
+      documents: true,
+      birthdays: false,
+hrReports: false
+    }
+  };
+
+  let savedPermissions = JSON.parse(
+localStorage.getItem("afRolePermissions") || "null"
   );
+
+  if (!savedPermissions) {
+savedPermissions = JSON.parse(
+JSON.stringify(defaultPermissions)
+    );
+
+localStorage.setItem(
+      "afRolePermissions",
+JSON.stringify(savedPermissions)
+    );
+  }
+
+const permissionModal = document.createElement("div");
+
+permissionModal.style.cssText = `
+position:fixed;
+    inset:0;
+background:rgba(0,0,0,.6);
+display:flex;
+align-items:center;
+justify-content:center;
+    z-index:10000;
+font-family:Arial,sans-serif;
+  `;
+
+permissionModal.innerHTML = `
+<div style="
+background:white;
+      width:900px;
+      max-width:95%;
+      max-height:92vh;
+overflow:auto;
+      border-radius:14px;
+      padding:24px;
+      box-shadow:0 10px 40px rgba(0,0,0,.35);
+    ">
+
+<h2 style="
+        margin-top:0;
+        color:#0b5d3b;
+      ">
+        Roles & Permissions
+</h2>
+
+<div style="
+        background:#eef8f2;
+        padding:13px;
+        border-radius:9px;
+        margin-bottom:18px;
+        font-size:14px;
+      ">
+        Select a system role and choose the Staff & HR modules
+        that the role is allowed to access.
+</div>
+
+<label style="
+font-weight:bold;
+display:block;
+        margin-bottom:7px;
+      ">
+        Select Role
+</label>
+
+<select id="permissionRole"
+        style="
+          width:100%;
+          padding:11px;
+          border:1px solid #ccc;
+          border-radius:7px;
+          margin-bottom:20px;
+          font-size:15px;
+        ">
+        ${roles.map(role => `
+<option value="${escapeSettingsText(role)}">
+            ${escapeSettingsText(role)}
+</option>
+        `).join("")}
+</select>
+
+<div style="
+        overflow-x:auto;
+        border:1px solid #ddd;
+        border-radius:9px;
+      ">
+
+<table style="
+          width:100%;
+border-collapse:collapse;
+          min-width:650px;
+        ">
+
+<thead>
+<tr style="
+              background:#0b5d3b;
+color:white;
+            ">
+<th style="padding:11px;text-align:left;">
+                Module
+</th>
+
+<th style="padding:11px;text-align:center;">
+                Access
+</th>
+</tr>
+</thead>
+
+<tbody id="permissionTableBody">
+</tbody>
+
+</table>
+
+</div>
+
+<div style="
+display:flex;
+        gap:10px;
+justify-content:flex-end;
+        margin-top:20px;
+      ">
+
+<button id="cancelPermissions"
+          style="
+            padding:10px 18px;
+            border:1px solid #aaa;
+            border-radius:7px;
+background:white;
+cursor:pointer;
+          ">
+          Cancel
+</button>
+
+<button id="savePermissions"
+          style="
+            padding:10px 18px;
+border:none;
+            border-radius:7px;
+            background:#0b5d3b;
+color:white;
+cursor:pointer;
+          ">
+          Save Permissions
+</button>
+
+</div>
+
+</div>
+  `;
+
+document.body.appendChild(permissionModal);
+
+const roleSelect =
+permissionModal.querySelector("#permissionRole");
+
+const tableBody =
+permissionModal.querySelector("#permissionTableBody");
+
+  function renderPermissions() {
+
+const selectedRole = roleSelect.value;
+
+const rolePermissions =
+savedPermissions[selectedRole] ||
+defaultPermissions[selectedRole];
+
+tableBody.innerHTML = permissions.map(
+      ([key, label]) => {
+
+const checked =
+rolePermissions[key] === true
+            ? "checked"
+            : "";
+
+        return `
+<tr style="
+            border-bottom:1px solid #eee;
+          ">
+
+<td style="
+              padding:11px;
+              font-weight:500;
+            ">
+              ${escapeSettingsText(label)}
+</td>
+
+<td style="
+              padding:11px;
+text-align:center;
+            ">
+
+<input
+                type="checkbox"
+                class="permissionCheckbox"
+                data-permission="${key}"
+                ${checked}
+                style="
+                  width:19px;
+                  height:19px;
+cursor:pointer;
+                "
+>
+
+</td>
+
+</tr>
+        `;
+      }
+    ).join("");
+  }
+
+roleSelect.onchange = renderPermissions;
+
+renderPermissions();
+
+permissionModal.querySelector(
+    "#savePermissions"
+  ).onclick = () => {
+
+const selectedRole = roleSelect.value;
+
+const updatedPermissions = {};
+
+permissions.forEach(([key]) => {
+
+const checkbox =
+permissionModal.querySelector(
+          `.permissionCheckbox[data-permission="${key}"]`
+        );
+
+updatedPermissions[key] =
+checkbox.checked;
+    });
+
+savedPermissions[selectedRole] =
+updatedPermissions;
+
+localStorage.setItem(
+      "afRolePermissions",
+JSON.stringify(savedPermissions)
+    );
+
+    alert(
+      "Permissions saved successfully for " +
+selectedRole + "."
+    );
+
+permissionModal.remove();
+  };
+
+permissionModal.querySelector(
+    "#cancelPermissions"
+  ).onclick = () => {
+permissionModal.remove();
+  };
 };
 
 modal.querySelector("#portalHRBtn").onclick = () => {
@@ -7204,6 +7561,7 @@ display:grid;
 <option>Employee</option>
 <option>Team Leader</option>
 <option>Secretary</option>
+<option>HR</option>
 <option>Manager</option>
 <option>Director</option>
 </select>
