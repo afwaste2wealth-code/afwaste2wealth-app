@@ -276,42 +276,88 @@ loginScreen.querySelector("#afLoginButton").onclick = () => {
 
 const employeeId =
 loginScreen.querySelector("#afLoginEmployeeId")
-        .value
-        .trim();
+      .value
+      .trim();
 
 const password =
 loginScreen.querySelector("#afLoginPassword")
-        .value;
+      .value;
 
 const message =
 loginScreen.querySelector("#afLoginMessage");
 
-
-    if (!employeeId) {
-
-message.style.color = "#b00020";
-message.textContent =
-        "Please enter your Employee ID.";
-
-      return;
-    }
-
-
-    if (!password) {
+  if (!employeeId) {
 
 message.style.color = "#b00020";
 message.textContent =
-        "Please enter your password.";
+      "Please enter your Employee ID.";
 
-      return;
-    }
+    return;
+  }
 
+  if (!password) {
+
+message.style.color = "#b00020";
+message.textContent =
+      "Please enter your password.";
+
+    return;
+  }
+
+const employees = getEmployees();
+
+const employee = employees.find(
+    employee =>
+      String(employee.employeeId).toLowerCase() ===
+employeeId.toLowerCase()
+  );
+
+  if (!employee) {
+
+message.style.color = "#b00020";
+message.textContent =
+      "Employee ID not found.";
+
+    return;
+  }
+
+  if (employee.accountStatus === "not_activated") {
+
+message.style.color = "#b00020";
+message.textContent =
+      "This account has not yet been activated.";
+
+    return;
+  }
+
+  if (employee.accountStatus === "deactivated") {
+
+message.style.color = "#b00020";
+message.textContent =
+      "This account has been deactivated. Please contact HR or the Director.";
+
+    return;
+  }
+
+  if (employee.accountStatus === "activated") {
+
+    if (!employee.passwordHash) {
 
 message.style.color = "#0b5d3b";
 message.textContent =
-      "Login system is being connected...";
-  };
+        "Account activated. Password setup is required.";
 
+      return;
+    }
+
+message.style.color = "#0b5d3b";
+message.textContent =
+      "Account found. Checking password...";
+
+    return;
+  }
+
+};
 
   /* ---------- FORGOT PASSWORD ---------- */
 
