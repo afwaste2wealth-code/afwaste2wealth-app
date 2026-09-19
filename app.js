@@ -8519,6 +8519,7 @@ modal.querySelector(
 
 accountStatus:
         "not_activated",
+         passwordHash: "",
 
 teamId:
         null,
