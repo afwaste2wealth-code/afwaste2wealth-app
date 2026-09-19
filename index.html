@@ -20,7 +20,9 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;p
 </style>
 </head>
 <body>
-<div class="app">
+<div class="app"
+  id="mainApplication"
+  style="display:none;">
 <aside class="side">
 <div class="brand">♻ A&F Wekavera Ltd<small>WASTE2WEALTH SOLUTIONS</small><div class="tag">Turning Waste into Value</div></div>
 <div class="section">FACTORY MANAGEMENT SYSTEM</div>
@@ -74,5 +76,9 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;p
 <div class="footer">A&F Wekavera Ltd • Waste2Wealth Solutions • Mbalala Town, Mukono • Factory management prototype</div>
 </main></div>
 <script src="app.js"></script>
+<script> document.addEventListener("DOMContentLoaded", function () {
+  showAFLoginScreen();
+});
+</script>
 <script
 src="monthly-client-summary.js"></script>
