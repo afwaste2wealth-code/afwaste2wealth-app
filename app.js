@@ -5472,7 +5472,11 @@ const daysRemaining = Math.round(
     if (
 daysRemaining === 0 ||
 daysRemaining === 1 ||
-daysRemaining === 2 ||      
+daysRemaining === 2 ||
+daysRemaining === 3 ||
+daysRemaining === 4 ||
+daysRemaining === 5 ||
+daysRemaining === 6 ||
 daysRemaining === 7
     ) {
 reminders.push({
