@@ -342,10 +342,7 @@ message.textContent =
   if (employee.accountStatus === "activated") {
 
     if (!employee.passwordHash) {
-
-message.style.color = "#0b5d3b";
-message.textContent =
-        "Account activated. Password setup is required.";
+showAFCreatePasswordScreen(employee);
 
       return;
     }
