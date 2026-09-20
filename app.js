@@ -370,13 +370,14 @@ message.textContent =
     return;
   }
 localStorage.setItem(
-  "currentUser",
+   "currentUser",
 JSON.stringify({
 employeeId: employee.employeeId,
 fullName: employee.fullName,
     role: employee.role
   })
 );
+   updateLoggedInUserHeader();
 
 message.style.color = "#0b5d3b";
 message.textContent =
@@ -1305,7 +1306,14 @@ permissionModal.remove();
   };
 };
 function updateLoggedInUserHeader() {
-
+const date = document.getElementById("dashboardDate");
+   if (date) {
+      date.textContent = new Date().toLocaleDateString("en-GB", {
+         day: "numeric",
+         month: "long",
+         year: "numeric"
+      });
+   }
 const currentUser =
 JSON.parse(
 localStorage.getItem("currentUser") || "null"
@@ -1365,7 +1373,6 @@ savedPermissions[currentUser.role];
 
   return rolePermissions[permissionKey] === true;
 }
-
 modal.querySelector("#portalHRBtn").onclick = () => {
   alert(
     "Employee Portal will be connected to employee login and personal records."
