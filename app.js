@@ -396,7 +396,9 @@ document.getElementById("mainApplication");
 
     if (dashboard) {
 dashboard.style.display = "";
-    }
+       if (typeof updateLoggedInUserHeader === "function") {
+          updateLoggedInUserHeader();
+              }
 
   }, 500);
 
