@@ -9574,7 +9574,7 @@ bestPelletClient[1].toLocaleString() +
    ========================================================= */
 
 document.addEventListener("DOMContentLoaded", function () {
-   updateLoggedInUserHeader();
+
 
 if (typeof updateDashboardMaterialTotals === "function") {
   updateDashboardMaterialTotals(
