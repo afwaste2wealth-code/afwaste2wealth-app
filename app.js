@@ -1406,6 +1406,44 @@ role.textContent =
 currentUser.role;
   }
 }
+function logoutAFUser() {
+  // Remove only the active login session
+localStorage.removeItem("currentUser");
+
+  // Hide the main application
+const dashboard =
+document.getElementById("mainApplication");
+
+  if (dashboard) {
+dashboard.style.display = "none";
+  }
+
+  // Clear dashboard user details
+const userName =
+document.getElementById("dashboardUserName");
+
+const userRole =
+document.getElementById("dashboardUserRole");
+
+  if (userName) {
+userName.textContent = "";
+  }
+
+  if (userRole) {
+userRole.textContent = "";
+  }
+
+  // Remove an existing login screen if present
+const existingLogin =
+document.getElementById("afLoginScreen");
+
+  if (existingLogin) {
+existingLogin.remove();
+  }
+
+  // Return to the A&F login screen
+showAFLoginScreen();
+}
 
 function hasPermission(permissionKey) {
 
