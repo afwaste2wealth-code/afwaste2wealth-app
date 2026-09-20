@@ -1135,6 +1135,17 @@ manageTeamPerformanceSettings();
 };
 
 modal.querySelector("#rolesHRBtn").onclick = () => {
+const currentUser = JSON.parse(
+localStorage.getItem("currentUser") || "null"
+);
+
+if (!currentUser || currentUser.role !== "Director") {
+  alert(
+    "Access Denied\n\n" +
+    "Only the Director can manage Roles & Permissions."
+  );
+  return;
+}
 
 const roles = [
     "Director",
