@@ -399,7 +399,7 @@ dashboard.style.display = "";
        if (typeof updateLoggedInUserHeader === "function") {
           updateLoggedInUserHeader();
               }
-
+    }
   }, 500);
 
 } catch (error) {
