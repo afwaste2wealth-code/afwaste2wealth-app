@@ -1304,7 +1304,8 @@ permissionModal.querySelector(
 permissionModal.remove();
   };
 };
- 
+   
+function updateLoggedInUserHeader() {
 const date = document.getElementById("dashboardDate");
    if (date) {
       date.textContent = new Date().toLocaleDateString("en-GB", {
