@@ -17,77 +17,159 @@ loginScreen.id = "afLoginScreen";
 
 loginScreen.style.cssText = `
 position:fixed;
-    inset:0;
-background:linear-gradient(135deg,#062f20,#0b5d3b);
+  inset:0;
+  z-index:999999;
+font-family:Arial,sans-serif;
+box-sizing:border-box;
+overflow:auto;
+  background:
+    linear-gradient(
+      135deg,
+rgba(4,45,30,.96),
+rgba(11,93,59,.92)
+    );
 display:flex;
 align-items:center;
 justify-content:center;
-    z-index:999999;
-font-family:Arial,sans-serif;
-    padding:20px;
-box-sizing:border-box;
-  `;
+  padding:24px;
+`;
 
 loginScreen.innerHTML = `
 
 <div style="
-      width:420px;
-      max-width:100%;
-background:white;
-      border-radius:18px;
-      padding:35px;
-box-sizing:border-box;
-      box-shadow:0 15px 50px rgba(0,0,0,.35);
-    ">
+  width:960px;
+  max-width:100%;
+  min-height:570px;
+  background:#ffffff;
+  border-radius:22px;
+overflow:hidden;
+display:grid;
+  grid-template-columns:1.05fr .95fr;
+  box-shadow:0 24px 70px rgba(0,0,0,.38);
+">
 
-<!-- LOGO / COMPANY NAME -->
-
+<!-- LEFT COMPANY PANEL -->
 <div style="
-text-align:center;
-        margin-bottom:28px;
-      ">
-
-<div style="
-          width:70px;
-          height:70px;
-          margin:0 auto 15px;
-          border-radius:50%;
-          background:#0b5d3b;
+    background:
+      linear-gradient(
+        145deg,
+        #073e29 0%,
+        #0b5d3b 55%,
+        #14835a 100%
+      );
 color:white;
+    padding:55px 48px;
+display:flex;
+flex-direction:column;
+justify-content:space-between;
+  ">
+
+<div>
+
+<div style="
+        width:82px;
+        height:82px;
+        border-radius:18px;
+background:rgba(255,255,255,.14);
+        border:1px solid rgba(255,255,255,.28);
 display:flex;
 align-items:center;
 justify-content:center;
-          font-size:25px;
+        font-size:29px;
+        font-weight:800;
+        margin-bottom:30px;
+      ">
+        A&F
+</div>
+
+<div style="
+        font-size:13px;
+        letter-spacing:2px;
+        color:#bce7d1;
 font-weight:bold;
-        ">
-          A&F
+        margin-bottom:10px;
+      ">
+        WASTE2WEALTH SOLUTIONS
 </div>
 
 <h1 style="
-          margin:0;
-          color:#0b5d3b;
-          font-size:25px;
-        ">
-          A&F Wekavera Ltd
+        margin:0;
+        font-size:34px;
+        line-height:1.15;
+        font-weight:800;
+      ">
+        A&F Wekavera Ltd
 </h1>
 
 <div style="
-          margin-top:7px;
-          color:#666;
-          font-size:14px;
-        ">
-          Waste2Wealth Solutions
+        width:55px;
+        height:4px;
+        background:#ffffff;
+        border-radius:20px;
+        margin:22px 0;
+        opacity:.85;
+      "></div>
+
+<p style="
+        margin:0;
+        max-width:350px;
+        font-size:16px;
+        line-height:1.7;
+        color:#e1f2e9;
+      ">
+        Factory Management System for efficient,
+        accountable and sustainable operations.
+</p>
+
 </div>
 
 <div style="
-          margin-top:18px;
-          font-size:20px;
-font-weight:bold;
-          color:#222;
-        ">
-          Staff & HR Login
+      font-size:12px;
+      line-height:1.7;
+      color:#bce7d1;
+    ">
+      Turning Waste into Value<br>
+Mbalala • Mukono
 </div>
 
+</div>
+
+
+<!-- RIGHT LOGIN PANEL -->
+<div style="
+    padding:55px 52px;
+display:flex;
+flex-direction:column;
+justify-content:center;
+    background:#ffffff;
+  ">
+
+<div style="
+      color:#0b5d3b;
+      font-size:13px;
+font-weight:bold;
+      letter-spacing:1.5px;
+      margin-bottom:9px;
+    ">
+      STAFF & HR PORTAL
+</div>
+
+<h2 style="
+      margin:0;
+      color:#173027;
+      font-size:30px;
+    ">
+      Welcome Back
+</h2>
+
+<div style="
+      color:#6b7d75;
+      font-size:14px;
+      margin-top:9px;
+      margin-bottom:34px;
+      line-height:1.5;
+    ">
+      Sign in with your employee account to continue.
 </div>
 
 
@@ -95,28 +177,32 @@ font-weight:bold;
 
 <label style="
 display:block;
+      color:#263c33;
+      font-size:13px;
 font-weight:bold;
-        margin-bottom:7px;
-        color:#333;
-      ">
-        Employee ID
+      margin-bottom:8px;
+    ">
+      Employee ID
 </label>
 
 <input
-        id="afLoginEmployeeId"
-        type="text"
-        placeholder="Enter your Employee ID"
-        autocomplete="username"
-        style="
-          width:100%;
-          padding:13px;
+      id="afLoginEmployeeId"
+      type="text"
+      placeholder="e.g. EMP001"
+      autocomplete="username"
+      style="
+        width:100%;
+        height:50px;
+        padding:0 15px;
 box-sizing:border-box;
-          border:1px solid #ccc;
-          border-radius:8px;
-          font-size:15px;
+        border:1px solid #d7e2dc;
+        border-radius:10px;
+        background:#f8faf9;
+        color:#173027;
+        font-size:15px;
 outline:none;
-          margin-bottom:18px;
-        "
+        margin-bottom:20px;
+      "
 >
 
 
@@ -124,49 +210,54 @@ outline:none;
 
 <label style="
 display:block;
+      color:#263c33;
+      font-size:13px;
 font-weight:bold;
-        margin-bottom:7px;
-        color:#333;
-      ">
-        Password
+      margin-bottom:8px;
+    ">
+      Password
 </label>
 
 <div style="
 position:relative;
-        margin-bottom:12px;
-      ">
+      margin-bottom:12px;
+    ">
 
 <input
-          id="afLoginPassword"
-          type="password"
-          placeholder="Enter your password"
-          autocomplete="current-password"
-          style="
-            width:100%;
-            padding:13px;
-            padding-right:50px;
+        id="afLoginPassword"
+        type="password"
+        placeholder="Enter your password"
+        autocomplete="current-password"
+        style="
+          width:100%;
+          height:50px;
+          padding:0 50px 0 15px;
 box-sizing:border-box;
-            border:1px solid #ccc;
-            border-radius:8px;
-            font-size:15px;
+          border:1px solid #d7e2dc;
+          border-radius:10px;
+          background:#f8faf9;
+          color:#173027;
+          font-size:15px;
 outline:none;
-          "
+        "
 >
 
 <button
-          id="afTogglePassword"
-          type="button"
-          style="
+        id="afTogglePassword"
+        type="button"
+        title="Show password"
+        style="
 position:absolute;
-            right:8px;
-            top:7px;
-            border:0;
+          right:8px;
+          top:7px;
+          width:36px;
+          height:36px;
+          border:0;
+          border-radius:8px;
 background:transparent;
 cursor:pointer;
-            font-size:18px;
-            padding:6px;
-          "
-          title="Show password"
+          font-size:18px;
+        "
 >
 👁
 </button>
@@ -177,69 +268,94 @@ cursor:pointer;
 <!-- LOGIN MESSAGE -->
 
 <div
-        id="afLoginMessage"
-        style="
-          min-height:20px;
-          margin-bottom:12px;
-          font-size:13px;
+      id="afLoginMessage"
+      style="
+        min-height:20px;
+        margin:3px 0 10px;
+        font-size:13px;
 text-align:center;
-        "
+      "
 ></div>
 
 
 <!-- LOGIN BUTTON -->
 
 <button
-        id="afLoginButton"
-        type="button"
-        style="
-          width:100%;
-          padding:14px;
-          border:0;
-          border-radius:8px;
-          background:#0b5d3b;
+      id="afLoginButton"
+      type="button"
+      style="
+        width:100%;
+        height:50px;
+        border:0;
+        border-radius:10px;
+        background:#0b5d3b;
 color:white;
-          font-size:16px;
-font-weight:bold;
+        font-size:15px;
+        font-weight:800;
+        letter-spacing:.5px;
 cursor:pointer;
-        "
+        box-shadow:0 7px 18px rgba(11,93,59,.22);
+      "
 >
-        LOGIN
+      SIGN IN
 </button>
 
 
 <!-- FORGOT PASSWORD -->
 
 <button
-        id="afForgotPasswordButton"
-        type="button"
-        style="
+      id="afForgotPasswordButton"
+      type="button"
+      style="
 display:block;
-          margin:18px auto 0;
-          border:0;
-background:none;
-          color:#0b5d3b;
+        margin:18px auto 0;
+        padding:5px;
+        border:0;
+background:transparent;
+        color:#0b5d3b;
+        font-size:13px;
+        font-weight:600;
 cursor:pointer;
-          font-size:13px;
-        "
+      "
 >
-        Forgot Password?
+      Forgot Password?
 </button>
 
 
 <div style="
-        margin-top:25px;
-        padding-top:15px;
-        border-top:1px solid #eee;
+      margin-top:32px;
+      padding-top:18px;
+      border-top:1px solid #edf2ef;
 text-align:center;
-        color:#888;
-        font-size:11px;
-      ">
-        A&F Wekavera Ltd • Staff & HR Management System
+      color:#8a9992;
+      font-size:11px;
+      line-height:1.5;
+    ">
+      Authorized staff access only<br>
+      A&F Wekavera Ltd • Waste2Wealth Solutions
 </div>
 
 </div>
-  `;
+
+</div>
+
+<style>
+  @media (max-width: 760px) {
+    #afLoginScreen > div {
+      grid-template-columns: 1fr !important;
+    }
+
+    #afLoginScreen > div >div:first-child {
+      display: none !important;
+    }
+
+    #afLoginScreen > div >div:last-child {
+      padding: 36px 25px !important;
+    }
+  }
+</style>
+
+`;
 
 document.body.appendChild(loginScreen);
 
