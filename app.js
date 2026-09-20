@@ -347,11 +347,61 @@ showAFCreatePasswordScreen(employee);
       return;
     }
 
+try {
+
+const encoder = new TextEncoder();
+const data = encoder.encode(password);
+
+const hashBuffer =
+    await crypto.subtle.digest("SHA-256", data);
+
+const hashArray =
+Array.from(new Uint8Array(hashBuffer));
+
+const enteredPasswordHash =
+hashArray
+      .map(byte =>byte.toString(16).padStart(2, "0"))
+      .join("");
+
+  if (enteredPasswordHash !== employee.passwordHash) {
+message.style.color = "#b00020";
+message.textContent =
+      "Incorrect password.";
+    return;
+  }
+
 message.style.color = "#0b5d3b";
 message.textContent =
-      "Account found. Checking password...";
+    "Login successful. Opening dashboard...";
 
-    return;
+setTimeout(() => {
+
+const loginScreen =
+document.getElementById("afLoginScreen");
+
+    if (loginScreen) {
+loginScreen.remove();
+    }
+
+const dashboard =
+document.getElementById("mainApplication");
+
+    if (dashboard) {
+dashboard.style.display = "";
+    }
+
+  }, 500);
+
+} catch (error) {
+
+console.error("Login verification error:", error);
+
+message.style.color = "#b00020";
+message.textContent =
+    "Unable to verify password. Please try again.";
+
+}
+
   }
 
 };
