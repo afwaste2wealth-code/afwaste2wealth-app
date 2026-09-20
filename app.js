@@ -1515,18 +1515,34 @@ permissionModal.remove();
 };
    
 modal.querySelector("#portalHRBtn").onclick = () => {
+
+  if (!hasPermission("portal")) {
+requirePermission("portal");
+    return;
+  }
+
   alert(
     "Employee Portal will be connected to employee login and personal records."
   );
 };
 
 modal.querySelector("#documentsHRBtn").onclick = () => {
+
+  if (!hasPermission("documents")) {
+requirePermission("documents");
+    return;
+  }
+
   alert(
     "Employee Documents & Records module will be connected next."
   );
 };
 
 modal.querySelector("#birthdayHRBtn").onclick = () => {
+if (!hasPermission("birthdays")) {
+requirePermission("birthdays");
+    return;
+  }
 
 const reminders =
 typeof getEmployeeBirthdayReminders === "function"
@@ -1555,6 +1571,11 @@ reminder.daysRemaining +
 };
 
 modal.querySelector("#hrReportsBtn").onclick = () => {
+   if (!hasPermission("hrReports")) {
+requirePermission("hrReports");
+    return;
+  }
+
 modal.remove();
 
   alert(
