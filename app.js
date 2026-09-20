@@ -1304,6 +1304,31 @@ permissionModal.querySelector(
 permissionModal.remove();
   };
 };
+function hasPermission(permissionKey) {
+
+const currentUser =
+JSON.parse(
+localStorage.getItem("currentUser") || "null"
+    );
+
+  if (!currentUser || !currentUser.role) {
+    return false;
+  }
+
+const savedPermissions =
+JSON.parse(
+localStorage.getItem("afRolePermissions") || "{}"
+    );
+
+const rolePermissions =
+savedPermissions[currentUser.role];
+
+  if (!rolePermissions) {
+    return false;
+  }
+
+  return rolePermissions[permissionKey] === true;
+}
 
 modal.querySelector("#portalHRBtn").onclick = () => {
   alert(
