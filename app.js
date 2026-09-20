@@ -729,6 +729,30 @@ systemSettings();
 
 function staffHR() {
 
+const staffHRPermissions = [
+    "employeeAccounts",
+    "teams",
+    "attendance",
+    "allowance",
+    "advances",
+    "payroll",
+    "performance",
+    "portal",
+    "documents",
+    "birthdays",
+    "hrReports"
+  ];
+
+const canAccessStaffHR =
+staffHRPermissions.some(permissionKey =>
+hasPermission(permissionKey)
+    );
+
+  if (!canAccessStaffHR) {
+requirePermission("employeeAccounts");
+    return;
+  }
+
 const modal = document.createElement("div");
 
 modal.style.cssText = `
