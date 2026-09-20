@@ -272,7 +272,7 @@ toggleButton.title = "Show password";
 
   /* ---------- LOGIN BUTTON ---------- */
 
-loginScreen.querySelector("#afLoginButton").onclick = () => {
+loginScreen.querySelector("#afLoginButton").onclick = async () => {
 
 const employeeId =
 loginScreen.querySelector("#afLoginEmployeeId")
