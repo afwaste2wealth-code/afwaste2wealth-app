@@ -1064,31 +1064,72 @@ manageTeams();
 };
 
 modal.querySelector("#shiftsHRBtn").onclick = () => {
+
+  if (!hasPermission("attendance")) {
+requirePermission("attendance");
+    return;
+  }
+
 modal.remove();
 manageShiftSettings();
-  };
+};
+
 
 modal.querySelector("#attendanceHRBtn").onclick = () => {
+
+  if (!hasPermission("attendance")) {
+requirePermission("attendance");
+    return;
+  }
+
 modal.remove();
 recordAttendance();
-  };
+};
+
 
 modal.querySelector("#allowanceHRBtn").onclick = () => {
+
+  if (!hasPermission("allowance")) {
+requirePermission("allowance");
+    return;
+  }
+
 modal.remove();
 manageEmployeeAllowance();
 };
 
+
 modal.querySelector("#advancesHRBtn").onclick = () => {
+
+  if (!hasPermission("advances")) {
+requirePermission("advances");
+    return;
+  }
+
 modal.remove();
 manageEmployeeAdvancesAndDeductions();
 };
 
+
 modal.querySelector("#payrollHRBtn").onclick = () => {
+
+  if (!hasPermission("payroll")) {
+requirePermission("payroll");
+    return;
+  }
+
 modal.remove();
 managePayrollLedger();
 };
 
+
 modal.querySelector("#performanceHRBtn").onclick = () => {
+
+  if (!hasPermission("performance")) {
+requirePermission("performance");
+    return;
+  }
+
 modal.remove();
 manageTeamPerformanceSettings();
 };
