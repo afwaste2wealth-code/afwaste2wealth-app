@@ -1470,6 +1470,33 @@ savedPermissions[currentUser.role];
 
   return rolePermissions[permissionKey] === true;
 }
+ function requirePermission(permissionKey, actionFunction) {
+  if (!hasPermission(permissionKey)) {
+const currentUser = JSON.parse(
+localStorage.getItem("currentUser") || "null"
+    );
+
+const role =
+currentUser&&currentUser.role
+        ? currentUser.role
+        : "This user";
+
+    alert(
+      "Access Denied\n\n" +
+      role +
+      " does not have permission to use this function.\n\n" +
+      "Please contact the Director or HR if access is required."
+    );
+
+    return false;
+  }
+
+  if (typeof actionFunction === "function") {
+actionFunction();
+  }
+
+  return true;
+}
 
 /* =========================================================
    SYSTEM SETTINGS
