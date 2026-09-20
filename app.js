@@ -9581,7 +9581,7 @@ if (typeof updateDashboardMaterialTotals === "function") {
     );
 }
   updateClientPerformance();
-
+  updateLoggedInUserHeader();
 });
 /* =========================================================
    VIEW MATERIAL RECORDS
