@@ -397,7 +397,7 @@ document.getElementById("mainApplication");
     if (dashboard) {
 dashboard.style.display = "";
     }
-updateLoggedInUserHeader();
+
   }, 500);
 
 } catch (error) {
