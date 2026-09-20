@@ -369,6 +369,14 @@ message.textContent =
       "Incorrect password.";
     return;
   }
+localStorage.setItem(
+  "currentUser",
+JSON.stringify({
+employeeId: employee.employeeId,
+fullName: employee.fullName,
+    role: employee.role
+  })
+);
 
 message.style.color = "#0b5d3b";
 message.textContent =
