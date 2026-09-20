@@ -394,13 +394,16 @@ loginScreen.remove();
 const dashboard =
 document.getElementById("mainApplication");
 
-    if (dashboard) {
+if (dashboard) {
 dashboard.style.display = "";
-       if (typeof updateLoggedInUserHeader === "function") {
-          updateLoggedInUserHeader();
-              }
-    }
-  }, 500);
+}
+
+/* Refresh logged-in user's dashboard details */
+if (typeof updateLoggedInUserHeader === "function") {
+updateLoggedInUserHeader();
+}
+
+}, 500);
 
 } catch (error) {
 
