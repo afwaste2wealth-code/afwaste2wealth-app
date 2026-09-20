@@ -926,14 +926,26 @@ modal.remove();
   };
 
 modal.querySelector("#employeeAccountsHRBtn").onclick = () => {
+
+  if (!hasPermission("employeeAccounts")) {
+requirePermission("employeeAccounts");
+    return;
+  }
+
 modal.remove();
 manageEmployeeAccounts();
-  };
+};
 
 modal.querySelector("#teamsHRBtn").onclick = () => {
+
+  if (!hasPermission("teams")) {
+requirePermission("teams");
+    return;
+  }
+
 modal.remove();
 manageTeams();
-  };
+};
 
 modal.querySelector("#shiftsHRBtn").onclick = () => {
 modal.remove();
