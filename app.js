@@ -622,7 +622,7 @@ message.textContent =
 
 };
 
-
+}
 function showMessage(name) {
 
   if (name === "Record Material In") { 
