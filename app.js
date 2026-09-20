@@ -1310,6 +1310,60 @@ permissionModal.remove();
   };
 };
    
+modal.querySelector("#portalHRBtn").onclick = () => {
+  alert(
+    "Employee Portal will be connected to employee login and personal records."
+  );
+};
+
+modal.querySelector("#documentsHRBtn").onclick = () => {
+  alert(
+    "Employee Documents & Records module will be connected next."
+  );
+};
+
+modal.querySelector("#birthdayHRBtn").onclick = () => {
+
+const reminders =
+typeof getEmployeeBirthdayReminders === "function"
+      ? getEmployeeBirthdayReminders()
+      : [];
+
+  if (!reminders.length) {
+    alert("There are no upcoming employee birthdays.");
+    return;
+  }
+
+  alert(
+    reminders
+      .map(
+        reminder =>
+reminder.message ||
+          (
+reminder.fullName +
+            " — " +
+reminder.daysRemaining +
+            " day(s)"
+          )
+      )
+      .join("\n")
+  );
+};
+
+modal.querySelector("#hrReportsBtn").onclick = () => {
+modal.remove();
+
+  alert(
+    "HR Reports will include:\n\n" +
+    "• Attendance reports\n" +
+    "• Employee allowance reports\n" +
+    "• Overtime and shortfall reports\n" +
+    "• Advances and deductions\n" +
+    "• Payroll ledger\n" +
+    "• Employee and team performance"
+  );
+};
+}
 function updateLoggedInUserHeader() {
 const date = document.getElementById("dashboardDate");
    if (date) {
@@ -1378,60 +1432,7 @@ savedPermissions[currentUser.role];
 
   return rolePermissions[permissionKey] === true;
 }
-modal.querySelector("#portalHRBtn").onclick = () => {
-  alert(
-    "Employee Portal will be connected to employee login and personal records."
-  );
-};
 
-modal.querySelector("#documentsHRBtn").onclick = () => {
-  alert(
-    "Employee Documents & Records module will be connected next."
-  );
-};
-
-modal.querySelector("#birthdayHRBtn").onclick = () => {
-
-const reminders =
-typeof getEmployeeBirthdayReminders === "function"
-      ? getEmployeeBirthdayReminders()
-      : [];
-
-  if (!reminders.length) {
-    alert("There are no upcoming employee birthdays.");
-    return;
-  }
-
-  alert(
-    reminders
-      .map(
-        reminder =>
-reminder.message ||
-          (
-reminder.fullName +
-            " — " +
-reminder.daysRemaining +
-            " day(s)"
-          )
-      )
-      .join("\n")
-  );
-};
-
-modal.querySelector("#hrReportsBtn").onclick = () => {
-modal.remove();
-
-  alert(
-    "HR Reports will include:\n\n" +
-    "• Attendance reports\n" +
-    "• Employee allowance reports\n" +
-    "• Overtime and shortfall reports\n" +
-    "• Advances and deductions\n" +
-    "• Payroll ledger\n" +
-    "• Employee and team performance"
-  );
-};
-}
 /* =========================================================
    SYSTEM SETTINGS
    ========================================================= */
