@@ -1304,6 +1304,42 @@ permissionModal.querySelector(
 permissionModal.remove();
   };
 };
+function updateLoggedInUserHeader() {
+
+const currentUser =
+JSON.parse(
+localStorage.getItem("currentUser") || "null"
+    );
+
+  if (!currentUser) {
+    return;
+  }
+
+const title =
+document.getElementById("dashboardTitle");
+
+const name =
+document.getElementById("dashboardUserName");
+
+const role =
+document.getElementById("dashboardUserRole");
+
+  if (title) {
+title.textContent =
+currentUser.role + " Dashboard";
+  }
+
+  if (name) {
+name.textContent =
+currentUser.fullName;
+  }
+
+  if (role) {
+role.textContent =
+currentUser.role;
+  }
+}
+
 function hasPermission(permissionKey) {
 
 const currentUser =
@@ -9532,6 +9568,7 @@ bestPelletClient[1].toLocaleString() +
    ========================================================= */
 
 document.addEventListener("DOMContentLoaded", function () {
+   updateLoggedInUserHeader();
 
 if (typeof updateDashboardMaterialTotals === "function") {
   updateDashboardMaterialTotals(
