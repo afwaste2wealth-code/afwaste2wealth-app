@@ -523,7 +523,105 @@ font-weight:bold;
 
 document.body.appendChild(screen);
 
-}
+// Handle password creation
+screen.querySelector("#afCreatePasswordButton").onclick = async () => {
+
+const newPassword =
+screen.querySelector("#afNewPassword").value;
+
+const confirmPassword =
+screen.querySelector("#afConfirmPassword").value;
+
+const message =
+screen.querySelector("#afCreatePasswordMessage");
+
+  if (!newPassword || !confirmPassword) {
+
+message.style.color = "#b00020";
+message.textContent =
+      "Please complete both password fields.";
+
+    return;
+  }
+
+  if (newPassword.length< 6) {
+
+message.style.color = "#b00020";
+message.textContent =
+      "Password must contain at least 6 characters.";
+
+    return;
+  }
+
+  if (newPassword !== confirmPassword) {
+
+message.style.color = "#b00020";
+message.textContent =
+      "Passwords do not match.";
+
+    return;
+  }
+
+  try {
+
+const encoder = new TextEncoder();
+
+const data = encoder.encode(newPassword);
+
+const hashBuffer =
+      await crypto.subtle.digest("SHA-256", data);
+
+const hashArray =
+Array.from(new Uint8Array(hashBuffer));
+
+const passwordHash =
+hashArray
+        .map(byte =>byte.toString(16).padStart(2, "0"))
+        .join("");
+
+const employees = getEmployees();
+
+const savedEmployee = employees.find(
+      item =>item.employeeId === employee.employeeId
+    );
+
+    if (!savedEmployee) {
+
+message.style.color = "#b00020";
+message.textContent =
+        "Employee account could not be found.";
+
+      return;
+    }
+
+savedEmployee.passwordHash = passwordHash;
+
+saveEmployees(employees);
+
+message.style.color = "#0b5d3b";
+message.textContent =
+      "Password created successfully.";
+
+setTimeout(() => {
+
+screen.remove();
+
+showAFLoginScreen();
+
+    }, 1000);
+
+  } catch (error) {
+
+console.error("Password creation error:", error);
+
+message.style.color = "#b00020";
+message.textContent =
+      "Unable to create password. Please try again.";
+
+  }
+
+};
+
 
 function showMessage(name) {
 
