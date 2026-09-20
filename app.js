@@ -377,7 +377,7 @@ fullName: employee.fullName,
     role: employee.role
   })
 );
-  
+   updateLoggedInUserHeader();
 
 message.style.color = "#0b5d3b";
 message.textContent =
