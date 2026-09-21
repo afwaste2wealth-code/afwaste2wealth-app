@@ -2461,7 +2461,7 @@ getAFCurrentRole();
 
 
   if (role === "Director") {
-    return true;
+    return true
   }
 
 
@@ -2594,6 +2594,379 @@ function requireAFDeleteAuthority() {
 
 
   return false;
+
+}
+/* =========================================================
+   A&F STAFF & HR ROLE VISIBILITY CONTROLLER
+   ========================================================= */
+
+function applyStaffHRRoleVisibility(modal) {
+
+  if (!modal) {
+    return;
+  }
+
+const currentUser = JSON.parse(
+localStorage.getItem("currentUser") || "null"
+  );
+
+  if (!currentUser || !currentUser.role) {
+    return;
+  }
+
+const role = currentUser.role;
+
+
+  /* -------------------------------------------------------
+     ALL STAFF & HR BUTTONS
+     ------------------------------------------------------- */
+
+const allButtons = [
+    "employeeAccountsHRBtn",
+    "teamsHRBtn",
+    "shiftsHRBtn",
+    "attendanceHRBtn",
+    "allowanceHRBtn",
+    "advancesHRBtn",
+    "payrollHRBtn",
+    "performanceHRBtn",
+    "rolesHRBtn",
+    "portalHRBtn",
+    "documentsHRBtn",
+    "birthdayHRBtn",
+    "hrReportsBtn"
+  ];
+
+
+  /* Hide everything first */
+
+allButtons.forEach(id => {
+
+const button =
+modal.querySelector("#" + id);
+
+    if (button) {
+button.style.display = "none";
+    }
+
+  });
+
+
+  /* -------------------------------------------------------
+     ROLE BUTTON CONFIGURATION
+     ------------------------------------------------------- */
+
+const roleButtons = {
+
+    Director: [
+      "employeeAccountsHRBtn",
+      "teamsHRBtn",
+      "shiftsHRBtn",
+      "attendanceHRBtn",
+      "allowanceHRBtn",
+      "advancesHRBtn",
+      "payrollHRBtn",
+      "performanceHRBtn",
+      "rolesHRBtn",
+      "portalHRBtn",
+      "documentsHRBtn",
+      "birthdayHRBtn",
+      "hrReportsBtn"
+    ],
+
+
+    Manager: [
+      "teamsHRBtn",
+      "shiftsHRBtn",
+      "attendanceHRBtn",
+      "payrollHRBtn",
+      "performanceHRBtn",
+      "hrReportsBtn"
+    ],
+
+
+    HR: [
+      "employeeAccountsHRBtn",
+      "teamsHRBtn",
+      "shiftsHRBtn",
+      "attendanceHRBtn",
+      "allowanceHRBtn",
+      "advancesHRBtn",
+      "payrollHRBtn",
+      "performanceHRBtn",
+      "portalHRBtn",
+      "documentsHRBtn",
+      "birthdayHRBtn",
+      "hrReportsBtn"
+    ],
+
+
+    Secretary: [
+      "employeeAccountsHRBtn",
+      "attendanceHRBtn",
+      "allowanceHRBtn",
+      "advancesHRBtn",
+      "payrollHRBtn",
+      "portalHRBtn",
+      "documentsHRBtn",
+      "birthdayHRBtn",
+      "hrReportsBtn"
+    ],
+
+
+    "Team Leader": [
+      "teamsHRBtn",
+      "shiftsHRBtn",
+      "attendanceHRBtn",
+      "performanceHRBtn",
+      "portalHRBtn"
+    ],
+
+
+    Employee: [
+      "portalHRBtn",
+      "documentsHRBtn"
+    ]
+
+  };
+
+
+const visibleButtons =
+roleButtons[role] || [];
+
+
+  /* -------------------------------------------------------
+     SHOW ONLY AUTHORIZED BUTTONS
+     ------------------------------------------------------- */
+
+visibleButtons.forEach(id => {
+
+const button =
+modal.querySelector("#" + id);
+
+    if (button) {
+button.style.display = "";
+    }
+
+  });
+
+
+  /* -------------------------------------------------------
+     MANAGER — VIEW ONLY
+     ------------------------------------------------------- */
+
+  if (role === "Manager") {
+
+setStaffHRButtonViewOnly(
+      modal,
+      "teamsHRBtn",
+      "View teams and employees"
+    );
+
+setStaffHRButtonViewOnly(
+      modal,
+      "shiftsHRBtn",
+      "View shifts and working hours"
+    );
+
+setStaffHRButtonViewOnly(
+      modal,
+      "attendanceHRBtn",
+      "View employee attendance"
+    );
+
+setStaffHRButtonViewOnly(
+      modal,
+      "payrollHRBtn",
+      "View payroll information"
+    );
+
+setStaffHRButtonViewOnly(
+      modal,
+      "performanceHRBtn",
+      "View employee and team performance"
+    );
+
+setStaffHRButtonViewOnly(
+      modal,
+      "hrReportsBtn",
+      "View HR reports"
+    );
+
+  }
+
+
+  /* -------------------------------------------------------
+     TEAM LEADER — VIEW ONLY
+     ------------------------------------------------------- */
+
+  if (role === "Team Leader") {
+
+setStaffHRButtonViewOnly(
+      modal,
+      "teamsHRBtn",
+      "View my team"
+    );
+
+setStaffHRButtonViewOnly(
+      modal,
+      "shiftsHRBtn",
+      "View shift and working hours"
+    );
+
+setStaffHRButtonViewOnly(
+      modal,
+      "attendanceHRBtn",
+      "View attendance"
+    );
+
+setStaffHRButtonViewOnly(
+      modal,
+      "performanceHRBtn",
+      "View team and employee performance"
+    );
+
+setStaffHRButtonViewOnly(
+      modal,
+      "portalHRBtn",
+      "View employee portal"
+    );
+
+  }
+
+
+  /* -------------------------------------------------------
+     EMPLOYEE — PERSONAL VIEW ONLY
+     ------------------------------------------------------- */
+
+  if (role === "Employee") {
+
+setStaffHRButtonViewOnly(
+      modal,
+      "portalHRBtn",
+      "View my personal information"
+    );
+
+setStaffHRButtonViewOnly(
+      modal,
+      "documentsHRBtn",
+      "View my documents"
+    );
+
+  }
+
+}
+
+
+/* =========================================================
+   CHANGE STAFF & HR BUTTON TEXT TO VIEW ONLY
+   ========================================================= */
+
+function setStaffHRButtonViewOnly(
+  modal,
+buttonId,
+  description
+) {
+
+const button =
+modal.querySelector("#" + buttonId);
+
+  if (!button) {
+    return;
+  }
+
+
+const strong =
+button.querySelector("strong");
+
+const span =
+button.querySelector("span");
+
+
+  if (
+    strong &&
+    !strong.textContent.includes("View Only")
+  ) {
+
+strong.textContent =
+strong.textContent + " — View Only";
+
+  }
+
+
+  if (span) {
+
+span.textContent =
+      description;
+
+  }
+
+
+button.style.background =
+    "#f4f7f5";
+
+button.style.border =
+    "1px solid #dce8e2";
+
+}
+
+
+/* =========================================================
+   CHECK WHETHER STAFF & HR ROLE IS VIEW ONLY
+   ========================================================= */
+
+function isStaffHRViewOnly() {
+
+const currentUser = JSON.parse(
+localStorage.getItem("currentUser") || "null"
+  );
+
+  if (!currentUser) {
+    return false;
+  }
+
+
+  return [
+    "Manager",
+    "Team Leader",
+    "Employee"
+  ].includes(currentUser.role);
+
+}
+
+
+/* =========================================================
+   CHECK WHETHER MANAGER IS VIEWING HR
+   ========================================================= */
+
+function isManagerHRViewOnly() {
+
+const currentUser = JSON.parse(
+localStorage.getItem("currentUser") || "null"
+  );
+
+  return Boolean(
+currentUser&&
+currentUser.role === "Manager"
+  );
+
+}
+
+
+/* =========================================================
+   CHECK WHETHER TEAM LEADER IS VIEWING HR
+   ========================================================= */
+
+function isTeamLeaderViewOnly() {
+
+const currentUser = JSON.parse(
+localStorage.getItem("currentUser") || "null"
+  );
+
+  return Boolean(
+currentUser&&
+currentUser.role === "Team Leader"
+  );
 
 }
 
@@ -2852,7 +3225,12 @@ ${getShiftSettingsSummary()}
 
 document.body.appendChild(modal);
 
-modal.querySelector("#closeSystemSettings").onclick = () => {
+/* Apply Staff & HR visibility according to logged-in role */
+if (typeof applyStaffHRRoleVisibility === "function") {
+applyStaffHRRoleVisibility(modal);
+}
+
+modal.querySelector("#closeStaffHR").onclick = () => {
 modal.remove();
   };
 
