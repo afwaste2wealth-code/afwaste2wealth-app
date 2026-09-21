@@ -515,8 +515,13 @@ dashboard.style.display = "";
 }
 
 /* Refresh logged-in user's dashboard details */
-if (typeof updateLoggedInUserHeader === "function") {
+if (typeofupdateLoggedInUserHeader === "function") {
 updateLoggedInUserHeader();
+}
+
+if (typeofapplyAFRoleDashboard === "function") {
+applyAFRoleDashboard();
+}
 }
 
 }, 500);
@@ -1589,6 +1594,1008 @@ modal.remove();
   );
 };
 }
+/* =========================================================
+   A&F CENTRAL ROLE ACCESS & DASHBOARD CONTROLLER
+   ========================================================= */
+
+const AF_ROLE_ACCESS = {
+
+  Director: {
+
+    sidebar: [
+      "navDashboard",
+      "navMaterialProduction",
+      "navStockInventory",
+      "navSalesCustomers",
+      "navSuppliers",
+      "navExpenses",
+      "navStaffHR",
+      "navReports",
+      "navSystemSettings",
+      "navWashingTarget",
+      "navWashingRecords"
+    ],
+
+    actions: [
+      "actionMaterialIn",
+      "actionWashing",
+      "actionProduction",
+      "actionCheckStock",
+      "actionPlanProduction",
+      "actionDelivery"
+    ],
+
+    subtitle:
+      "Full Company Control & Management Access",
+
+accessText:
+      "Full company access • View • Record • Edit • Delete • Control"
+
+  },
+
+
+  Manager: {
+
+    sidebar: [
+      "navDashboard",
+      "navStaffHR"
+    ],
+
+    actions: [
+      "actionWashing",
+      "actionProduction",
+      "actionCheckStock"
+    ],
+
+    subtitle:
+      "Operations Supervision & Administrative Oversight",
+
+accessText:
+      "Supervisory access • Mainly read-only • Limited operational recording"
+
+  },
+
+
+  HR: {
+
+    sidebar: [
+      "navDashboard",
+      "navStaffHR",
+      "navReports"
+    ],
+
+    actions: [],
+
+    subtitle:
+      "Human Resources & Employee Management",
+
+accessText:
+      "HR access • Employee administration • Attendance • Payroll • HR records"
+
+  },
+
+
+  Secretary: {
+
+    sidebar: [
+      "navDashboard",
+      "navSalesCustomers",
+      "navSuppliers",
+      "navExpenses",
+      "navStaffHR",
+      "navReports"
+    ],
+
+    actions: [],
+
+    subtitle:
+      "Administration, Accounts & Company Records",
+
+accessText:
+      "Administrative access • View & Record • Saved records cannot be edited or deleted"
+
+  },
+
+
+  "Team Leader": {
+
+    sidebar: [
+      "navDashboard",
+      "navStaffHR"
+    ],
+
+    actions: [],
+
+    subtitle:
+      "Team Supervision & Performance",
+
+accessText:
+      "View-only access • Team attendance • Working hours • Team & employee performance"
+
+  },
+
+
+  Employee: {
+
+    sidebar: [
+      "navDashboard"
+    ],
+
+    actions: [],
+
+    subtitle:
+      "Employee Personal Portal",
+
+accessText:
+      "Personal access • View your own employment information"
+
+  }
+
+};
+
+
+/* =========================================================
+   GET CURRENT USER
+   ========================================================= */
+
+function getAFCurrentUser() {
+
+  try {
+
+    return JSON.parse(
+localStorage.getItem("currentUser") || "null"
+    );
+
+  } catch (error) {
+
+console.error(
+      "Unable to read current user:",
+      error
+    );
+
+    return null;
+
+  }
+
+}
+
+
+/* =========================================================
+   GET CURRENT ROLE
+   ========================================================= */
+
+function getAFCurrentRole() {
+
+const currentUser = getAFCurrentUser();
+
+  if (
+    !currentUser ||
+    !currentUser.role
+  ) {
+
+    return null;
+
+  }
+
+  return currentUser.role;
+
+}
+
+
+/* =========================================================
+   CHECK ROLE
+   ========================================================= */
+
+function isAFRole() {
+
+const allowedRoles =
+Array.from(arguments);
+
+const role =
+getAFCurrentRole();
+
+  return allowedRoles.includes(role);
+
+}
+
+
+/* =========================================================
+   RESET DASHBOARD VISIBILITY
+   ========================================================= */
+
+function resetAFRoleDashboard() {
+
+const sidebarIds = [
+    "navDashboard",
+    "navMaterialProduction",
+    "navStockInventory",
+    "navSalesCustomers",
+    "navSuppliers",
+    "navExpenses",
+    "navStaffHR",
+    "navReports",
+    "navSystemSettings",
+    "navWashingTarget",
+    "navWashingRecords"
+  ];
+
+sidebarIds.forEach(id => {
+
+const element =
+document.getElementById(id);
+
+    if (element) {
+element.style.display = "none";
+    }
+
+  });
+
+
+const actionIds = [
+    "actionMaterialIn",
+    "actionWashing",
+    "actionProduction",
+    "actionCheckStock",
+    "actionPlanProduction",
+    "actionDelivery"
+  ];
+
+actionIds.forEach(id => {
+
+const element =
+document.getElementById(id);
+
+    if (element) {
+element.style.display = "none";
+    }
+
+  });
+
+
+const factoryKpis =
+document.getElementById("factoryKpis");
+
+const dashboardGrid =
+document.getElementById("factoryDashboardGrid");
+
+const operations =
+document.getElementById("operationsOverview");
+
+const quickActions =
+document.getElementById("quickActionsCard");
+
+const integration =
+document.getElementById("systemIntegrationCard");
+
+
+  if (factoryKpis) {
+factoryKpis.style.display = "";
+  }
+
+  if (dashboardGrid) {
+dashboardGrid.style.display = "";
+  }
+
+  if (operations) {
+operations.style.display = "";
+  }
+
+  if (quickActions) {
+quickActions.style.display = "";
+  }
+
+  if (integration) {
+integration.style.display = "";
+  }
+
+}
+
+
+/* =========================================================
+   APPLY ROLE DASHBOARD
+   ========================================================= */
+
+function applyAFRoleDashboard() {
+
+const currentUser =
+getAFCurrentUser();
+
+  if (
+    !currentUser ||
+    !currentUser.role
+  ) {
+
+    return;
+
+  }
+
+
+const role =
+currentUser.role;
+
+const roleAccess =
+    AF_ROLE_ACCESS[role];
+
+
+  if (!roleAccess) {
+
+    alert(
+      "This employee account does not have a recognised system role."
+    );
+
+    return;
+
+  }
+
+
+resetAFRoleDashboard();
+
+
+  /* ---------- SIDEBAR ---------- */
+
+roleAccess.sidebar.forEach(id => {
+
+const element =
+document.getElementById(id);
+
+    if (element) {
+element.style.display = "";
+    }
+
+  });
+
+
+  /* ---------- QUICK ACTIONS ---------- */
+
+roleAccess.actions.forEach(id => {
+
+const element =
+document.getElementById(id);
+
+    if (element) {
+element.style.display = "";
+    }
+
+  });
+
+
+  /* ---------- TITLE ---------- */
+
+const title =
+document.getElementById("dashboardTitle");
+
+  if (title) {
+
+title.textContent =
+      role + " Dashboard";
+
+  }
+
+
+  /* ---------- SUBTITLE ---------- */
+
+const subtitle =
+document.getElementById(
+      "dashboardSubtitle"
+    );
+
+  if (subtitle) {
+
+subtitle.textContent =
+roleAccess.subtitle;
+
+  }
+
+
+  /* ---------- ACCESS NOTICE ---------- */
+
+const notice =
+document.getElementById(
+      "roleAccessNotice"
+    );
+
+  if (notice) {
+
+notice.style.display = "block";
+
+notice.textContent =
+roleAccess.accessText;
+
+  }
+
+
+  /* =======================================================
+     DIRECTOR
+     ======================================================= */
+
+  if (role === "Director") {
+
+    return;
+
+  }
+
+
+  /* =======================================================
+     MANAGER
+     Keep Operations Overview.
+     Show only approved operational actions.
+     ======================================================= */
+
+  if (role === "Manager") {
+
+const factoryKpis =
+document.getElementById(
+        "factoryKpis"
+      );
+
+const integration =
+document.getElementById(
+        "systemIntegrationCard"
+      );
+
+    if (factoryKpis) {
+factoryKpis.style.display = "none";
+    }
+
+    if (integration) {
+integration.style.display = "none";
+    }
+
+    return;
+
+  }
+
+
+  /* =======================================================
+     HR
+     Role-specific HR dashboard comes in next stage.
+     Hide factory production dashboard for now.
+     ======================================================= */
+
+  if (role === "HR") {
+
+hideAFFactoryDashboard();
+
+    return;
+
+  }
+
+
+  /* =======================================================
+     SECRETARY
+     Secretary records administration/accounts.
+     Editing/deleting saved records will remain Director-only.
+     ======================================================= */
+
+  if (role === "Secretary") {
+
+hideAFFactoryDashboard();
+
+    return;
+
+  }
+
+
+  /* =======================================================
+     TEAM LEADER
+     VIEW ONLY.
+     Performance dashboard comes in next stage.
+     ======================================================= */
+
+  if (role === "Team Leader") {
+
+hideAFFactoryDashboard();
+
+    return;
+
+  }
+
+
+  /* =======================================================
+     EMPLOYEE
+     Personal dashboard comes in next stage.
+     ======================================================= */
+
+  if (role === "Employee") {
+
+hideAFFactoryDashboard();
+
+  }
+
+}
+
+
+/* =========================================================
+   HIDE FACTORY DASHBOARD CONTENT
+   ========================================================= */
+
+function hideAFFactoryDashboard() {
+
+const ids = [
+    "factoryKpis",
+    "factoryDashboardGrid",
+    "systemIntegrationCard"
+  ];
+
+ids.forEach(id => {
+
+const element =
+document.getElementById(id);
+
+    if (element) {
+element.style.display = "none";
+    }
+
+  });
+
+}
+
+
+/* =========================================================
+   CHECK MAIN MODULE ACCESS
+   ========================================================= */
+
+function canAFRoleAccessModule(moduleName) {
+
+const role =
+getAFCurrentRole();
+
+  if (!role) {
+    return false;
+  }
+
+
+const moduleAccess = {
+
+materialProduction: [
+      "Director"
+    ],
+
+stockInventory: [
+      "Director"
+    ],
+
+salesCustomers: [
+      "Director",
+      "Secretary"
+    ],
+
+    suppliers: [
+      "Director",
+      "Secretary"
+    ],
+
+    expenses: [
+      "Director",
+      "Secretary"
+    ],
+
+staffHR: [
+      "Director",
+      "Manager",
+      "HR",
+      "Secretary",
+      "Team Leader"
+    ],
+
+    reports: [
+      "Director",
+      "HR",
+      "Secretary"
+    ],
+
+systemSettings: [
+      "Director"
+    ],
+
+washingTarget: [
+      "Director"
+    ],
+
+washingRecords: [
+      "Director"
+    ]
+
+  };
+
+
+const allowedRoles =
+moduleAccess[moduleName] || [];
+
+
+  return allowedRoles.includes(role);
+
+}
+
+
+/* =========================================================
+   OPEN MAIN MODULE SAFELY
+   ========================================================= */
+
+function openRoleModule(moduleName) {
+
+  if (
+    !canAFRoleAccessModule(moduleName)
+  ) {
+
+const role =
+getAFCurrentRole() ||
+      "This user";
+
+    alert(
+      "Access Denied\n\n" +
+      role +
+      " does not have access to this module."
+    );
+
+    return;
+
+  }
+
+
+  switch (moduleName) {
+
+    case "materialProduction":
+
+showMessage(
+        "Material & Production"
+      );
+
+      break;
+
+
+    case "stockInventory":
+
+showMessage(
+        "Stock & Inventory"
+      );
+
+      break;
+
+
+    case "salesCustomers":
+
+clientRegistration();
+
+      break;
+
+
+    case "suppliers":
+
+supplierManagement();
+
+      break;
+
+
+    case "expenses":
+
+showMessage(
+        "Expenses"
+      );
+
+      break;
+
+
+    case "staffHR":
+
+staffHR();
+
+      break;
+
+
+    case "reports":
+
+monthlyClientSummary();
+
+      break;
+
+
+    case "systemSettings":
+
+systemSettings();
+
+      break;
+
+
+    case "washingTarget":
+
+setWashingTarget();
+
+      break;
+
+
+    case "washingRecords":
+
+viewWashingRecords();
+
+      break;
+
+  }
+
+}
+
+
+/* =========================================================
+   CHECK QUICK ACTION ACCESS
+   ========================================================= */
+
+function canAFRoleRunAction(actionName) {
+
+const role =
+getAFCurrentRole();
+
+  if (!role) {
+    return false;
+  }
+
+
+const actionAccess = {
+
+recordMaterialIn: [
+      "Director"
+    ],
+
+recordWashing: [
+      "Director",
+      "Manager"
+    ],
+
+recordProduction: [
+      "Director",
+      "Manager"
+    ],
+
+checkStock: [
+      "Director",
+      "Manager"
+    ],
+
+planProduction: [
+      "Director"
+    ],
+
+recordDelivery: [
+      "Director"
+    ]
+
+  };
+
+
+const allowedRoles =
+actionAccess[actionName] || [];
+
+
+  return allowedRoles.includes(role);
+
+}
+
+
+/* =========================================================
+   RUN QUICK ACTION SAFELY
+   ========================================================= */
+
+function runRoleAction(actionName) {
+
+  if (
+    !canAFRoleRunAction(actionName)
+  ) {
+
+const role =
+getAFCurrentRole() ||
+      "This user";
+
+    alert(
+      "Access Denied\n\n" +
+      role +
+      " is not authorised to perform this action."
+    );
+
+    return;
+
+  }
+
+
+  switch (actionName) {
+
+    case "recordMaterialIn":
+
+recordMaterialIn();
+
+      break;
+
+
+    case "recordWashing":
+
+recordWashing();
+
+      break;
+
+
+    case "recordProduction":
+
+recordProduction();
+
+      break;
+
+
+    case "checkStock":
+
+showMessage(
+        "Check Stock"
+      );
+
+      break;
+
+
+    case "planProduction":
+
+showMessage(
+        "Plan Production"
+      );
+
+      break;
+
+
+    case "recordDelivery":
+
+showMessage(
+        "Record Delivery"
+      );
+
+      break;
+
+  }
+
+}
+
+
+/* =========================================================
+   RECORD / EDIT / DELETE AUTHORITY
+   ========================================================= */
+
+function canAFRecord(recordArea) {
+
+const role =
+getAFCurrentRole();
+
+
+  if (role === "Director") {
+    return true;
+  }
+
+
+  if (role === "Secretary") {
+
+const secretaryRecordAreas = [
+      "accounts",
+      "expenses",
+      "sales",
+      "customers",
+      "suppliers",
+      "attendance",
+      "allowance",
+      "advances",
+      "payroll",
+      "documents",
+      "administration",
+      "marketing"
+    ];
+
+    return secretaryRecordAreas.includes(
+recordArea
+    );
+
+  }
+
+
+  if (role === "HR") {
+
+const hrRecordAreas = [
+      "employees",
+      "teams",
+      "attendance",
+      "allowance",
+      "advances",
+      "payroll",
+      "documents",
+      "hr"
+    ];
+
+    return hrRecordAreas.includes(
+recordArea
+    );
+
+  }
+
+
+  if (role === "Manager") {
+
+const managerRecordAreas = [
+      "washing",
+      "production"
+    ];
+
+    return managerRecordAreas.includes(
+recordArea
+    );
+
+  }
+
+
+  return false;
+
+}
+
+
+/* =========================================================
+   EDIT AUTHORITY
+   Director controls saved-record editing.
+   ========================================================= */
+
+function canAFEditSavedRecord() {
+
+  return getAFCurrentRole() ===
+    "Director";
+
+}
+
+
+/* =========================================================
+   DELETE AUTHORITY
+   Director only.
+   ========================================================= */
+
+function canAFDeleteSavedRecord() {
+
+  return getAFCurrentRole() ===
+    "Director";
+
+}
+
+
+/* =========================================================
+   REQUIRE EDIT AUTHORITY
+   ========================================================= */
+
+function requireAFEditAuthority() {
+
+  if (canAFEditSavedRecord()) {
+    return true;
+  }
+
+
+  alert(
+    "Access Denied\n\n" +
+    "Only the Director can edit saved records."
+  );
+
+
+  return false;
+
+}
+
+
+/* =========================================================
+   REQUIRE DELETE AUTHORITY
+   ========================================================= */
+
+function requireAFDeleteAuthority() {
+
+  if (canAFDeleteSavedRecord()) {
+    return true;
+  }
+
+
+  alert(
+    "Access Denied\n\n" +
+    "Only the Director can delete saved records."
+  );
+
+
+  return false;
+
+}
+
 function updateLoggedInUserHeader() {
 const date = document.getElementById("dashboardDate");
    if (date) {
