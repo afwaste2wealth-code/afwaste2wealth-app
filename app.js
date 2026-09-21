@@ -503,28 +503,29 @@ setTimeout(() => {
 const loginScreen =
 document.getElementById("afLoginScreen");
 
-    if (loginScreen) {
+  if (loginScreen) {
 loginScreen.remove();
-    }
+  }
 
 const dashboard =
 document.getElementById("mainApplication");
 
-if (dashboard) {
+  if (dashboard) {
 dashboard.style.display = "";
-}
+  }
 
-/* Refresh logged-in user's dashboard details */
-if (typeofupdateLoggedInUserHeader === "function") {
+  /* Refresh logged-in user's dashboard details */
+  if (typeof updateLoggedInUserHeader === "function") {
 updateLoggedInUserHeader();
-}
+  }
 
-if (typeofapplyAFRoleDashboard === "function") {
+  /* Apply dashboard access according to employee role */
+  if (typeof applyAFRoleDashboard === "function") {
 applyAFRoleDashboard();
-}
-}
+  }
 
 }, 500);
+
 
 } catch (error) {
 
