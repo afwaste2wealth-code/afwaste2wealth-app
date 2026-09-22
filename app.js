@@ -17847,7 +17847,7 @@ document.getElementById("productionStatus").value;
     alert("Please enter KG taken into production.");
     return;
   }
-  if (productionInputkg > productionAvailablekg) {
+  if (productionInputKg > productionAvailableKg) {
     alert("KG taken into production cannot be greater than Washed kavera Available.");
     return;
   }
