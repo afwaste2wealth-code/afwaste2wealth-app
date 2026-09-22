@@ -2684,10 +2684,7 @@ const roleButtons = {
       "teamsHRBtn",
       "shiftsHRBtn",
       "attendanceHRBtn",
-      "payrollHRBtn",
-      "performanceHRBtn",
-      "hrReportsBtn"
-    ],
+      ],
 
 
     HR: [
@@ -2778,24 +2775,6 @@ setStaffHRButtonViewOnly(
       modal,
       "attendanceHRBtn",
       "View employee attendance"
-    );
-
-setStaffHRButtonViewOnly(
-      modal,
-      "payrollHRBtn",
-      "View payroll information"
-    );
-
-setStaffHRButtonViewOnly(
-      modal,
-      "performanceHRBtn",
-      "View employee and team performance"
-    );
-
-setStaffHRButtonViewOnly(
-      modal,
-      "hrReportsBtn",
-      "View HR reports"
     );
 
   }
