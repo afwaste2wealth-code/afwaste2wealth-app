@@ -3081,6 +3081,9 @@ fullName:
 employee.fullName ||
           "Employee",
 
+passportPhoto:
+employee.passportPhoto || "",
+
 dateOfBirth:
 employee.dateOfBirth,
 
@@ -3208,50 +3211,102 @@ isToday
 
           return `
 <div style="
-              padding:10px;
-              margin-top:8px;
-              border:1px solid ${border};
-              border-radius:9px;
-              background:${background};
-            ">
+  padding:10px;
+  margin-top:8px;
+  border:1px solid ${border};
+  border-radius:9px;
+  background:${background};
+">
 
 <div style="
-                font-size:13px;
-font-weight:bold;
-                color:#173027;
-                line-height:1.4;
-              ">
-                ${afBirthdayEscape(
+display:flex;
+align-items:center;
+  gap:10px;
+">
+
+<div style="
+  width:48px;
+  height:48px;
+  min-width:48px;
+  border-radius:50%;
+overflow:hidden;
+  background:#e9f1ed;
+  border:2px solid #d8e7df;
+display:flex;
+align-items:center;
+justify-content:center;
+  color:#6b7d75;
+  font-size:20px;
+">
+
+${
+birthday.passportPhoto
+    ? `
+<img
+src="${birthday.passportPhoto}"
+        alt="${afBirthdayEscape(
 birthday.fullName
-                )}
+        )}"
+        style="
+          width:100%;
+          height:100%;
+object-fit:cover;
+        "
+>
+    `
+    : "👤"
+}
+
+</div>
+
+<div style="
+  flex:1;
+  min-width:0;
+">
+
+<div style="
+  font-size:13px;
+font-weight:bold;
+  color:#173027;
+  line-height:1.4;
+">
+  ${afBirthdayEscape(
+birthday.fullName
+  )}
 </div>
 
 <div style="
 display:flex;
 justify-content:space-between;
-                gap:8px;
-                margin-top:5px;
-                font-size:11px;
-                color:#6b7d75;
-              ">
+align-items:center;
+flex-wrap:wrap;
+  gap:5px 8px;
+  margin-top:5px;
+  font-size:11px;
+  color:#6b7d75;
+">
 
 <span>
-                  ${afBirthdayDateText(
+  ${afBirthdayDateText(
 birthday.nextBirthday
-                  )}
+  )}
 </span>
 
 <strong style="
-                  color:${
+  color:${
 isToday
-                      ? "#a36b00"
-                      : "#0b5d3b"
-                  };
-                ">
-                  ${afBirthdayRemainingText(
+      ? "#a36b00"
+      : "#0b5d3b"
+  };
+">
+  ${afBirthdayRemainingText(
 birthday.daysRemaining
-                  )}
+  )}
 </strong>
+
+</div>
+
+</div>
 
 </div>
 
