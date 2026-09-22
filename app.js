@@ -1039,7 +1039,7 @@ grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
 </div>
 
 </div>
-  `;
+  `; 
 
 document.body.appendChild(modal);
 
