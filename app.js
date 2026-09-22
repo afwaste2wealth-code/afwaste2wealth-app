@@ -1043,9 +1043,14 @@ grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
 
 document.body.appendChild(modal);
 
+/* Apply Staff & HR visibility according to logged-in role */
+if (typeof applyStaffHRRoleVisibility === "function") {
+applyStaffHRRoleVisibility(modal);
+}
+
 modal.querySelector("#closeStaffHR").onclick = () => {
-modal.remove();
-  };
+   modal.remove();
+}
 
 modal.querySelector("#employeeAccountsHRBtn").onclick = () => {
 
