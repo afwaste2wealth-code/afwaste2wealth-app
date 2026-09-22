@@ -753,6 +753,61 @@ onclick="runRoleAction('recordDelivery')"
 
 </div>
 
+<!-- ==========================================
+     DASHBOARD BIRTHDAY REMINDERS
+     ========================================== -->
+
+<section
+  class="card"
+  id="dashboardBirthdayCard"
+  style="margin-top:16px;display:none;"
+>
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:flex-start;
+  gap:15px;
+  margin-bottom:16px;
+">
+
+<div>
+<div class="title" style="margin-bottom:4px;">
+🎂 Upcoming Birthdays
+</div>
+
+<div class="sub">
+    Employee birthdays in the next 4 weeks
+</div>
+</div>
+
+<div
+  id="dashboardBirthdayCount"
+  style="
+    background:#eef8f2;
+    color:#0b5d3b;
+    padding:7px 11px;
+    border-radius:20px;
+    font-size:12px;
+font-weight:bold;
+white-space:nowrap;
+  "
+>
+  0 upcoming
+</div>
+
+</div>
+
+<div
+  id="dashboardBirthdayWeeks"
+  style="
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
+    gap:12px;
+  "
+></div>
+
+</section>
 
 <section
   class="card"
