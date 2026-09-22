@@ -6197,6 +6197,1521 @@ summary.netOvertimeMinutes /
     );
   };
 }
+/* =========================================================
+   MANAGER READ-ONLY STAFF & HR VIEWS
+   Teams • Shifts • Attendance
+   ========================================================= */
+
+/*
+ * Keep references to the existing working functions.
+ * Director, HR and other authorised roles continue using
+ * the original screens exactly as before.
+ */
+const afOriginalManageTeams = manageTeams;
+const afOriginalManageShiftSettings = manageShiftSettings;
+const afOriginalRecordAttendance = recordAttendance;
+
+
+/* =========================================================
+   GENERAL HELPERS
+   ========================================================= */
+
+function afManagerIsLoggedIn() {
+const user =
+typeof getAFCurrentUser === "function"
+      ? getAFCurrentUser()
+      : JSON.parse(
+localStorage.getItem("currentUser") || "null"
+        );
+
+  return !!(
+    user &&
+user.role === "Manager"
+  );
+}
+
+
+function afManagerEscape(value) {
+  if (
+typeof escapeSettingsText === "function"
+  ) {
+    return escapeSettingsText(
+      String(value ?? "")
+    );
+  }
+
+const div =
+document.createElement("div");
+
+div.textContent =
+    String(value ?? "");
+
+  return div.innerHTML;
+}
+
+
+function afManagerFormatMinutes(minutes) {
+const total =
+Math.max(
+      Number(minutes || 0),
+      0
+    );
+
+const hours =
+Math.floor(total / 60);
+
+const mins =
+Math.round(total % 60);
+
+  return (
+    hours +
+    "h " +
+mins +
+    "m"
+  );
+}
+
+
+function afManagerFormatTime(time) {
+  if (!time) {
+    return "—";
+  }
+
+const parts =
+    String(time).split(":");
+
+  if (parts.length< 2) {
+    return afManagerEscape(time);
+  }
+
+  let hour =
+    Number(parts[0]);
+
+const minute =
+    parts[1];
+
+const period =
+    hour >= 12 ? "PM" : "AM";
+
+  hour =
+    hour % 12;
+
+  if (hour === 0) {
+    hour = 12;
+  }
+
+  return (
+    hour +
+    ":" +
+    minute +
+    " " +
+    period
+  );
+}
+
+
+function afManagerPercent(
+  value,
+  total
+) {
+const number =
+    Number(value || 0);
+
+const denominator =
+    Number(total || 0);
+
+  if (denominator <= 0) {
+    return "0.0%";
+  }
+
+  return (
+    (
+      number /
+      denominator *
+      100
+    ).toFixed(1) +
+    "%"
+  );
+}
+
+
+function afManagerDateString(date) {
+const year =
+date.getFullYear();
+
+const month =
+    String(
+date.getMonth() + 1
+    ).padStart(2, "0");
+
+const day =
+    String(
+date.getDate()
+    ).padStart(2, "0");
+
+  return (
+    year +
+    "-" +
+    month +
+    "-" +
+    day
+  );
+}
+
+
+function afManagerReadableDate(
+dateString
+) {
+  if (!dateString) {
+    return "—";
+  }
+
+const date =
+    new Date(
+dateString +
+      "T00:00:00"
+    );
+
+  if (
+Number.isNaN(
+date.getTime()
+    )
+  ) {
+    return afManagerEscape(
+dateString
+    );
+  }
+
+  return date.toLocaleDateString(
+    undefined,
+    {
+      day: "numeric",
+      month: "short",
+      year: "numeric"
+    }
+  );
+}
+
+
+function afManagerCreateModal(
+  title,
+  subtitle
+) {
+const modal =
+document.createElement("div");
+
+modal.style.cssText = `
+position:fixed;
+    inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+align-items:center;
+justify-content:center;
+    z-index:100000;
+font-family:Arial,sans-serif;
+    padding:10px;
+  `;
+
+modal.innerHTML = `
+<div style="
+background:white;
+      width:950px;
+      max-width:97%;
+      max-height:94vh;
+overflow:auto;
+      border-radius:14px;
+      padding:24px;
+      box-shadow:0 10px 40px rgba(0,0,0,.3);
+    ">
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:flex-start;
+        gap:15px;
+        margin-bottom:18px;
+      ">
+
+<div>
+<h2 style="
+            margin:0;
+            color:#0b5d3b;
+          ">
+            ${afManagerEscape(title)}
+</h2>
+
+<div style="
+            margin-top:6px;
+            color:#666;
+            font-size:13px;
+          ">
+            ${afManagerEscape(subtitle)}
+</div>
+
+<div style="
+display:inline-block;
+            margin-top:8px;
+            padding:5px 9px;
+            border-radius:20px;
+            background:#eef8f2;
+            color:#0b5d3b;
+            font-size:12px;
+font-weight:bold;
+          ">
+            MANAGER • VIEW ONLY
+</div>
+</div>
+
+<button
+          class="afManagerClose"
+          style="
+            border:0;
+            background:#eee;
+            padding:9px 13px;
+            border-radius:7px;
+cursor:pointer;
+font-weight:bold;
+          "
+>
+✕ Close
+</button>
+
+</div>
+
+<div class="afManagerContent"></div>
+
+</div>
+  `;
+
+document.body.appendChild(
+    modal
+  );
+
+  modal
+    .querySelector(
+      ".afManagerClose"
+    )
+    .onclick = () => {
+modal.remove();
+    };
+
+  return modal;
+}
+
+
+/* =========================================================
+   MANAGER — TEAMS & TEAM LEADERS
+   VIEW ONLY
+   ========================================================= */
+
+function viewManagerTeamsReadOnly() {
+
+const teams =
+typeof getTeams === "function"
+      ? getTeams()
+      : [];
+
+const employees =
+typeof getEmployees === "function"
+      ? getEmployees()
+      : [];
+
+const modal =
+afManagerCreateModal(
+      "Teams & Team Leaders",
+      "View teams, Team Leaders, members and assigned shifts."
+    );
+
+const content =
+modal.querySelector(
+      ".afManagerContent"
+    );
+
+  if (
+    !Array.isArray(teams) ||
+teams.length === 0
+  ) {
+
+content.innerHTML = `
+<div style="
+        padding:18px;
+        background:#f5f5f5;
+        border-radius:9px;
+        color:#666;
+      ">
+        No teams have been created yet.
+</div>
+    `;
+
+    return;
+  }
+
+
+  function employeeName(
+employeeId
+  ) {
+
+const employee =
+employees.find(
+        item =>
+          String(
+item.employeeId
+          ) ===
+          String(employeeId)
+      );
+
+    return employee
+      ? employee.fullName
+      : employeeId;
+  }
+
+
+content.innerHTML =
+teams.map(team => {
+
+const memberIds =
+Array.isArray(
+team.memberEmployeeIds
+        )
+          ? team.memberEmployeeIds
+          : [];
+
+const memberNames =
+memberIds.length
+          ? memberIds
+              .map(employeeName)
+              .filter(Boolean)
+          : (
+Array.isArray(
+team.members
+              )
+                ? team.members
+                : []
+            );
+
+const leaderName =
+team.leader ||
+employeeName(
+team.leaderEmployeeId
+        ) ||
+        "Not assigned";
+
+      return `
+<div style="
+          border:1px solid #dfe5e1;
+          border-radius:11px;
+          padding:16px;
+          margin-bottom:12px;
+          background:#fff;
+        ">
+
+<div style="
+display:flex;
+justify-content:space-between;
+            gap:15px;
+align-items:flex-start;
+          ">
+
+<div style="flex:1;">
+
+<strong style="
+                color:#0b5d3b;
+                font-size:18px;
+              ">
+                ${afManagerEscape(
+team.name ||
+                  "Unnamed Team"
+                )}
+</strong>
+
+<div style="
+                margin-top:10px;
+                line-height:1.8;
+                font-size:14px;
+              ">
+
+<div>
+<strong>
+                    Team Leader:
+</strong>
+                  ${afManagerEscape(
+leaderName
+                  )}
+</div>
+
+<div>
+<strong>
+                    Assigned Shift:
+</strong>
+                  ${afManagerEscape(
+team.shiftName ||
+                    "Not assigned"
+                  )}
+</div>
+
+<div>
+<strong>
+                    Members:
+</strong>
+                  ${
+memberNames.length
+                      ? memberNames
+                          .map(
+                            name =>
+afManagerEscape(
+                                name
+                              )
+                          )
+                          .join(", ")
+                      : "No members assigned"
+                  }
+</div>
+
+<div>
+<strong>
+                    Number of Members:
+</strong>
+                  ${memberNames.length}
+</div>
+
+</div>
+</div>
+
+<span style="
+              padding:6px 10px;
+              border-radius:20px;
+              background:#eef8f2;
+              color:#0b5d3b;
+              font-size:12px;
+font-weight:bold;
+            ">
+              ${afManagerEscape(
+                String(
+team.status ||
+                  "active"
+                ).toUpperCase()
+              )}
+</span>
+
+</div>
+
+</div>
+      `;
+
+    }).join("");
+}
+
+
+/* =========================================================
+   MANAGER — SHIFT & WORKING HOURS
+   VIEW ONLY
+   ========================================================= */
+
+function viewManagerShiftsReadOnly() {
+
+const shifts =
+typeof getShiftSettings ===
+      "function"
+      ? getShiftSettings()
+      : [];
+
+const modal =
+afManagerCreateModal(
+      "Shift & Working Hours",
+      "View official shifts and working hours. Manager cannot change shift settings."
+    );
+
+const content =
+modal.querySelector(
+      ".afManagerContent"
+    );
+
+  if (
+    !Array.isArray(shifts) ||
+shifts.length === 0
+  ) {
+
+content.innerHTML = `
+<div style="
+        padding:18px;
+        background:#f5f5f5;
+        border-radius:9px;
+        color:#666;
+      ">
+        No working shifts have been configured.
+</div>
+    `;
+
+    return;
+  }
+
+
+content.innerHTML =
+shifts.map(shift => `
+<div style="
+        border:1px solid #dfe5e1;
+        border-radius:11px;
+        padding:16px;
+        margin-bottom:12px;
+      ">
+
+<div style="
+display:flex;
+justify-content:space-between;
+          gap:15px;
+align-items:flex-start;
+        ">
+
+<div>
+
+<strong style="
+              color:#0b5d3b;
+              font-size:18px;
+            ">
+              ${afManagerEscape(
+shift.name ||
+                "Unnamed Shift"
+              )}
+</strong>
+
+<div style="
+              margin-top:10px;
+              line-height:1.9;
+              font-size:14px;
+            ">
+
+<div>
+<strong>
+                  Start Time:
+</strong>
+                ${afManagerFormatTime(
+shift.startTime
+                )}
+</div>
+
+<div>
+<strong>
+                  End Time:
+</strong>
+                ${afManagerFormatTime(
+shift.endTime
+                )}
+</div>
+
+<div>
+<strong>
+                  Break:
+</strong>
+                ${Number(
+shift.breakMinutes || 0
+                )}
+                minutes
+</div>
+
+<div>
+<strong>
+                  Normal Working Hours:
+</strong>
+                ${Number(
+shift.normalHours || 0
+                ).toFixed(2)}
+                hours
+</div>
+
+<div>
+<strong>
+                  Grace Period:
+</strong>
+                ${Number(
+shift.graceMinutes || 0
+                )}
+                minutes
+</div>
+
+</div>
+
+</div>
+
+<span style="
+            padding:6px 10px;
+            border-radius:20px;
+            background:#eef8f2;
+            color:#0b5d3b;
+            font-size:12px;
+font-weight:bold;
+          ">
+            ${afManagerEscape(
+              String(
+shift.status ||
+                "active"
+              ).toUpperCase()
+            )}
+</span>
+
+</div>
+
+</div>
+    `).join("");
+}
+
+
+/* =========================================================
+   MANAGER — ATTENDANCE
+   DAILY • WEEKLY • MONTHLY
+   VIEW ONLY + PERCENTAGES
+   ========================================================= */
+
+function viewManagerAttendanceReadOnly() {
+
+const modal =
+afManagerCreateModal(
+      "Employee Attendance",
+      "Daily, weekly and monthly attendance with figures and percentages."
+    );
+
+const content =
+modal.querySelector(
+      ".afManagerContent"
+    );
+
+const today =
+afManagerDateString(
+      new Date()
+    );
+
+
+content.innerHTML = `
+
+<div style="
+display:flex;
+flex-wrap:wrap;
+      gap:10px;
+      margin-bottom:16px;
+    ">
+
+<button
+        data-attendance-view="daily"
+        class="afAttendancePeriodBtn"
+        style="
+          padding:10px 18px;
+          border:0;
+          border-radius:8px;
+cursor:pointer;
+font-weight:bold;
+        "
+>
+        Daily
+</button>
+
+<button
+        data-attendance-view="weekly"
+        class="afAttendancePeriodBtn"
+        style="
+          padding:10px 18px;
+          border:0;
+          border-radius:8px;
+cursor:pointer;
+font-weight:bold;
+        "
+>
+        Weekly
+</button>
+
+<button
+        data-attendance-view="monthly"
+        class="afAttendancePeriodBtn"
+        style="
+          padding:10px 18px;
+          border:0;
+          border-radius:8px;
+cursor:pointer;
+font-weight:bold;
+        "
+>
+        Monthly
+</button>
+
+</div>
+
+
+<div style="
+      background:#f7f9f8;
+      border-radius:10px;
+      padding:14px;
+      margin-bottom:16px;
+    ">
+
+<label style="
+font-weight:bold;
+      ">
+        Select Date
+</label>
+
+<input
+        id="afManagerAttendanceDate"
+        type="date"
+        value="${today}"
+        style="
+          width:100%;
+box-sizing:border-box;
+          margin-top:7px;
+          padding:10px;
+          border:1px solid #ccc;
+          border-radius:7px;
+        "
+>
+
+<div
+        id="afAttendancePeriodDescription"
+        style="
+          margin-top:8px;
+          color:#666;
+          font-size:13px;
+        "
+></div>
+
+</div>
+
+
+<div
+      id="afAttendanceSummaryCards"
+      style="
+display:grid;
+        grid-template-columns:
+          repeat(auto-fit,minmax(145px,1fr));
+        gap:10px;
+        margin-bottom:18px;
+      "
+></div>
+
+
+<div style="
+      overflow-x:auto;
+      border:1px solid #e1e5e2;
+      border-radius:10px;
+    ">
+
+<table style="
+        width:100%;
+border-collapse:collapse;
+        min-width:900px;
+        font-size:13px;
+      ">
+
+<thead>
+<tr style="
+            background:#0b5d3b;
+color:white;
+          ">
+<th style="padding:10px;text-align:left;">
+              Date
+</th>
+<th style="padding:10px;text-align:left;">
+              Employee
+</th>
+<th style="padding:10px;text-align:left;">
+              Team
+</th>
+<th style="padding:10px;text-align:left;">
+              Shift
+</th>
+<th style="padding:10px;text-align:left;">
+              Status
+</th>
+<th style="padding:10px;text-align:left;">
+              Time In
+</th>
+<th style="padding:10px;text-align:left;">
+              Time Out
+</th>
+<th style="padding:10px;text-align:left;">
+              Worked
+</th>
+<th style="padding:10px;text-align:left;">
+              Late
+</th>
+<th style="padding:10px;text-align:left;">
+              Shortfall
+</th>
+<th style="padding:10px;text-align:left;">
+              Overtime
+</th>
+</tr>
+</thead>
+
+<tbody
+          id="afManagerAttendanceRows"
+></tbody>
+
+</table>
+
+</div>
+
+  `;
+
+
+  let currentView =
+    "daily";
+
+
+const dateInput =
+content.querySelector(
+      "#afManagerAttendanceDate"
+    );
+
+const description =
+content.querySelector(
+      "#afAttendancePeriodDescription"
+    );
+
+const cards =
+content.querySelector(
+      "#afAttendanceSummaryCards"
+    );
+
+const rows =
+content.querySelector(
+      "#afManagerAttendanceRows"
+    );
+
+
+  function getSelectedRange() {
+
+const selected =
+      new Date(
+dateInput.value +
+        "T00:00:00"
+      );
+
+    let start =
+      new Date(selected);
+
+    let end =
+      new Date(selected);
+
+
+    if (
+currentView === "weekly"
+    ) {
+
+const day =
+start.getDay();
+
+const difference =
+        day === 0
+          ? -6
+          : 1 - day;
+
+start.setDate(
+start.getDate() +
+        difference
+      );
+
+      end =
+        new Date(start);
+
+end.setDate(
+start.getDate() + 6
+      );
+    }
+
+
+    if (
+currentView === "monthly"
+    ) {
+
+      start =
+        new Date(
+selected.getFullYear(),
+selected.getMonth(),
+          1
+        );
+
+      end =
+        new Date(
+selected.getFullYear(),
+selected.getMonth() + 1,
+          0
+        );
+    }
+
+
+    return {
+      start:
+afManagerDateString(
+          start
+        ),
+
+      end:
+afManagerDateString(
+          end
+        )
+    };
+  }
+
+
+  function attendanceCategory(
+    record
+  ) {
+
+const status =
+      String(
+record.status || ""
+      ).toLowerCase();
+
+const reason =
+      String(
+record.absenceReason || ""
+      ).toLowerCase();
+
+
+    if (
+      status === "present"
+    ) {
+      return "present";
+    }
+
+
+    if (
+reason.includes("leave")
+    ) {
+      return "leave";
+    }
+
+
+    if (
+reason.includes("permission")
+    ) {
+      return "permission";
+    }
+
+
+    return "absent";
+  }
+
+
+  function summaryCard(
+    label,
+    number,
+    percentage
+  ) {
+
+    return `
+<div style="
+        border:1px solid #dfe5e1;
+        border-radius:10px;
+        padding:13px;
+background:white;
+      ">
+
+<div style="
+          color:#666;
+          font-size:12px;
+        ">
+          ${afManagerEscape(label)}
+</div>
+
+<div style="
+          margin-top:5px;
+          font-size:21px;
+font-weight:bold;
+          color:#0b5d3b;
+        ">
+          ${number}
+</div>
+
+<div style="
+          margin-top:3px;
+          font-size:13px;
+font-weight:bold;
+        ">
+          ${percentage}
+</div>
+
+</div>
+    `;
+  }
+
+
+  function renderAttendance() {
+
+const range =
+getSelectedRange();
+
+const allRecords =
+typeof getAttendanceRecords ===
+        "function"
+        ? getAttendanceRecords()
+        : [];
+
+
+const records =
+allRecords
+        .filter(record =>
+record.date>=
+range.start&&
+record.date<=
+range.end
+        )
+        .sort((a, b) =>
+          String(b.date)
+            .localeCompare(
+              String(a.date)
+            )
+        );
+
+
+    if (
+currentView === "daily"
+    ) {
+description.textContent =
+        "Daily attendance: " +
+afManagerReadableDate(
+range.start
+        );
+    }
+
+
+    if (
+currentView === "weekly"
+    ) {
+description.textContent =
+        "Weekly attendance: " +
+afManagerReadableDate(
+range.start
+        ) +
+        " to " +
+afManagerReadableDate(
+range.end
+        );
+    }
+
+
+    if (
+currentView === "monthly"
+    ) {
+const selected =
+        new Date(
+dateInput.value +
+          "T00:00:00"
+        );
+
+description.textContent =
+        "Monthly attendance: " +
+selected.toLocaleDateString(
+          undefined,
+          {
+            month: "long",
+            year: "numeric"
+          }
+        );
+    }
+
+
+const total =
+records.length;
+
+const present =
+records.filter(
+        record =>
+attendanceCategory(
+            record
+          ) === "present"
+      ).length;
+
+const absent =
+records.filter(
+        record =>
+attendanceCategory(
+            record
+          ) === "absent"
+      ).length;
+
+const leave =
+records.filter(
+        record =>
+attendanceCategory(
+            record
+          ) === "leave"
+      ).length;
+
+const permission =
+records.filter(
+        record =>
+attendanceCategory(
+            record
+          ) === "permission"
+      ).length;
+
+const late =
+records.filter(
+        record =>
+attendanceCategory(
+            record
+          ) === "present" &&
+          Number(
+record.lateMinutes || 0
+          ) > 0
+      ).length;
+
+
+const totalWorkedMinutes =
+records.reduce(
+        (sum, record) =>
+          sum +
+          Number(
+record.workedMinutes || 0
+          ),
+        0
+      );
+
+const totalShortfall =
+records.reduce(
+        (sum, record) =>
+          sum +
+          Number(
+record.shortfallMinutes || 0
+          ),
+        0
+      );
+
+const totalOvertime =
+records.reduce(
+        (sum, record) =>
+          sum +
+          Number(
+record.overtimeMinutes || 0
+          ),
+        0
+      );
+
+
+cards.innerHTML =
+
+summaryCard(
+        "Recorded Attendance",
+        total,
+        total
+          ? "100%"
+          : "0%"
+      ) +
+
+summaryCard(
+        "Present",
+        present,
+afManagerPercent(
+          present,
+          total
+        )
+      ) +
+
+summaryCard(
+        "Absent",
+        absent,
+afManagerPercent(
+          absent,
+          total
+        )
+      ) +
+
+summaryCard(
+        "Leave",
+        leave,
+afManagerPercent(
+          leave,
+          total
+        )
+      ) +
+
+summaryCard(
+        "Permission",
+        permission,
+afManagerPercent(
+          permission,
+          total
+        )
+      ) +
+
+summaryCard(
+        "Late",
+        late,
+afManagerPercent(
+          late,
+          present
+        )
+      ) +
+
+summaryCard(
+        "Hours Worked",
+        (
+totalWorkedMinutes /
+          60
+        ).toFixed(2),
+        "hrs"
+      ) +
+
+summaryCard(
+        "Shortfall",
+        (
+totalShortfall /
+          60
+        ).toFixed(2),
+        "hrs"
+      ) +
+
+summaryCard(
+        "Overtime",
+        (
+totalOvertime /
+          60
+        ).toFixed(2),
+        "hrs"
+      );
+
+
+    if (!records.length) {
+
+rows.innerHTML = `
+<tr>
+<td
+colspan="11"
+            style="
+              padding:20px;
+text-align:center;
+              color:#666;
+            "
+>
+            No attendance records found
+            for this period.
+</td>
+</tr>
+      `;
+
+      return;
+    }
+
+
+rows.innerHTML =
+records.map(record => {
+
+const category =
+attendanceCategory(
+            record
+          );
+
+        let statusLabel =
+record.status ||
+          "—";
+
+        if (
+          category === "leave"
+        ) {
+statusLabel =
+            "Leave";
+        }
+
+        if (
+          category ===
+          "permission"
+        ) {
+statusLabel =
+            "Permission";
+        }
+
+
+        return `
+<tr style="
+            border-bottom:
+              1px solid #eee;
+          ">
+
+<td style="padding:9px;">
+              ${afManagerReadableDate(
+record.date
+              )}
+</td>
+
+<td style="padding:9px;">
+<strong>
+                ${afManagerEscape(
+record.employeeName ||
+record.employeeId ||
+                  "—"
+                )}
+</strong>
+</td>
+
+<td style="padding:9px;">
+              ${afManagerEscape(
+record.teamName ||
+                "—"
+              )}
+</td>
+
+<td style="padding:9px;">
+              ${afManagerEscape(
+record.shiftName ||
+                "—"
+              )}
+</td>
+
+<td style="padding:9px;">
+              ${afManagerEscape(
+statusLabel
+              )}
+</td>
+
+<td style="padding:9px;">
+              ${afManagerFormatTime(
+record.timeIn
+              )}
+</td>
+
+<td style="padding:9px;">
+              ${afManagerFormatTime(
+record.timeOut
+              )}
+</td>
+
+<td style="padding:9px;">
+              ${afManagerFormatMinutes(
+record.workedMinutes
+              )}
+</td>
+
+<td style="padding:9px;">
+              ${afManagerFormatMinutes(
+record.lateMinutes
+              )}
+</td>
+
+<td style="padding:9px;">
+              ${afManagerFormatMinutes(
+record.shortfallMinutes
+              )}
+</td>
+
+<td style="padding:9px;">
+              ${afManagerFormatMinutes(
+record.overtimeMinutes
+              )}
+</td>
+
+</tr>
+        `;
+
+      }).join("");
+  }
+
+
+  function updatePeriodButtons() {
+
+    content
+      .querySelectorAll(
+        ".afAttendancePeriodBtn"
+      )
+      .forEach(button => {
+
+const selected =
+button.dataset
+            .attendanceView ===
+currentView;
+
+button.style.background =
+          selected
+            ? "#0b5d3b"
+            : "#eeeeee";
+
+button.style.color =
+          selected
+            ? "white"
+            : "#333";
+
+      });
+  }
+
+
+  content
+    .querySelectorAll(
+      ".afAttendancePeriodBtn"
+    )
+    .forEach(button => {
+
+button.onclick = () => {
+
+currentView =
+button.dataset
+            .attendanceView;
+
+updatePeriodButtons();
+renderAttendance();
+      };
+
+    });
+
+
+dateInput.onchange = () => {
+renderAttendance();
+  };
+
+
+updatePeriodButtons();
+renderAttendance();
+}
+
+
+/* =========================================================
+   ROUTE EXISTING STAFF & HR FUNCTIONS BY ROLE
+
+   Manager:
+   READ ONLY.
+
+   Other authorised roles:
+   Existing working functions remain unchanged.
+   ========================================================= */
+
+manageTeams = function () {
+
+  if (
+afManagerIsLoggedIn()
+  ) {
+viewManagerTeamsReadOnly();
+    return;
+  }
+
+  return afOriginalManageTeams();
+};
+
+
+manageShiftSettings = function () {
+
+  if (
+afManagerIsLoggedIn()
+  ) {
+viewManagerShiftsReadOnly();
+    return;
+  }
+
+  return afOriginalManageShiftSettings();
+};
+
+
+recordAttendance = function () {
+
+  if (
+afManagerIsLoggedIn()
+  ) {
+viewManagerAttendanceReadOnly();
+    return;
+  }
+
+  return afOriginalRecordAttendance();
+};
+
+
+/* =========================================================
+   END MANAGER READ-ONLY STAFF & HR VIEWS
+   ========================================================= */
 
  /* =========================================================
    EMPLOYEE ALLOWANCE + ADVANCES + DEDUCTIONS + PAYROLL
