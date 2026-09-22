@@ -11206,6 +11206,89 @@ font-weight:bold;
         Director Only
 </div>
 
+<!-- ==================================
+     PASSPORT PHOTO
+     ================================== -->
+
+<div style="
+text-align:center;
+        margin-bottom:20px;
+        padding:15px;
+        background:#f8f9fa;
+        border:1px solid #e1e5e8;
+        border-radius:10px;
+      ">
+
+<div
+  id="editEmployeePhotoPreview"
+  style="
+    width:120px;
+    height:140px;
+    margin:0 auto 10px;
+    border:2px dashed #bbb;
+    border-radius:10px;
+display:flex;
+align-items:center;
+justify-content:center;
+overflow:hidden;
+background:white;
+    color:#777;
+    font-size:13px;
+  "
+>
+  ${
+employee.passportPhoto
+      ? `
+<img
+src="${employee.passportPhoto}"
+          style="
+            width:100%;
+            height:100%;
+object-fit:cover;
+          "
+>
+      `
+      : "No Passport Photo"
+  }
+</div>
+
+<label
+  for="editEmployeePhoto"
+  style="
+display:inline-block;
+    background:#0d6efd;
+color:white;
+    padding:9px 16px;
+    border-radius:7px;
+cursor:pointer;
+font-weight:bold;
+  "
+>
+  ${
+employee.passportPhoto
+      ? "Replace Passport Photo"
+      : "Add Passport Photo"
+  }
+</label>
+
+<input
+  id="editEmployeePhoto"
+  type="file"
+  accept="image/*"
+  style="display:none"
+>
+
+<div style="
+  margin-top:7px;
+  font-size:12px;
+  color:#666;
+">
+  The current photo remains unchanged unless
+  a new photo is selected.
+</div>
+
+</div>
+
 <div style="
 display:grid;
         grid-template-columns:
@@ -11443,6 +11526,105 @@ font-weight:bold;
 
 document.body.appendChild(modal);
 
+/* ==================================
+   EDIT EMPLOYEE PASSPORT PHOTO
+   ================================== */
+
+modal.querySelector(
+  "#editEmployeePhoto"
+).onchange = event => {
+
+const file =
+event.target.files[0];
+
+  if (!file) {
+    return;
+  }
+
+  if (!file.type.startsWith("image/")) {
+
+    alert(
+      "Please select an image file."
+    );
+
+event.target.value = "";
+
+    return;
+  }
+
+const reader =
+    new FileReader();
+
+reader.onload = e => {
+
+const image =
+      new Image();
+
+image.onload = () => {
+
+const canvas =
+document.createElement("canvas");
+
+const size = 300;
+
+canvas.width = size;
+canvas.height = size;
+
+const ctx =
+canvas.getContext("2d");
+
+const scale =
+Math.max(
+          size / image.width,
+          size / image.height
+        );
+
+const width =
+image.width * scale;
+
+const height =
+image.height * scale;
+
+const x =
+        (size - width) / 2;
+
+const y =
+        (size - height) / 2;
+
+ctx.drawImage(
+        image,
+        x,
+        y,
+        width,
+        height
+      );
+
+editedPassportPhotoData =
+canvas.toDataURL(
+          "image/jpeg",
+          0.72
+        );
+
+modal.querySelector(
+        "#editEmployeePhotoPreview"
+      ).innerHTML = `
+<img
+src="${editedPassportPhotoData}"
+          style="
+            width:100%;
+            height:100%;
+object-fit:cover;
+          "
+>
+      `;
+    };
+
+image.src =
+e.target.result;
+  };
+
+reader.readAsDataURL(file);
+};
 
 modal.querySelector(
     "#cancelEmployeeEdit"
@@ -11469,7 +11651,7 @@ modal.querySelector(
 
 const updatedEmployee = {
       ...employee,
-
+passportPhoto:editedPassportPhotoData,
 fullName:
 modal.querySelector(
           "#editEmployeeName"
