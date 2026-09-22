@@ -11152,6 +11152,11 @@ const employeeIndex = employees.findIndex(
 
 const employee = employees[employeeIndex];
 
+/* Keep the existing passport photo unless
+   the Director selects a replacement. */
+let editedPassportPhotoData =
+employee.passportPhoto || "";
+
 const modal =
 document.createElement("div");
 
