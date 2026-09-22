@@ -790,14 +790,46 @@ Mbalala Town, Mukono • Factory Management System
 
 <script>
 
-document.addEventListener(
-  "DOMContentLoaded",
-  function () {
+document.addEventListener("DOMContentLoaded", function () {
+
+  let currentUser = null;
+
+  try {
+currentUser = JSON.parse(
+localStorage.getItem("currentUser") || "null"
+    );
+  } catch (error) {
+currentUser = null;
+  }
+
+const dashboard =
+document.getElementById("mainApplication");
+
+  if (currentUser&&currentUser.employeeId&&currentUser.role) {
+
+    if (dashboard) {
+dashboard.style.display = "";
+    }
+
+    if (typeofupdateLoggedInUserHeader === "function") {
+updateLoggedInUserHeader();
+    }
+
+    if (typeofapplyAFRoleDashboard === "function") {
+applyAFRoleDashboard();
+    }
+
+  } else {
+
+    if (dashboard) {
+dashboard.style.display = "none";
+    }
 
 showAFLoginScreen();
 
   }
-);
+
+});
 
 </script>
 
