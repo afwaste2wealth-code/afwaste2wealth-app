@@ -1935,6 +1935,12 @@ const roleAccess =
 
 
 resetAFRoleDashboard();
+if (
+typeof refreshAFDashboardBirthdays ===
+  "function"
+) {
+refreshAFDashboardBirthdays();
+}
 
 
   /* ---------- SIDEBAR ---------- */
@@ -2951,6 +2957,493 @@ localStorage.getItem("currentUser") || "null"
 currentUser&&
 currentUser.role === "Team Leader"
   );
+
+}
+
+/* =========================================================
+   A&F DASHBOARD - 4 WEEK BIRTHDAY REMINDERS
+   ========================================================= */
+
+function getAFDashboardBirthdays() {
+
+const employees =
+typeof getEmployees === "function"
+      ? getEmployees()
+      : [];
+
+const today = new Date();
+
+today.setHours(
+    0,
+    0,
+    0,
+    0
+  );
+
+const birthdays = [];
+
+
+employees.forEach(employee => {
+
+    if (!employee.dateOfBirth) {
+      return;
+    }
+
+
+const parts =
+      String(employee.dateOfBirth)
+        .split("-");
+
+
+    if (parts.length !== 3) {
+      return;
+    }
+
+
+const month =
+      Number(parts[1]) - 1;
+
+const day =
+      Number(parts[2]);
+
+
+    if (
+Number.isNaN(month) ||
+Number.isNaN(day)
+    ) {
+      return;
+    }
+
+
+    let nextBirthday =
+      new Date(
+today.getFullYear(),
+        month,
+        day
+      );
+
+
+nextBirthday.setHours(
+      0,
+      0,
+      0,
+      0
+    );
+
+
+    if (nextBirthday< today) {
+
+nextBirthday =
+        new Date(
+today.getFullYear() + 1,
+          month,
+          day
+        );
+
+nextBirthday.setHours(
+        0,
+        0,
+        0,
+        0
+      );
+
+    }
+
+
+const difference =
+nextBirthday.getTime() -
+today.getTime();
+
+
+const daysRemaining =
+Math.round(
+        difference /
+        (1000 * 60 * 60 * 24)
+      );
+
+
+    /*
+     * Dashboard birthday window:
+     * Today up to the next 28 days.
+     */
+
+    if (
+daysRemaining>= 0 &&
+daysRemaining< 28
+    ) {
+
+birthdays.push({
+
+employeeId:
+employee.employeeId || "",
+
+fullName:
+employee.fullName ||
+          "Employee",
+
+dateOfBirth:
+employee.dateOfBirth,
+
+nextBirthday:
+nextBirthday,
+
+daysRemaining:
+daysRemaining
+
+      });
+
+    }
+
+  });
+
+
+birthdays.sort(
+    (a, b) =>
+a.daysRemaining -
+b.daysRemaining
+  );
+
+
+  return birthdays;
+
+}
+
+
+/* =========================================================
+   BIRTHDAY DISPLAY HELPERS
+   ========================================================= */
+
+function afBirthdayEscape(value) {
+
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
+}
+
+
+function afBirthdayDateText(date) {
+
+  if (!(date instanceof Date)) {
+    return "";
+  }
+
+
+  return date.toLocaleDateString(
+    "en-GB",
+    {
+      day: "numeric",
+      month: "short"
+    }
+  );
+
+}
+
+
+function afBirthdayRemainingText(days) {
+
+  if (days === 0) {
+    return "🎉 Birthday Today";
+  }
+
+
+  if (days === 1) {
+    return "Tomorrow";
+  }
+
+
+  return days + " days";
+
+}
+
+
+/* =========================================================
+   RENDER ONE BIRTHDAY WEEK
+   ========================================================= */
+
+function renderAFBirthdayWeek(
+  title,
+  birthdays
+) {
+
+  let content = "";
+
+
+  if (!birthdays.length) {
+
+    content = `
+<div style="
+        color:#8a9992;
+        font-size:12px;
+        padding:10px 0;
+      ">
+        No birthdays
+</div>
+    `;
+
+  } else {
+
+    content =
+birthdays.map(
+        birthday => {
+
+const isToday =
+birthday.daysRemaining === 0;
+
+
+const background =
+isToday
+              ? "#fff7dc"
+              : "#f8faf9";
+
+
+const border =
+isToday
+              ? "#f0cf66"
+              : "#e4ece7";
+
+
+          return `
+<div style="
+              padding:10px;
+              margin-top:8px;
+              border:1px solid ${border};
+              border-radius:9px;
+              background:${background};
+            ">
+
+<div style="
+                font-size:13px;
+font-weight:bold;
+                color:#173027;
+                line-height:1.4;
+              ">
+                ${afBirthdayEscape(
+birthday.fullName
+                )}
+</div>
+
+<div style="
+display:flex;
+justify-content:space-between;
+                gap:8px;
+                margin-top:5px;
+                font-size:11px;
+                color:#6b7d75;
+              ">
+
+<span>
+                  ${afBirthdayDateText(
+birthday.nextBirthday
+                  )}
+</span>
+
+<strong style="
+                  color:${
+isToday
+                      ? "#a36b00"
+                      : "#0b5d3b"
+                  };
+                ">
+                  ${afBirthdayRemainingText(
+birthday.daysRemaining
+                  )}
+</strong>
+
+</div>
+
+</div>
+          `;
+
+        }
+      ).join("");
+
+  }
+
+
+  return `
+<div style="
+      border:1px solid #e1ebe5;
+      border-radius:11px;
+      padding:12px;
+      background:#ffffff;
+      min-height:115px;
+    ">
+
+<div style="
+        color:#0b5d3b;
+        font-size:13px;
+font-weight:bold;
+        padding-bottom:7px;
+        border-bottom:1px solid #edf2ef;
+      ">
+        ${title}
+</div>
+
+      ${content}
+
+</div>
+  `;
+
+}
+
+
+/* =========================================================
+   UPDATE DASHBOARD BIRTHDAY CARD
+   ========================================================= */
+
+function updateAFDashboardBirthdays() {
+
+const card =
+document.getElementById(
+      "dashboardBirthdayCard"
+    );
+
+
+const container =
+document.getElementById(
+      "dashboardBirthdayWeeks"
+    );
+
+
+const count =
+document.getElementById(
+      "dashboardBirthdayCount"
+    );
+
+
+  if (
+    !card ||
+    !container ||
+    !count
+  ) {
+    return;
+  }
+
+
+const currentUser =
+typeof getAFCurrentUser === "function"
+      ? getAFCurrentUser()
+      : null;
+
+
+  /*
+   * Company-wide birthday dashboard
+   * is visible only to these roles.
+   */
+
+const allowedRoles = [
+    "Director",
+    "Manager",
+    "HR",
+    "Secretary"
+  ];
+
+
+  if (
+    !currentUser ||
+    !allowedRoles.includes(
+currentUser.role
+    )
+  ) {
+
+card.style.display =
+      "none";
+
+    return;
+
+  }
+
+
+card.style.display =
+    "block";
+
+
+const birthdays =
+getAFDashboardBirthdays();
+
+
+count.textContent =
+birthdays.length === 1
+      ? "1 upcoming"
+      : birthdays.length +
+        " upcoming";
+
+
+const thisWeek =
+birthdays.filter(
+      item =>
+item.daysRemaining>= 0 &&
+item.daysRemaining<= 6
+    );
+
+
+const nextWeek =
+birthdays.filter(
+      item =>
+item.daysRemaining>= 7 &&
+item.daysRemaining<= 13
+    );
+
+
+const weekThree =
+birthdays.filter(
+      item =>
+item.daysRemaining>= 14 &&
+item.daysRemaining<= 20
+    );
+
+
+const weekFour =
+birthdays.filter(
+      item =>
+item.daysRemaining>= 21 &&
+item.daysRemaining<= 27
+    );
+
+
+container.innerHTML =
+
+renderAFBirthdayWeek(
+      "This Week",
+thisWeek
+    ) +
+
+renderAFBirthdayWeek(
+      "Next Week",
+nextWeek
+    ) +
+
+renderAFBirthdayWeek(
+      "Week 3",
+weekThree
+    ) +
+
+renderAFBirthdayWeek(
+      "Week 4",
+weekFour
+    );
+
+}
+
+
+/* =========================================================
+   REFRESH BIRTHDAYS AFTER ROLE DASHBOARD LOAD
+   ========================================================= */
+
+function refreshAFDashboardBirthdays() {
+
+  if (
+typeof updateAFDashboardBirthdays ===
+    "function"
+  ) {
+
+updateAFDashboardBirthdays();
+
+  }
 
 }
 
