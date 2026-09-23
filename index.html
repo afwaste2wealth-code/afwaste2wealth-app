@@ -11,7 +11,7 @@ A&F Wekavera Ltd • Waste2Wealth Solutions — Factory Management System
 
 <style>
 
-:root{
+:root{ 
   --g:#0b5d3b;
   --g2:#16a66a;
   --bg:#f5f8f6;
@@ -267,12 +267,210 @@ display:none;
   }
 
 }
+/* =========================================================
+   RESPONSIVE SIDEBAR / MOBILE NAVIGATION
+   ========================================================= */
+
+.side{
+  width:245px;
+background:var(--g);
+  color:#fff;
+  padding:20px 14px;
+position:fixed;
+  top:0;
+  left:0;
+  bottom:0;
+
+display:flex;
+flex-direction:column;
+
+  overflow-y:auto;
+  overflow-x:hidden;
+
+  z-index:5000;
+}
+
+.brand{
+  flex-shrink:0;
+}
+
+#mainNavigation{
+display:block;
+  flex:1;
+overflow:visible;
+  padding-bottom:12px;
+}
+
+.logout{
+position:static;
+  width:100%;
+  margin-top:16px;
+  flex-shrink:0;
+
+  background:#08472e !important;
+  border:1px solid rgba(255,255,255,.25) !important;
+}
+
+.mobile-menu-btn{
+display:none;
+
+  border:0;
+  background:#0b5d3b;
+color:white;
+
+  padding:10px 14px;
+  border-radius:8px;
+
+  font-size:20px;
+font-weight:bold;
+cursor:pointer;
+}
+
+.mobile-menu-close{
+display:none;
+}
+
+.mobile-menu-overlay{
+display:none;
+}
+
+
+/* =========================================================
+   PHONE / SMALL SCREEN
+   ========================================================= */
+
+@media(max-width:700px){
+
+body.mobile-menu-open{
+overflow:hidden;
+  }
+
+  .app{
+display:block;
+  }
+
+  .main{
+    margin-left:0;
+    width:100%;
+    padding:12px;
+  }
+
+  header{
+    padding:14px;
+    gap:10px;
+  }
+
+  h1{
+    font-size:20px;
+  }
+
+  .mobile-menu-btn{
+display:inline-block;
+  }
+
+  .side{
+    width:270px;
+    max-width:85vw;
+
+transform:translateX(-105%);
+transition:transform .25s ease;
+
+    box-shadow:4px 0 20px rgba(0,0,0,.25);
+  }
+
+body.mobile-menu-open .side{
+transform:translateX(0);
+  }
+
+  #mainNavigation{
+display:block;
+  }
+
+  .mobile-menu-close{
+display:block;
+
+    width:100%;
+    margin:0 0 12px;
+
+    padding:10px;
+
+    border:1px solid rgba(255,255,255,.25);
+    border-radius:8px;
+
+background:rgba(255,255,255,.08);
+color:white;
+
+font-weight:bold;
+cursor:pointer;
+  }
+
+  .mobile-menu-overlay{
+display:none;
+
+position:fixed;
+    inset:0;
+
+background:rgba(0,0,0,.45);
+
+    z-index:4900;
+  }
+
+body.mobile-menu-open .mobile-menu-overlay{
+display:block;
+  }
+
+  .kpis{
+    grid-template-columns:1fr 1fr;
+  }
+
+  .grid{
+    grid-template-columns:1fr;
+  }
+
+  .actions{
+    grid-template-columns:1fr;
+  }
+
+  table{
+    min-width:650px;
+  }
+
+  .card{
+    overflow-x:auto;
+  }
+}
+
+
+/* =========================================================
+   VERY SMALL PHONES
+   ========================================================= */
+
+@media(max-width:430px){
+
+  .kpis{
+    grid-template-columns:1fr;
+  }
+
+  header{
+flex-direction:column;
+  }
+
+  header >div:last-child{
+text-align:left !important;
+  }
+
+}
 
 </style>
 </head>
 
 
 <body>
+<div
+  id="mobileMenuOverlay"
+  class="mobile-menu-overlay"
+onclick="closeAFMobileMenu()"
+></div>
 
 <div
   class="app"
@@ -281,7 +479,13 @@ display:none;
 >
 
 <aside class="side">
-
+  <button
+  type="button"
+  class="mobile-menu-close"
+onclick="closeAFMobileMenu()"
+>
+✕ Close Menu
+</button>
 <div class="brand">
 ♻ A&F Wekavera Ltd
 <small>WASTE2WEALTH SOLUTIONS</small>
@@ -375,6 +579,12 @@ onclick="openRoleModule('washingTarget')"
 🎯 Set Washing Target
 </button>
 
+<button
+  id="navPoleStandardWeights"
+onclick="openRoleModule('poleStandardWeights')"
+>
+⚖ Pole Standard Weights
+</button>
 
 <button
   id="navWashingRecords"
@@ -399,6 +609,15 @@ onclick="logoutAFUser()"
 <main class="main">
 
 <header>
+  <button
+  type="button"
+  class="mobile-menu-btn"
+onclick="openAFMobileMenu()"
+  aria-label="Open menu"
+>
+☰
+</button>
+
 
 <div>
 
