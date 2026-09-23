@@ -13931,8 +13931,23 @@ modal.remove();
   };
 }
 /* =========================================================
-   WASHING DEPARTMENT - BATCH BASED
-   Material Batch KB001 -> Washing Cycle WCKB001
+   WASHING DEPARTMENT - SOURCE BATCH + WASHING SUB-BATCH
+
+   Example:
+   Purchase batch: KB001
+   First washing issue:  KBW0011
+   Second washing issue: KBW0012
+
+   RULE:
+   KG Taken = Actual Washed + Returned KG
+
+   Returned KG goes back to the source KB batch.
+   Only Actual Washed KG leaves the unwashed stock.
+   ========================================================= */
+
+
+/* =========================================================
+   BASIC WASHING STORAGE
    ========================================================= */
 
 function getWashingShiftRecords() {
@@ -13948,6 +13963,11 @@ JSON.stringify(records)
   );
 }
 
+
+/*
+ * Keep washingCycles storage because older reports and
+ * Director correction functions may still refer to it.
+ */
 function getWashingCycles() {
   return JSON.parse(
 localStorage.getItem("washingCycles") || "[]"
@@ -13961,6 +13981,11 @@ JSON.stringify(cycles)
   );
 }
 
+
+/* =========================================================
+   WASHED KAVERA STOCK
+   ========================================================= */
+
 function getWashedKaveraStock() {
   return Number(
 localStorage.getItem("washedKaveraStock") || 0
@@ -13973,10 +13998,7 @@ localStorage.setItem(
 Math.max(Number(kg) || 0, 0).toFixed(2)
   );
 }
-/* =========================================================
-   WASHED KAVERA STOCK BY OWNER
-   Separates A&F stock from Client stock
-   ========================================================= */
+
 
 function getCompanyWashedKaveraStock() {
   return Number(
@@ -13991,6 +14013,7 @@ Math.max(Number(kg) || 0, 0).toFixed(2)
   );
 }
 
+
 function getClientWashedKaveraStock() {
   return Number(
 localStorage.getItem("clientWashedKaveraStock") || 0
@@ -14003,6 +14026,11 @@ localStorage.setItem(
 Math.max(Number(kg) || 0, 0).toFixed(2)
   );
 }
+
+
+/* =========================================================
+   MATERIAL BATCH HELPERS
+   ========================================================= */
 
 function getBatchOwnerType(batchNumber) {
 
@@ -14022,32 +14050,12 @@ const batch = records.find(
     ? "client"
     : "company";
 }
-/* =========================================================
-   MATERIAL BATCH NUMBER
-   KB001, KB002, KB003...
-   ========================================================= */
+
 
 function formatBatchNumber(number) {
-  return "KB" +
-    String(number).padStart(3, "0");
+  return "KB" + String(number).padStart(3, "0");
 }
 
-
-/* =========================================================
-   WASHING CYCLE NUMBER
-   KB001 -> WCKB001
-   ========================================================= */
-
-function washingCycleFromBatch(batchNumber) {
-  return batchNumber
-    ? "WC" + batchNumber
-    : "";
-}
-
-
-/* =========================================================
-   GET NEXT MATERIAL BATCH
-   ========================================================= */
 
 function getNextMaterialBatchNumber() {
 
@@ -14059,10 +14067,9 @@ localStorage.getItem("materialRecords") || "[]"
 
 records.forEach(record => {
 
-const match =
-      String(
+const match = String(
 record.batchNumber || ""
-      ).match(/^KB(\d+)$/i);
+    ).match(/^KB(\d+)$/i);
 
     if (match) {
       highest = Math.max(
@@ -14070,18 +14077,11 @@ record.batchNumber || ""
         Number(match[1]) || 0
       );
     }
-
   });
 
-  return formatBatchNumber(
-    highest + 1
-  );
+  return formatBatchNumber(highest + 1);
 }
 
-
-/* =========================================================
-   ALL MATERIAL BATCHES COMPANY + CLIENT
-   ========================================================= */
 
 function getMaterialBatchRecords() {
 
@@ -14089,22 +14089,11 @@ const records = JSON.parse(
 localStorage.getItem("materialRecords") || "[]"
   );
 
-  return records.filter(record =>
-record.batchNumber
+  return records.filter(
+    record =>record.batchNumber
   );
 }
 
-
-/* =========================================================
-   TOTAL KAVERA FOR WASHING
-
-   IMPORTANT:
-   We use NET USABLE KG.
-   Example:
-   Gross = 5,000 KG
-   Net after dirt = 4,000 KG
-   WCKB total = 4,000 KG
-   ========================================================= */
 
 function getBatchTotalKg(batch) {
 
@@ -14113,6 +14102,7 @@ function getBatchTotalKg(batch) {
   }
 
   return Number(
+batch.openingBatchKg ??
 batch.netWeight ??
 batch.grossWeight ??
     0
@@ -14121,113 +14111,154 @@ batch.grossWeight ??
 
 
 /* =========================================================
-   FIND WASHING CYCLE
+   CURRENT KB BALANCE
+
+   New records use batchBalanceKg.
+
+   Older records without batchBalanceKg are calculated from:
+   opening/net weight - actual washed.
    ========================================================= */
 
-function getWashingCycleForBatch(
-batchNumber
-) {
+function getBatchPendingKg(batchNumber) {
 
-const cycles =
-getWashingCycles();
+const batch = getMaterialBatchRecords().find(
+    record =>record.batchNumber === batchNumber
+  );
 
-  return cycles.find(
-    cycle =>
-cycle.batchNumber ===
-batchNumber
-  ) || null;
+  if (!batch) {
+    return 0;
+  }
+
+  if (
+batch.batchBalanceKg !== undefined &&
+batch.batchBalanceKg !== null
+  ) {
+    return Math.max(
+      Number(batch.batchBalanceKg) || 0,
+      0
+    );
+  }
+
+  return Math.max(
+getBatchTotalKg(batch) -
+getBatchWashedKg(batchNumber),
+    0
+  );
 }
 
 
-/* =========================================================
-   TOTAL ACTUAL WASHED FOR BATCH
-   ========================================================= */
-
-function getBatchWashedKg(
-batchNumber
-) {
+function getBatchWashedKg(batchNumber) {
 
   return getWashingShiftRecords()
-
     .filter(record =>
-
-record.batchNumber ===
-batchNumber&&
-
-record.targetStatus ===
-        "COMPLETED" &&
-
-record.status !==
-        "CANCELLED"
+record.batchNumber === batchNumber&&
+record.targetStatus === "COMPLETED" &&
+record.status !== "CANCELLED"
     )
-
     .reduce(
       (sum, record) =>
         sum +
-        (
-          Number(
-record.actualWashedKg
-          ) || 0
-        ),
+        (Number(record.actualWashedKg) || 0),
       0
     );
 }
 
 
 /* =========================================================
-   PENDING WASHING KG
+   AUTOMATIC WASHING SUB-BATCH NUMBER
 
-   Pending =
-   Net usable batch KG -
-   Actual washed so far
+   KB001 -> KBW0011
+   KB001 -> KBW0012
+   KB002 -> KBW0021
    ========================================================= */
 
-function getBatchPendingKg(
-batchNumber
-) {
+function getNextWashingSubBatchNumber(batchNumber) {
 
-const batch =
-getMaterialBatchRecords()
-      .find(
-        record =>
-record.batchNumber ===
-batchNumber
-      );
+const match = String(
+batchNumber || ""
+  ).match(/^KB(\d+)$/i);
 
-  if (!batch) {
-    return 0;
+  if (!match) {
+    return "";
   }
 
-  return Math.max(
+const sourceDigits = match[1];
 
-getBatchTotalKg(batch) -
+const prefix =
+    "KBW" + sourceDigits;
 
-getBatchWashedKg(
+  let highestSequence = 0;
+
+getWashingShiftRecords().forEach(record => {
+
+const subBatch =
+      String(
+record.washingSubBatchNumber ||
+record.cycleNumber ||
+        ""
+      );
+
+const subMatch =
+subBatch.match(
+        new RegExp(
+          "^KBW" +
+sourceDigits +
+          "(\\d+)$",
+          "i"
+        )
+      );
+
+    if (subMatch) {
+highestSequence = Math.max(
+highestSequence,
+        Number(subMatch[1]) || 0
+      );
+    }
+  });
+
+  return prefix + (highestSequence + 1);
+}
+
+
+/*
+ * Compatibility function.
+ * Older parts of the application may still call this name.
+ *
+ * It no longer creates WCKB001.
+ */
+function washingCycleFromBatch(batchNumber) {
+  return getNextWashingSubBatchNumber(
 batchNumber
-    ),
-
-    0
   );
 }
 
 
 /* =========================================================
-   CREATE WASHING CYCLE FOR MATERIAL BATCH
+   COMPATIBILITY CYCLE HELPERS
+
+   These remain so existing reports and Director correction
+   code do not break.
    ========================================================= */
 
-function ensureWashingCycleForBatch(
-  batch
-) {
+function getWashingCycleForBatch(batchNumber) {
 
-  let cycles =
-getWashingCycles();
+const cycles = getWashingCycles();
 
-  let cycle =
-cycles.find(
-      item =>
-item.batchNumber ===
-batch.batchNumber
-    );
+  return cycles.find(
+    cycle =>
+cycle.batchNumber === batchNumber
+  ) || null;
+}
+
+
+function ensureWashingCycleForBatch(batch) {
+
+  let cycles = getWashingCycles();
+
+  let cycle = cycles.find(
+    item =>
+item.batchNumber === batch.batchNumber
+  );
 
   if (cycle) {
     return cycle;
@@ -14243,23 +14274,25 @@ batch.id,
 batchNumber:
 batch.batchNumber,
 
+    /*
+     * Source-level tracking only.
+     * Individual washing records receive KBW numbers.
+     */
 cycleNumber:
-washingCycleFromBatch(
-batch.batchNumber
-      ),
+batch.batchNumber,
 
 totalBatchKg:
       Number(
-getBatchTotalKg(batch)
-          .toFixed(2)
+getBatchTotalKg(batch).toFixed(2)
       ),
 
 totalActualWashedKg: 0,
 
 pendingKg:
       Number(
-getBatchTotalKg(batch)
-          .toFixed(2)
+getBatchPendingKg(
+batch.batchNumber
+        ).toFixed(2)
       ),
 
 closingVarianceKg: 0,
@@ -14277,40 +14310,25 @@ completedAt: null
 
 cycles.push(cycle);
 
-saveWashingCycles(
-    cycles
-  );
+saveWashingCycles(cycles);
 
   return cycle;
 }
 
 
-/* =========================================================
-   RECALCULATE WASHING CYCLE
-   ========================================================= */
-
-function recalculateWashingCycle(
-batchNumber
-) {
-
-const batches =
-getMaterialBatchRecords();
+function recalculateWashingCycle(batchNumber) {
 
 const batch =
-batches.find(
+getMaterialBatchRecords().find(
       item =>
-item.batchNumber ===
-batchNumber
+item.batchNumber === batchNumber
     );
 
   if (!batch) {
     return null;
   }
 
-  let cycle =
-ensureWashingCycleForBatch(
-      batch
-    );
+ensureWashingCycleForBatch(batch);
 
 const cycles =
 getWashingCycles();
@@ -14318,51 +14336,34 @@ getWashingCycles();
 const index =
 cycles.findIndex(
       item =>
-item.batchNumber ===
-batchNumber
+item.batchNumber === batchNumber
     );
 
   if (index === -1) {
-    return cycle;
+    return null;
   }
 
 const totalBatchKg =
-getBatchTotalKg(
-      batch
-    );
+getBatchTotalKg(batch);
 
 const totalWashedKg =
-getBatchWashedKg(
-batchNumber
-    );
+getBatchWashedKg(batchNumber);
 
 const pendingKg =
-Math.max(
-totalBatchKg -
-totalWashedKg,
-      0
-    );
+getBatchPendingKg(batchNumber);
 
   cycles[index].totalBatchKg =
-    Number(
-totalBatchKg.toFixed(2)
-    );
+    Number(totalBatchKg.toFixed(2));
 
-  cycles[index]
-    .totalActualWashedKg =
-    Number(
-totalWashedKg.toFixed(2)
-    );
+  cycles[index].totalActualWashedKg =
+    Number(totalWashedKg.toFixed(2));
 
   cycles[index].pendingKg =
-    Number(
-pendingKg.toFixed(2)
-    );
+    Number(pendingKg.toFixed(2));
 
+  cycles[index].closingVarianceKg = 0;
 
-  if (
-pendingKg<= 0.01
-  ) {
+  if (pendingKg<= 0.01) {
 
     cycles[index].status =
       "WASHING COMPLETE";
@@ -14371,122 +14372,86 @@ pendingKg<= 0.01
       cycles[index].completedAt ||
       new Date().toISOString();
 
-    cycles[index]
-      .closingVarianceKg = 0;
-
-  } else if (
-    !cycles[index]
-      .manualComplete
-  ) {
+  } else {
 
     cycles[index].status =
       "ACTIVE";
 
     cycles[index].completedAt =
       null;
-
-    cycles[index]
-      .closingVarianceKg = 0;
   }
 
-
-saveWashingCycles(
-    cycles
-  );
+saveWashingCycles(cycles);
 
   return cycles[index];
 }
 
 
-/* =========================================================
-   MANUALLY CLOSE WASHING CYCLE
-
-   Used when physical kavera is finished but
-   the weighing figures leave a small balance.
-   ========================================================= */
-
-function markWashingCycleComplete(
-batchNumber
-) {
+/*
+ * IMPORTANT:
+ * Completing a batch does NOT turn the remaining balance
+ * into a washing loss.
+ */
+function markWashingCycleComplete(batchNumber) {
 
 const batch =
-getMaterialBatchRecords()
-      .find(
-        item =>
-item.batchNumber ===
-batchNumber
-      );
+getMaterialBatchRecords().find(
+      item =>
+item.batchNumber === batchNumber
+    );
 
   if (!batch) {
     return null;
   }
 
+const balance =
+getBatchPendingKg(batchNumber);
 
-ensureWashingCycleForBatch(
-    batch
-  );
+  if (balance > 0.01) {
 
+    alert(
+      "This source batch still has " +
+balance.toFixed(2) +
+      " KG available.\n\n" +
+      "Returned or unwashed kavera remains in the source KB batch and cannot be written off as washing loss."
+    );
+
+    return recalculateWashingCycle(
+batchNumber
+    );
+  }
 
 const cycles =
 getWashingCycles();
 
-
 const index =
 cycles.findIndex(
       item =>
-item.batchNumber ===
-batchNumber
+item.batchNumber === batchNumber
     );
-
 
   if (index === -1) {
     return null;
   }
 
-
-const pendingKg =
-getBatchPendingKg(
-batchNumber
-    );
-
-
-  cycles[index]
-    .manualComplete = true;
-
-
+  cycles[index].manualComplete = true;
   cycles[index].status =
     "WASHING COMPLETE";
 
+  cycles[index].pendingKg = 0;
+  cycles[index].closingVarianceKg = 0;
 
-  cycles[index].pendingKg =
-    Number(
-pendingKg.toFixed(2)
-    );
-
-
-  cycles[index]
-    .closingVarianceKg =
-    Number(
-pendingKg.toFixed(2)
-    );
-
-
-  cycles[index]
-    .completedAt =
+  cycles[index].completedAt =
     new Date().toISOString();
 
-
-saveWashingCycles(
-    cycles
-  );
-
+saveWashingCycles(cycles);
 
   return cycles[index];
 }
 
 
 /* =========================================================
-   GET BATCHES STILL AVAILABLE FOR WASHING
+   OPEN SOURCE BATCHES
    ========================================================= */
 
 function getOpenMaterialBatches() {
@@ -14494,31 +14459,20 @@ function getOpenMaterialBatches() {
   return getMaterialBatchRecords()
     .filter(batch => {
 
-const cycle =
-getWashingCycleForBatch(
-batch.batchNumber
-        );
-
-const pending =
+      return (
 getBatchPendingKg(
 batch.batchNumber
-        );
-
-      return (
-        pending > 0.01 &&
-        (
-          !cycle ||
-cycle.status !==
-            "WASHING COMPLETE"
-        )
+        ) > 0.01
       );
-
     });
 }
 
 
 /* =========================================================
    DIRECTOR - SET WASHING TARGET
+
+   Target is a PERFORMANCE TARGET.
+   It does NOT remove stock from KB.
    ========================================================= */
 
 function setWashingTarget() {
@@ -14526,25 +14480,17 @@ function setWashingTarget() {
 const batches =
 getOpenMaterialBatches();
 
-
-  if (
-batches.length === 0
-  ) {
+  if (batches.length === 0) {
 
     alert(
-      "There is no open company material batch available for washing.\n\n" +
-      "Record new company material first so the system can create a batch such as KB001."
+      "There is no material batch available for washing."
     );
 
     return;
   }
 
-
 const modal =
-document.createElement(
-      "div"
-    );
-
+document.createElement("div");
 
 modal.style.cssText = `
 position:fixed;
@@ -14557,276 +14503,89 @@ justify-content:center;
 font-family:Arial,sans-serif;
   `;
 
-
 const batchOptions =
-batches.map(batch => `
+batches.map(batch => {
 
-<option
-        value="${batch.batchNumber}"
->
+const balance =
+getBatchPendingKg(
+batch.batchNumber
+        );
 
-        ${batch.batchNumber}
-        -
-        ${batch.materialType || "Kavera"}
-        -
-        ${getBatchTotalKg(batch).toLocaleString()}
-        KG
-
+      return `
+<option value="${batch.batchNumber}">
+          ${batch.batchNumber}
+          - ${batch.materialType || "Kavera"}
+          - Balance ${balance.toLocaleString()} KG
 </option>
-
-    `).join("");
-
+      `;
+    }).join("");
 
 modal.innerHTML = `
-
 <div style="
 background:white;
       width:94%;
-      max-width:760px;
+      max-width:700px;
       max-height:92vh;
 overflow:auto;
       padding:28px;
       border-radius:16px;
-      box-shadow:
-      0 12px 35px
-rgba(0,0,0,.25);
     ">
 
-<h2 style="
-        margin-top:0;
-      ">
+<h2 style="margin-top:0">
         Set Washing Target
 </h2>
 
-<p style="
-        color:#666;
-      ">
-        Director sets a fresh target
-        for each shift from an open
-        material batch.
+<p style="color:#666">
+        Director sets the expected washing output.
+        The Manager will separately record the actual
+        KG physically taken from the source batch.
 </p>
 
-
-<label style="
-display:block;
-        margin-bottom:6px;
-        font-weight:600;
-      ">
-        Material Batch
-</label>
+<label><b>Material Batch</b></label>
 
 <select
         id="washingBatch"
+        style="width:100%;padding:10px;margin:6px 0 16px"
+>
+        ${batchOptions}
+</select>
+
+<label><b>Available KB Balance</b></label>
+
+<input
+        id="targetAvailableKg"
+readonly
         style="
           width:100%;
           padding:10px;
-          margin-bottom:18px;
+          margin:6px 0 16px;
+          background:#f3f5f4;
           border:1px solid #ccc;
           border-radius:8px;
         "
 >
 
-        ${batchOptions}
-
-</select>
-
-
-<div style="
-display:grid;
-        grid-template-columns:
-        repeat(2,1fr);
-        gap:14px;
-        margin-bottom:20px;
-      ">
-
-
-<div>
-
-<label style="
-display:block;
-            margin-bottom:6px;
-            font-weight:600;
-          ">
-            Washing Cycle
-</label>
+<label><b>Date</b></label>
 
 <input
-            id="targetCycleNumber"
-readonly
-            style="
-              width:100%;
-              padding:10px;
-              border:1px solid #ccc;
-              border-radius:8px;
-              background:#f3f5f4;
-            "
+        id="washingTargetDate"
+        type="date"
+        value="${new Date().toISOString().split("T")[0]}"
+        style="width:100%;padding:10px;margin:6px 0 16px"
 >
 
-</div>
-
-
-<div>
-
-<label style="
-display:block;
-            margin-bottom:6px;
-            font-weight:600;
-          ">
-            Total WC Kavera (KG)
-</label>
-
-<input
-            id="targetTotalKg"
-readonly
-            style="
-              width:100%;
-              padding:10px;
-              border:1px solid #ccc;
-              border-radius:8px;
-              background:#f3f5f4;
-            "
->
-
-</div>
-
-
-<div>
-
-<label style="
-display:block;
-            margin-bottom:6px;
-            font-weight:600;
-          ">
-            Total Washed So Far (KG)
-</label>
-
-<input
-            id="targetWashedKg"
-readonly
-            style="
-              width:100%;
-              padding:10px;
-              border:1px solid #ccc;
-              border-radius:8px;
-              background:#f3f5f4;
-            "
->
-
-</div>
-
-
-<div>
-
-<label style="
-display:block;
-            margin-bottom:6px;
-            font-weight:600;
-          ">
-            Pending WC Kavera (KG)
-</label>
-
-<input
-            id="targetPendingKg"
-readonly
-            style="
-              width:100%;
-              padding:10px;
-              border:1px solid #ccc;
-              border-radius:8px;
-              background:#f3f5f4;
-            "
->
-
-</div>
-
-</div>
-
-
-<div style="
-display:grid;
-        grid-template-columns:
-        1fr 1fr;
-        gap:14px;
-      ">
-
-
-<div>
-
-<label style="
-display:block;
-            margin-bottom:6px;
-            font-weight:600;
-          ">
-            Date
-</label>
-
-<input
-            id="washingTargetDate"
-            type="date"
-            value="${
-              new Date()
-                .toISOString()
-                .split("T")[0]
-            }"
-            style="
-              width:100%;
-              padding:10px;
-              margin-bottom:18px;
-              border:1px solid #ccc;
-              border-radius:8px;
-            "
->
-
-</div>
-
-
-<div>
-
-<label style="
-display:block;
-            margin-bottom:6px;
-            font-weight:600;
-          ">
-            Shift
-</label>
+<label><b>Shift</b></label>
 
 <select
-            id="washingTargetShift"
-            style="
-              width:100%;
-              padding:10px;
-              margin-bottom:18px;
-              border:1px solid #ccc;
-              border-radius:8px;
-            "
+        id="washingTargetShift"
+        style="width:100%;padding:10px;margin:6px 0 16px"
 >
-
-<option value="">
-              Select Shift
-</option>
-
-<option value="Day">
-              Day
-</option>
-
-<option value="Night">
-              Night
-</option>
-
+<option value="">Select Shift</option>
+<option value="Day">Day</option>
+<option value="Night">Night</option>
 </select>
 
-</div>
-
-</div>
-
-
-<label style="
-display:block;
-        margin-bottom:6px;
-        font-weight:600;
-      ">
-        Target Kavera To Wash (KG)
-</label>
+<label><b>Target KG To Wash</b></label>
 
 <input
         id="washingTargetKg"
@@ -14834,15 +14593,8 @@ display:block;
         min="0"
         step="0.01"
         placeholder="Enter target KG"
-        style="
-          width:100%;
-          padding:10px;
-          margin-bottom:24px;
-          border:1px solid #ccc;
-          border-radius:8px;
-        "
+        style="width:100%;padding:10px;margin:6px 0 22px"
 >
-
 
 <div style="
 display:flex;
@@ -14853,121 +14605,53 @@ justify-content:flex-end;
 <button
           id="closeWashingTargetBtn"
           type="button"
-          style="
-background:white;
-            border:1px solid #ccc;
-            padding:10px 18px;
-            border-radius:8px;
-cursor:pointer;
-          "
+          style="padding:10px 18px"
 >
           Close
 </button>
-
 
 <button
           id="saveWashingTargetBtn"
           type="button"
           style="
+            padding:10px 18px;
             background:#1976d2;
 color:white;
-border:none;
-            padding:10px 18px;
+            border:0;
             border-radius:8px;
-            font-weight:600;
-cursor:pointer;
+font-weight:bold;
           "
 >
           Save Target
 </button>
 
 </div>
-
 </div>
   `;
 
-
-document.body.appendChild(
-    modal
-  );
+document.body.appendChild(modal);
 
 
-  function refreshBatchSummary() {
+  function refreshTargetBatch() {
 
 const batchNumber =
 modal.querySelector(
         "#washingBatch"
       ).value;
 
-
-const batch =
-batches.find(
-        item =>
-item.batchNumber ===
+modal.querySelector(
+      "#targetAvailableKg"
+    ).value =
+getBatchPendingKg(
 batchNumber
-      );
-
-
-    if (!batch) {
-      return;
-    }
-
-
-const cycle =
-ensureWashingCycleForBatch(
-        batch
-      );
-
-
-const totalKg =
-getBatchTotalKg(
-        batch
-      );
-
-
-const washedKg =
-getBatchWashedKg(
-batchNumber
-      );
-
-
-const pendingKg =
-Math.max(
-totalKg -
-washedKg,
-        0
-      );
-
-
-modal.querySelector(
-      "#targetCycleNumber"
-    ).value =
-cycle.cycleNumber;
-
-
-modal.querySelector(
-      "#targetTotalKg"
-    ).value =
-totalKg.toFixed(2);
-
-
-modal.querySelector(
-      "#targetWashedKg"
-    ).value =
-washedKg.toFixed(2);
-
-
-modal.querySelector(
-      "#targetPendingKg"
-    ).value =
-pendingKg.toFixed(2);
+      ).toFixed(2) + " KG";
   }
 
 
 modal.querySelector(
     "#washingBatch"
   ).onchange =
-refreshBatchSummary;
+refreshTargetBatch;
 
 
 modal.querySelector(
@@ -14981,12 +14665,10 @@ modal.querySelector(
   ).onclick =
     function () {
 
-
 const batchNumber =
 modal.querySelector(
           "#washingBatch"
         ).value;
-
 
 const batch =
 batches.find(
@@ -14995,18 +14677,15 @@ item.batchNumber ===
 batchNumber
         );
 
-
 const date =
 modal.querySelector(
           "#washingTargetDate"
         ).value;
 
-
 const shift =
 modal.querySelector(
           "#washingTargetShift"
         ).value;
-
 
 const targetKg =
         Number(
@@ -15015,91 +14694,61 @@ modal.querySelector(
           ).value
         ) || 0;
 
-
       if (!batch) {
-
         alert(
           "Please select a material batch."
         );
-
         return;
       }
 
-
       if (!date) {
-
         alert(
           "Please select the washing date."
         );
-
         return;
       }
 
-
       if (!shift) {
-
         alert(
           "Please select the washing shift."
         );
-
         return;
       }
 
-
-      if (
-targetKg<= 0
-      ) {
-
+      if (targetKg<= 0) {
         alert(
-          "Please enter the target KG."
+          "Please enter the washing target."
         );
-
         return;
       }
 
-
-const pendingKg =
+const availableKg =
 getBatchPendingKg(
 batchNumber
         );
 
-
       if (
 targetKg>
-pendingKg + 0.01
+availableKg + 0.01
       ) {
-
         alert(
-          "Target KG cannot be greater than the Pending WC Kavera of " +
-pendingKg.toFixed(2) +
+          "Target cannot be greater than the available KB balance of " +
+availableKg.toFixed(2) +
           " KG."
         );
-
         return;
       }
-
 
 const records =
 getWashingShiftRecords();
 
-
 const duplicate =
-records.some(
-          record =>
-
-record.batchNumber ===
-batchNumber&&
-
-record.date ===
-              date &&
-
-record.shift ===
-              shift &&
-
-record.targetStatus !==
-              "CANCELLED"
+records.some(record =>
+record.batchNumber === batchNumber&&
+record.date === date &&
+record.shift === shift &&
+record.targetStatus === "TARGET SET"
         );
-
 
       if (duplicate) {
 
@@ -15112,12 +14761,12 @@ batchNumber +
         return;
       }
 
-
-const cycle =
-ensureWashingCycleForBatch(
-          batch
+const currentUser =
+JSON.parse(
+localStorage.getItem(
+            "currentUser"
+          ) || "{}"
         );
-
 
 records.push({
 
@@ -15126,30 +14775,48 @@ records.push({
 batchId:
 batch.id,
 
+batchNumber:
 batchNumber,
 
-cycleId:
-cycle.id,
+        /*
+         * KBW number is deliberately NOT generated here.
+         * It is generated only when Manager actually
+         * issues physical material to washing.
+         */
+washingSubBatchNumber: "",
 
-cycleNumber:
-cycle.cycleNumber,
+cycleNumber: "",
 
-        date,
+        date:
+          date,
 
-        shift,
+        shift:
+          shift,
 
 targetKg:
           Number(
 targetKg.toFixed(2)
           ),
 
+kgTaken: 0,
+
 actualWashedKg: 0,
 
+returnedKg: 0,
+
+        /*
+         * Keep this legacy field at zero.
+         * Returned material is NOT discarded.
+         */
 discardedKg: 0,
 
 achievementPercent: 0,
 
         staff: "",
+
+staffEmployeeIds: [],
+
+staffEmployees: [],
 
 targetStatus:
           "TARGET SET",
@@ -15158,38 +14825,38 @@ washingComplete: false,
 
 correctionHistory: [],
 
+targetSetByEmployeeId:
+currentUser.employeeId || "",
+
+targetSetByName:
+currentUser.fullName || "",
+
+targetSetByRole:
+currentUser.role || "",
+
 createdAt:
           new Date().toISOString()
       });
-
 
 saveWashingShiftRecords(
         records
       );
 
-
       alert(
         "Washing target saved successfully.\n\n" +
-
-        "Batch: " +
+        "Source Batch: " +
 batchNumber +
-        "\n" +
-
-        "Cycle: " +
-cycle.cycleNumber +
-        "\n" +
-
-        "Target: " +
+        "\nTarget: " +
 targetKg.toFixed(2) +
-        " KG"
+        " KG\n\n" +
+        "The KBW sub-batch will be generated when the Manager records the physical KG taken."
       );
-
 
 modal.remove();
     };
 
 
-refreshBatchSummary();
+refreshTargetBatch();
 }
 
 
@@ -15202,14 +14869,12 @@ function recordWashing() {
 const records =
 getWashingShiftRecords();
 
-
 const pendingTargets =
 records.filter(
       record =>
 record.targetStatus ===
         "TARGET SET"
     );
-
 
   if (
 pendingTargets.length === 0
@@ -15222,12 +14887,8 @@ pendingTargets.length === 0
     return;
   }
 
-
 const modal =
-document.createElement(
-      "div"
-    );
-
+document.createElement("div");
 
 modal.style.cssText = `
 position:fixed;
@@ -15244,318 +14905,125 @@ font-family:Arial,sans-serif;
 const targetOptions =
 pendingTargets.map(
       record => `
-
-<option
-          value="${record.id}"
->
-
-          ${
-record.batchNumber ||
-            "Legacy"
-          }
-
-          -
-
-          ${
-record.cycleNumber ||
-            ""
-          }
-
-          -
-
-          ${record.date}
-
-          -
-
-          ${record.shift}
-
-          -
-
-          Target
-          ${
-            Number(
-record.targetKg
-            ).toLocaleString()
-          }
-          KG
-
+<option value="${record.id}">
+          ${record.batchNumber}
+          - ${record.date}
+          - ${record.shift}
+          - Target ${Number(record.targetKg || 0).toLocaleString()} KG
 </option>
-
       `
     ).join("");
 
 
 modal.innerHTML = `
-
 <div style="
 background:white;
       width:94%;
-      max-width:850px;
+      max-width:820px;
       max-height:92vh;
 overflow:auto;
-      padding:30px;
+      padding:28px;
       border-radius:16px;
-      box-shadow:
-      0 12px 35px
-rgba(0,0,0,.25);
     ">
 
-<h2 style="
-        margin-top:0;
-      ">
+<h2 style="margin-top:0">
         Record Washing
 </h2>
 
-
-<label style="
-display:block;
-        margin-bottom:6px;
-        font-weight:600;
-      ">
-        Washing Target
-</label>
-
+<label><b>Washing Target</b></label>
 
 <select
         id="washingTargetRecord"
-        style="
-          width:100%;
-          padding:10px;
-          margin-bottom:20px;
-          border:1px solid #ccc;
-          border-radius:8px;
-        "
+        style="width:100%;padding:10px;margin:6px 0 18px"
 >
-
         ${targetOptions}
-
 </select>
 
 
 <div style="
 display:grid;
-        grid-template-columns:
-        repeat(2,1fr);
+        grid-template-columns:1fr 1fr;
         gap:14px;
-        margin-bottom:20px;
       ">
 
-
 <div>
-
-<label style="
-display:block;
-            margin-bottom:6px;
-            font-weight:600;
-          ">
-            Material Batch
-</label>
-
+<label><b>Source Batch</b></label>
 <input
             id="washingDisplayBatch"
 readonly
-            style="
-              width:100%;
-              padding:10px;
-              border:1px solid #ccc;
-              border-radius:8px;
-              background:#f3f5f4;
-            "
+            style="width:100%;padding:10px;background:#f3f5f4"
 >
-
 </div>
 
-
 <div>
-
-<label style="
-display:block;
-            margin-bottom:6px;
-            font-weight:600;
-          ">
-            Washing Cycle
-</label>
-
+<label><b>Next Washing Sub-Batch</b></label>
 <input
-            id="washingDisplayCycle"
+            id="washingDisplaySubBatch"
 readonly
-            style="
-              width:100%;
-              padding:10px;
-              border:1px solid #ccc;
-              border-radius:8px;
-              background:#f3f5f4;
-            "
+            style="width:100%;padding:10px;background:#f3f5f4"
 >
-
 </div>
 
-
 <div>
-
-<label style="
-display:block;
-            margin-bottom:6px;
-            font-weight:600;
-          ">
-            Total WC Kavera (KG)
-</label>
-
+<label><b>Current KB Balance</b></label>
 <input
-            id="washingTotalCycleKg"
+            id="washingCurrentBalance"
 readonly
-            style="
-              width:100%;
-              padding:10px;
-              border:1px solid #ccc;
-              border-radius:8px;
-              background:#f3f5f4;
-            "
+            style="width:100%;padding:10px;background:#f3f5f4"
 >
-
 </div>
-
 
 <div>
-
-<label style="
-display:block;
-            margin-bottom:6px;
-            font-weight:600;
-          ">
-            Total Washed So Far (KG)
-</label>
-
-<input
-            id="washingTotalWashedKg"
-readonly
-            style="
-              width:100%;
-              padding:10px;
-              border:1px solid #ccc;
-              border-radius:8px;
-              background:#f3f5f4;
-            "
->
-
-</div>
-
-
-<div>
-
-<label style="
-display:block;
-            margin-bottom:6px;
-            font-weight:600;
-          ">
-            Pending WC Kavera (KG)
-</label>
-
-<input
-            id="washingPendingCycleKg"
-readonly
-            style="
-              width:100%;
-              padding:10px;
-              border:1px solid #ccc;
-              border-radius:8px;
-              background:#f3f5f4;
-            "
->
-
-</div>
-
-
-<div>
-
-<label style="
-display:block;
-            margin-bottom:6px;
-            font-weight:600;
-          ">
-            Current Washed Kavera Stock
-            (KG)
-</label>
-
-<input
-            id="currentWashedStock"
-readonly
-            value="${
-getWashedKaveraStock()
-                .toFixed(2)
-            }"
-            style="
-              width:100%;
-              padding:10px;
-              border:1px solid #ccc;
-              border-radius:8px;
-              background:#f3f5f4;
-            "
->
-
-</div>
-
-</div>
-
-
-<div style="
-display:grid;
-        grid-template-columns:
-        1fr 1fr;
-        gap:14px;
-        margin-bottom:18px;
-      ">
-
-
-<div>
-
-<label style="
-display:block;
-            margin-bottom:6px;
-            font-weight:600;
-          ">
-            Current Shift Target (KG)
-</label>
-
+<label><b>Director Target</b></label>
 <input
             id="washingDisplayTargetKg"
 readonly
-            style="
-              width:100%;
-              padding:10px;
-              border:1px solid #ccc;
-              border-radius:8px;
-              background:#f3f5f4;
-            "
+            style="width:100%;padding:10px;background:#f3f5f4"
 >
-
 </div>
 
+<div>
+<label><b>KG Taken / Re-weighed</b></label>
+<input
+            id="washingKgTaken"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="Physical KG taken from source batch"
+            style="width:100%;padding:10px"
+>
+</div>
 
 <div>
-
-<label style="
-display:block;
-            margin-bottom:6px;
-            font-weight:600;
-          ">
-            Actual KG Washed
-</label>
-
+<label><b>Actual KG Washed</b></label>
 <input
             id="washingActualKg"
             type="number"
             min="0"
             step="0.01"
-            placeholder="Enter actual KG washed"
-            style="
-              width:100%;
-              padding:10px;
-              border:1px solid #ccc;
-              border-radius:8px;
-            "
+            placeholder="Actual KG successfully washed"
+            style="width:100%;padding:10px"
 >
+</div>
 
+<div>
+<label><b>KG Returned to Source Batch</b></label>
+<input
+            id="washingReturnedKg"
+readonly
+            value="0"
+            style="width:100%;padding:10px;background:#eef8f2"
+>
+</div>
+
+<div>
+<label><b>Achievement %</b></label>
+<input
+            id="washingAchievement"
+readonly
+            value="0"
+            style="width:100%;padding:10px;background:#f3f5f4"
+>
 </div>
 
 </div>
@@ -15563,126 +15031,51 @@ display:block;
 
 <label style="
 display:block;
-        margin-bottom:6px;
-        font-weight:600;
+        margin-top:18px;
       ">
-        Staff Who Worked
+<b>Staff Who Worked</b>
 </label>
-
 
 <input
         id="washingStaff"
         type="text"
         placeholder="Enter staff names"
-        style="
-          width:100%;
-          padding:10px;
-          margin-bottom:18px;
-          border:1px solid #ccc;
-          border-radius:8px;
-        "
+        style="width:100%;padding:10px;margin:6px 0 18px"
 >
 
 
 <div style="
-display:grid;
-        grid-template-columns:
-        1fr 1fr;
-        gap:14px;
-        margin-bottom:20px;
+        background:#eef8f2;
+        padding:12px;
+        border-radius:8px;
+        margin-bottom:18px;
       ">
-
-
-<div>
-
-<label style="
-display:block;
-            margin-bottom:6px;
-            font-weight:600;
-          ">
-            KG Not Washed
-</label>
-
-<input
-            id="washingDiscardedKg"
-readonly
-            value="0"
-            style="
-              width:100%;
-              padding:10px;
-              border:1px solid #ccc;
-              border-radius:8px;
-              background:#f3f5f4;
-            "
->
-
-</div>
-
-
-<div>
-
-<label style="
-display:block;
-            margin-bottom:6px;
-            font-weight:600;
-          ">
-            Achievement %
-</label>
-
-<input
-            id="washingAchievement"
-readonly
-            value="0"
-            style="
-              width:100%;
-              padding:10px;
-              border:1px solid #ccc;
-              border-radius:8px;
-              background:#f3f5f4;
-            "
->
-
-</div>
-
+<b>Stock Rule</b><br>
+        KG Taken = Actual Washed + KG Returned.<br>
+        Returned KG goes back to the source KB batch.
 </div>
 
 
 <label style="
 display:flex;
-align-items:flex-start;
         gap:10px;
-        margin-bottom:24px;
         padding:12px;
         background:#fff8e1;
         border-radius:8px;
+        margin-bottom:20px;
       ">
 
-
 <input
-          id="washingCycleComplete"
+          id="washingSourceComplete"
           type="checkbox"
-          style="
-            margin-top:3px;
-          "
 >
 
-
 <span>
-
-<strong>
-            All kavera in this material
-            batch is now finished.
-</strong>
-
-<br>
-
+<b>Source KB batch is completely finished</b><br>
 <small>
-            Tick only when the physical
-            batch is finished. Any remaining
-            system balance will be recorded
-            as the cycle closing variance.
+            This can only close the source batch when its
+            remaining balance reaches zero.
 </small>
-
 </span>
 
 </label>
@@ -15694,33 +15087,24 @@ justify-content:flex-end;
         gap:12px;
       ">
 
-
 <button
           id="closeWashingBtn"
           type="button"
-          style="
-background:white;
-            border:1px solid #ccc;
-            padding:11px 20px;
-            border-radius:8px;
-cursor:pointer;
-          "
+          style="padding:11px 20px"
 >
           Close
 </button>
-
 
 <button
           id="saveWashingBtn"
           type="button"
           style="
+            padding:11px 20px;
             background:#1976d2;
 color:white;
-border:none;
-            padding:11px 20px;
+            border:0;
             border-radius:8px;
-            font-weight:600;
-cursor:pointer;
+font-weight:bold;
           "
 >
           Save Washing Record
@@ -15746,7 +15130,6 @@ modal.querySelector(
         ).value
       );
 
-
     return records.find(
       record =>
         Number(record.id) ===
@@ -15760,111 +15143,82 @@ selectedId
 const record =
 getSelectedRecord();
 
-
     if (!record) {
       return;
     }
 
-
-const batch =
-getMaterialBatchRecords()
-        .find(
-          item =>
-item.batchNumber ===
+const balance =
+getBatchPendingKg(
 record.batchNumber
-        );
-
-
-const totalKg =
-      batch
-        ? getBatchTotalKg(batch)
-        : 0;
-
-
-const washedKg =
-record.batchNumber
-        ? getBatchWashedKg(
-record.batchNumber
-          )
-        : 0;
-
-
-const pendingKg =
-record.batchNumber
-        ? getBatchPendingKg(
-record.batchNumber
-          )
-        : 0;
-
+      );
 
 modal.querySelector(
       "#washingDisplayBatch"
     ).value =
-record.batchNumber ||
-      "Legacy Record";
-
+record.batchNumber || "";
 
 modal.querySelector(
-      "#washingDisplayCycle"
+      "#washingDisplaySubBatch"
     ).value =
-record.cycleNumber ||
-      "Legacy Cycle";
-
+getNextWashingSubBatchNumber(
+record.batchNumber
+      );
 
 modal.querySelector(
-      "#washingTotalCycleKg"
+      "#washingCurrentBalance"
     ).value =
-totalKg.toFixed(2);
-
-
-modal.querySelector(
-      "#washingTotalWashedKg"
-    ).value =
-washedKg.toFixed(2);
-
-
-modal.querySelector(
-      "#washingPendingCycleKg"
-    ).value =
-pendingKg.toFixed(2);
-
+balance.toFixed(2) +
+      " KG";
 
 modal.querySelector(
       "#washingDisplayTargetKg"
     ).value =
       Number(
 record.targetKg || 0
-      ).toFixed(2);
+      ).toFixed(2) +
+      " KG";
 
+modal.querySelector(
+      "#washingKgTaken"
+    ).value = "";
 
 modal.querySelector(
       "#washingActualKg"
     ).value = "";
 
+modal.querySelector(
+      "#washingReturnedKg"
+    ).value = "0.00";
+
+modal.querySelector(
+      "#washingAchievement"
+    ).value = "0.00";
 
 modal.querySelector(
       "#washingStaff"
     ).value = "";
 
-
 modal.querySelector(
-      "#washingCycleComplete"
+      "#washingSourceComplete"
     ).checked = false;
-
-
-calculateWashingResults();
   }
 
 
   function calculateWashingResults() {
 
-const targetKg =
+const record =
+getSelectedRecord();
+
+    if (!record) {
+      return;
+    }
+
+const kgTaken =
       Number(
 modal.querySelector(
-          "#washingDisplayTargetKg"
+          "#washingKgTaken"
         ).value
       ) || 0;
-
 
 const actualKg =
       Number(
@@ -15873,29 +15227,26 @@ modal.querySelector(
         ).value
       ) || 0;
 
-
-const notWashedKg =
+const returnedKg =
 Math.max(
-targetKg -
-actualKg,
+kgTaken - actualKg,
         0
       );
 
+const targetKg =
+      Number(
+record.targetKg || 0
+      );
 
 const achievement =
 targetKg> 0
-        ? (
-actualKg /
-targetKg
-          ) * 100
+        ? (actualKg / targetKg) * 100
         : 0;
 
-
 modal.querySelector(
-      "#washingDiscardedKg"
+      "#washingReturnedKg"
     ).value =
-notWashedKg.toFixed(2);
-
+returnedKg.toFixed(2);
 
 modal.querySelector(
       "#washingAchievement"
@@ -15908,6 +15259,12 @@ modal.querySelector(
     "#washingTargetRecord"
   ).onchange =
 loadSelectedTarget;
+
+
+modal.querySelector(
+    "#washingKgTaken"
+  ).oninput =
+calculateWashingResults;
 
 
 modal.querySelector(
@@ -15927,10 +15284,8 @@ modal.querySelector(
   ).onclick =
     function () {
 
-
 const selectedRecord =
 getSelectedRecord();
-
 
       if (!selectedRecord) {
 
@@ -15942,9 +15297,11 @@ getSelectedRecord();
       }
 
 
-const targetKg =
+const kgTaken =
         Number(
-selectedRecord.targetKg
+modal.querySelector(
+            "#washingKgTaken"
+          ).value
         ) || 0;
 
 
@@ -15962,10 +15319,66 @@ modal.querySelector(
         ).value.trim();
 
 
-const completeCycle =
+const sourceComplete =
 modal.querySelector(
-          "#washingCycleComplete"
+          "#washingSourceComplete"
         ).checked;
+
+
+const availableBefore =
+getBatchPendingKg(
+selectedRecord.batchNumber
+        );
+
+
+      if (kgTaken<= 0) {
+
+        alert(
+          "Please enter the physical KG taken from the source batch."
+        );
+
+        return;
+      }
+
+
+      if (
+kgTaken>
+availableBefore + 0.01
+      ) {
+
+        alert(
+          "KG Taken cannot be greater than the current " +
+selectedRecord.batchNumber +
+          " balance of " +
+availableBefore.toFixed(2) +
+          " KG."
+        );
+
+        return;
+      }
+
+
+      if (actualKg<= 0) {
+
+        alert(
+          "Please enter the actual KG washed."
+        );
+
+        return;
+      }
+
+
+      if (
+actualKg>
+kgTaken + 0.01
+      ) {
+
+        alert(
+          "Actual KG Washed cannot be greater than KG Taken."
+        );
+
+        return;
+      }
 
 
       if (!staff) {
@@ -15978,274 +15391,334 @@ modal.querySelector(
       }
 
 
-      if (
-actualKg<= 0
-      ) {
-
-        alert(
-          "Please enter the actual KG washed."
-        );
-
-        return;
-      }
-
-
-      if (
-actualKg>
-targetKg + 0.01
-      ) {
-
-        alert(
-          "Actual KG washed cannot be greater than the Director's target."
-        );
-
-        return;
-      }
-
-
-      if (
-selectedRecord.batchNumber
-      ) {
-
-const batchPending =
-getBatchPendingKg(
-selectedRecord.batchNumber
-          );
-
-
-        if (
-actualKg>
-batchPending + 0.01
-        ) {
-
-          alert(
-            "Actual KG washed cannot be greater than the Pending WC Kavera of " +
-batchPending.toFixed(2) +
-            " KG."
-          );
-
-          return;
-        }
-      }
-
-
-const notWashedKg =
+const returnedKg =
 Math.max(
-targetKg -
-actualKg,
+kgTaken - actualKg,
           0
+        );
+
+
+const targetKg =
+        Number(
+selectedRecord.targetKg || 0
         );
 
 
 const achievement =
 targetKg> 0
-          ? (
-actualKg /
-targetKg
-            ) * 100
+          ? (actualKg / targetKg) * 100
           : 0;
 
 
-selectedRecord
-        .actualWashedKg =
+      /*
+       * IMPORTANT:
+       *
+       * Physically we take KG from the batch,
+       * but returned KG comes back.
+       *
+       * Therefore the permanent reduction is
+       * ONLY actual washed KG.
+       */
+const balanceAfter =
+Math.max(
+availableBefore - actualKg,
+          0
+        );
+
+
+      if (
+sourceComplete&&
+balanceAfter> 0.01
+      ) {
+
+        alert(
+          "The source batch cannot be marked complete yet.\n\n" +
+selectedRecord.batchNumber +
+          " will still have " +
+balanceAfter.toFixed(2) +
+          " KG after this washing record.\n\n" +
+          "Returned/unwashed material remains in the source batch."
+        );
+
+        return;
+      }
+
+
+const washingSubBatchNumber =
+getNextWashingSubBatchNumber(
+selectedRecord.batchNumber
+        );
+
+
+const currentUser =
+JSON.parse(
+localStorage.getItem(
+            "currentUser"
+          ) || "{}"
+        );
+
+
+      /*
+       * Update the original target record.
+       */
+selectedRecord.washingSubBatchNumber =
+washingSubBatchNumber;
+
+      /*
+       * Keep cycleNumber for compatibility with
+       * existing reports and Director correction.
+       */
+selectedRecord.cycleNumber =
+washingSubBatchNumber;
+
+selectedRecord.kgTaken =
+        Number(
+kgTaken.toFixed(2)
+        );
+
+selectedRecord.actualWashedKg =
         Number(
 actualKg.toFixed(2)
         );
 
-
-selectedRecord
-        .discardedKg =
+selectedRecord.returnedKg =
         Number(
-notWashedKg.toFixed(2)
+returnedKg.toFixed(2)
         );
 
+      /*
+       * Returned KG is not discarded.
+       */
+selectedRecord.discardedKg = 0;
 
-selectedRecord
-        .achievementPercent =
+selectedRecord.achievementPercent =
         Number(
 achievement.toFixed(2)
         );
 
-
 selectedRecord.staff =
         staff;
 
-
-selectedRecord
-        .targetStatus =
+selectedRecord.targetStatus =
         "COMPLETED";
 
-
-selectedRecord
-        .washingComplete =
+selectedRecord.washingComplete =
         true;
 
+selectedRecord.sourceBatchComplete =
+sourceComplete;
 
-selectedRecord
-        .completedAt =
+selectedRecord.sourceBalanceBeforeKg =
+        Number(
+availableBefore.toFixed(2)
+        );
+
+selectedRecord.sourceBalanceAfterKg =
+        Number(
+balanceAfter.toFixed(2)
+        );
+
+selectedRecord.recordedByEmployeeId =
+currentUser.employeeId || "";
+
+selectedRecord.recordedByName =
+currentUser.fullName || "";
+
+selectedRecord.recordedByRole =
+currentUser.role || "";
+
+selectedRecord.completedAt =
         new Date().toISOString();
 
 
+      /*
+       * Save source KB balance.
+       */
+const materialRecords =
+JSON.parse(
+localStorage.getItem(
+            "materialRecords"
+          ) || "[]"
+        );
+
+
+const batchIndex =
+materialRecords.findIndex(
+          batch =>
+batch.batchNumber ===
+selectedRecord.batchNumber
+        );
+
+
+      if (batchIndex === -1) {
+
+        alert(
+          "Source material batch could not be found. Washing record was not saved."
+        );
+
+        return;
+      }
+
+
+materialRecords[
+batchIndex
+      ].batchBalanceKg =
+        Number(
+balanceAfter.toFixed(2)
+        );
+
+
+materialRecords[
+batchIndex
+      ].totalWashedKg =
+        Number(
+          (
+            Number(
+materialRecords[
+batchIndex
+              ].totalWashedKg || 0
+            ) +
+actualKg
+          ).toFixed(2)
+        );
+
+
+materialRecords[
+batchIndex
+      ].batchStatus =
+balanceAfter<= 0.01
+          ? "WASHING COMPLETE"
+          : "AVAILABLE FOR WASHING";
+
+
+materialRecords[
+batchIndex
+      ].lastWashingAt =
+        new Date().toISOString();
+
+
+localStorage.setItem(
+        "materialRecords",
+JSON.stringify(
+materialRecords
+        )
+      );
+
+
+      /*
+       * Save washing record.
+       */
 saveWashingShiftRecords(
         records
       );
 
 
-      let cycle = null;
-
-
-      if (
-selectedRecord.batchNumber
-      ) {
-
-        cycle =
-recalculateWashingCycle(
-selectedRecord.batchNumber
-          );
-
-
-        if (completeCycle) {
-
-          cycle =
-markWashingCycleComplete(
-selectedRecord.batchNumber
-            );
-        }
-      }
-
-
+      /*
+       * Add only ACTUAL WASHED KG
+       * to washed stock.
+       */
 const ownerType =
 getBatchOwnerType(
 selectedRecord.batchNumber
-);
+        );
 
-let ownerStockAfter = 0;
 
-if (ownerType === "client") {
-
-const currentClientStock =
-getClientWashedKaveraStock();
-
-ownerStockAfter =
-currentClientStock +
-actualKg;
+      if (ownerType === "client") {
 
 setClientWashedKaveraStock(
-ownerStockAfter
-  );
+getClientWashedKaveraStock() +
+actualKg
+        );
 
-} else {
-
-const currentCompanyStock =
-getCompanyWashedKaveraStock();
-
-ownerStockAfter =
-currentCompanyStock +
-actualKg;
+      } else {
 
 setCompanyWashedKaveraStock(
-ownerStockAfter
-  );
-}
+getCompanyWashedKaveraStock() +
+actualKg
+        );
+      }
 
 
-/*
- * Keep the old combined stock temporarily
- * because some existing screens still use it.
- */
-const newStock =
-getWashedKaveraStock() +
-actualKg;
-
+      /*
+       * Legacy combined stock.
+       */
 setWashedKaveraStock(
-newStock
-);
+getWashedKaveraStock() +
+actualKg
+      );
 
-const pendingAfter =
+
+recalculateWashingCycle(
 selectedRecord.batchNumber
-          ? getBatchPendingKg(
-selectedRecord.batchNumber
-            )
-          : 0;
+      );
 
 
-      let message =
+const equationDifference =
+Math.abs(
+kgTaken -
+          (
+actualKg +
+returnedKg
+          )
+        );
 
+
+      if (
+equationDifference> 0.01
+      ) {
+
+        alert(
+          "Washing balance error detected. Record was not balanced correctly."
+        );
+
+        return;
+      }
+
+
+      alert(
         "Washing record saved successfully.\n\n" +
 
-        "Batch: " +
-        (
-selectedRecord.batchNumber ||
-          "Legacy"
-        ) +
+        "Source Batch: " +
+selectedRecord.batchNumber +
         "\n" +
 
-        "Cycle: " +
-        (
-selectedRecord.cycleNumber ||
-          "Legacy"
-        ) +
-        "\n" +
+        "Washing Sub-Batch: " +
+washingSubBatchNumber +
+        "\n\n" +
 
-        "Target: " +
+        "Director Target: " +
 targetKg.toFixed(2) +
+        " KG\n" +
+
+        "KG Taken: " +
+kgTaken.toFixed(2) +
         " KG\n" +
 
         "Actual Washed: " +
 actualKg.toFixed(2) +
         " KG\n" +
 
-        "KG Not Washed: " +
-notWashedKg.toFixed(2) +
-        " KG\n" +
+        "Returned to " +
+selectedRecord.batchNumber +
+        ": " +
+returnedKg.toFixed(2) +
+        " KG\n\n" +
 
         "Achievement: " +
 achievement.toFixed(2) +
         "%\n" +
 
-        "Pending WC: " +
-pendingAfter.toFixed(2) +
+        "New " +
+selectedRecord.batchNumber +
+        " Balance: " +
+balanceAfter.toFixed(2) +
         " KG\n\n" +
 
         "Washed Kavera Stock: " +
-newStock.toFixed(2) +
-        " KG";
+getWashedKaveraStock().toFixed(2) +
+        " KG"
+      );
 
-
-      if (
-        cycle &&
-cycle.status ===
-          "WASHING COMPLETE"
-      ) {
-
-        message +=
-
-          "\n\nWashing Cycle " +
-cycle.cycleNumber +
-          " is WASHING COMPLETE.";
-
-
-        if (
-          Number(
-cycle.closingVarianceKg ||
-            0
-          ) > 0
-        ) {
-
-          message +=
-
-            "\nClosing variance: " +
-
-            Number(
-cycle.closingVarianceKg
-            ).toFixed(2) +
-
-            " KG.";
-        }
-      }
-
-
-      alert(message);
 
 modal.remove();
     };
@@ -16253,7 +15726,6 @@ modal.remove();
 
 loadSelectedTarget();
 }
-
 
 /* =========================================================
    DIRECTOR - CORRECT SAVED WASHING RECORD
