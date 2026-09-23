@@ -3183,7 +3183,7 @@ getAFCurrentRole();
 const actionAccess = {
 
 recordMaterialIn: [
-      "Director"
+      "Director",
       "Secretary"
     ],
 
