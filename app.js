@@ -13024,7 +13024,13 @@ overflow:auto;
         border-radius:8px;
         margin:15px 0;
       ">
-<b>Net Usable Weight:</b>
+<b>Gross Weight:</b>
+<span id="summaryGrossWeight">0 kg</span><br><br>
+
+<b>Dirt Deduction:</b>
+<span id="dirtWeight">0 kg</span><br><br>
+
+<b>Net Usable Weight / Opening KB Stock:</b>
 <span id="netWeight">0 kg</span><br><br>
 
 <b>Material Cost:</b>
@@ -13109,19 +13115,29 @@ const d = Number(dirt.value) || 0;
 const p = Number(price.value) || 0;
 const t = Number(transport.value) || 0;
 
-const net = g * (1 - d / 100);
+const dirtKg = g * (d / 100);
+const net = g - dirtKg;
 const materialCost = net * p;
 const total = materialCost + t;
+
+modal.querySelector("#summaryGrossWeight").textContent =
+g.toLocaleString() + " kg";
+
+modal.querySelector("#dirtWeight").textContent =
+dirtKg.toLocaleString() +
+    " kg (" +
+d.toLocaleString() +
+    "%)";
 
 modal.querySelector("#netWeight").textContent =
 net.toLocaleString() + " kg";
 
 modal.querySelector("#materialCost").textContent =
-      "UGX " + materialCost.toLocaleString();
+    "UGX " + materialCost.toLocaleString();
 
 modal.querySelector("#totalCost").textContent =
-      "UGX " + total.toLocaleString();
-  }
+    "UGX " + total.toLocaleString();
+}
 
 source.addEventListener("change", updateForm);
 clientService.addEventListener("change", updateForm);
@@ -13176,9 +13192,23 @@ actualPelletKg = Number(pelletWeight.value) || 0;
 const dirtPercentValue =
       Number(dirt.value) || 0;
 
+const dirtKg =
+isClient
+    ? 0
+    : grossKg * (dirtPercentValue / 100);
+
 const netKg =
-grossKg * (1 - dirtPercentValue / 100);
-const newBatchNumber = getNextMaterialBatchNumber();
+isClient
+    ? grossKg
+    : grossKg - dirtKg;
+
+const newBatchNumber =
+getNextMaterialBatchNumber();
+
+const currentUser =
+JSON.parse(
+localStorage.getItem("currentUser") || "{}"
+  );
 const record = {
 
       id: Date.now(),
@@ -13228,8 +13258,29 @@ isClient ? actualPelletKg : 0,
 dirtPercent:
 isClient ? 0 : dirtPercentValue,
 
+dirtWeightKg:
+isClient ? 0 : Number(dirtKg.toFixed(2)),
+
 netWeight:
-isClient ? grossKg : netKg,
+  Number(netKg.toFixed(2)),
+
+openingBatchKg:
+  Number(netKg.toFixed(2)),
+
+batchBalanceKg:
+  Number(netKg.toFixed(2)),
+
+recordedByEmployeeId:
+currentUser.employeeId || "",
+
+recordedByName:
+currentUser.fullName || "",
+
+recordedByRole:
+currentUser.role || "",
+
+recordedAt:
+  new Date().toISOString(),
 
 pricePerKg:
 isClient ? 0 : Number(price.value) || 0,
