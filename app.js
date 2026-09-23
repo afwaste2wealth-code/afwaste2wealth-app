@@ -1692,7 +1692,9 @@ accessText:
       "navReports"
     ],
 
-    actions: [],
+    actions: [
+       "actionMaterialIn"
+    ],
 
     subtitle:
       "Administration, Accounts & Company Records",
@@ -2073,18 +2075,21 @@ hideAFFactoryDashboard();
   }
 
 
-  /* =======================================================
-     SECRETARY
-     Secretary records administration/accounts.
-     Editing/deleting saved records will remain Director-only.
-     ======================================================= */
+/* =======================================================
+   SECRETARY DASHBOARD
+
+   Administrative overview of factory activity.
+   Secretary = View + Record.
+   Saved records remain Director-controlled for corrections.
+   ======================================================= */
 
   if (role === "Secretary") {
 
 hideAFFactoryDashboard();
 
-    return;
+renderAFSecretaryDashboard();
 
+    return;
   }
 
 
@@ -2140,6 +2145,840 @@ element.style.display = "none";
 
   });
 
+}
+/* =========================================================
+   SECRETARY DASHBOARD
+   ========================================================= */
+
+function renderAFSecretaryDashboard() {
+
+  /*
+   * Remove an older Secretary dashboard before rebuilding.
+   */
+const oldDashboard =
+document.getElementById(
+      "afSecretaryDashboard"
+    );
+
+  if (oldDashboard) {
+oldDashboard.remove();
+  }
+
+
+const main =
+document.querySelector(
+      "#mainApplication .main"
+    );
+
+  if (!main) {
+    return;
+  }
+
+
+  /* =======================================================
+     READ REAL FACTORY DATA
+     ======================================================= */
+
+const materialRecords =
+JSON.parse(
+localStorage.getItem(
+        "materialRecords"
+      ) || "[]"
+    );
+
+
+const washingRecords =
+JSON.parse(
+localStorage.getItem(
+        "washingShiftRecords"
+      ) || "[]"
+    );
+
+
+const productionRecords =
+JSON.parse(
+localStorage.getItem(
+        "productionRecords"
+      ) || "[]"
+    );
+
+
+  /*
+   * Company-owned kavera only.
+   * Client washing material must not be counted as
+   * company purchased stock.
+   */
+const companyMaterials =
+materialRecords.filter(
+      record =>
+record.materialSource !==
+        "client"
+    );
+
+
+const grossReceivedKg =
+companyMaterials.reduce(
+      (sum, record) =>
+        sum +
+        (
+          Number(
+record.grossWeight
+          ) || 0
+        ),
+      0
+    );
+
+
+const netUsableKg =
+companyMaterials.reduce(
+      (sum, record) =>
+        sum +
+        (
+          Number(
+record.openingBatchKg ??
+record.netWeight ??
+            0
+          ) || 0
+        ),
+      0
+    );
+
+
+const unwashedBalanceKg =
+companyMaterials.reduce(
+      (sum, record) =>
+        sum +
+        (
+          Number(
+record.batchBalanceKg ??
+record.openingBatchKg ??
+record.netWeight ??
+            0
+          ) || 0
+        ),
+      0
+    );
+
+
+const companyWashedKg =
+    Number(
+localStorage.getItem(
+        "companyWashedKaveraStock"
+      ) || 0
+    );
+
+
+const completedWashing =
+washingRecords.filter(
+      record =>
+record.targetStatus ===
+        "COMPLETED" &&
+record.status !==
+        "CANCELLED"
+    );
+
+
+const totalWashedKg =
+completedWashing.reduce(
+      (sum, record) =>
+        sum +
+        (
+          Number(
+record.actualWashedKg
+          ) || 0
+        ),
+      0
+    );
+
+
+  /*
+   * Production totals.
+   * These use real saved production records.
+   */
+const totalPolesProduced =
+productionRecords.reduce(
+      (sum, record) =>
+        sum +
+        (
+          Number(
+record.totalPoles
+          ) || 0
+        ),
+      0
+    );
+
+
+const totalProductionWeight =
+productionRecords.reduce(
+      (sum, record) =>
+        sum +
+        (
+          Number(
+record.productionWeight
+          ) || 0
+        ),
+      0
+    );
+
+
+  /*
+   * Latest operational activity.
+   */
+const latestWashing =
+completedWashing.length
+      ? completedWashing[
+completedWashing.length - 1
+        ]
+      : null;
+
+
+const latestProduction =
+productionRecords.length
+      ? productionRecords[
+productionRecords.length - 1
+        ]
+      : null;
+
+
+const openBatches =
+companyMaterials.filter(
+      record =>
+        Number(
+record.batchBalanceKg ??
+record.openingBatchKg ??
+record.netWeight ??
+          0
+        ) > 0.01
+    ).length;
+
+
+  /* =======================================================
+     BUILD SECRETARY DASHBOARD
+     ======================================================= */
+
+const dashboard =
+document.createElement("div");
+
+dashboard.id =
+    "afSecretaryDashboard";
+
+dashboard.style.cssText = `
+    margin-top:16px;
+  `;
+
+
+dashboard.innerHTML = `
+
+<!-- ===============================================
+         TODAY / FACTORY AT A GLANCE
+         =============================================== -->
+
+<section
+      class="card"
+      style="margin-bottom:16px;"
+>
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:flex-start;
+        gap:15px;
+flex-wrap:wrap;
+        margin-bottom:16px;
+      ">
+
+<div>
+
+<div class="title"
+               style="margin-bottom:4px;">
+            Factory at a Glance
+</div>
+
+<div class="sub">
+            Administrative overview of material,
+            washing, production and stock movement
+</div>
+
+</div>
+
+<button
+          type="button"
+onclick="runRoleAction('recordMaterialIn')"
+          style="
+            border:0;
+            background:#0b5d3b;
+color:white;
+            padding:11px 16px;
+            border-radius:8px;
+font-weight:bold;
+cursor:pointer;
+          "
+>
+＋ Record Kavera Purchase
+</button>
+
+</div>
+
+
+<div style="
+display:grid;
+        grid-template-columns:
+          repeat(auto-fit,minmax(170px,1fr));
+        gap:12px;
+      ">
+
+
+<div style="
+          padding:15px;
+          border:1px solid #dce8e2;
+          border-radius:10px;
+          background:#f8fbf9;
+        ">
+
+<div class="kt">
+Kavera Received
+</div>
+
+<div class="kv">
+            ${grossReceivedKg.toLocaleString()}
+<span style="font-size:13px;">kg</span>
+</div>
+
+<div class="note">
+            Gross company purchases
+</div>
+
+</div>
+
+
+<div style="
+          padding:15px;
+          border:1px solid #dce8e2;
+          border-radius:10px;
+          background:#f8fbf9;
+        ">
+
+<div class="kt">
+            Net Usable Kavera
+</div>
+
+<div class="kv">
+            ${netUsableKg.toLocaleString()}
+<span style="font-size:13px;">kg</span>
+</div>
+
+<div class="note">
+            After dirt deduction
+</div>
+
+</div>
+
+
+<div style="
+          padding:15px;
+          border:1px solid #dce8e2;
+          border-radius:10px;
+          background:#f8fbf9;
+        ">
+
+<div class="kt">
+Kavera In Stock
+</div>
+
+<div class="kv">
+            ${unwashedBalanceKg.toLocaleString()}
+<span style="font-size:13px;">kg</span>
+</div>
+
+<div class="note">
+            ${openBatches} open KB batch(es)
+</div>
+
+</div>
+
+
+<div style="
+          padding:15px;
+          border:1px solid #dce8e2;
+          border-radius:10px;
+          background:#f8fbf9;
+        ">
+
+<div class="kt">
+Kavera Washed
+</div>
+
+<div class="kv">
+            ${totalWashedKg.toLocaleString()}
+<span style="font-size:13px;">kg</span>
+</div>
+
+<div class="note">
+            Total successfully washed
+</div>
+
+</div>
+
+
+<div style="
+          padding:15px;
+          border:1px solid #dce8e2;
+          border-radius:10px;
+          background:#f8fbf9;
+        ">
+
+<div class="kt">
+            Washed Stock
+</div>
+
+<div class="kv">
+            ${companyWashedKg.toLocaleString()}
+<span style="font-size:13px;">kg</span>
+</div>
+
+<div class="note">
+            Company washed material
+</div>
+
+</div>
+
+
+<div style="
+          padding:15px;
+          border:1px solid #dce8e2;
+          border-radius:10px;
+          background:#f8fbf9;
+        ">
+
+<div class="kt">
+            Poles Produced
+</div>
+
+<div class="kv">
+            ${totalPolesProduced.toLocaleString()}
+</div>
+
+<div class="note">
+            ${totalProductionWeight.toLocaleString()}
+            kg finished weight
+</div>
+
+</div>
+
+</div>
+
+</section>
+
+
+<!-- ===============================================
+         OPERATIONS + SECRETARY WORK
+         =============================================== -->
+
+<div style="
+display:grid;
+      grid-template-columns:
+        repeat(auto-fit,minmax(320px,1fr));
+      gap:16px;
+      margin-bottom:16px;
+    ">
+
+
+<!-- MANAGER ACTIVITY -->
+
+<section class="card">
+
+<div class="title">
+          Manager Activities
+</div>
+
+<div style="
+          border-bottom:1px solid #edf2ef;
+          padding:10px 0;
+        ">
+
+<b>Latest Washing</b>
+
+<div class="sub"
+               style="margin-top:6px;">
+
+            ${
+latestWashing
+                ? (
+                    (latestWashing.washingSubBatchNumber ||
+latestWashing.cycleNumber ||
+latestWashing.batchNumber) +
+                    " • " +
+                    Number(
+latestWashing.actualWashedKg || 0
+                    ).toLocaleString() +
+                    " kg washed • " +
+                    Number(
+latestWashing.achievementPercent || 0
+                    ).toFixed(1) +
+                    "%"
+                  )
+                : "No completed washing record yet"
+            }
+
+</div>
+
+</div>
+
+
+<div style="
+          border-bottom:1px solid #edf2ef;
+          padding:12px 0;
+        ">
+
+<b>Latest Production</b>
+
+<div class="sub"
+               style="margin-top:6px;">
+
+            ${
+latestProduction
+                ? (
+                    Number(
+latestProduction.totalPoles || 0
+                    ).toLocaleString() +
+                    " poles • " +
+                    Number(
+latestProduction.productionWeight || 0
+                    ).toLocaleString() +
+                    " kg"
+                  )
+                : "No production record yet"
+            }
+
+</div>
+
+</div>
+
+
+<div style="
+          padding:12px 0 2px;
+        ">
+
+<b>
+            Inspection & Equipment Verification
+</b>
+
+<div class="sub"
+               style="margin-top:6px;">
+            Manager → Secretary verification
+            workflow will appear here as records
+            are connected.
+</div>
+
+</div>
+
+</section>
+
+
+<!-- SECRETARY ADMINISTRATION -->
+
+<section class="card">
+
+<div class="title">
+          Secretary Administration
+</div>
+
+<div style="
+display:grid;
+          grid-template-columns:1fr 1fr;
+          gap:10px;
+        ">
+
+<button
+            class="action"
+            type="button"
+onclick="runRoleAction('recordMaterialIn')"
+>
+♻Kavera Purchase
+</button>
+
+<button
+            class="action"
+            type="button"
+onclick="openRoleModule('salesCustomers')"
+>
+▱ Sales & Customers
+</button>
+
+<button
+            class="action"
+            type="button"
+onclick="openRoleModule('suppliers')"
+>
+♻ Suppliers
+</button>
+
+<button
+            class="action"
+            type="button"
+onclick="openRoleModule('expenses')"
+>
+◈ Expenses
+</button>
+
+</div>
+
+</section>
+
+</div>
+
+
+<!-- ===============================================
+         SALES, STOCK & DISPATCH
+         =============================================== -->
+
+<section
+      class="card"
+      style="margin-bottom:16px;"
+>
+
+<div class="title">
+        Sales, Stock & Dispatch
+</div>
+
+<div style="
+display:grid;
+        grid-template-columns:
+          repeat(auto-fit,minmax(180px,1fr));
+        gap:12px;
+      ">
+
+<div style="
+          padding:14px;
+          border:1px solid #edf2ef;
+          border-radius:9px;
+        ">
+<div class="kt">
+            Poles Sold
+</div>
+<div class="kv">—</div>
+<div class="note">
+            Sales records to be connected
+</div>
+</div>
+
+
+<div style="
+          padding:14px;
+          border:1px solid #edf2ef;
+          border-radius:9px;
+        ">
+<div class="kt">
+            Poles Dispatched
+</div>
+<div class="kv">—</div>
+<div class="note">
+            Kept separate from poles sold
+</div>
+</div>
+
+
+<div style="
+          padding:14px;
+          border:1px solid #edf2ef;
+          border-radius:9px;
+        ">
+<div class="kt">
+            Pole Balance At Factory
+</div>
+<div class="kv">—</div>
+<div class="note">
+            Finished-stock records to be connected
+</div>
+</div>
+
+
+<div style="
+          padding:14px;
+          border:1px solid #edf2ef;
+          border-radius:9px;
+        ">
+<div class="kt">
+            Orders / Quotations
+</div>
+<div class="kv">—</div>
+<div class="note">
+            Commercial records to be connected
+</div>
+</div>
+
+</div>
+
+</section>
+
+
+<!-- ===============================================
+         UPCOMING / COMPANY RECORDS
+         =============================================== -->
+
+<div style="
+display:grid;
+      grid-template-columns:
+        repeat(auto-fit,minmax(320px,1fr));
+      gap:16px;
+      margin-bottom:16px;
+    ">
+
+
+<section class="card">
+
+<div class="title">
+          Upcoming & Follow-up
+</div>
+
+<table>
+<tbody>
+
+<tr>
+<td>Upcoming Clients</td>
+<td style="text-align:right;">
+<b>To connect</b>
+</td>
+</tr>
+
+<tr>
+<td>Upcoming Events</td>
+<td style="text-align:right;">
+<b>To connect</b>
+</td>
+</tr>
+
+<tr>
+<td>Customer Follow-ups</td>
+<td style="text-align:right;">
+<b>To connect</b>
+</td>
+</tr>
+
+<tr>
+<td>Pending Verification</td>
+<td style="text-align:right;">
+<b>To connect</b>
+</td>
+</tr>
+
+</tbody>
+</table>
+
+</section>
+
+
+<section class="card">
+
+<div class="title">
+          Company Records & Marketing
+</div>
+
+<table>
+<tbody>
+
+<tr>
+<td>Company Meetings</td>
+<td style="text-align:right;">
+<b>To connect</b>
+</td>
+</tr>
+
+<tr>
+<td>Adverts & Campaigns</td>
+<td style="text-align:right;">
+<b>To connect</b>
+</td>
+</tr>
+
+<tr>
+<td>Facebook</td>
+<td style="text-align:right;">
+<b>Social Media</b>
+</td>
+</tr>
+
+<tr>
+<td>TikTok</td>
+<td style="text-align:right;">
+<b>Social Media</b>
+</td>
+</tr>
+
+<tr>
+<td>WhatsApp</td>
+<td style="text-align:right;">
+<b>Social Media</b>
+</td>
+</tr>
+
+</tbody>
+</table>
+
+</section>
+
+</div>
+
+
+<!-- ===============================================
+         ALERTS
+         =============================================== -->
+
+<section class="card">
+
+<div class="title">
+        Alerts & Pending Work
+</div>
+
+<div style="
+        background:#eef8f2;
+        border:1px solid #cfe6d8;
+        border-radius:9px;
+        padding:14px;
+        color:#0b5d3b;
+        font-size:13px;
+        line-height:1.7;
+      ">
+
+        This area will automatically show records
+        requiring Secretary attention, including
+        Manager verification requests, customer
+        follow-ups, dispatches, supplier matters
+        and administrative exceptions.
+
+</div>
+
+</section>
+
+  `;
+
+
+  /*
+   * Insert Secretary dashboard before birthday card.
+   * This keeps the working birthday card below it.
+   */
+const birthdayCard =
+document.getElementById(
+      "dashboardBirthdayCard"
+    );
+
+
+  if (
+birthdayCard&&
+birthdayCard.parentNode
+  ) {
+
+birthdayCard.parentNode.insertBefore(
+      dashboard,
+birthdayCard
+    );
+
+  } else {
+
+main.appendChild(
+      dashboard
+    );
+  }
 }
 
 
@@ -2345,6 +3184,7 @@ const actionAccess = {
 
 recordMaterialIn: [
       "Director"
+      "Secretary"
     ],
 
 recordWashing: [
