@@ -1618,6 +1618,7 @@ const AF_ROLE_ACCESS = {
       "navStaffHR",
       "navReports",
       "navSystemSettings",
+      "navPoleStandardWeights",
       "navWashingTarget",
       "navWashingRecords"
     ],
@@ -1823,6 +1824,7 @@ const sidebarIds = [
     "navStaffHR",
     "navReports",
     "navSystemSettings",
+    "navPoleStandardWeights",
     "navWashingTarget",
     "navWashingRecords"
   ];
@@ -3160,6 +3162,20 @@ setWashingTarget();
 viewWashingRecords();
 
       break;
+if (moduleName === "poleStandardWeights") {
+
+  if (!isAFRole("Director")) {
+    alert(
+      "Access Denied.\n\nOnly the Director can manage approved pole standard weights."
+    );
+    return;
+  }
+
+managePoleStandardWeights();
+closeAFMobileMenu();
+
+  return;
+}
 
   }
 
@@ -19893,6 +19909,24 @@ updateDashboardMaterialTotals();
 viewMaterialRecords();
 
   alert("Material record deleted successfully.");
+}
+/* =========================================================
+   MOBILE NAVIGATION
+   ========================================================= */
+
+function openAFMobileMenu() {
+
+document.body.classList.add(
+    "mobile-menu-open"
+  );
+}
+
+
+function closeAFMobileMenu() {
+
+document.body.classList.remove(
+    "mobile-menu-open"
+  );
 }
 
 
