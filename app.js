@@ -18151,15 +18151,21 @@ source.productionInputKg ||
 
 const sourceNumber =
 getProductionSourceNumber(record);
-const sourceNumber =
-getProductionSourceNumber(record);
 
+/*
+ * Only the new traceable KBW washing
+ * sub-batches can enter new production.
+ */
 if (!/^KBW\d+$/i.test(sourceNumber)) {
   return false;
 }
 
 const washedKg =
   Number(record.actualWashedKg || 0);
+
+if (!sourceNumber || washedKg<= 0) {
+  return false;
+}
 
 if (!sourceNumber || washedKg<= 0) {
   return false;
