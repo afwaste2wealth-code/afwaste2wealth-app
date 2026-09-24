@@ -3207,8 +3207,7 @@ recordWashing: [
       "Director",
       "Manager"
     ],
-
-: [
+recordProduction: [
       "Director",
       "Manager"
     ],
