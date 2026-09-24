@@ -14631,159 +14631,436 @@ modal.remove();
  =============================================================*/
 function managePoleStandardWeights() {
 
-const savedWeights = JSON.parse(
-localStorage.getItem("poleStandardWeights") || "{}"
+const currentUser = JSON.parse(
+localStorage.getItem("currentUser") || "{}"
   );
 
-const modal = document.createElement("div");
+  if (
+    String(currentUser.role || "").toLowerCase() !==
+    "director"
+  ) {
+    alert(
+      "Only the Director can set or change pole standard weights."
+    );
+    return;
+  }
+
+const poleCategories = [
+    {
+      key: "pole3X3X6Square",
+      name: '3"x3"x6ft Square'
+    },
+    {
+      key: "pole3X3X6_5Square",
+      name: '3"x3"x6.5ft Square'
+    },
+    {
+      key: "pole4X4X6Square",
+      name: '4"x4"x6ft Square'
+    },
+    {
+      key: "pole4X4X7Square",
+      name: '4"x4"x7ft Square'
+    },
+    {
+      key: "pole3x6Round",
+      name: '3" Round x 6ft'
+    },
+    {
+      key: "pole4x7Round",
+      name: '4" Round x 7ft'
+    },
+    {
+      key: "pole3X3X2Square",
+      name: '3"x3"x2ft Square'
+    },
+    {
+      key: "pole4x4X2Square",
+      name: '4"x4"x2ft Square'
+    },
+    {
+      key: "pole4x2Round",
+      name: '4" Round x 2ft'
+    }
+  ];
+
+  function getSavedWeights() {
+    return JSON.parse(
+localStorage.getItem(
+        "poleStandardWeights"
+      ) || "{}"
+    );
+  }
+
+const modal =
+document.createElement("div");
 
 modal.style.cssText = `
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.55);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 10000;
-    font-family: Arial, sans-serif;
+position:fixed;
+    inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+align-items:center;
+justify-content:center;
+    z-index:10000;
+font-family:Arial,sans-serif;
+    padding:10px;
   `;
 
 modal.innerHTML = `
 <div style="
 background:white;
-      width:95%;
-      max-width:650px;
-      max-height:90vh;
+      width:94%;
+      max-width:760px;
+      max-height:92vh;
 overflow:auto;
-      padding:24px;
-      border-radius:12px;
+      padding:26px;
+      border-radius:16px;
+      box-shadow:0 12px 35px rgba(0,0,0,.25);
     ">
 
-<h2 style="margin-top:0;">
-        Pole Standard Weights
+<h2 style="
+        margin-top:0;
+        color:#0b5d3b;
+      ">
+        Director Pole Standard Weights
 </h2>
 
-<p>
-        Director sets the approved standard weight
-        for one pole in each category.
-</p>
+<div style="
+        background:#eef8f2;
+        border:1px solid #cfe6d8;
+        padding:12px;
+        border-radius:8px;
+        margin-bottom:20px;
+        line-height:1.5;
+      ">
+        Select a pole category and enter the
+        Director-approved finished weight for
+        one pole.
+</div>
 
-<label>4"x4"x7ft Square - KG per Pole</label>
+<label>
+<b>Pole Category</b>
+</label>
+
+<select
+        id="standardPoleCategory"
+        style="
+          width:100%;
+          padding:11px;
+          margin:6px 0 16px;
+        "
+>
+<option value="">
+          Select Pole Category
+</option>
+
+        ${poleCategories.map(category => `
+<option value="${category.key}">
+            ${category.name}
+</option>
+        `).join("")}
+</select>
+
+<label>
+<b>Standard Weight — KG per Pole</b>
+</label>
+
 <input
-        id="weight4X4X7Square"
+        id="standardPoleWeight"
         type="number"
         min="0"
         step="0.01"
-        value="${savedWeights.pole4X4X7Square ?? ""}"
+        placeholder="Enter approved KG per pole"
+        style="
+          width:100%;
+box-sizing:border-box;
+          padding:11px;
+          margin:6px 0 16px;
+        "
 >
 
-<br><br>
+<div
+        id="standardWeightStatus"
+        style="
+          min-height:20px;
+          margin-bottom:16px;
+          color:#666;
+          font-size:13px;
+        "
+></div>
 
-<label>3"x3"x6ft Square - KG per Pole</label>
-<input
-        id="weight3X3X6Square"
-        type="number"
-        min="0"
-        step="0.01"
-        value="${savedWeights.pole3X3X6Square ?? ""}"
+<button
+        id="saveSelectedPoleWeight"
+        type="button"
+        style="
+          padding:11px 18px;
+          background:#0b5d3b;
+color:white;
+          border:0;
+          border-radius:8px;
+font-weight:bold;
+cursor:pointer;
+        "
 >
-
-<br><br>
-
-<label>4"x7ft Round - KG per Pole</label>
-<input
-        id="weight4x7Round"
-        type="number"
-        min="0"
-        step="0.01"
-        value="${savedWeights.pole4x7Round ?? ""}"
->
-
-<br><br>
-
-<label>3"x3"x2ft Square - KG per Pole</label>
-<input
-        id="weight3X3X2Square"
-        type="number"
-        min="0"
-        step="0.01"
-        value="${savedWeights.pole3X3X2Square ?? ""}"
->
-
-<br><br>
-
-<label>4"x4"x2ft Square - KG per Pole</label>
-<input
-        id="weight4x4X2Square"
-        type="number"
-        min="0"
-        step="0.01"
-        value="${savedWeights.pole4x4X2Square ?? ""}"
->
-
-<br><br>
-
-<label>4"x2ft Round - KG per Pole</label>
-<input
-        id="weight4x2Round"
-        type="number"
-        min="0"
-        step="0.01"
-        value="${savedWeights.pole4x2Round ?? ""}"
->
-
-<br><br>
-
-<button id="savePoleWeightsBtn" type="button">
-        Save Standard Weights
+        Save / Update Standard
 </button>
 
-<button id="closePoleWeightsBtn" type="button">
-        Close
+<hr style="
+        margin:24px 0 18px;
+        border:0;
+        border-top:1px solid #ddd;
+      ">
+
+<h3>
+        Current Approved Standards
+</h3>
+
+<div style="overflow-x:auto;">
+
+<table style="
+          width:100%;
+border-collapse:collapse;
+          min-width:500px;
+        ">
+
+<thead>
+<tr>
+<th style="
+                border:1px solid #ddd;
+                padding:9px;
+text-align:left;
+              ">
+                Pole Category
+</th>
+
+<th style="
+                border:1px solid #ddd;
+                padding:9px;
+text-align:center;
+              ">
+                Standard KG / Pole
+</th>
+</tr>
+</thead>
+
+<tbody id="poleStandardsTable">
+</tbody>
+
+</table>
+
+</div>
+
+<div style="
+text-align:right;
+        margin-top:22px;
+      ">
+
+<button
+          id="closePoleWeightsBtn"
+          type="button"
+          style="
+            padding:10px 18px;
+background:white;
+            border:1px solid #ccc;
+            border-radius:8px;
+cursor:pointer;
+          "
+>
+          Close
 </button>
+
+</div>
 
 </div>
   `;
 
 document.body.appendChild(modal);
 
-document.getElementById("closePoleWeightsBtn").onclick = function() {
-modal.remove();
-  };
+const categorySelect =
+modal.querySelector(
+      "#standardPoleCategory"
+    );
 
-document.getElementById("savePoleWeightsBtn").onclick = function() {
+const weightInput =
+modal.querySelector(
+      "#standardPoleWeight"
+    );
 
-const weights = {
-      pole4X4X7Square:
-        Number(document.getElementById("weight4X4X7Square").value) || 0,
+const status =
+modal.querySelector(
+      "#standardWeightStatus"
+    );
 
-      pole3X3X6Square:
-        Number(document.getElementById("weight3X3X6Square").value) || 0,
+const tableBody =
+modal.querySelector(
+      "#poleStandardsTable"
+    );
 
-      pole4x7Round:
-        Number(document.getElementById("weight4x7Round").value) || 0,
+  function renderStandardsTable() {
 
-      pole3X3X2Square:
-        Number(document.getElementById("weight3X3X2Square").value) || 0,
+const savedWeights =
+getSavedWeights();
 
-      pole4x4X2Square:
-        Number(document.getElementById("weight4x4X2Square").value) || 0,
+tableBody.innerHTML =
+poleCategories.map(category => {
 
-      pole4x2Round:
-        Number(document.getElementById("weight4x2Round").value) || 0,
+const weight =
+          Number(
+savedWeights[category.key] || 0
+          );
 
-updatedAt: new Date().toISOString()
-    };
+        return `
+<tr>
+<td style="
+              border:1px solid #ddd;
+              padding:9px;
+            ">
+              ${category.name}
+</td>
+
+<td style="
+              border:1px solid #ddd;
+              padding:9px;
+text-align:center;
+font-weight:bold;
+            ">
+              ${
+                weight > 0
+                  ? weight.toFixed(2) + " KG"
+                  : "Not Set"
+              }
+</td>
+</tr>
+        `;
+      }).join("");
+  }
+
+  function loadSelectedStandard() {
+
+const key =
+categorySelect.value;
+
+    if (!key) {
+
+weightInput.value = "";
+
+status.textContent =
+        "Select a pole category.";
+
+      return;
+    }
+
+const savedWeights =
+getSavedWeights();
+
+const currentWeight =
+      Number(
+savedWeights[key] || 0
+      );
+
+    if (currentWeight> 0) {
+
+weightInput.value =
+currentWeight;
+
+status.textContent =
+        "Current approved standard: " +
+currentWeight.toFixed(2) +
+        " KG per pole.";
+
+    } else {
+
+weightInput.value = "";
+
+status.textContent =
+        "No standard weight has been set for this category.";
+    }
+  }
+
+categorySelect.onchange =
+loadSelectedStandard;
+
+modal.querySelector(
+    "#saveSelectedPoleWeight"
+  ).onclick = function () {
+
+const key =
+categorySelect.value;
+
+const category =
+poleCategories.find(
+        item =>item.key === key
+      );
+
+const weight =
+      Number(weightInput.value) || 0;
+
+    if (!category) {
+
+      alert(
+        "Please select a pole category."
+      );
+
+      return;
+    }
+
+    if (weight <= 0) {
+
+      alert(
+        "Please enter a valid standard weight greater than zero."
+      );
+
+      return;
+    }
+
+const savedWeights =
+getSavedWeights();
+
+savedWeights[key] =
+      Number(weight.toFixed(2));
+
+savedWeights.updatedAt =
+      new Date().toISOString();
+
+savedWeights.updatedByEmployeeId =
+currentUser.employeeId || "";
+
+savedWeights.updatedByName =
+currentUser.fullName || "";
+
+savedWeights.updatedByRole =
+currentUser.role || "";
 
 localStorage.setItem(
       "poleStandardWeights",
-JSON.stringify(weights)
+JSON.stringify(savedWeights)
     );
 
-    alert("Pole standard weights saved successfully.");
+status.textContent =
+category.name +
+      " saved at " +
+weight.toFixed(2) +
+      " KG per pole.";
 
+renderStandardsTable();
+
+    alert(
+      "Pole standard weight saved successfully.\n\n" +
+category.name +
+      "\n" +
+weight.toFixed(2) +
+      " KG per pole"
+    );
+  };
+
+modal.querySelector(
+    "#closePoleWeightsBtn"
+  ).onclick = function () {
 modal.remove();
   };
+
+renderStandardsTable();
 }
 /* =========================================================
    WASHING DEPARTMENT - SOURCE BATCH + WASHING SUB-BATCH
