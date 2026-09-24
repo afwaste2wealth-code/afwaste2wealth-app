@@ -3160,30 +3160,23 @@ setWashingTarget();
       break;
 
 
-    case "washingRecords":
+   case "washingRecords":
 
 viewWashingRecords();
 
       break;
-if (moduleName === "poleStandardWeights") {
 
-  if (!isAFRole("Director")) {
-    alert(
-      "Access Denied.\n\nOnly the Director can manage approved pole standard weights."
-    );
-    return;
-  }
+
+    case "poleStandardWeights":
 
 managePoleStandardWeights();
 closeAFMobileMenu();
 
-  return;
-}
+      break;
 
   }
 
 }
-
 
 /* =========================================================
    CHECK QUICK ACTION ACCESS
