@@ -15429,16 +15429,6 @@ readonly
         style="width:100%;padding:10px;margin:6px 0 16px"
 >
 
-<label><b>Shift</b></label>
-
-<select
-        id="washingTargetShift"
-        style="width:100%;padding:10px;margin:6px 0 16px"
->
-<option value="">Select Shift</option>
-<option value="Day">Day</option>
-<option value="Night">Night</option>
-</select>
 
 <label><b>Target KG To Wash</b></label>
 
@@ -15537,10 +15527,6 @@ modal.querySelector(
           "#washingTargetDate"
         ).value;
 
-const shift =
-modal.querySelector(
-          "#washingTargetShift"
-        ).value;
 
 const targetKg =
         Number(
@@ -15563,13 +15549,7 @@ modal.querySelector(
         return;
       }
 
-      if (!shift) {
-        alert(
-          "Please select the washing shift."
-        );
-        return;
-      }
-
+     
       if (targetKg<= 0) {
         alert(
           "Please enter the washing target."
@@ -15601,7 +15581,6 @@ const duplicate =
 records.some(record =>
 record.batchNumber === batchNumber&&
 record.date === date &&
-record.shift === shift &&
 record.targetStatus === "TARGET SET"
         );
 
@@ -15645,8 +15624,8 @@ cycleNumber: "",
         date:
           date,
 
-        shift:
-          shift,
+        shift:"",
+          shiftId"",
 
 targetKg:
           Number(
@@ -15763,7 +15742,6 @@ pendingTargets.map(
 <option value="${record.id}">
           ${record.batchNumber}
           - ${record.date}
-          - ${record.shift}
           - Target ${Number(record.targetKg || 0).toLocaleString()} KG
 </option>
       `
@@ -15792,6 +15770,25 @@ overflow:auto;
         style="width:100%;padding:10px;margin:6px 0 18px"
 >
         ${targetOptions}
+</select>
+<label style="
+display:block;
+  margin-top:4px;
+">
+<b>Working Shift</b>
+</label>
+
+<select
+  id="washingWorkingShift"
+  style="
+    width:100%;
+    padding:10px;
+    margin:6px 0 18px;
+  "
+>
+<option value="">
+    Select Working Shift
+</option>
 </select>
 
 
@@ -16014,12 +16011,43 @@ modal.querySelector(
 selectedId
     ) || null;
   }
-function renderWashingStaff(record) {
+   function renderWashingStaff() {
 
 const staffContainer =
-modal.querySelector("#washingStaffList");
+modal.querySelector(
+      "#washingStaffList"
+    );
 
-  if (!staffContainer) {
+const shiftSelect =
+modal.querySelector(
+      "#washingWorkingShift"
+    );
+
+  if (
+    !staffContainer ||
+    !shiftSelect
+  ) {
+    return;
+  }
+
+const selectedShiftId =
+    String(
+shiftSelect.value || ""
+    );
+
+  if (!selectedShiftId) {
+
+staffContainer.innerHTML = `
+<div style="
+        padding:12px;
+        background:#f5f5f5;
+        border-radius:8px;
+        color:#666;
+      ">
+        Select the working shift first.
+</div>
+    `;
+
     return;
   }
 
@@ -16027,82 +16055,27 @@ const employees =
 typeof getEmployees === "function"
       ? getEmployees()
       : JSON.parse(
-localStorage.getItem("employees") || "[]"
+localStorage.getItem(
+            "employees"
+          ) || "[]"
         );
 
 const teams =
 typeof getTeams === "function"
       ? getTeams()
       : JSON.parse(
-localStorage.getItem("factoryTeams") || "[]"
+localStorage.getItem(
+            "factoryTeams"
+          ) || "[]"
         );
 
-const shifts =
-typeof getShiftSettings === "function"
-      ? getShiftSettings()
-      : [];
-
-const targetShift =
-    String(record?.shift || "").trim();
-
-  if (!targetShift) {
-
-staffContainer.innerHTML = `
-<div style="
-        padding:12px;
-        background:#fff4e5;
-        border-radius:8px;
-      ">
-        This washing target has no shift.
-</div>
-    `;
-
-    return;
-  }
-
-  /*
-   * Washing targets may contain the shift name,
-   * while teams store shiftId.
-   */
-const matchedShift =
-shifts.find(shift =>
-      String(shift.id || "") === targetShift ||
-      String(shift.name || "").toLowerCase() ===
-targetShift.toLowerCase()
-    );
-
 const matchingTeams =
-teams.filter(team => {
-
-const teamShiftId =
-        String(team.shiftId || "");
-
-const teamShiftName =
-        String(
-team.shiftName || ""
-        ).toLowerCase();
-
-const shiftMatches =
-matchedShift
-          ? (
-teamShiftId ===
-                String(matchedShift.id) ||
-teamShiftName ===
-                String(matchedShift.name || "")
-                  .toLowerCase()
-            )
-          : (
-teamShiftId === targetShift ||
-teamShiftName ===
-targetShift.toLowerCase()
-            );
-
-const active =
-        String(team.status || "")
-          .toLowerCase() === "active";
-
-      return shiftMatches&& active;
-    });
+teams.filter(team =>
+      String(team.shiftId || "") ===
+selectedShiftId&&
+      String(team.status || "")
+        .toLowerCase() === "active"
+    );
 
   if (!matchingTeams.length) {
 
@@ -16114,8 +16087,8 @@ staffContainer.innerHTML = `
         border-radius:8px;
         color:#8a5a00;
       ">
-        No active team is assigned to
-        ${targetShift}.
+        No active team is assigned
+        to this shift.
 </div>
     `;
 
@@ -16141,31 +16114,40 @@ team.memberEmployeeIds
         ].filter(Boolean))
       );
 
-employeeIds.forEach(employeeId => {
+employeeIds.forEach(
+employeeId => {
 
 const employee =
 employees.find(item =>
-          String(item.employeeId) ===
-          String(employeeId)
-        );
+            String(
+item.employeeId
+            ) ===
+            String(employeeId)
+          );
 
-      if (!employee) {
-        return;
-      }
+        if (!employee) {
+          return;
+        }
 
-      if (
-        String(
-employee.employmentStatus || ""
-        ).toLowerCase() !== "active"
-      ) {
-        return;
-      }
+        if (
+          String(
+employee.employmentStatus ||
+            ""
+          ).toLowerCase() !==
+          "active"
+        ) {
+          return;
+        }
 
-      if (!staffMap.has(String(employeeId))) {
+        if (
+          !staffMap.has(
+            String(employeeId)
+          )
+        ) {
 
 staffMap.set(
-          String(employeeId),
-          {
+            String(employeeId),
+            {
 employeeId:
 employee.employeeId,
 
@@ -16179,16 +16161,17 @@ teamName:
 team.name,
 
 isTeamLeader:
-              String(
+                String(
 team.leaderEmployeeId
-              ) ===
-              String(
+                ) ===
+                String(
 employee.employeeId
-              )
-          }
-        );
+                )
+            }
+          );
+        }
       }
-    });
+    );
   });
 
 const staff =
@@ -16204,7 +16187,8 @@ staffContainer.innerHTML = `
         background:#fff4e5;
         border-radius:8px;
       ">
-        The team has no active registered employees.
+        The assigned team has no
+        active registered employees.
 </div>
     `;
 
@@ -16226,14 +16210,18 @@ cursor:pointer;
 <input
           type="checkbox"
           class="washingStaffCheckbox"
-          value="${String(person.employeeId)
-            .replace(/"/g, "&quot;")}"
-          data-name="${String(person.fullName || "")
-            .replace(/"/g, "&quot;")}"
-          data-team-id="${String(person.teamId || "")
-            .replace(/"/g, "&quot;")}"
-          data-team-name="${String(person.teamName || "")
-            .replace(/"/g, "&quot;")}"
+          value="${String(
+person.employeeId || ""
+          ).replace(/"/g, "&quot;")}"
+          data-name="${String(
+person.fullName || ""
+          ).replace(/"/g, "&quot;")}"
+          data-team-id="${String(
+person.teamId || ""
+          ).replace(/"/g, "&quot;")}"
+          data-team-name="${String(
+person.teamName || ""
+          ).replace(/"/g, "&quot;")}"
           data-team-leader="${
 person.isTeamLeader
               ? "yes"
@@ -16247,7 +16235,6 @@ person.isTeamLeader
 >
 
 <span>
-
 <b>
             ${person.fullName || ""}
 </b>
@@ -16259,22 +16246,57 @@ person.isTeamLeader
             font-size:12px;
           ">
             ${person.employeeId || ""}
-            •
-            ${person.teamName || ""}
+            • ${person.teamName || ""}
             ${
 person.isTeamLeader
                 ? " • Team Leader"
                 : ""
             }
 </span>
-
 </span>
 
 </label>
 
     `).join("");
 }
+function loadWashingShifts() {
 
+const shiftSelect =
+modal.querySelector(
+      "#washingWorkingShift"
+    );
+
+  if (!shiftSelect) {
+    return;
+  }
+
+const shifts =
+typeof getShiftSettings === "function"
+      ? getShiftSettings().filter(
+          shift =>
+            String(
+shift.status || ""
+            ).toLowerCase() ===
+            "active"
+        )
+      : [];
+
+shiftSelect.innerHTML = `
+<option value="">
+      Select Working Shift
+</option>
+
+    ${shifts.map(shift => `
+<option value="${shift.id}">
+        ${shift.name}
+</option>
+    `).join("")}
+  `;
+}
+modal.querySelector(
+  "#washingWorkingShift"
+).onchange =
+renderWashingStaff;
 
   function loadSelectedTarget() {
 
@@ -16331,8 +16353,11 @@ modal.querySelector(
 modal.querySelector(
       "#washingAchievement"
     ).value = "0.00";
+modal.querySelector(
+      "#washingWorkingShift"
+    ).value = "";
 
-renderWashingStaff(record);
+renderWashingStaff();
 modal.querySelector(
       "#washingSourceComplete"
     ).checked = false;
@@ -16421,6 +16446,23 @@ modal.querySelector(
 
 const selectedRecord =
 getSelectedRecord();
+       const workingShiftId =
+modal.querySelector(
+    "#washingWorkingShift"
+  ).value;
+
+const activeShifts =
+typeof getShiftSettings === "function"
+    ? getShiftSettings()
+    : [];
+
+const workingShift =
+activeShifts.find(
+    shift =>
+      String(shift.id) ===
+      String(workingShiftId)
+  );
+
 
       if (!selectedRecord) {
 
@@ -16628,7 +16670,16 @@ washingSubBatchNumber;
        */
 selectedRecord.cycleNumber =
 washingSubBatchNumber;
-
+if(!workingShift) {
+   alert(
+      "Please select the working shift."
+      );
+   return;
+}
+       selectedRecord.shiftId =
+           workingShift.id;
+       selectedRecord.shift = workingShift.name;
+          
 selectedRecord.kgTaken =
         Number(
 kgTaken.toFixed(2)
@@ -16890,7 +16941,8 @@ modal.remove();
     };
 
 
-loadSelectedTarget();
+loadWashingShifts();
+   loadSelectedTarget();
 }
 
 /* =========================================================
