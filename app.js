@@ -3278,9 +3278,9 @@ recordWashing();
       break;
 
 
-    case "":
+    case "recordProduction":
 
-();
+recordProduction();
 
       break;
 
