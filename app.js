@@ -816,7 +816,7 @@ recordMaterialIn();
   }
 
   if (name === "Record Production") {
-recordProduction();
+();
     return;
   }
 
@@ -3208,7 +3208,7 @@ recordWashing: [
       "Manager"
     ],
 
-recordProduction: [
+: [
       "Director",
       "Manager"
     ],
@@ -3279,9 +3279,9 @@ recordWashing();
       break;
 
 
-    case "recordProduction":
+    case "":
 
-recordProduction();
+();
 
       break;
 
@@ -17954,19 +17954,272 @@ const poleStandardWeights = JSON.parse(
 localStorage.getItem("poleStandardWeights") || "{}"
   );
 
-  /*
-   * Company washed kavera is the material available
-   * for A&F pole production.
-   */
-const companyWashedAvailable =
-typeof getCompanyWashedKaveraStock === "function"
-      ? getCompanyWashedKaveraStock()
-      : Number(
-localStorage.getItem("companyWashedKaveraStock") || 0
+const productionRecords = JSON.parse(
+localStorage.getItem("productionRecords") || "[]"
+  );
+
+const washingRecords =
+typeof getWashingShiftRecords === "function"
+      ? getWashingShiftRecords()
+      : JSON.parse(
+localStorage.getItem("washingShiftRecords") || "[]"
         );
 
+const employees =
+typeof getEmployees === "function"
+      ? getEmployees()
+      : JSON.parse(
+localStorage.getItem("employees") || "[]"
+        );
 
-const modal = document.createElement("div");
+const teams =
+typeof getTeams === "function"
+      ? getTeams()
+      : JSON.parse(
+localStorage.getItem("factoryTeams") || "[]"
+        );
+
+const shifts =
+typeof getShiftSettings === "function"
+      ? getShiftSettings().filter(
+          shift =>
+            String(shift.status || "").toLowerCase() === "active"
+        )
+      : [];
+
+const currentUser = JSON.parse(
+localStorage.getItem("currentUser") || "{}"
+  );
+
+
+  /* =========================================================
+     BASIC HELPERS
+     ========================================================= */
+
+  function escapeProductionText(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+
+  function roundProductionKg(value) {
+    return Number(
+      (Number(value) || 0).toFixed(2)
+    );
+  }
+
+
+  function getProductionSourceNumber(record) {
+    return String(
+record.washingSubBatchNumber ||
+record.subBatchNumber ||
+record.cycleNumber ||
+      ""
+    ).trim();
+  }
+
+
+  function getProductionSourceBatch(record) {
+    return String(
+record.batchNumber ||
+record.sourceBatchNumber ||
+record.masterBatchNumber ||
+      ""
+    ).trim();
+  }
+
+
+  function isCompletedWashingRecord(record) {
+
+const status = String(
+record.status || ""
+    ).toUpperCase();
+
+const targetStatus = String(
+record.targetStatus || ""
+    ).toUpperCase();
+
+    return (
+      status === "COMPLETED" ||
+targetStatus === "COMPLETED"
+    );
+  }
+
+
+  function isCompanyWashingRecord(record) {
+
+    /*
+     * New washing records should identify their owner.
+     * For older records, use the source KB to determine ownership.
+     */
+
+const ownerType = String(
+record.ownerType ||
+record.batchOwnerType ||
+record.materialOwnerType ||
+      ""
+    ).toLowerCase();
+
+    if (ownerType) {
+      return ownerType !== "client";
+    }
+
+const batchNumber =
+getProductionSourceBatch(record);
+
+    if (
+batchNumber&&
+typeof getBatchOwnerType === "function"
+    ) {
+
+      return String(
+getBatchOwnerType(batchNumber) || "company"
+      ).toLowerCase() !== "client";
+    }
+
+    /*
+     * Historical company records without owner fields
+     * remain usable.
+     */
+    return true;
+  }
+
+
+  function getUsedKgForWashingSource(sourceNumber) {
+
+    if (!sourceNumber) {
+      return 0;
+    }
+
+    return productionRecords.reduce(
+      (total, record) => {
+
+const sources =
+Array.isArray(record.washedSources)
+            ? record.washedSources
+            : [];
+
+const usedInRecord =
+sources.reduce(
+            (sourceTotal, source) => {
+
+const number = String(
+source.washingSubBatchNumber ||
+source.subBatchNumber ||
+source.cycleNumber ||
+                ""
+              ).trim();
+
+              if (number !== sourceNumber) {
+                return sourceTotal;
+              }
+
+              return (
+sourceTotal +
+                Number(
+source.kgUsed ||
+source.productionInputKg ||
+                  0
+                )
+              );
+            },
+            0
+          );
+
+        return total + usedInRecord;
+      },
+      0
+    );
+  }
+
+
+  function getAvailableWashedSources() {
+
+    return washingRecords
+      .filter(record => {
+
+        if (!isCompletedWashingRecord(record)) {
+          return false;
+        }
+
+        if (!isCompanyWashingRecord(record)) {
+          return false;
+        }
+
+const sourceNumber =
+getProductionSourceNumber(record);
+
+const washedKg =
+          Number(record.actualWashedKg || 0);
+
+        if (!sourceNumber || washedKg<= 0) {
+          return false;
+        }
+
+const alreadyUsed =
+getUsedKgForWashingSource(sourceNumber);
+
+        return (
+washedKg - alreadyUsed> 0.01
+        );
+      })
+      .map(record => {
+
+const sourceNumber =
+getProductionSourceNumber(record);
+
+const washedKg =
+          Number(record.actualWashedKg || 0);
+
+const alreadyUsed =
+getUsedKgForWashingSource(sourceNumber);
+
+const availableKg =
+Math.max(
+washedKg - alreadyUsed,
+            0
+          );
+
+        return {
+          record,
+sourceNumber,
+sourceBatchNumber:
+getProductionSourceBatch(record),
+washedKg:
+roundProductionKg(washedKg),
+alreadyUsedKg:
+roundProductionKg(alreadyUsed),
+availableKg:
+roundProductionKg(availableKg)
+        };
+      })
+      .sort((a, b) =>
+a.sourceNumber.localeCompare(
+b.sourceNumber,
+          undefined,
+          {
+            numeric: true,
+            sensitivity: "base"
+          }
+        )
+      );
+  }
+
+
+const availableWashedSources =
+getAvailableWashedSources();
+
+
+  /* =========================================================
+     CREATE MODAL
+     ========================================================= */
+
+const modal =
+document.createElement("div");
 
 modal.style.cssText = `
 position:fixed;
@@ -17977,436 +18230,572 @@ align-items:center;
 justify-content:center;
     z-index:9999;
 font-family:Arial,sans-serif;
+    padding:10px;
   `;
 
 
 modal.innerHTML = `
-
 <div style="
 background:white;
-  width:92%;
-  max-width:950px;
-  max-height:90vh;
+      width:94%;
+      max-width:1050px;
+      max-height:92vh;
 overflow:auto;
-  padding:30px;
-  border-radius:16px;
-  box-shadow:0 12px 35px rgba(0,0,0,0.25);
-">
+      padding:26px;
+      border-radius:16px;
+      box-shadow:0 12px 35px rgba(0,0,0,0.25);
+    ">
 
-<h2 style="margin-top:0;">
-  Record Production
+<h2 style="
+        margin-top:0;
+        color:#0b5d3b;
+      ">
+        Record Production
 </h2>
 
-
 <div style="
-  background:#eef8f2;
-  border:1px solid #cfe6d8;
-  padding:12px;
-  border-radius:8px;
-  margin-bottom:18px;
-  color:#0b5d3b;
-">
-<b>Production Stock Rule</b><br>
-  KG taken into production is deducted from
-  Company Washed Kavera Stock when this record is saved.
+        background:#eef8f2;
+        border:1px solid #cfe6d8;
+        padding:13px;
+        border-radius:9px;
+        margin-bottom:20px;
+        color:#0b5d3b;
+        line-height:1.5;
+      ">
+<b>Production Control</b><br>
+        Select the working shift, the employees who actually worked,
+        and the washed KBW material taken into production.
+        Finished production weight is calculated automatically using
+        Director-approved pole standard weights.
 </div>
 
 
 <div style="
 display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:20px;
-  margin-bottom:18px;
-">
+grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+        gap:18px;
+        margin-bottom:20px;
+      ">
 
 <div>
-
 <label style="
 display:block;
-  margin-bottom:6px;
-  font-weight:600;
-">
-  Date
+            margin-bottom:6px;
+            font-weight:600;
+          ">
+            Production Date
 </label>
 
 <input
-  id="productionDate"
-  type="date"
-  value="${new Date().toISOString().split("T")[0]}"
-  style="
-    width:100%;
-    padding:10px;
-    border:1px solid #ccc;
-    border-radius:8px;
-  "
+            id="productionDate"
+            type="date"
+            value="${new Date().toISOString().split("T")[0]}"
+            style="
+              width:100%;
+box-sizing:border-box;
+              padding:10px;
+              border:1px solid #ccc;
+              border-radius:8px;
+            "
 >
-
 </div>
 
 
 <div>
-
 <label style="
 display:block;
-  margin-bottom:6px;
-  font-weight:600;
-">
-  Shift
+            margin-bottom:6px;
+            font-weight:600;
+          ">
+            Working Shift
 </label>
 
 <select
-  id="productionShift"
-  style="
-    width:100%;
-    padding:10px;
-    border:1px solid #ccc;
-    border-radius:8px;
-  "
+            id="productionShift"
+            style="
+              width:100%;
+box-sizing:border-box;
+              padding:10px;
+              border:1px solid #ccc;
+              border-radius:8px;
+            "
 >
-<option value="">Select Shift</option>
-<option value="Day">Day</option>
-<option value="Night">Night</option>
+<option value="">
+              Select Shift
+</option>
+
+            ${shifts.map(shift => `
+<option value="${escapeProductionText(shift.id)}">
+                ${escapeProductionText(shift.name)}
+</option>
+            `).join("")}
 </select>
-
 </div>
 
 </div>
 
 
 <div style="
+        border:1px solid #d9e5de;
+        border-radius:10px;
+        padding:15px;
+        margin-bottom:20px;
+      ">
+
+<h3 style="
+          margin:0 0 8px;
+          color:#0b5d3b;
+          font-size:17px;
+        ">
+          Staff Who Actually Worked
+</h3>
+
+<div style="
+          font-size:13px;
+          color:#666;
+          margin-bottom:12px;
+        ">
+          Select a shift first. Only employees assigned to the
+          active team or teams working that shift will appear.
+</div>
+
+<div
+          id="productionStaffList"
+          style="
+            max-height:220px;
+overflow:auto;
+          "
+>
+<div style="
+            padding:12px;
+            background:#f5f5f5;
+            border-radius:8px;
+            color:#666;
+          ">
+            Select the working shift.
+</div>
+</div>
+
+</div>
+
+
+<div style="
+        border:1px solid #d9e5de;
+        border-radius:10px;
+        padding:15px;
+        margin-bottom:20px;
+      ">
+
+<h3 style="
+          margin:0 0 8px;
+          color:#0b5d3b;
+          font-size:17px;
+        ">
+          Washed Kavera Issued to Production
+</h3>
+
+<div style="
+          font-size:13px;
+          color:#666;
+          margin-bottom:12px;
+          line-height:1.45;
+        ">
+          Select one or more completed company KBW washing
+          sub-batches and enter only the KG actually taken from each.
+          Unused KG remains available for future production.
+</div>
+
+<div id="productionWashedSources"></div>
+
+<div style="
+          margin-top:15px;
 display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:20px;
-  margin-bottom:18px;
-">
+grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+          gap:14px;
+        ">
 
 <div>
-
 <label style="
 display:block;
-  margin-bottom:6px;
-  font-weight:600;
-">
-  Staff Who Worked
+              margin-bottom:6px;
+              font-weight:600;
+            ">
+              Total Company Washed Kavera Available
 </label>
 
 <input
-  id="productionStaff"
-  type="text"
-  placeholder="Enter staff names"
-  style="
-    width:100%;
-    padding:10px;
-    border:1px solid #ccc;
-    border-radius:8px;
-  "
->
-
-</div>
-
-
-<div>
-
-<label style="
-display:block;
-  margin-bottom:6px;
-  font-weight:600;
-">
-  Company Washed Kavera Available (KG)
-</label>
-
-<input
-  id="productionAvailableKg"
-  type="number"
-  min="0"
-  step="0.01"
+              id="productionAvailableKg"
+              type="number"
 readonly
-  value="${Number(companyWashedAvailable).toFixed(2)}"
-  style="
-    width:100%;
-    padding:10px;
-    border:1px solid #ccc;
-    border-radius:8px;
-    background:#f3f5f4;
-  "
+              value="0"
+              style="
+                width:100%;
+box-sizing:border-box;
+                padding:10px;
+                border:1px solid #ccc;
+                border-radius:8px;
+                background:#f3f5f4;
+              "
 >
-
-</div>
-
 </div>
 
 
-<div style="margin-bottom:22px;">
-
+<div>
 <label style="
 display:block;
-  margin-bottom:6px;
-  font-weight:600;
-">
-  KG Taken Into Production
+              margin-bottom:6px;
+              font-weight:600;
+            ">
+              Total KG Taken Into Production
 </label>
 
 <input
-  id="productionInputKg"
-  type="number"
-  min="0"
-  step="0.01"
-  placeholder="Enter physical KG taken into production"
-  style="
-    width:100%;
-    padding:10px;
-    border:1px solid #ccc;
-    border-radius:8px;
-  "
+              id="productionInputKg"
+              type="number"
+readonly
+              value="0"
+              style="
+                width:100%;
+box-sizing:border-box;
+                padding:10px;
+                border:1px solid #ccc;
+                border-radius:8px;
+                background:#f3f5f4;
+font-weight:bold;
+              "
 >
+</div>
+
+</div>
 
 </div>
 
 
 <h3 style="
-  margin:5px 0 14px;
-  font-size:16px;
-">
-  Pole Quantities Produced
+        margin:5px 0 14px;
+        color:#0b5d3b;
+        font-size:17px;
+      ">
+        Pole Quantities Produced
 </h3>
 
 
 <div style="
 display:grid;
-grid-template-columns:repeat(3,1fr);
-  gap:16px;
-  margin-bottom:24px;
-">
+grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+        gap:15px;
+        margin-bottom:24px;
+      ">
 
+<div>
 <label>
-  4"x4"x7ft Square - Number of Poles
+            4"x4"x7ft Square
 </label>
 
 <input
-  id="pole4X4X7Square"
-  type="number"
-  min="0"
-  value="0"
+            id="pole4X4X7Square"
+            type="number"
+            min="0"
+            step="1"
+            value="0"
+            style="
+              width:100%;
+box-sizing:border-box;
+              padding:10px;
+              margin-top:5px;
+            "
 >
+</div>
 
 
+<div>
 <label>
-  3"x3"x6ft Square - Number of Poles
+            3"x3"x6ft Square
 </label>
 
 <input
-  id="pole3X3X6Square"
-  type="number"
-  min="0"
-  value="0"
+            id="pole3X3X6Square"
+            type="number"
+            min="0"
+            step="1"
+            value="0"
+            style="
+              width:100%;
+box-sizing:border-box;
+              padding:10px;
+              margin-top:5px;
+            "
 >
+</div>
 
 
+<div>
 <label>
-  4"x7ft Round - Number of Poles
+            4"x7ft Round
 </label>
 
 <input
-  id="pole4x7Round"
-  type="number"
-  min="0"
-  value="0"
+            id="pole4x7Round"
+            type="number"
+            min="0"
+            step="1"
+            value="0"
+            style="
+              width:100%;
+box-sizing:border-box;
+              padding:10px;
+              margin-top:5px;
+            "
 >
+</div>
 
 
+<div>
 <label>
-  3"x3"x2ft Square - Number of Poles
+            3"x3"x2ft Square
 </label>
 
 <input
-  id="pole3X3X2Square"
-  type="number"
-  min="0"
-  value="0"
+            id="pole3X3X2Square"
+            type="number"
+            min="0"
+            step="1"
+            value="0"
+            style="
+              width:100%;
+box-sizing:border-box;
+              padding:10px;
+              margin-top:5px;
+            "
 >
+</div>
 
 
+<div>
 <label>
-  4"x4"x2ft Square - Number of Poles
+            4"x4"x2ft Square
 </label>
 
 <input
-  id="pole4x4X2Square"
-  type="number"
-  min="0"
-  value="0"
+            id="pole4x4X2Square"
+            type="number"
+            min="0"
+            step="1"
+            value="0"
+            style="
+              width:100%;
+box-sizing:border-box;
+              padding:10px;
+              margin-top:5px;
+            "
 >
+</div>
 
 
+<div>
 <label>
-  4"x2ft Round - Number of Poles
+            4"x2ft Round
 </label>
 
 <input
-  id="pole4x2Round"
-  type="number"
-  min="0"
-  value="0"
+            id="pole4x2Round"
+            type="number"
+            min="0"
+            step="1"
+            value="0"
+            style="
+              width:100%;
+box-sizing:border-box;
+              padding:10px;
+              margin-top:5px;
+            "
 >
+</div>
 
 </div>
 
+
+<div style="
+        background:#f7fbf9;
+        border:1px solid #d9e5de;
+        border-radius:10px;
+        padding:15px;
+        margin-bottom:20px;
+      ">
 
 <h3 style="
-  margin:8px 0 14px;
-  font-size:16px;
-">
-  Production Summary
+          margin:0 0 14px;
+          color:#0b5d3b;
+          font-size:17px;
+        ">
+          Production Summary
 </h3>
-
 
 <div style="
 display:grid;
-grid-template-columns:repeat(3,1fr);
-  gap:16px;
-  margin-bottom:20px;
-">
+grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+          gap:14px;
+        ">
 
 <div>
-
-<label>
-  Total Poles Produced
-</label>
+<label>Total Poles</label>
 
 <input
-  id="totalPolesProduced"
-  type="number"
-  value="0"
+              id="totalPolesProduced"
+              type="number"
 readonly
+              value="0"
+              style="
+                width:100%;
+box-sizing:border-box;
+                padding:10px;
+                margin-top:5px;
+              "
 >
-
 </div>
 
 
 <div>
-
 <label>
-  Total Finished Pole Weight (KG)
+              Finished Pole Weight (KG)
 </label>
 
 <input
-  id="totalProductionWeight"
-  type="number"
-  value="0"
-  step="0.01"
+              id="totalProductionWeight"
+              type="number"
 readonly
+              value="0"
+              step="0.01"
+              style="
+                width:100%;
+box-sizing:border-box;
+                padding:10px;
+                margin-top:5px;
+              "
 >
-
 </div>
 
 
 <div>
-
 <label>
-  Unaccounted Production KG
+              Pending / Unaccounted KG
 </label>
 
 <input
-  id="productionPendingKg"
-  type="number"
-  value="0"
-  step="0.01"
+              id="productionPendingKg"
+              type="number"
 readonly
+              value="0"
+              step="0.01"
+              style="
+                width:100%;
+box-sizing:border-box;
+                padding:10px;
+                margin-top:5px;
+              "
 >
-
 </div>
 
 
 <div>
-
 <label>
-  Production Weight %
+              Production Weight %
 </label>
 
 <input
-  id="productionCompletion"
-  type="number"
-  value="0"
-  step="0.01"
+              id="productionCompletion"
+              type="number"
 readonly
+              value="0"
+              step="0.01"
+              style="
+                width:100%;
+box-sizing:border-box;
+                padding:10px;
+                margin-top:5px;
+              "
 >
-
 </div>
 
 
 <div>
-
 <label>
-  Production Status
+              Production Status
 </label>
 
 <input
-  id="productionStatus"
-  type="text"
-  value="PENDING"
+              id="productionStatus"
+              type="text"
 readonly
+              value="PENDING"
+              style="
+                width:100%;
+box-sizing:border-box;
+                padding:10px;
+                margin-top:5px;
+font-weight:bold;
+              "
 >
+</div>
+
+</div>
 
 </div>
 
 
-<div>
-
-<label>
-  Washed Stock After Issue
-</label>
-
-<input
-  id="productionStockAfter"
-  type="number"
-  value="${Number(companyWashedAvailable).toFixed(2)}"
-  step="0.01"
-readonly
->
-
-</div>
-
+<div style="
+        background:#fff8e6;
+        border:1px solid #f0d89a;
+        padding:12px;
+        border-radius:8px;
+        margin-bottom:18px;
+        font-size:13px;
+        line-height:1.45;
+      ">
+<b>Important:</b>
+        Remaining KG is not automatically treated as waste or loss.
+        The record remains <b>PENDING</b> until the production completion
+        workflow is introduced.
 </div>
 
 
 <div style="
 display:flex;
 justify-content:flex-end;
-  gap:12px;
-  margin-top:24px;
-">
+flex-wrap:wrap;
+        gap:12px;
+      ">
 
 <button
-  id="saveProductionBtn"
-  type="button"
-  style="
-    background:#1976d2;
+          id="saveProductionBtn"
+          type="button"
+          style="
+            background:#0b5d3b;
 color:white;
 border:none;
-    padding:11px 20px;
-    border-radius:8px;
-    font-weight:600;
+            padding:11px 20px;
+            border-radius:8px;
+            font-weight:600;
 cursor:pointer;
-  "
+          "
 >
-  Save Production Record
+          Save Production Record
 </button>
 
-
 <button
-  id="closeProductionBtn"
-  type="button"
-  style="
+          id="closeProductionBtn"
+          type="button"
+          style="
 background:white;
-    color:#333;
-    border:1px solid #ccc;
-    padding:11px 20px;
-    border-radius:8px;
-    font-weight:600;
+            color:#333;
+            border:1px solid #ccc;
+            padding:11px 20px;
+            border-radius:8px;
+            font-weight:600;
 cursor:pointer;
-  "
+          "
 >
-  Close
+          Close
 </button>
 
 </div>
@@ -18418,14 +18807,676 @@ cursor:pointer;
 document.body.appendChild(modal);
 
 
+const productionShift =
+modal.querySelector("#productionShift");
+
+const productionStaffList =
+modal.querySelector("#productionStaffList");
+
+const productionWashedSources =
+modal.querySelector("#productionWashedSources");
+
 const productionAvailableInput =
 modal.querySelector("#productionAvailableKg");
 
 const productionInput =
 modal.querySelector("#productionInputKg");
 
-const stockAfterInput =
-modal.querySelector("#productionStockAfter");
+
+  /* =========================================================
+     STAFF BY SHIFT
+     ========================================================= */
+
+  function renderProductionStaff() {
+
+const selectedShiftId =
+      String(productionShift.value || "");
+
+    if (!selectedShiftId) {
+
+productionStaffList.innerHTML = `
+<div style="
+          padding:12px;
+          background:#f5f5f5;
+          border-radius:8px;
+          color:#666;
+        ">
+          Select the working shift.
+</div>
+      `;
+
+      return;
+    }
+
+
+const matchingTeams =
+teams.filter(team => {
+
+        return (
+          String(team.shiftId || "") ===
+selectedShiftId&&
+
+          String(
+team.status || ""
+          ).toLowerCase() === "active"
+        );
+      });
+
+
+    if (!matchingTeams.length) {
+
+productionStaffList.innerHTML = `
+<div style="
+          padding:12px;
+          background:#fff4e5;
+          border:1px solid #f0d7aa;
+          border-radius:8px;
+          color:#8a5a00;
+        ">
+          No active team is assigned to this shift.
+          Assign a team to the shift first.
+</div>
+      `;
+
+      return;
+    }
+
+
+const staffMap = new Map();
+
+
+matchingTeams.forEach(team => {
+
+const employeeIds =
+Array.from(
+          new Set([
+team.leaderEmployeeId,
+            ...(
+Array.isArray(team.memberEmployeeIds)
+                ? team.memberEmployeeIds
+                : []
+            )
+          ].filter(Boolean))
+        );
+
+
+employeeIds.forEach(employeeId => {
+
+const employee =
+employees.find(
+            item =>
+              String(item.employeeId) ===
+              String(employeeId)
+          );
+
+        if (!employee) {
+          return;
+        }
+
+
+        if (
+          String(
+employee.employmentStatus || ""
+          ).toLowerCase() !== "active"
+        ) {
+          return;
+        }
+
+
+        if (!staffMap.has(employeeId)) {
+
+staffMap.set(
+employeeId,
+            {
+employeeId:
+employee.employeeId,
+
+fullName:
+employee.fullName,
+
+teamId:
+team.id,
+
+teamName:
+team.name,
+
+isTeamLeader:
+                String(team.leaderEmployeeId) ===
+                String(employee.employeeId)
+            }
+          );
+        }
+      });
+    });
+
+
+const staff =
+Array.from(staffMap.values());
+
+
+    if (!staff.length) {
+
+productionStaffList.innerHTML = `
+<div style="
+          padding:12px;
+          background:#fff4e5;
+          border-radius:8px;
+        ">
+          The team has no active registered employees.
+</div>
+      `;
+
+      return;
+    }
+
+
+productionStaffList.innerHTML =
+staff.map(person => `
+
+<label style="
+display:flex;
+align-items:flex-start;
+          gap:10px;
+          padding:9px 6px;
+          border-bottom:1px solid #eee;
+cursor:pointer;
+        ">
+
+<input
+            type="checkbox"
+            class="productionStaffCheckbox"
+            value="${escapeProductionText(person.employeeId)}"
+            data-name="${escapeProductionText(person.fullName)}"
+            data-team-id="${escapeProductionText(person.teamId)}"
+            data-team-name="${escapeProductionText(person.teamName)}"
+            data-team-leader="${person.isTeamLeader ? "yes" : "no"}"
+            style="
+              width:18px;
+              height:18px;
+              margin-top:2px;
+            "
+>
+
+<span>
+<b>
+              ${escapeProductionText(person.fullName)}
+</b>
+
+<br>
+
+<span style="
+              color:#666;
+              font-size:12px;
+            ">
+              ${escapeProductionText(person.employeeId)}
+              •
+              ${escapeProductionText(person.teamName)}
+              ${person.isTeamLeader ? " • Team Leader" : ""}
+</span>
+</span>
+
+</label>
+
+      `).join("");
+  }
+
+
+  /* =========================================================
+     KBW MATERIAL SOURCES
+     ========================================================= */
+
+  function renderProductionWashedSources() {
+
+const totalAvailable =
+availableWashedSources.reduce(
+        (sum, source) =>
+          sum + Number(source.availableKg || 0),
+        0
+      );
+
+
+productionAvailableInput.value =
+totalAvailable.toFixed(2);
+
+
+    if (!availableWashedSources.length) {
+
+productionWashedSources.innerHTML = `
+<div style="
+          padding:13px;
+          background:#fff4e5;
+          border:1px solid #f0d7aa;
+          border-radius:8px;
+          color:#8a5a00;
+        ">
+          No completed company KBW washed material is currently
+          available for production.
+</div>
+      `;
+
+      return;
+    }
+
+
+productionWashedSources.innerHTML =
+availableWashedSources.map(
+        (source, index) => `
+
+<div style="
+display:grid;
+            grid-template-columns:
+minmax(160px,1fr)
+minmax(130px,0.7fr)
+minmax(150px,0.8fr);
+            gap:12px;
+align-items:center;
+            padding:11px 6px;
+            border-bottom:1px solid #eee;
+          ">
+
+<label style="
+display:flex;
+align-items:center;
+              gap:9px;
+cursor:pointer;
+            ">
+
+<input
+                type="checkbox"
+                class="productionSourceCheckbox"
+                data-index="${index}"
+                style="
+                  width:18px;
+                  height:18px;
+                "
+>
+
+<span>
+<b>
+                  ${escapeProductionText(source.sourceNumber)}
+</b>
+
+<br>
+
+<span style="
+                  color:#666;
+                  font-size:12px;
+                ">
+                  Source:
+                  ${escapeProductionText(
+source.sourceBatchNumber || "—"
+                  )}
+</span>
+</span>
+
+</label>
+
+
+<div style="
+              font-size:13px;
+            ">
+              Available:
+<br>
+<b>
+                ${source.availableKg.toFixed(2)} KG
+</b>
+</div>
+
+
+<div>
+<input
+                type="number"
+                class="productionSourceKg"
+                data-index="${index}"
+                min="0"
+                max="${source.availableKg}"
+                step="0.01"
+                value="0"
+                disabled
+                placeholder="KG taken"
+                style="
+                  width:100%;
+box-sizing:border-box;
+                  padding:9px;
+                  border:1px solid #ccc;
+                  border-radius:7px;
+                "
+>
+</div>
+
+</div>
+
+        `
+      ).join("");
+  }
+
+
+  function calculateProductionInputKg() {
+
+    let total = 0;
+
+
+    modal
+      .querySelectorAll(
+        ".productionSourceCheckbox"
+      )
+      .forEach(checkbox => {
+
+        if (!checkbox.checked) {
+          return;
+        }
+
+const index =
+          Number(checkbox.dataset.index);
+
+const kgInput =
+modal.querySelector(
+            '.productionSourceKg[data-index="' +
+            index +
+            '"]'
+          );
+
+const source =
+availableWashedSources[index];
+
+        if (!kgInput || !source) {
+          return;
+        }
+
+
+        let kg =
+          Number(kgInput.value) || 0;
+
+
+        if (kg < 0) {
+          kg = 0;
+        }
+
+
+        if (kg >source.availableKg) {
+
+          kg =
+source.availableKg;
+
+kgInput.value =
+source.availableKg.toFixed(2);
+        }
+
+
+        total += kg;
+      });
+
+
+productionInput.value =
+total.toFixed(2);
+
+
+calculateProductionSummary();
+  }
+
+
+  /* =========================================================
+     PRODUCTION CALCULATION
+     ========================================================= */
+
+  function getPoleQuantities() {
+
+    return {
+
+      pole4X4X7Square:
+        Number(
+modal.querySelector(
+            "#pole4X4X7Square"
+          ).value
+        ) || 0,
+
+      pole3X3X6Square:
+        Number(
+modal.querySelector(
+            "#pole3X3X6Square"
+          ).value
+        ) || 0,
+
+      pole4x7Round:
+        Number(
+modal.querySelector(
+            "#pole4x7Round"
+          ).value
+        ) || 0,
+
+      pole3X3X2Square:
+        Number(
+modal.querySelector(
+            "#pole3X3X2Square"
+          ).value
+        ) || 0,
+
+      pole4x4X2Square:
+        Number(
+modal.querySelector(
+            "#pole4x4X2Square"
+          ).value
+        ) || 0,
+
+      pole4x2Round:
+        Number(
+modal.querySelector(
+            "#pole4x2Round"
+          ).value
+        ) || 0
+    };
+  }
+
+
+  function calculateProductionSummary() {
+
+const quantities =
+getPoleQuantities();
+
+
+const totalPoles =
+      quantities.pole4X4X7Square +
+      quantities.pole3X3X6Square +
+      quantities.pole4x7Round +
+      quantities.pole3X3X2Square +
+      quantities.pole4x4X2Square +
+      quantities.pole4x2Round;
+
+
+const productionWeight =
+
+      (
+        quantities.pole4X4X7Square *
+        Number(
+          poleStandardWeights.pole4X4X7Square || 0
+        )
+      ) +
+
+      (
+        quantities.pole3X3X6Square *
+        Number(
+          poleStandardWeights.pole3X3X6Square || 0
+        )
+      ) +
+
+      (
+        quantities.pole4x7Round *
+        Number(
+          poleStandardWeights.pole4x7Round || 0
+        )
+      ) +
+
+      (
+        quantities.pole3X3X2Square *
+        Number(
+          poleStandardWeights.pole3X3X2Square || 0
+        )
+      ) +
+
+      (
+        quantities.pole4x4X2Square *
+        Number(
+          poleStandardWeights.pole4x4X2Square || 0
+        )
+      ) +
+
+      (
+        quantities.pole4x2Round *
+        Number(
+          poleStandardWeights.pole4x2Round || 0
+        )
+      );
+
+
+const productionInputKg =
+      Number(productionInput.value) || 0;
+
+
+const pendingKg =
+Math.max(
+productionInputKg -
+productionWeight,
+        0
+      );
+
+
+const completion =
+productionInputKg> 0
+        ? (
+productionWeight /
+productionInputKg
+          ) * 100
+        : 0;
+
+
+modal.querySelector(
+      "#totalPolesProduced"
+    ).value =
+totalPoles;
+
+
+modal.querySelector(
+      "#totalProductionWeight"
+    ).value =
+productionWeight.toFixed(2);
+
+
+modal.querySelector(
+      "#productionPendingKg"
+    ).value =
+pendingKg.toFixed(2);
+
+
+modal.querySelector(
+      "#productionCompletion"
+    ).value =
+completion.toFixed(2);
+
+
+modal.querySelector(
+      "#productionStatus"
+    ).value =
+      "PENDING";
+  }
+
+
+  /* =========================================================
+     EVENTS
+     ========================================================= */
+
+productionShift.addEventListener(
+    "change",
+renderProductionStaff
+  );
+
+
+modal.addEventListener(
+    "change",
+    function (event) {
+
+      if (
+event.target.classList.contains(
+          "productionSourceCheckbox"
+        )
+      ) {
+
+const index =
+          Number(
+event.target.dataset.index
+          );
+
+const kgInput =
+modal.querySelector(
+            '.productionSourceKg[data-index="' +
+            index +
+            '"]'
+          );
+
+const source =
+availableWashedSources[index];
+
+
+        if (kgInput&& source) {
+
+kgInput.disabled =
+            !event.target.checked;
+
+
+          if (event.target.checked) {
+
+            /*
+             * Do not automatically consume the whole KBW.
+             * Manager must enter the physical KG actually taken.
+             */
+kgInput.value = "";
+
+kgInput.focus();
+
+          } else {
+
+kgInput.value = "0";
+          }
+        }
+
+
+calculateProductionInputKg();
+      }
+    }
+  );
+
+
+modal.addEventListener(
+    "input",
+    function (event) {
+
+      if (
+event.target.classList.contains(
+          "productionSourceKg"
+        )
+      ) {
+
+calculateProductionInputKg();
+      }
+    }
+  );
+
+
+  [
+    "pole4X4X7Square",
+    "pole3X3X6Square",
+    "pole4x7Round",
+    "pole3X3X2Square",
+    "pole4x4X2Square",
+    "pole4x2Round"
+  ].forEach(id => {
+
+modal.querySelector(
+      "#" + id
+    ).addEventListener(
+      "input",
+calculateProductionSummary
+    );
+  });
 
 
 modal.querySelector(
@@ -18436,267 +19487,16 @@ modal.remove();
   };
 
 
-  /*
-   * Re-read live stock.
-   * This prevents the form from relying only on the value
-   * that existed when the modal was first opened.
-   */
-  function getLiveCompanyWashedStock() {
-
-    if (
-typeof getCompanyWashedKaveraStock === "function"
-    ) {
-
-      return Number(
-getCompanyWashedKaveraStock()
-      ) || 0;
-    }
-
-    return Number(
-localStorage.getItem(
-        "companyWashedKaveraStock"
-      ) || 0
-    );
-  }
-
-
-  function refreshProductionStock() {
-
-const available =
-getLiveCompanyWashedStock();
-
-const inputKg =
-      Number(
-productionInput.value
-      ) || 0;
-
-productionAvailableInput.value =
-available.toFixed(2);
-
-stockAfterInput.value =
-Math.max(
-        available - inputKg,
-        0
-      ).toFixed(2);
-  }
-
-
-  function calculateTotalPoles() {
-
-const pole4X4X7 =
-      Number(
-modal.querySelector(
-          "#pole4X4X7Square"
-        ).value
-      ) || 0;
-
-
-const pole3X3X6 =
-      Number(
-modal.querySelector(
-          "#pole3X3X6Square"
-        ).value
-      ) || 0;
-
-
-const pole4x7Round =
-      Number(
-modal.querySelector(
-          "#pole4x7Round"
-        ).value
-      ) || 0;
-
-
-const pole3X3X2 =
-      Number(
-modal.querySelector(
-          "#pole3X3X2Square"
-        ).value
-      ) || 0;
-
-
-const pole4x4X2 =
-      Number(
-modal.querySelector(
-          "#pole4x4X2Square"
-        ).value
-      ) || 0;
-
-
-const pole4x2Round =
-      Number(
-modal.querySelector(
-          "#pole4x2Round"
-        ).value
-      ) || 0;
-
-
-const totalPoles =
-      pole4X4X7 +
-      pole3X3X6 +
-      pole4x7Round +
-      pole3X3X2 +
-      pole4x4X2 +
-      pole4x2Round;
-
-
-modal.querySelector(
-      "#totalPolesProduced"
-    ).value =
-totalPoles;
-
-
-const totalProductionWeight =
-
-      (
-        pole4X4X7 *
-        Number(
-poleStandardWeights
-            .pole4X4X7Square || 0
-        )
-      ) +
-
-      (
-        pole3X3X6 *
-        Number(
-poleStandardWeights
-            .pole3X3X6Square || 0
-        )
-      ) +
-
-      (
-        pole4x7Round *
-        Number(
-poleStandardWeights
-            .pole4x7Round || 0
-        )
-      ) +
-
-      (
-        pole3X3X2 *
-        Number(
-poleStandardWeights
-            .pole3X3X2Square || 0
-        )
-      ) +
-
-      (
-        pole4x4X2 *
-        Number(
-poleStandardWeights
-            .pole4x4X2Square || 0
-        )
-      ) +
-
-      (
-        pole4x2Round *
-        Number(
-poleStandardWeights
-            .pole4x2Round || 0
-        )
-      );
-
-
-modal.querySelector(
-      "#totalProductionWeight"
-    ).value =
-totalProductionWeight.toFixed(2);
-
-
-const productionInputKg =
-      Number(
-productionInput.value
-      ) || 0;
-
-
-const productionPendingKg =
-Math.max(
-productionInputKg -
-totalProductionWeight,
-        0
-      );
-
-
-modal.querySelector(
-      "#productionPendingKg"
-    ).value =
-productionPendingKg.toFixed(2);
-
-
-    /*
-     * This percentage is informational only.
-     *
-     * We are NOT automatically deciding that remaining
-     * material is a loss. The future COMPLETE/PENDING
-     * workflow will make that decision explicitly.
-     */
-const productionCompletion =
-
-productionInputKg> 0
-
-        ? (
-totalProductionWeight /
-productionInputKg
-          ) * 100
-
-        : 0;
-
-
-modal.querySelector(
-      "#productionCompletion"
-    ).value =
-productionCompletion.toFixed(2);
-
-
-    /*
-     * Keep this stage safely PENDING.
-     * We will introduce Manager COMPLETE/PENDING control
-     * in the production workflow stage.
-     */
-modal.querySelector(
-      "#productionStatus"
-    ).value =
-      "PENDING";
-
-
-refreshProductionStock();
-  }
-
-
-const poleInputs = [
-
-    "pole4X4X7Square",
-    "pole3X3X6Square",
-    "pole4x7Round",
-    "pole3X3X2Square",
-    "pole4x4X2Square",
-    "pole4x2Round"
-
-  ];
-
-
-poleInputs.forEach(function (id) {
-
-modal.querySelector(
-      "#" + id
-    ).addEventListener(
-      "input",
-calculateTotalPoles
-    );
-  });
-
-
-productionInput.addEventListener(
-    "input",
-calculateTotalPoles
-  );
-
+  /* =========================================================
+     SAVE PRODUCTION
+     ========================================================= */
 
 modal.querySelector(
     "#saveProductionBtn"
   ).onclick = function () {
 
-calculateTotalPoles();
+calculateProductionInputKg();
+calculateProductionSummary();
 
 
 const date =
@@ -18705,115 +19505,18 @@ modal.querySelector(
       ).value;
 
 
-const shift =
-modal.querySelector(
-        "#productionShift"
-      ).value;
+const selectedShiftId =
+      String(
+productionShift.value || ""
+      );
 
 
-const staff =
-modal.querySelector(
-        "#productionStaff"
-      ).value.trim();
-
-
-    /*
-     * Re-read live stock immediately before saving.
-     */
-const productionAvailableKg =
-getLiveCompanyWashedStock();
-
-
-const productionInputKg =
-      Number(
-productionInput.value
-      ) || 0;
-
-
-const pole4X4X7Square =
-      Number(
-modal.querySelector(
-          "#pole4X4X7Square"
-        ).value
-      ) || 0;
-
-
-const pole3X3X6Square =
-      Number(
-modal.querySelector(
-          "#pole3X3X6Square"
-        ).value
-      ) || 0;
-
-
-const pole4x7Round =
-      Number(
-modal.querySelector(
-          "#pole4x7Round"
-        ).value
-      ) || 0;
-
-
-const pole3X3X2Square =
-      Number(
-modal.querySelector(
-          "#pole3X3X2Square"
-        ).value
-      ) || 0;
-
-
-const pole4x4X2Square =
-      Number(
-modal.querySelector(
-          "#pole4x4X2Square"
-        ).value
-      ) || 0;
-
-
-const pole4x2Round =
-      Number(
-modal.querySelector(
-          "#pole4x2Round"
-        ).value
-      ) || 0;
-
-
-const totalPoles =
-      Number(
-modal.querySelector(
-          "#totalPolesProduced"
-        ).value
-      ) || 0;
-
-
-const productionWeight =
-      Number(
-modal.querySelector(
-          "#totalProductionWeight"
-        ).value
-      ) || 0;
-
-
-const productionPendingKg =
-      Number(
-modal.querySelector(
-          "#productionPendingKg"
-        ).value
-      ) || 0;
-
-
-const productionCompletion =
-      Number(
-modal.querySelector(
-          "#productionCompletion"
-        ).value
-      ) || 0;
-
-
-const productionStatus =
-modal.querySelector(
-        "#productionStatus"
-      ).value;
+const selectedShift =
+shifts.find(
+        shift =>
+          String(shift.id) ===
+selectedShiftId
+      );
 
 
     if (!date) {
@@ -18826,24 +19529,249 @@ modal.querySelector(
     }
 
 
-    if (!shift) {
+    if (!selectedShift) {
 
       alert(
-        "Please select the shift."
+        "Please select the working shift."
       );
 
       return;
     }
 
 
-    if (!staff) {
+    /* -------------------------
+       SELECTED STAFF
+       ------------------------- */
+
+const selectedStaff =
+Array.from(
+modal.querySelectorAll(
+          ".productionStaffCheckbox:checked"
+        )
+      ).map(checkbox => ({
+
+employeeId:
+checkbox.value,
+
+fullName:
+checkbox.dataset.name || "",
+
+teamId:
+checkbox.dataset.teamId || "",
+
+teamName:
+checkbox.dataset.teamName || "",
+
+isTeamLeader:
+checkbox.dataset.teamLeader === "yes"
+      }));
+
+
+    if (!selectedStaff.length) {
 
       alert(
-        "Please enter the staff who worked."
+        "Please select the employees who actually worked in production."
       );
 
       return;
     }
+
+
+    /* -------------------------
+       SELECTED KBW SOURCES
+       ------------------------- */
+
+const washedSources = [];
+
+    let productionInputKg = 0;
+
+
+const checkedSources =
+Array.from(
+modal.querySelectorAll(
+          ".productionSourceCheckbox:checked"
+        )
+      );
+
+
+    if (!checkedSources.length) {
+
+      alert(
+        "Please select the washed KBW material taken into production."
+      );
+
+      return;
+    }
+
+
+    for (
+const checkbox of checkedSources
+    ) {
+
+const index =
+        Number(
+checkbox.dataset.index
+        );
+
+const source =
+availableWashedSources[index];
+
+const kgInput =
+modal.querySelector(
+          '.productionSourceKg[data-index="' +
+          index +
+          '"]'
+        );
+
+
+      if (!source || !kgInput) {
+        continue;
+      }
+
+
+const kgUsed =
+        Number(kgInput.value) || 0;
+
+
+      if (kgUsed<= 0) {
+
+        alert(
+          "Please enter the KG taken from " +
+source.sourceNumber +
+          "."
+        );
+
+        return;
+      }
+
+
+      /*
+       * Recalculate usage from current production records
+       * immediately before saving.
+       */
+const latestRecords =
+JSON.parse(
+localStorage.getItem(
+            "productionRecords"
+          ) || "[]"
+        );
+
+
+const latestUsed =
+latestRecords.reduce(
+          (total, record) => {
+
+const sources =
+Array.isArray(
+record.washedSources
+              )
+                ? record.washedSources
+                : [];
+
+            return (
+              total +
+sources.reduce(
+                (sourceTotal, savedSource) => {
+
+const savedNumber =
+                    String(
+savedSource.washingSubBatchNumber ||
+savedSource.subBatchNumber ||
+savedSource.cycleNumber ||
+                      ""
+                    ).trim();
+
+
+                  if (
+savedNumber !==
+source.sourceNumber
+                  ) {
+                    return sourceTotal;
+                  }
+
+
+                  return (
+sourceTotal +
+                    Number(
+savedSource.kgUsed ||
+savedSource.productionInputKg ||
+                      0
+                    )
+                  );
+                },
+                0
+              )
+            );
+          },
+          0
+        );
+
+
+const latestAvailable =
+Math.max(
+          Number(source.washedKg) -
+latestUsed,
+          0
+        );
+
+
+      if (
+kgUsed>
+latestAvailable + 0.01
+      ) {
+
+        alert(
+source.sourceNumber +
+          " now has only " +
+latestAvailable.toFixed(2) +
+          " KG available.\n\n" +
+          "Close and reopen Production to refresh the material."
+        );
+
+        return;
+      }
+
+
+washedSources.push({
+
+washingSubBatchNumber:
+source.sourceNumber,
+
+sourceBatchNumber:
+source.sourceBatchNumber,
+
+washedKg:
+roundProductionKg(
+source.washedKg
+          ),
+
+availableBeforeKg:
+roundProductionKg(
+latestAvailable
+          ),
+
+kgUsed:
+roundProductionKg(
+kgUsed
+          ),
+
+availableAfterKg:
+roundProductionKg(
+latestAvailable -
+kgUsed
+          )
+      });
+
+
+productionInputKg +=
+kgUsed;
+    }
+
+
+productionInputKg =
+roundProductionKg(
+productionInputKg
+      );
 
 
     if (
@@ -18851,79 +19779,51 @@ productionInputKg<= 0
     ) {
 
       alert(
-        "Please enter KG taken into production."
+        "KG taken into production must be greater than zero."
       );
 
       return;
     }
 
 
-    if (
-productionAvailableKg<= 0
-    ) {
+    /* -------------------------
+       POLE QUANTITIES
+       ------------------------- */
+
+const quantities =
+getPoleQuantities();
+
+
+const totalPoles =
+      quantities.pole4X4X7Square +
+      quantities.pole3X3X6Square +
+      quantities.pole4x7Round +
+      quantities.pole3X3X2Square +
+      quantities.pole4x4X2Square +
+      quantities.pole4x2Round;
+
+
+    if (totalPoles<= 0) {
 
       alert(
-        "There is no Company Washed Kavera available for production."
+        "Please enter the number of poles produced."
       );
 
       return;
     }
 
 
-    if (
-productionInputKg>
-productionAvailableKg + 0.01
-    ) {
+    /* -------------------------
+       DIRECTOR APPROVED WEIGHTS
+       ------------------------- */
 
-      alert(
-        "KG taken into production cannot be greater than the available Company Washed Kavera Stock of " +
-productionAvailableKg.toFixed(2) +
-        " KG."
-      );
-
-refreshProductionStock();
-
-      return;
-    }
-
-
-    if (
-totalPoles<= 0
-    ) {
-
-      alert(
-        "Please enter the poles produced."
-      );
-
-      return;
-    }
-
-
-    if (
-productionWeight<= 0
-    ) {
-
-      alert(
-        "Production weight is zero.\n\n" +
-        "Please make sure the Director has entered the approved standard weight for every pole category being produced."
-      );
-
-      return;
-    }
-
-
-    /*
-     * Ensure every pole category actually used has
-     * a Director-approved standard weight.
-     */
 const missingWeights = [];
 
 
     if (
-      pole4X4X7Square > 0 &&
+      quantities.pole4X4X7Square > 0 &&
       Number(
-poleStandardWeights
-          .pole4X4X7Square || 0
+        poleStandardWeights.pole4X4X7Square || 0
       ) <= 0
     ) {
 
@@ -18934,10 +19834,9 @@ missingWeights.push(
 
 
     if (
-      pole3X3X6Square > 0 &&
+      quantities.pole3X3X6Square > 0 &&
       Number(
-poleStandardWeights
-          .pole3X3X6Square || 0
+        poleStandardWeights.pole3X3X6Square || 0
       ) <= 0
     ) {
 
@@ -18948,10 +19847,9 @@ missingWeights.push(
 
 
     if (
-      pole4x7Round > 0 &&
+      quantities.pole4x7Round > 0 &&
       Number(
-poleStandardWeights
-          .pole4x7Round || 0
+        poleStandardWeights.pole4x7Round || 0
       ) <= 0
     ) {
 
@@ -18962,10 +19860,9 @@ missingWeights.push(
 
 
     if (
-      pole3X3X2Square > 0 &&
+      quantities.pole3X3X2Square > 0 &&
       Number(
-poleStandardWeights
-          .pole3X3X2Square || 0
+        poleStandardWeights.pole3X3X2Square || 0
       ) <= 0
     ) {
 
@@ -18976,10 +19873,9 @@ missingWeights.push(
 
 
     if (
-      pole4x4X2Square > 0 &&
+      quantities.pole4x4X2Square > 0 &&
       Number(
-poleStandardWeights
-          .pole4x4X2Square || 0
+        poleStandardWeights.pole4x4X2Square || 0
       ) <= 0
     ) {
 
@@ -18990,10 +19886,9 @@ missingWeights.push(
 
 
     if (
-      pole4x2Round > 0 &&
+      quantities.pole4x2Round > 0 &&
       Number(
-poleStandardWeights
-          .pole4x2Round || 0
+        poleStandardWeights.pole4x2Round || 0
       ) <= 0
     ) {
 
@@ -19003,13 +19898,11 @@ missingWeights.push(
     }
 
 
-    if (
-missingWeights.length> 0
-    ) {
+    if (missingWeights.length) {
 
       alert(
         "Production cannot be saved.\n\n" +
-        "The Director must first set the standard weight for:\n\n" +
+        "The Director must first approve the standard weight for:\n\n" +
 missingWeights.join("\n")
       );
 
@@ -19017,31 +19910,125 @@ missingWeights.join("\n")
     }
 
 
-const washedStockBefore =
-      Number(
-productionAvailableKg.toFixed(2)
+const productionWeight =
+
+      (
+        quantities.pole4X4X7Square *
+        Number(
+          poleStandardWeights.pole4X4X7Square || 0
+        )
+      ) +
+
+      (
+        quantities.pole3X3X6Square *
+        Number(
+          poleStandardWeights.pole3X3X6Square || 0
+        )
+      ) +
+
+      (
+        quantities.pole4x7Round *
+        Number(
+          poleStandardWeights.pole4x7Round || 0
+        )
+      ) +
+
+      (
+        quantities.pole3X3X2Square *
+        Number(
+          poleStandardWeights.pole3X3X2Square || 0
+        )
+      ) +
+
+      (
+        quantities.pole4x4X2Square *
+        Number(
+          poleStandardWeights.pole4x4X2Square || 0
+        )
+      ) +
+
+      (
+        quantities.pole4x2Round *
+        Number(
+          poleStandardWeights.pole4x2Round || 0
+        )
       );
 
 
-const washedStockAfter =
-      Number(
+    /*
+     * Finished pole weight should not exceed
+     * the washed material issued to this production run.
+     */
+    if (
+productionWeight>
+productionInputKg + 0.01
+    ) {
+
+      alert(
+        "Production cannot be saved.\n\n" +
+        "Finished pole weight: " +
+productionWeight.toFixed(2) +
+        " KG\n" +
+        "Washed kavera issued: " +
+productionInputKg.toFixed(2) +
+        " KG\n\n" +
+        "Finished weight cannot be greater than the material issued."
+      );
+
+      return;
+    }
+
+
+const productionPendingKg =
 Math.max(
-washedStockBefore -
-productionInputKg,
-          0
-        ).toFixed(2)
+productionInputKg -
+productionWeight,
+        0
       );
 
 
-const currentUser =
-JSON.parse(
-localStorage.getItem(
-          "currentUser"
-        ) || "{}"
+const productionCompletion =
+productionInputKg> 0
+        ? (
+productionWeight /
+productionInputKg
+          ) * 100
+        : 0;
+
+
+    /* -------------------------
+       TEAM INFORMATION
+       ------------------------- */
+
+const selectedTeamIds =
+Array.from(
+        new Set(
+selectedStaff
+            .map(person =>
+              String(person.teamId || "")
+            )
+            .filter(Boolean)
+        )
       );
 
 
-const records =
+const selectedTeamNames =
+Array.from(
+        new Set(
+selectedStaff
+            .map(person =>
+person.teamName
+            )
+            .filter(Boolean)
+        )
+      );
+
+
+    /* -------------------------
+       SAVE RECORD
+       ------------------------- */
+
+const latestProductionRecords =
 JSON.parse(
 localStorage.getItem(
           "productionRecords"
@@ -19051,95 +20038,127 @@ localStorage.getItem(
 
 const productionRecord = {
 
-      id: Date.now(),
+      id:
+Date.now(),
 
       date,
 
-      shift,
+shiftId:
+selectedShift.id,
 
-      staff,
+      shift:
+selectedShift.name,
+
+shiftName:
+selectedShift.name,
+
+teamIds:
+selectedTeamIds,
+
+teamNames:
+selectedTeamNames,
+
+      staff:
+selectedStaff
+          .map(person =>person.fullName)
+          .join(", "),
+
+staffEmployeeIds:
+selectedStaff
+          .map(person =>person.employeeId),
+
+staffWorked:
+selectedStaff,
+
+washedSources:
+washedSources,
 
 productionAvailableKg:
-washedStockBefore,
-
-washedStockBeforeKg:
-washedStockBefore,
-
-productionInputKg:
-        Number(
-productionInputKg.toFixed(2)
+roundProductionKg(
+washedSources.reduce(
+            (sum, source) =>
+              sum +
+              Number(
+source.availableBeforeKg || 0
+              ),
+            0
+          )
         ),
 
-washedStockAfterKg:
-washedStockAfter,
+productionInputKg:
+roundProductionKg(
+productionInputKg
+        ),
 
-      pole4X4X7Square,
+      pole4X4X7Square:
+        quantities.pole4X4X7Square,
 
-      pole3X3X6Square,
+      pole3X3X6Square:
+        quantities.pole3X3X6Square,
 
-      pole4x7Round,
+      pole4x7Round:
+        quantities.pole4x7Round,
 
-      pole3X3X2Square,
+      pole3X3X2Square:
+        quantities.pole3X3X2Square,
 
-      pole4x4X2Square,
+      pole4x4X2Square:
+        quantities.pole4x4X2Square,
 
-      pole4x2Round,
+      pole4x2Round:
+        quantities.pole4x2Round,
 
+totalPoles:
 totalPoles,
 
 productionWeight:
-        Number(
-productionWeight.toFixed(2)
+roundProductionKg(
+productionWeight
         ),
 
 productionPendingKg:
-        Number(
-productionPendingKg.toFixed(2)
+roundProductionKg(
+productionPendingKg
         ),
 
 productionCompletion:
-        Number(
-productionCompletion.toFixed(2)
+roundProductionKg(
+productionCompletion
         ),
 
-productionStatus,
+productionStatus:
+        "PENDING",
 
 standardWeightsUsed: {
 
         pole4X4X7Square:
           Number(
-poleStandardWeights
-              .pole4X4X7Square || 0
+            poleStandardWeights.pole4X4X7Square || 0
           ),
 
         pole3X3X6Square:
           Number(
-poleStandardWeights
-              .pole3X3X6Square || 0
+            poleStandardWeights.pole3X3X6Square || 0
           ),
 
         pole4x7Round:
           Number(
-poleStandardWeights
-              .pole4x7Round || 0
+            poleStandardWeights.pole4x7Round || 0
           ),
 
         pole3X3X2Square:
           Number(
-poleStandardWeights
-              .pole3X3X2Square || 0
+            poleStandardWeights.pole3X3X2Square || 0
           ),
 
         pole4x4X2Square:
           Number(
-poleStandardWeights
-              .pole4x4X2Square || 0
+            poleStandardWeights.pole4x4X2Square || 0
           ),
 
         pole4x2Round:
           Number(
-poleStandardWeights
-              .pole4x2Round || 0
+            poleStandardWeights.pole4x2Round || 0
           )
       },
 
@@ -19157,55 +20176,69 @@ createdAt:
     };
 
 
-    /*
-     * Save the production record first.
-     */
-records.push(
+latestProductionRecords.push(
 productionRecord
     );
 
 
 localStorage.setItem(
       "productionRecords",
-JSON.stringify(records)
+JSON.stringify(
+latestProductionRecords
+      )
     );
 
 
     /*
-     * Deduct the physical production issue from
-     * COMPANY washed stock.
+     * Maintain the existing company washed-stock counters
+     * for dashboard/report compatibility.
+     *
+     * KBW source-level consumption is now preserved in
+     * productionRecord.washedSources.
      */
+
+const companyStockBefore =
+typeof getCompanyWashedKaveraStock === "function"
+        ? Number(
+getCompanyWashedKaveraStock()
+          ) || 0
+        : Number(
+localStorage.getItem(
+              "companyWashedKaveraStock"
+            ) || 0
+          );
+
+
+const companyStockAfter =
+Math.max(
+companyStockBefore -
+productionInputKg,
+        0
+      );
+
+
     if (
-typeof setCompanyWashedKaveraStock ===
-      "function"
+typeof setCompanyWashedKaveraStock === "function"
     ) {
 
 setCompanyWashedKaveraStock(
-washedStockAfter
+companyStockAfter
       );
 
     } else {
 
 localStorage.setItem(
         "companyWashedKaveraStock",
-washedStockAfter.toFixed(2)
+companyStockAfter.toFixed(2)
       );
     }
 
 
-    /*
-     * Keep the older combined washed-stock counter
-     * synchronized for existing reports/functions.
-     *
-     * Do NOT touch Client Washed Stock.
-     */
-const legacyWashedBefore =
-
-typeof getWashedKaveraStock ===
-      "function"
-
-        ? getWashedKaveraStock()
-
+const legacyStockBefore =
+typeof getWashedKaveraStock === "function"
+        ? Number(
+getWashedKaveraStock()
+          ) || 0
         : Number(
 localStorage.getItem(
               "washedKaveraStock"
@@ -19213,28 +20246,27 @@ localStorage.getItem(
           );
 
 
-const legacyWashedAfter =
+const legacyStockAfter =
 Math.max(
-legacyWashedBefore -
+legacyStockBefore -
 productionInputKg,
         0
       );
 
 
     if (
-typeof setWashedKaveraStock ===
-      "function"
+typeof setWashedKaveraStock === "function"
     ) {
 
 setWashedKaveraStock(
-legacyWashedAfter
+legacyStockAfter
       );
 
     } else {
 
 localStorage.setItem(
         "washedKaveraStock",
-legacyWashedAfter.toFixed(2)
+legacyStockAfter.toFixed(2)
       );
     }
 
@@ -19242,25 +20274,31 @@ legacyWashedAfter.toFixed(2)
     alert(
       "Production record saved successfully.\n\n" +
 
-      "Company Washed Stock Before: " +
-washedStockBefore.toFixed(2) +
-      " KG\n" +
+      "Shift: " +
+selectedShift.name +
+      "\n" +
 
-      "KG Taken Into Production: " +
+      "Staff Selected: " +
+selectedStaff.length +
+      "\n" +
+
+      "Washed Kavera Issued: " +
 productionInputKg.toFixed(2) +
       " KG\n" +
 
-      "Company Washed Stock After: " +
-washedStockAfter.toFixed(2) +
-      " KG\n\n" +
+      "Finished Pole Weight: " +
+productionWeight.toFixed(2) +
+      " KG\n" +
+
+      "Pending / Unaccounted: " +
+productionPendingKg.toFixed(2) +
+      " KG\n" +
 
       "Total Poles: " +
 totalPoles +
-      "\n" +
+      "\n\n" +
 
-      "Finished Pole Weight: " +
-productionWeight.toFixed(2) +
-      " KG"
+      "Status: PENDING"
     );
 
 
@@ -19268,12 +20306,16 @@ modal.remove();
   };
 
 
-  /*
-   * Initial calculation and stock display.
-   */
-refreshProductionStock();
-calculateTotalPoles();
+  /* =========================================================
+     INITIAL DISPLAY
+     ========================================================= */
+
+renderProductionStaff();
+renderProductionWashedSources();
+calculateProductionInputKg();
+calculateProductionSummary();
 }
+
 
 function viewProductionRecords() {
 const records = JSON.parse(
