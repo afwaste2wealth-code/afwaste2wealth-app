@@ -3047,7 +3047,10 @@ washingTarget: [
 
 washingRecords: [
       "Director"
-    ]
+    ],
+   poleStandardWeights: [
+      "Director"
+   ],
 
   };
 
