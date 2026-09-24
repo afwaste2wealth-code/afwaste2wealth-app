@@ -15625,7 +15625,7 @@ cycleNumber: "",
           date,
 
         shift:"",
-          shiftId"",
+          shiftId:"",
 
 targetKg:
           Number(
