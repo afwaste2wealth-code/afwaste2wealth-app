@@ -15884,20 +15884,43 @@ readonly
 </div>
 
 
-<label style="
-display:block;
-        margin-top:18px;
-      ">
-<b>Staff Who Worked</b>
-</label>
+<div style="
+  margin-top:18px;
+  margin-bottom:18px;
+  border:1px solid #d9e5de;
+  border-radius:10px;
+  padding:15px;
+">
 
-<input
-        id="washingStaff"
-        type="text"
-        placeholder="Enter staff names"
-        style="width:100%;padding:10px;margin:6px 0 18px"
+<b>Staff Who Actually Worked</b>
+
+<div style="
+    font-size:13px;
+    color:#666;
+    margin:6px 0 12px;
+  ">
+    Staff are loaded automatically from the team assigned
+    to this washing target's shift.
+</div>
+
+<div
+    id="washingStaffList"
+    style="
+      max-height:220px;
+overflow:auto;
+    "
 >
+<div style="
+      padding:12px;
+      background:#f5f5f5;
+      border-radius:8px;
+      color:#666;
+    ">
+      Loading shift staff...
+</div>
+</div>
 
+</div>
 
 <div style="
         background:#eef8f2;
@@ -15991,6 +16014,266 @@ modal.querySelector(
 selectedId
     ) || null;
   }
+function renderWashingStaff(record) {
+
+const staffContainer =
+modal.querySelector("#washingStaffList");
+
+  if (!staffContainer) {
+    return;
+  }
+
+const employees =
+typeof getEmployees === "function"
+      ? getEmployees()
+      : JSON.parse(
+localStorage.getItem("employees") || "[]"
+        );
+
+const teams =
+typeof getTeams === "function"
+      ? getTeams()
+      : JSON.parse(
+localStorage.getItem("factoryTeams") || "[]"
+        );
+
+const shifts =
+typeof getShiftSettings === "function"
+      ? getShiftSettings()
+      : [];
+
+const targetShift =
+    String(record?.shift || "").trim();
+
+  if (!targetShift) {
+
+staffContainer.innerHTML = `
+<div style="
+        padding:12px;
+        background:#fff4e5;
+        border-radius:8px;
+      ">
+        This washing target has no shift.
+</div>
+    `;
+
+    return;
+  }
+
+  /*
+   * Washing targets may contain the shift name,
+   * while teams store shiftId.
+   */
+const matchedShift =
+shifts.find(shift =>
+      String(shift.id || "") === targetShift ||
+      String(shift.name || "").toLowerCase() ===
+targetShift.toLowerCase()
+    );
+
+const matchingTeams =
+teams.filter(team => {
+
+const teamShiftId =
+        String(team.shiftId || "");
+
+const teamShiftName =
+        String(
+team.shiftName || ""
+        ).toLowerCase();
+
+const shiftMatches =
+matchedShift
+          ? (
+teamShiftId ===
+                String(matchedShift.id) ||
+teamShiftName ===
+                String(matchedShift.name || "")
+                  .toLowerCase()
+            )
+          : (
+teamShiftId === targetShift ||
+teamShiftName ===
+targetShift.toLowerCase()
+            );
+
+const active =
+        String(team.status || "")
+          .toLowerCase() === "active";
+
+      return shiftMatches&& active;
+    });
+
+  if (!matchingTeams.length) {
+
+staffContainer.innerHTML = `
+<div style="
+        padding:12px;
+        background:#fff4e5;
+        border:1px solid #f0d7aa;
+        border-radius:8px;
+        color:#8a5a00;
+      ">
+        No active team is assigned to
+        ${targetShift}.
+</div>
+    `;
+
+    return;
+  }
+
+const staffMap =
+    new Map();
+
+matchingTeams.forEach(team => {
+
+const employeeIds =
+Array.from(
+        new Set([
+team.leaderEmployeeId,
+          ...(
+Array.isArray(
+team.memberEmployeeIds
+            )
+              ? team.memberEmployeeIds
+              : []
+          )
+        ].filter(Boolean))
+      );
+
+employeeIds.forEach(employeeId => {
+
+const employee =
+employees.find(item =>
+          String(item.employeeId) ===
+          String(employeeId)
+        );
+
+      if (!employee) {
+        return;
+      }
+
+      if (
+        String(
+employee.employmentStatus || ""
+        ).toLowerCase() !== "active"
+      ) {
+        return;
+      }
+
+      if (!staffMap.has(String(employeeId))) {
+
+staffMap.set(
+          String(employeeId),
+          {
+employeeId:
+employee.employeeId,
+
+fullName:
+employee.fullName,
+
+teamId:
+team.id,
+
+teamName:
+team.name,
+
+isTeamLeader:
+              String(
+team.leaderEmployeeId
+              ) ===
+              String(
+employee.employeeId
+              )
+          }
+        );
+      }
+    });
+  });
+
+const staff =
+Array.from(
+staffMap.values()
+    );
+
+  if (!staff.length) {
+
+staffContainer.innerHTML = `
+<div style="
+        padding:12px;
+        background:#fff4e5;
+        border-radius:8px;
+      ">
+        The team has no active registered employees.
+</div>
+    `;
+
+    return;
+  }
+
+staffContainer.innerHTML =
+staff.map(person => `
+
+<label style="
+display:flex;
+align-items:flex-start;
+        gap:10px;
+        padding:9px 6px;
+        border-bottom:1px solid #eee;
+cursor:pointer;
+      ">
+
+<input
+          type="checkbox"
+          class="washingStaffCheckbox"
+          value="${String(person.employeeId)
+            .replace(/"/g, "&quot;")}"
+          data-name="${String(person.fullName || "")
+            .replace(/"/g, "&quot;")}"
+          data-team-id="${String(person.teamId || "")
+            .replace(/"/g, "&quot;")}"
+          data-team-name="${String(person.teamName || "")
+            .replace(/"/g, "&quot;")}"
+          data-team-leader="${
+person.isTeamLeader
+              ? "yes"
+              : "no"
+          }"
+          style="
+            width:18px;
+            height:18px;
+            margin-top:2px;
+          "
+>
+
+<span>
+
+<b>
+            ${person.fullName || ""}
+</b>
+
+<br>
+
+<span style="
+            color:#666;
+            font-size:12px;
+          ">
+            ${person.employeeId || ""}
+            •
+            ${person.teamName || ""}
+            ${
+person.isTeamLeader
+                ? " • Team Leader"
+                : ""
+            }
+</span>
+
+</span>
+
+</label>
+
+    `).join("");
+}
 
 
   function loadSelectedTarget() {
@@ -16049,10 +16332,7 @@ modal.querySelector(
       "#washingAchievement"
     ).value = "0.00";
 
-modal.querySelector(
-      "#washingStaff"
-    ).value = "";
-
+renderWashingStaff(record);
 modal.querySelector(
       "#washingSourceComplete"
     ).checked = false;
@@ -16168,10 +16448,33 @@ modal.querySelector(
         ) || 0;
 
 
+const selectedStaff =
+Array.from(
+modal.querySelectorAll(
+      ".washingStaffCheckbox:checked"
+    )
+  ).map(checkbox => ({
+
+employeeId:
+checkbox.value,
+
+fullName:
+checkbox.dataset.name || "",
+
+teamId:
+checkbox.dataset.teamId || "",
+
+teamName:
+checkbox.dataset.teamName || "",
+
+isTeamLeader:
+checkbox.dataset.teamLeader === "yes"
+  }));
+
 const staff =
-modal.querySelector(
-          "#washingStaff"
-        ).value.trim();
+selectedStaff
+    .map(person =>person.fullName)
+    .join(", ");
 
 
 const sourceComplete =
@@ -16236,10 +16539,10 @@ kgTaken + 0.01
       }
 
 
-      if (!staff) {
+      if (!selectedStaff.length) {
 
         alert(
-          "Please enter the staff who worked."
+          "Please select the employees who actually worked in washing."
         );
 
         return;
@@ -16353,6 +16656,14 @@ achievement.toFixed(2)
 
 selectedRecord.staff =
         staff;
+       selectedRecord.staffEmployeeIds =
+selectedStaff.map(
+    person =>person.employeeId
+  );
+
+selectedRecord.staffEmployees =
+selectedStaff;
+
 
 selectedRecord.targetStatus =
         "COMPLETED";
