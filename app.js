@@ -816,7 +816,7 @@ recordMaterialIn();
   }
 
   if (name === "Record Production") {
-();
+recordProduction();
     return;
   }
 
