@@ -18151,6 +18151,19 @@ source.productionInputKg ||
 
 const sourceNumber =
 getProductionSourceNumber(record);
+const sourceNumber =
+getProductionSourceNumber(record);
+
+if (!/^KBW\d+$/i.test(sourceNumber)) {
+  return false;
+}
+
+const washedKg =
+  Number(record.actualWashedKg || 0);
+
+if (!sourceNumber || washedKg<= 0) {
+  return false;
+}
 
 const washedKg =
           Number(record.actualWashedKg || 0);
