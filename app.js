@@ -19948,117 +19948,133 @@ calculateProductionSummary();
      PRODUCTION CALCULATION
      ========================================================= */
 
+let productionPoleEntries = [];
+
+
+const productionPoleCategories = [
+
+    {
+      key: "pole3X3X6Square",
+      name: '3"x3"x6ft Square'
+    },
+
+    {
+      key: "pole3X3X6_5Square",
+      name: '3"x3"x6.5ft Square'
+    },
+
+    {
+      key: "pole4X4X6Square",
+      name: '4"x4"x6ft Square'
+    },
+
+    {
+      key: "pole4X4X7Square",
+      name: '4"x4"x7ft Square'
+    },
+
+    {
+      key: "pole3x6Round",
+      name: '3" Round x 6ft'
+    },
+
+    {
+      key: "pole4x7Round",
+      name: '4" Round x 7ft'
+    },
+
+    {
+      key: "pole3X3X2Square",
+      name: '3"x3"x2ft Square'
+    },
+
+    {
+      key: "pole4x4X2Square",
+      name: '4"x4"x2ft Square'
+    },
+
+    {
+      key: "pole4x2Round",
+      name: '4" Round x 2ft'
+    }
+
+  ];
+
+
   function getPoleQuantities() {
 
-    return {
+const quantities = {};
 
-      pole4X4X7Square:
-        Number(
-modal.querySelector(
-            "#pole4X4X7Square"
-          ).value
-        ) || 0,
+productionPoleCategories.forEach(
+      category => {
 
-      pole3X3X6Square:
-        Number(
-modal.querySelector(
-            "#pole3X3X6Square"
-          ).value
-        ) || 0,
+        quantities[category.key] = 0;
 
-      pole4x7Round:
-        Number(
-modal.querySelector(
-            "#pole4x7Round"
-          ).value
-        ) || 0,
+      }
+    );
 
-      pole3X3X2Square:
-        Number(
-modal.querySelector(
-            "#pole3X3X2Square"
-          ).value
-        ) || 0,
 
-      pole4x4X2Square:
-        Number(
-modal.querySelector(
-            "#pole4x4X2Square"
-          ).value
-        ) || 0,
+productionPoleEntries.forEach(
+      entry => {
 
-      pole4x2Round:
-        Number(
-modal.querySelector(
-            "#pole4x2Round"
-          ).value
-        ) || 0
-    };
+        quantities[entry.key] =
+          (
+            Number(
+              quantities[entry.key]
+            ) || 0
+          ) +
+          (
+            Number(
+entry.quantity
+            ) || 0
+          );
+
+      }
+    );
+
+
+    return quantities;
   }
 
 
   function calculateProductionSummary() {
 
-const quantities =
-getPoleQuantities();
-
-
 const totalPoles =
-      quantities.pole4X4X7Square +
-      quantities.pole3X3X6Square +
-      quantities.pole4x7Round +
-      quantities.pole3X3X2Square +
-      quantities.pole4x4X2Square +
-      quantities.pole4x2Round;
+productionPoleEntries.reduce(
+        (total, entry) => {
+
+          return (
+            total +
+            Number(
+entry.quantity || 0
+            )
+          );
+
+        },
+        0
+      );
 
 
 const productionWeight =
+productionPoleEntries.reduce(
+        (total, entry) => {
 
-      (
-        quantities.pole4X4X7Square *
-        Number(
-          poleStandardWeights.pole4X4X7Square || 0
-        )
-      ) +
+          return (
+            total +
+            Number(
+entry.finishedKg || 0
+            )
+          );
 
-      (
-        quantities.pole3X3X6Square *
-        Number(
-          poleStandardWeights.pole3X3X6Square || 0
-        )
-      ) +
-
-      (
-        quantities.pole4x7Round *
-        Number(
-          poleStandardWeights.pole4x7Round || 0
-        )
-      ) +
-
-      (
-        quantities.pole3X3X2Square *
-        Number(
-          poleStandardWeights.pole3X3X2Square || 0
-        )
-      ) +
-
-      (
-        quantities.pole4x4X2Square *
-        Number(
-          poleStandardWeights.pole4x4X2Square || 0
-        )
-      ) +
-
-      (
-        quantities.pole4x2Round *
-        Number(
-          poleStandardWeights.pole4x2Round || 0
-        )
+        },
+        0
       );
 
 
 const productionInputKg =
-      Number(productionInput.value) || 0;
+      Number(
+productionInput.value
+      ) || 0;
 
 
 const pendingKg =
@@ -20107,6 +20123,302 @@ modal.querySelector(
     ).value =
       "PENDING";
   }
+
+
+  function renderProductionPoleEntries() {
+
+const tableBody =
+modal.querySelector(
+        "#productionPoleEntriesTable"
+      );
+
+
+    if (!productionPoleEntries.length) {
+
+tableBody.innerHTML = `
+
+<tr>
+
+<td
+colspan="5"
+  style="
+    border:1px solid #ddd;
+    padding:12px;
+text-align:center;
+    color:#666;
+  "
+>
+  No pole categories added yet.
+</td>
+
+</tr>
+
+      `;
+
+
+calculateProductionSummary();
+
+      return;
+    }
+
+
+tableBody.innerHTML =
+productionPoleEntries
+        .map(
+          (entry, index) => `
+
+<tr>
+
+<td style="
+  border:1px solid #ddd;
+  padding:8px;
+">
+  ${escapeProductionText(
+entry.name
+  )}
+</td>
+
+
+<td style="
+  border:1px solid #ddd;
+  padding:8px;
+text-align:center;
+">
+  ${entry.quantity}
+</td>
+
+
+<td style="
+  border:1px solid #ddd;
+  padding:8px;
+text-align:center;
+">
+  ${Number(
+entry.standardWeight
+  ).toFixed(2)}
+</td>
+
+
+<td style="
+  border:1px solid #ddd;
+  padding:8px;
+text-align:center;
+font-weight:bold;
+">
+  ${Number(
+entry.finishedKg
+  ).toFixed(2)}
+</td>
+
+
+<td style="
+  border:1px solid #ddd;
+  padding:8px;
+text-align:center;
+">
+
+<button
+  type="button"
+  class="removeProductionPoleBtn"
+  data-index="${index}"
+  style="
+background:white;
+    color:#a00000;
+    border:1px solid #cc7777;
+    padding:6px 10px;
+    border-radius:6px;
+cursor:pointer;
+  "
+>
+  Remove
+</button>
+
+</td>
+
+</tr>
+
+          `
+        )
+        .join("");
+
+
+calculateProductionSummary();
+  }
+
+
+modal.querySelector(
+    "#addProductionPoleBtn"
+  ).onclick = function () {
+
+const categoryKey =
+      String(
+modal.querySelector(
+          "#productionPoleCategory"
+        ).value || ""
+      );
+
+
+const quantity =
+      Number(
+modal.querySelector(
+          "#productionPoleQuantity"
+        ).value
+      ) || 0;
+
+
+const category =
+productionPoleCategories.find(
+        item =>
+item.key === categoryKey
+      );
+
+
+    if (!category) {
+
+      alert(
+        "Please select a pole category."
+      );
+
+      return;
+    }
+
+
+    if (
+      quantity <= 0 ||
+      !Number.isInteger(quantity)
+    ) {
+
+      alert(
+        "Please enter a valid whole-number quantity produced."
+      );
+
+      return;
+    }
+
+
+const standardWeight =
+      Number(
+poleStandardWeights[
+categoryKey
+        ] || 0
+      );
+
+
+    if (standardWeight<= 0) {
+
+      alert(
+        "This pole category has no Director-approved standard weight.\n\n" +
+        "The Director must set the standard weight before it can be added to Production."
+      );
+
+      return;
+    }
+
+
+const existingEntry =
+productionPoleEntries.find(
+        entry =>
+entry.key === categoryKey
+      );
+
+
+    if (existingEntry) {
+
+existingEntry.quantity =
+        Number(
+existingEntry.quantity
+        ) +
+        quantity;
+
+
+existingEntry.finishedKg =
+roundProductionKg(
+existingEntry.quantity *
+standardWeight
+        );
+
+    } else {
+
+productionPoleEntries.push({
+
+        key:
+category.key,
+
+        name:
+category.name,
+
+        quantity:
+          quantity,
+
+standardWeight:
+roundProductionKg(
+standardWeight
+          ),
+
+finishedKg:
+roundProductionKg(
+            quantity *
+standardWeight
+          )
+
+      });
+
+    }
+
+
+modal.querySelector(
+      "#productionPoleCategory"
+    ).value = "";
+
+
+modal.querySelector(
+      "#productionPoleQuantity"
+    ).value = "";
+
+
+renderProductionPoleEntries();
+  };
+
+
+modal.addEventListener(
+    "click",
+    function (event) {
+
+constremoveButton =
+event.target.closest(
+          ".removeProductionPoleBtn"
+        );
+
+
+      if (!removeButton) {
+        return;
+      }
+
+
+const index =
+        Number(
+removeButton.dataset.index
+        );
+
+
+      if (
+        index < 0 ||
+        index >=
+productionPoleEntries.length
+      ) {
+        return;
+      }
+
+
+productionPoleEntries.splice(
+        index,
+        1
+      );
+
+
+renderProductionPoleEntries();
+    }
+  );
 
 
   /* =========================================================
@@ -20188,25 +20500,6 @@ calculateProductionInputKg();
       }
     }
   );
-
-
-  [
-    "pole4X4X7Square",
-    "pole3X3X6Square",
-    "pole4x7Round",
-    "pole3X3X2Square",
-    "pole4x4X2Square",
-    "pole4x2Round"
-  ].forEach(id => {
-
-modal.querySelector(
-      "#" + id
-    ).addEventListener(
-      "input",
-calculateProductionSummary
-    );
-  });
-
 
 modal.querySelector(
     "#closeProductionBtn"
