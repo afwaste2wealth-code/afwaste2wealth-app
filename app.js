@@ -20448,7 +20448,7 @@ modal.addEventListener(
     "click",
     function (event) {
 
-constremoveButton =
+const removeButton =
 event.target.closest(
           ".removeProductionPoleBtn"
         );
