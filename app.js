@@ -28503,5 +28503,799 @@ refreshAFTodaysChecklist,
   );
 
 })();
+/* =========================================================
+   A&F MANAGER DAILY STATUS CARDS
+   Live operational summary above Today's Checklist
+   ========================================================= */
+
+(function connectAFManagerDailyStatusCards() {
+
+  function getAFManagerStatusToday() {
+
+const now = new Date();
+
+const year = now.getFullYear();
+
+const month =
+      String(now.getMonth() + 1)
+        .padStart(2, "0");
+
+const day =
+      String(now.getDate())
+        .padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  }
+
+
+  function afManagerStatusSameDay(
+    value,
+    today
+  ) {
+
+    if (!value) {
+      return false;
+    }
+
+    return String(value)
+      .slice(0, 10) === today;
+  }
+
+
+  function afManagerStatusNumber(value) {
+
+    return Number(value || 0);
+  }
+
+
+  function afManagerStatusFormat(value) {
+
+    return afManagerStatusNumber(value)
+      .toLocaleString(
+        undefined,
+        {
+maximumFractionDigits: 1
+        }
+      );
+  }
+
+
+  function getAFManagerCurrentUser() {
+
+    if (
+typeof getAFCurrentUser ===
+      "function"
+    ) {
+
+      return getAFCurrentUser();
+
+    }
+
+
+    try {
+
+      return JSON.parse(
+localStorage.getItem(
+          "currentUser"
+        ) || "null"
+      );
+
+    } catch (error) {
+
+      return null;
+
+    }
+  }
+
+
+  function renderAFManagerDailyStatusCards() {
+
+const user =
+getAFManagerCurrentUser();
+
+
+const oldCards =
+document.getElementById(
+        "afManagerDailyStatusCards"
+      );
+
+
+    if (oldCards) {
+oldCards.remove();
+    }
+
+
+    if (
+      !user ||
+user.role !== "Manager"
+    ) {
+
+      return;
+
+    }
+
+
+const main =
+document.querySelector(
+        "#mainApplication .main"
+      );
+
+
+    if (!main) {
+      return;
+    }
+
+
+const today =
+getAFManagerStatusToday();
+
+
+    /* =====================================================
+       READ EXISTING REAL RECORDS
+       ===================================================== */
+
+const attendanceRecords =
+JSON.parse(
+localStorage.getItem(
+          "attendanceRecords"
+        ) || "[]"
+      );
+
+
+const washingRecords =
+JSON.parse(
+localStorage.getItem(
+          "washingShiftRecords"
+        ) || "[]"
+      );
+
+
+const productionRecords =
+JSON.parse(
+localStorage.getItem(
+          "productionRecords"
+        ) || "[]"
+      );
+
+
+const employees =
+JSON.parse(
+localStorage.getItem(
+          "employees"
+        ) || "[]"
+      );
+
+
+const checklistData =
+JSON.parse(
+localStorage.getItem(
+          "afDailyDashboardChecklist"
+        ) || "{}"
+      );
+
+
+    /* =====================================================
+       TODAY'S ATTENDANCE
+       ===================================================== */
+
+const todayAttendance =
+attendanceRecords.filter(record =>
+
+afManagerStatusSameDay(
+record.date ||
+record.attendanceDate ||
+record.recordedAt,
+          today
+        )
+
+      );
+
+
+const presentToday =
+todayAttendance.filter(record =>
+
+        String(
+record.status || ""
+        ).toLowerCase() ===
+          "present"
+
+      ).length;
+
+
+const activeEmployees =
+employees.filter(employee =>
+
+        String(
+employee.employmentStatus ||
+          ""
+        ).toLowerCase() ===
+          "active"
+
+      ).length;
+
+
+const attendancePercent =
+activeEmployees> 0
+        ? Math.round(
+            (
+presentToday /
+activeEmployees
+            ) * 100
+          )
+        : 0;
+
+
+    /* =====================================================
+       TODAY'S WASHING
+       ===================================================== */
+
+const todayWashing =
+washingRecords.filter(record =>
+
+afManagerStatusSameDay(
+record.date ||
+record.completedAt ||
+record.recordedAt,
+          today
+        ) &&
+
+        (
+          String(
+record.targetStatus || ""
+          ).toUpperCase() ===
+            "COMPLETED" ||
+
+record.washingComplete ===
+            true
+        )
+
+      );
+
+
+const washingKg =
+todayWashing.reduce(
+        (total, record) =>
+
+          total +
+afManagerStatusNumber(
+record.actualWashedKg
+          ),
+
+        0
+      );
+
+
+const washingTargetKg =
+todayWashing.reduce(
+        (total, record) =>
+
+          total +
+afManagerStatusNumber(
+record.targetKg
+          ),
+
+        0
+      );
+
+
+const washingAchievement =
+washingTargetKg> 0
+        ? Math.round(
+            (
+washingKg /
+washingTargetKg
+            ) * 100
+          )
+        : null;
+
+
+    /* =====================================================
+       TODAY'S PRODUCTION
+       ===================================================== */
+
+const todayProduction =
+productionRecords.filter(record =>
+
+afManagerStatusSameDay(
+record.date ||
+record.createdAt ||
+record.recordedAt,
+          today
+        ) &&
+
+        String(
+record.productionStatus ||
+          ""
+        ).toUpperCase() ===
+          "COMPLETED"
+
+      );
+
+
+const totalPolesToday =
+todayProduction.reduce(
+        (total, record) =>
+
+          total +
+afManagerStatusNumber(
+record.totalPoles
+          ),
+
+        0
+      );
+
+
+const finishedKgToday =
+todayProduction.reduce(
+        (total, record) =>
+
+          total +
+afManagerStatusNumber(
+record.productionWeight
+          ),
+
+        0
+      );
+
+
+    /* =====================================================
+       MANAGER CHECKLIST STATUS
+       8 Manager daily items
+       ===================================================== */
+
+const managerChecklistIds = [
+
+      "managerAttendance",
+      "managerFactoryInspection",
+      "managerWashing",
+      "managerProduction",
+      "managerStock",
+      "managerStaffIssues",
+      "managerCleanliness",
+      "managerEndDay"
+
+    ];
+
+
+const savedToday =
+checklistData[today] || {};
+
+
+    let completedChecks = 0;
+
+
+managerChecklistIds.forEach(id => {
+
+const saved =
+savedToday[id];
+
+
+      if (
+        saved &&
+        (
+saved.status === "DONE" ||
+saved.status ===
+            "NO_ACTIVITY"
+        )
+      ) {
+
+completedChecks++;
+
+      }
+
+    });
+
+
+    /*
+     * Add automatic system completion where
+     * the Manager has not manually checked it.
+     */
+
+    if (
+todayAttendance.length> 0 &&
+      !savedToday.managerAttendance
+    ) {
+
+completedChecks++;
+
+    }
+
+
+    if (
+todayWashing.length> 0 &&
+      !savedToday.managerWashing
+    ) {
+
+completedChecks++;
+
+    }
+
+
+    if (
+todayProduction.length> 0 &&
+      !savedToday.managerProduction
+    ) {
+
+completedChecks++;
+
+    }
+
+
+completedChecks =
+Math.min(
+completedChecks,
+managerChecklistIds.length
+      );
+
+
+const pendingChecks =
+managerChecklistIds.length -
+completedChecks;
+
+
+    /* =====================================================
+       BUILD CARDS
+       ===================================================== */
+
+const cards =
+document.createElement(
+        "div"
+      );
+
+
+cards.id =
+      "afManagerDailyStatusCards";
+
+
+cards.style.cssText = `
+display:grid;
+      grid-template-columns:
+        repeat(4,minmax(145px,1fr));
+      gap:10px;
+      margin:14px 0 10px 0;
+    `;
+
+
+cards.innerHTML = `
+
+<div
+        class="card"
+        style="
+          padding:13px;
+          min-height:82px;
+        "
+>
+
+<div
+          style="
+            font-size:11px;
+            color:#68776f;
+font-weight:bold;
+          "
+>
+          TODAY'S ATTENDANCE
+</div>
+
+<div
+          style="
+            margin-top:7px;
+            font-size:21px;
+font-weight:bold;
+            color:#173027;
+          "
+>
+          ${presentToday}/${activeEmployees}
+</div>
+
+<div
+          style="
+            margin-top:3px;
+            font-size:10px;
+            color:#777;
+          "
+>
+          Present •
+          ${attendancePercent}%
+</div>
+
+</div>
+
+
+<div
+        class="card"
+        style="
+          padding:13px;
+          min-height:82px;
+        "
+>
+
+<div
+          style="
+            font-size:11px;
+            color:#68776f;
+font-weight:bold;
+          "
+>
+          TODAY'S WASHING
+</div>
+
+<div
+          style="
+            margin-top:7px;
+            font-size:21px;
+font-weight:bold;
+            color:#173027;
+          "
+>
+          ${
+afManagerStatusFormat(
+washingKg
+            )
+          } kg
+</div>
+
+<div
+          style="
+            margin-top:3px;
+            font-size:10px;
+            color:#777;
+          "
+>
+          ${
+washingAchievement !==
+            null
+              ? washingAchievement +
+                "% of target"
+              : todayWashing.length
+                ? "Completed"
+                : "No washing recorded"
+          }
+</div>
+
+</div>
+
+
+<div
+        class="card"
+        style="
+          padding:13px;
+          min-height:82px;
+        "
+>
+
+<div
+          style="
+            font-size:11px;
+            color:#68776f;
+font-weight:bold;
+          "
+>
+          TODAY'S PRODUCTION
+</div>
+
+<div
+          style="
+            margin-top:7px;
+            font-size:21px;
+font-weight:bold;
+            color:#173027;
+          "
+>
+          ${
+afManagerStatusFormat(
+totalPolesToday
+            )
+          }
+          poles
+</div>
+
+<div
+          style="
+            margin-top:3px;
+            font-size:10px;
+            color:#777;
+          "
+>
+          ${
+afManagerStatusFormat(
+finishedKgToday
+            )
+          } kg finished
+</div>
+
+</div>
+
+
+<div
+        class="card"
+        style="
+          padding:13px;
+          min-height:82px;
+        "
+>
+
+<div
+          style="
+            font-size:11px;
+            color:#68776f;
+font-weight:bold;
+          "
+>
+          PENDING DAILY CHECKS
+</div>
+
+<div
+          style="
+            margin-top:7px;
+            font-size:21px;
+font-weight:bold;
+            color:
+              ${
+pendingChecks === 0
+                  ? "#0b5d3b"
+                  : "#8a5a00"
+              };
+          "
+>
+          ${pendingChecks}
+</div>
+
+<div
+          style="
+            margin-top:3px;
+            font-size:10px;
+            color:#777;
+          "
+>
+          ${completedChecks}/${
+managerChecklistIds.length
+          }
+          checklist items complete
+</div>
+
+</div>
+
+    `;
+
+
+    /* =====================================================
+       RESPONSIVE CARDS
+       ===================================================== */
+
+const responsive =
+document.createElement(
+        "style"
+      );
+
+
+responsive.textContent = `
+
+      @media (max-width:900px) {
+
+        #afManagerDailyStatusCards {
+          grid-template-columns:
+            repeat(2,minmax(140px,1fr))
+            !important;
+        }
+
+      }
+
+
+      @media (max-width:520px) {
+
+        #afManagerDailyStatusCards {
+          grid-template-columns:
+            1fr !important;
+        }
+
+      }
+
+    `;
+
+
+cards.appendChild(
+      responsive
+    );
+
+
+    /* =====================================================
+       INSERT ABOVE TODAY'S CHECKLIST
+       ===================================================== */
+
+const checklist =
+document.getElementById(
+        "afTodaysChecklist"
+      );
+
+
+    if (
+      checklist &&
+checklist.parentElement === main
+    ) {
+
+main.insertBefore(
+        cards,
+        checklist
+      );
+
+    } else {
+
+const operations =
+document.getElementById(
+          "operationsOverview"
+        );
+
+
+      if (
+        operations &&
+operations.parentElement === main
+      ) {
+
+main.insertBefore(
+          cards,
+          operations
+        );
+
+      } else {
+
+main.prepend(cards);
+
+      }
+
+    }
+
+  }
+
+
+window.refreshAFManagerDailyStatusCards =
+renderAFManagerDailyStatusCards;
+
+
+  /* =======================================================
+     CONNECT AFTER ROLE DASHBOARD RENDERS
+     ======================================================= */
+
+  if (
+typeof applyAFRoleDashboard ===
+    "function"
+  ) {
+
+const previousApplyAFRoleDashboard =
+applyAFRoleDashboard;
+
+
+applyAFRoleDashboard =
+      function() {
+
+const result =
+previousApplyAFRoleDashboard.apply(
+            this,
+            arguments
+          );
+
+
+setTimeout(
+renderAFManagerDailyStatusCards,
+          20
+        );
+
+
+        return result;
+
+      };
+
+  }
+
+
+  /*
+   * Existing logged-in Manager session.
+   */
+
+setTimeout(
+renderAFManagerDailyStatusCards,
+    50
+  );
+
+})();
 
  
