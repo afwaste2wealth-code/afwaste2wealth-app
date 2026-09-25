@@ -22014,6 +22014,666 @@ modal.querySelector(
 modal.remove();
   };
 }
+/* =========================================================
+   MASTER KB BATCH SUMMARY
+   ========================================================= */
+
+function viewMasterBatchSummary() {
+
+const materialRecords = JSON.parse(
+localStorage.getItem("materialRecords") || "[]"
+  );
+
+const washingRecords =
+typeof getWashingShiftRecords === "function"
+      ? getWashingShiftRecords()
+      : JSON.parse(
+localStorage.getItem("washingShiftRecords") || "[]"
+        );
+
+const productionRecords = JSON.parse(
+localStorage.getItem("productionRecords") || "[]"
+  );
+
+
+  function esc(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+
+  function roundKg(value) {
+    return Math.round(
+      (Number(value || 0) + Number.EPSILON) * 100
+    ) / 100;
+  }
+
+
+const poleCategories = [
+    ["pole3X3X6Square", '3"x3"x6ft Square'],
+    ["pole3X3X6_5Square", '3"x3"x6.5ft Square'],
+    ["pole4X4X6Square", '4"x4"x6ft Square'],
+    ["pole4X4X7Square", '4"x4"x7ft Square'],
+    ["pole3x6Round", '3" Round x 6ft'],
+    ["pole4x7Round", '4" Round x 7ft'],
+    ["pole3X3X2Square", '3"x3"x2ft Square'],
+    ["pole4x4X2Square", '4"x4"x2ft Square'],
+    ["pole4x2Round", '4" Round x 2ft']
+  ];
+
+
+const companyBatches =
+materialRecords.filter(record => {
+
+const batchNumber =
+        String(record.batchNumber || "");
+
+      return (
+        /^KB\d+$/i.test(batchNumber) &&
+        String(record.materialSource || "")
+          .toLowerCase() !== "client"
+      );
+    });
+
+
+const summaries =
+companyBatches.map(batch => {
+
+const batchNumber =
+        String(batch.batchNumber || "");
+
+
+const originalBatchKg =
+        Number(
+batch.openingBatchKg ??
+batch.netWeight ??
+batch.grossWeight ??
+          0
+        );
+
+
+const batchWashingRecords =
+washingRecords.filter(record =>
+          String(record.batchNumber || "") ===
+batchNumber&&
+          (
+            String(record.targetStatus || "")
+              .toUpperCase() === "COMPLETED" ||
+record.washingComplete === true
+          )
+        );
+
+
+const totalWashedKg =
+batchWashingRecords.reduce(
+          (total, record) =>
+            total +
+            Number(record.actualWashedKg || 0),
+          0
+        );
+
+
+const kbAwaitingWashingKg =
+Math.max(
+          Number(
+batch.batchBalanceKg ??
+            (
+originalBatchKg -
+totalWashedKg
+            )
+          ),
+          0
+        );
+
+
+const kbwNumbers =
+        new Set(
+batchWashingRecords
+            .map(record =>
+              String(
+record.washingSubBatchNumber ||
+record.cycleNumber ||
+                ""
+              )
+            )
+            .filter(value =>
+              /^KBW\d+$/i.test(value)
+            )
+        );
+
+
+      let productionInputKg = 0;
+      let finishedPoleKg = 0;
+      let totalPoles = 0;
+
+const poleTotals = {};
+
+
+productionRecords.forEach(record => {
+
+const sources =
+Array.isArray(record.washedSources)
+            ? record.washedSources
+            : [];
+
+
+const sourceKgForBatch =
+sources.reduce(
+            (total, source) => {
+
+const sourceBatch =
+                String(
+source.sourceBatchNumber || ""
+                );
+
+const sourceKbw =
+                String(
+source.washingSubBatchNumber ||
+source.subBatchNumber ||
+source.cycleNumber ||
+                  ""
+                );
+
+
+const belongsToBatch =
+sourceBatch === batchNumber ||
+kbwNumbers.has(sourceKbw);
+
+
+              return belongsToBatch
+                ? total +
+                  Number(source.kgUsed || 0)
+                : total;
+            },
+            0
+          );
+
+
+        if (sourceKgForBatch<= 0) {
+          return;
+        }
+
+
+productionInputKg +=
+sourceKgForBatch;
+
+
+const recordInputKg =
+          Number(record.productionInputKg || 0);
+
+const recordFinishedKg =
+          Number(record.productionWeight || 0);
+
+
+const batchShare =
+recordInputKg> 0
+            ? Math.min(
+sourceKgForBatch / recordInputKg,
+                1
+              )
+            : 0;
+
+
+finishedPoleKg +=
+recordFinishedKg *
+batchShare;
+
+
+const entries =
+Array.isArray(record.poleEntries)
+            ? record.poleEntries
+            : [];
+
+
+        if (entries.length) {
+
+entries.forEach(entry => {
+
+const quantity =
+              Number(entry.quantity || 0) *
+batchShare;
+
+            if (quantity <= 0) {
+              return;
+            }
+
+const key =
+              String(
+entry.key ||
+entry.name ||
+                "pole"
+              );
+
+const name =
+              String(
+entry.name ||
+entry.key ||
+                "Pole"
+              );
+
+            if (!poleTotals[key]) {
+poleTotals[key] = {
+                name: name,
+                quantity: 0
+              };
+            }
+
+poleTotals[key].quantity +=
+              quantity;
+          });
+
+        } else {
+
+poleCategories.forEach(item => {
+
+const key = item[0];
+const name = item[1];
+
+const quantity =
+              Number(record[key] || 0) *
+batchShare;
+
+            if (quantity <= 0) {
+              return;
+            }
+
+            if (!poleTotals[key]) {
+poleTotals[key] = {
+                name: name,
+                quantity: 0
+              };
+            }
+
+poleTotals[key].quantity +=
+              quantity;
+          });
+        }
+      });
+
+
+Object.values(poleTotals)
+        .forEach(item => {
+totalPoles +=
+            Number(item.quantity || 0);
+        });
+
+
+const processLossKg =
+Math.max(
+productionInputKg -
+finishedPoleKg,
+          0
+        );
+
+
+const recoveryPercent =
+productionInputKg> 0
+          ? (
+finishedPoleKg /
+productionInputKg
+            ) * 100
+          : 0;
+
+
+const lossPercent =
+productionInputKg> 0
+          ? (
+processLossKg /
+productionInputKg
+            ) * 100
+          : 0;
+
+
+const kbwAwaitingProductionKg =
+Math.max(
+totalWashedKg -
+productionInputKg,
+          0
+        );
+
+
+const poleDetails =
+Object.values(poleTotals)
+          .filter(item =>
+            Number(item.quantity || 0) > 0
+          )
+          .map(item =>
+            esc(item.name) +
+            " × " +
+roundKg(item.quantity)
+          )
+          .join("<br>") || "—";
+
+
+      let status = "NOT STARTED";
+
+
+      if (
+kbAwaitingWashingKg<= 0.01 &&
+kbwAwaitingProductionKg<= 0.01 &&
+totalWashedKg> 0
+      ) {
+        status = "BATCH COMPLETE";
+      } else if (
+productionInputKg> 0
+      ) {
+        status = "IN PRODUCTION";
+      } else if (
+totalWashedKg> 0
+      ) {
+        status = "WASHING / AWAITING PRODUCTION";
+      } else if (
+originalBatchKg> 0
+      ) {
+        status = "AWAITING WASHING";
+      }
+
+
+      return {
+batchNumber,
+originalBatchKg:
+roundKg(originalBatchKg),
+totalWashedKg:
+roundKg(totalWashedKg),
+kbAwaitingWashingKg:
+roundKg(kbAwaitingWashingKg),
+productionInputKg:
+roundKg(productionInputKg),
+kbwAwaitingProductionKg:
+roundKg(kbwAwaitingProductionKg),
+totalPoles:
+roundKg(totalPoles),
+finishedPoleKg:
+roundKg(finishedPoleKg),
+processLossKg:
+roundKg(processLossKg),
+recoveryPercent:
+roundKg(recoveryPercent),
+lossPercent:
+roundKg(lossPercent),
+poleDetails,
+        status
+      };
+    });
+
+
+summaries.sort((a, b) =>
+    String(a.batchNumber)
+      .localeCompare(
+        String(b.batchNumber),
+        undefined,
+        {
+          numeric: true,
+          sensitivity: "base"
+        }
+      )
+  );
+
+
+const rowsHtml =
+summaries.length
+      ? summaries.map(summary => `
+
+<tr>
+
+<td>${esc(summary.batchNumber)}</td>
+
+<td style="text-align:right;">
+  ${summary.originalBatchKg.toFixed(2)}
+</td>
+
+<td style="text-align:right;">
+  ${summary.totalWashedKg.toFixed(2)}
+</td>
+
+<td style="text-align:right;">
+  ${summary.kbAwaitingWashingKg.toFixed(2)}
+</td>
+
+<td style="text-align:right;">
+  ${summary.productionInputKg.toFixed(2)}
+</td>
+
+<td style="text-align:right;">
+  ${summary.kbwAwaitingProductionKg.toFixed(2)}
+</td>
+
+<td style="min-width:190px;">
+  ${summary.poleDetails}
+</td>
+
+<td style="
+text-align:center;
+font-weight:bold;
+">
+  ${summary.totalPoles}
+</td>
+
+<td style="text-align:right;">
+  ${summary.finishedPoleKg.toFixed(2)}
+</td>
+
+<td style="text-align:right;">
+  ${summary.processLossKg.toFixed(2)}
+</td>
+
+<td style="text-align:right;">
+  ${summary.recoveryPercent.toFixed(2)}%
+</td>
+
+<td style="text-align:right;">
+  ${summary.lossPercent.toFixed(2)}%
+</td>
+
+<td style="
+text-align:center;
+font-weight:bold;
+">
+  ${esc(summary.status)}
+</td>
+
+</tr>
+
+      `).join("")
+      : `
+
+<tr>
+<td
+colspan="13"
+  style="
+    padding:20px;
+text-align:center;
+    color:#666;
+  "
+>
+  No company KB batches found.
+</td>
+</tr>
+
+      `;
+
+
+const modal =
+document.createElement("div");
+
+
+modal.style.cssText = `
+position:fixed;
+    inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+align-items:center;
+justify-content:center;
+    z-index:10000;
+    padding:10px;
+font-family:Arial,sans-serif;
+  `;
+
+
+modal.innerHTML = `
+
+<div style="
+background:white;
+  width:98%;
+  max-width:1550px;
+  max-height:94vh;
+overflow:auto;
+  border-radius:14px;
+  padding:22px;
+  box-shadow:0 12px 35px rgba(0,0,0,.28);
+">
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:flex-start;
+  gap:15px;
+  margin-bottom:16px;
+">
+
+<div>
+
+<h2 style="
+  margin:0;
+  color:#0b5d3b;
+">
+  KB Master Batch Summary
+</h2>
+
+<div style="
+  margin-top:6px;
+  color:#666;
+  font-size:13px;
+  line-height:1.45;
+">
+  Complete traceability from original KB batch
+  through washing, KBW production input,
+  finished poles, recovery and process loss.
+</div>
+
+</div>
+
+<button
+  id="closeMasterBatchSummary"
+  type="button"
+  style="
+    padding:9px 16px;
+    border:1px solid #ccc;
+    border-radius:7px;
+background:white;
+cursor:pointer;
+  "
+>
+  Close
+</button>
+
+</div>
+
+
+<div style="
+  background:#eef7f2;
+  border:1px solid #cfe4d8;
+  border-radius:9px;
+  padding:11px 13px;
+  margin-bottom:15px;
+  font-size:13px;
+  line-height:1.5;
+">
+
+<b>Stock interpretation:</b>
+KB Awaiting Washing is material still in the original
+master batch. KBW Awaiting Production is material already
+processed through washing but not yet taken into production.
+Neither is counted as production loss.
+
+</div>
+
+
+<div style="overflow-x:auto;">
+
+<table
+  id="masterBatchSummaryTable"
+  style="
+    width:100%;
+    min-width:1600px;
+border-collapse:collapse;
+    font-size:12px;
+  "
+>
+
+<thead>
+
+<tr style="
+  background:#0b5d3b;
+color:white;
+">
+
+<th>KB Batch</th>
+<th>Original Batch KG</th>
+<th>Processed Through Washing KG</th>
+<th>KB Awaiting Washing KG</th>
+<th>KBW Used in Production KG</th>
+<th>KBW Awaiting Production KG</th>
+<th>Pole Production</th>
+<th>Total Poles</th>
+<th>Finished Pole KG</th>
+<th>Process Loss KG</th>
+<th>Recovery %</th>
+<th>Loss %</th>
+<th>Batch Status</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+  ${rowsHtml}
+</tbody>
+
+</table>
+
+</div>
+
+</div>
+  `;
+
+
+modal.querySelectorAll(
+    "#masterBatchSummaryTableth"
+  ).forEach(cell => {
+
+cell.style.padding = "10px";
+cell.style.border =
+      "1px solid #d8e1dc";
+cell.style.whiteSpace = "nowrap";
+  });
+
+
+modal.querySelectorAll(
+    "#masterBatchSummaryTable td"
+  ).forEach(cell => {
+
+cell.style.padding = "9px";
+cell.style.border =
+      "1px solid #ddd";
+cell.style.verticalAlign = "top";
+  });
+
+
+document.body.appendChild(modal);
+
+
+modal.querySelector(
+    "#closeMasterBatchSummary"
+  ).onclick = function () {
+
+modal.remove();
+  };
+}
 
 
 /* =========================================================
