@@ -22599,7 +22599,7 @@ Neither is counted as production loss.
   id="masterBatchSummaryTable"
   style="
     width:100%;
-    min-width:1600px;
+    min-width:1250px;
 border-collapse:collapse;
     font-size:12px;
   "
@@ -22646,10 +22646,11 @@ modal.querySelectorAll(
     "#masterBatchSummaryTableth"
   ).forEach(cell => {
 
-cell.style.padding = "10px";
+cell.style.padding = "6px 5px";
 cell.style.border =
       "1px solid #d8e1dc";
-cell.style.whiteSpace = "nowrap";
+cell.style.whiteSpace = "normal";
+cell.style.lineHeight = "1.2";
   });
 
 
@@ -22657,10 +22658,11 @@ modal.querySelectorAll(
     "#masterBatchSummaryTable td"
   ).forEach(cell => {
 
-cell.style.padding = "9px";
+cell.style.padding = "6px 5px";
 cell.style.border =
       "1px solid #ddd";
 cell.style.verticalAlign = "top";
+cell.style.lineHeight = "1.25";
   });
 
 
