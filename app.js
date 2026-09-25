@@ -26741,4 +26741,1764 @@ grid.appendChild(button);
 
 })();
 
+/* =========================================================
+   A&F TODAY'S CHECKLIST
+   Director + Manager + Secretary
+   Daily dashboard reminder with upward movement
+   ========================================================= */
 
+(function connectAFTodaysChecklist() {
+
+const STORAGE_KEY = "afDailyDashboardChecklist";
+
+  let afChecklistTimer = null;
+
+
+  /* =======================================================
+     HELPERS
+     ======================================================= */
+
+  function getAFChecklistToday() {
+
+const now = new Date();
+
+const year = now.getFullYear();
+
+const month =
+      String(now.getMonth() + 1)
+        .padStart(2, "0");
+
+const day =
+      String(now.getDate())
+        .padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  }
+
+
+  function getAFChecklistUser() {
+
+    if (
+typeof getAFCurrentUser === "function"
+    ) {
+      return getAFCurrentUser();
+    }
+
+    return JSON.parse(
+localStorage.getItem("currentUser") ||
+      "null"
+    );
+  }
+
+
+  function getAFChecklistStorage() {
+
+    try {
+
+      return JSON.parse(
+localStorage.getItem(
+          STORAGE_KEY
+        ) || "{}"
+      );
+
+    } catch (error) {
+
+      return {};
+
+    }
+
+  }
+
+
+  function saveAFChecklistStorage(data) {
+
+localStorage.setItem(
+      STORAGE_KEY,
+JSON.stringify(data)
+    );
+
+  }
+
+
+  function afChecklistSameDay(
+    value,
+    today
+  ) {
+
+    if (!value) {
+      return false;
+    }
+
+    return String(value)
+      .slice(0, 10) === today;
+
+  }
+
+
+  function afChecklistEscape(value) {
+
+const div =
+document.createElement("div");
+
+div.textContent =
+      String(value ?? "");
+
+    return div.innerHTML;
+
+  }
+
+
+  /* =======================================================
+     READ TODAY'S REAL SYSTEM ACTIVITY
+     ======================================================= */
+
+  function getAFAutomaticDailyActivity() {
+
+const today =
+getAFChecklistToday();
+
+
+const attendance =
+JSON.parse(
+localStorage.getItem(
+          "attendanceRecords"
+        ) || "[]"
+      );
+
+
+const washing =
+JSON.parse(
+localStorage.getItem(
+          "washingShiftRecords"
+        ) || "[]"
+      );
+
+
+const production =
+JSON.parse(
+localStorage.getItem(
+          "productionRecords"
+        ) || "[]"
+      );
+
+
+const materials =
+JSON.parse(
+localStorage.getItem(
+          "materialRecords"
+        ) || "[]"
+      );
+
+
+    /*
+     * Sales, expenses and supplier records may
+     * use different keys in older parts of the app.
+     * We read them safely without changing them.
+     */
+
+const sales =
+JSON.parse(
+localStorage.getItem(
+          "salesRecords"
+        ) || "[]"
+      );
+
+
+const expenses =
+JSON.parse(
+localStorage.getItem(
+          "expenses"
+        ) ||
+localStorage.getItem(
+          "expenseRecords"
+        ) ||
+        "[]"
+      );
+
+
+const supplierPayments =
+JSON.parse(
+localStorage.getItem(
+          "supplierPayments"
+        ) || "[]"
+      );
+
+
+const attendanceDone =
+attendance.some(record =>
+afChecklistSameDay(
+record.date ||
+record.attendanceDate ||
+record.recordedAt,
+          today
+        )
+      );
+
+
+const washingDone =
+washing.some(record =>
+
+afChecklistSameDay(
+record.date ||
+record.completedAt ||
+record.recordedAt,
+          today
+        ) &&
+
+        (
+          String(
+record.targetStatus || ""
+          ).toUpperCase() ===
+            "COMPLETED" ||
+
+record.washingComplete ===
+            true
+        )
+
+      );
+
+
+const productionDone =
+production.some(record =>
+
+afChecklistSameDay(
+record.date ||
+record.createdAt ||
+record.recordedAt,
+          today
+        ) &&
+
+        String(
+record.productionStatus || ""
+        ).toUpperCase() ===
+          "COMPLETED"
+
+      );
+
+
+const materialReceived =
+materials.some(record =>
+
+afChecklistSameDay(
+record.date ||
+record.purchaseDate ||
+record.createdAt ||
+record.recordedAt,
+          today
+        )
+
+      );
+
+
+const salesUpdated =
+sales.some(record =>
+
+afChecklistSameDay(
+record.date ||
+record.saleDate ||
+record.createdAt ||
+record.recordedAt,
+          today
+        )
+
+      );
+
+
+const expensesUpdated =
+expenses.some(record =>
+
+afChecklistSameDay(
+record.date ||
+record.expenseDate ||
+record.createdAt ||
+record.recordedAt,
+          today
+        )
+
+      );
+
+
+const supplierUpdated =
+supplierPayments.some(record =>
+
+afChecklistSameDay(
+record.date ||
+record.paymentDate ||
+record.createdAt ||
+record.recordedAt,
+          today
+        )
+
+      );
+
+
+    return {
+
+      attendance:
+attendanceDone,
+
+      washing:
+washingDone,
+
+      production:
+productionDone,
+
+materialReceived:
+materialReceived,
+
+salesUpdated:
+salesUpdated,
+
+expensesUpdated:
+expensesUpdated,
+
+supplierUpdated:
+supplierUpdated
+
+    };
+
+  }
+
+
+  /* =======================================================
+     MANAGER DAILY CHECKLIST
+     ======================================================= */
+
+  function getAFManagerChecklist(
+    automatic
+  ) {
+
+    return [
+
+      {
+        id: "managerAttendance",
+        label:
+          "Attendance recorded",
+        automatic: true,
+        done:
+automatic.attendance
+      },
+
+      {
+        id: "managerFactoryInspection",
+        label:
+          "Factory & machine inspection checked",
+        automatic: false
+      },
+
+      {
+        id: "managerWashing",
+        label:
+          "Washing activity updated",
+        automatic: true,
+        done:
+automatic.washing,
+allowNoActivity: true
+      },
+
+      {
+        id: "managerProduction",
+        label:
+          "Production activity updated",
+        automatic: true,
+        done:
+automatic.production,
+allowNoActivity: true
+      },
+
+      {
+        id: "managerStock",
+        label:
+          "Stock & batch movements checked",
+        automatic: false
+      },
+
+      {
+        id: "managerStaffIssues",
+        label:
+          "Staff issues / incidents checked",
+        automatic: false,
+allowNoActivity: true
+      },
+
+      {
+        id: "managerCleanliness",
+        label:
+          "Factory cleanliness & safety checked",
+        automatic: false
+      },
+
+      {
+        id: "managerEndDay",
+        label:
+          "End-of-day operational records reviewed",
+        automatic: false
+      }
+
+    ];
+
+  }
+
+
+  /* =======================================================
+     SECRETARY DAILY CHECKLIST
+     ======================================================= */
+
+  function getAFSecretaryChecklist(
+    automatic
+  ) {
+
+    return [
+
+      {
+        id: "secretaryPurchases",
+        label:
+          "Kavera purchases / receipts updated",
+        automatic: true,
+        done:
+automatic.materialReceived,
+allowNoActivity: true
+      },
+
+      {
+        id: "secretarySales",
+        label:
+          "Sales records checked & updated",
+        automatic: true,
+        done:
+automatic.salesUpdated,
+allowNoActivity: true
+      },
+
+      {
+        id: "secretaryDispatch",
+        label:
+          "Dispatch & delivery records checked",
+        automatic: false,
+allowNoActivity: true
+      },
+
+      {
+        id: "secretarySuppliers",
+        label:
+          "Supplier & payment records checked",
+        automatic: true,
+        done:
+automatic.supplierUpdated,
+allowNoActivity: true
+      },
+
+      {
+        id: "secretaryExpenses",
+        label:
+          "Expense records checked & updated",
+        automatic: true,
+        done:
+automatic.expensesUpdated,
+allowNoActivity: true
+      },
+
+      {
+        id: "secretaryClients",
+        label:
+          "Upcoming clients & follow-ups checked",
+        automatic: false,
+allowNoActivity: true
+      },
+
+      {
+        id: "secretaryDocuments",
+        label:
+          "Company records & documents checked",
+        automatic: false
+      },
+
+      {
+        id: "secretaryAdminFollowUp",
+        label:
+          "Administrative follow-ups checked",
+        automatic: false,
+allowNoActivity: true
+      },
+
+      {
+        id: "secretaryEndDay",
+        label:
+          "End-of-day administration reviewed",
+        automatic: false
+      }
+
+    ];
+
+  }
+
+
+  /* =======================================================
+     DIRECTOR SUPERVISORY CHECKLIST
+     Director sees combined daily control items.
+     ======================================================= */
+
+  function getAFDirectorChecklist(
+    automatic
+  ) {
+
+    return [
+
+      {
+        id: "directorAttendance",
+        label:
+          "Attendance status reviewed",
+        automatic: true,
+        done:
+automatic.attendance
+      },
+
+      {
+        id: "directorOperations",
+        label:
+          "Today's factory operations reviewed",
+        automatic: false
+      },
+
+      {
+        id: "directorWashing",
+        label:
+          "Washing update reviewed",
+        automatic: true,
+        done:
+automatic.washing,
+allowNoActivity: true
+      },
+
+      {
+        id: "directorProduction",
+        label:
+          "Production update reviewed",
+        automatic: true,
+        done:
+automatic.production,
+allowNoActivity: true
+      },
+
+      {
+        id: "directorPurchases",
+        label:
+          "Kavera purchase / receipt status reviewed",
+        automatic: true,
+        done:
+automatic.materialReceived,
+allowNoActivity: true
+      },
+
+      {
+        id: "directorAdministration",
+        label:
+          "Secretary administration status reviewed",
+        automatic: false
+      },
+
+      {
+        id: "directorStock",
+        label:
+          "Stock & batch position reviewed",
+        automatic: false
+      },
+
+      {
+        id: "directorStaff",
+        label:
+          "Staff matters / incidents reviewed",
+        automatic: false,
+allowNoActivity: true
+      },
+
+      {
+        id: "directorSafety",
+        label:
+          "Factory safety & cleanliness status reviewed",
+        automatic: false
+      },
+
+      {
+        id: "directorPending",
+        label:
+          "Pending approvals & follow-ups reviewed",
+        automatic: false,
+allowNoActivity: true
+      },
+
+      {
+        id: "directorEndDay",
+        label:
+          "Daily factory records reviewed",
+        automatic: false
+      }
+
+    ];
+
+  }
+
+
+  /* =======================================================
+     SELECT CHECKLIST BY ROLE
+     ======================================================= */
+
+  function getAFRoleChecklist(
+    role,
+    automatic
+  ) {
+
+    if (role === "Manager") {
+
+      return getAFManagerChecklist(
+        automatic
+      );
+
+    }
+
+
+    if (role === "Secretary") {
+
+      return getAFSecretaryChecklist(
+        automatic
+      );
+
+    }
+
+
+    if (role === "Director") {
+
+      return getAFDirectorChecklist(
+        automatic
+      );
+
+    }
+
+
+    return [];
+
+  }
+
+
+  /* =======================================================
+     GET SAVED STATUS
+     ======================================================= */
+
+  function getAFChecklistItemStatus(
+    item,
+todayData
+  ) {
+
+    /*
+     * Existing real system record has priority.
+     */
+    if (
+item.automatic&&
+item.done
+    ) {
+
+      return {
+
+        completed: true,
+
+        status: "DONE",
+
+        source: "SYSTEM"
+
+      };
+
+    }
+
+
+const saved =
+todayData[item.id];
+
+
+    if (
+      saved &&
+      (
+saved.status === "DONE" ||
+saved.status === "NO_ACTIVITY"
+      )
+    ) {
+
+      return {
+
+        completed: true,
+
+        status:
+saved.status,
+
+        source: "MANUAL",
+
+checkedBy:
+saved.checkedBy || "",
+
+checkedAt:
+saved.checkedAt || ""
+
+      };
+
+    }
+
+
+    return {
+
+      completed: false,
+
+      status: "PENDING",
+
+      source: ""
+
+    };
+
+  }
+
+
+  /* =======================================================
+     SAVE MANUAL CHECK
+     ======================================================= */
+
+  function saveAFManualChecklistItem(
+itemId,
+    status
+  ) {
+
+const user =
+getAFChecklistUser();
+
+
+    if (!user) {
+      return;
+    }
+
+
+const today =
+getAFChecklistToday();
+
+
+const data =
+getAFChecklistStorage();
+
+
+    if (!data[today]) {
+
+      data[today] = {};
+
+    }
+
+
+    data[today][itemId] = {
+
+      status: status,
+
+checkedBy:
+user.fullName ||
+user.employeeId ||
+        "",
+
+checkedByEmployeeId:
+user.employeeId ||
+        "",
+
+checkedByRole:
+user.role ||
+        "",
+
+checkedAt:
+        new Date().toISOString()
+
+    };
+
+
+saveAFChecklistStorage(
+      data
+    );
+
+  }
+
+
+  /* =======================================================
+     RENDER CHECKLIST
+     ======================================================= */
+
+  function renderAFTodaysChecklist() {
+
+const user =
+getAFChecklistUser();
+
+
+const existing =
+document.getElementById(
+        "afTodaysChecklist"
+      );
+
+
+    if (existing) {
+existing.remove();
+    }
+
+
+    if (
+      !user ||
+      ![
+        "Director",
+        "Manager",
+        "Secretary"
+      ].includes(user.role)
+    ) {
+
+      return;
+
+    }
+
+
+const main =
+document.querySelector(
+        "#mainApplication .main"
+      );
+
+
+    if (!main) {
+      return;
+    }
+
+
+const today =
+getAFChecklistToday();
+
+
+const stored =
+getAFChecklistStorage();
+
+
+const todayData =
+      stored[today] || {};
+
+
+const automatic =
+getAFAutomaticDailyActivity();
+
+
+const items =
+getAFRoleChecklist(
+user.role,
+        automatic
+      );
+
+
+    if (!items.length) {
+      return;
+    }
+
+
+const completed =
+items.filter(item =>
+
+getAFChecklistItemStatus(
+          item,
+todayData
+        ).completed
+
+      ).length;
+
+
+const percentage =
+Math.round(
+        completed /
+items.length *
+        100
+      );
+
+
+const box =
+document.createElement(
+        "section"
+      );
+
+
+box.id =
+      "afTodaysChecklist";
+
+
+box.className =
+      "card";
+
+
+box.style.cssText = `
+      margin:14px 0 16px 0;
+      padding:0;
+overflow:hidden;
+      border:1px solid #d6e4db;
+      border-radius:12px;
+background:white;
+    `;
+
+
+box.innerHTML = `
+
+<style>
+
+        #afTodaysChecklist
+        .afTodayHeader {
+
+display:flex;
+align-items:center;
+justify-content:space-between;
+          gap:12px;
+flex-wrap:wrap;
+
+          padding:12px 15px;
+
+          background:#f2f8f4;
+
+          border-bottom:
+            1px solid #dce8e0;
+
+        }
+
+
+        #afTodaysChecklist
+        .afTodayTitle {
+
+          color:#0b5d3b;
+
+font-weight:bold;
+
+          font-size:15px;
+
+        }
+
+
+        #afTodaysChecklist
+        .afTodayProgressText {
+
+          color:#0b5d3b;
+
+          font-size:12px;
+
+font-weight:bold;
+
+        }
+
+
+        #afTodaysChecklist
+        .afTodayProgress {
+
+          height:6px;
+
+          background:#e5ebe7;
+
+        }
+
+
+        #afTodaysChecklist
+        .afTodayProgressBar {
+
+          height:100%;
+
+          background:#0b5d3b;
+
+          transition:
+            width .3s ease;
+
+        }
+
+
+        #afTodaysChecklist
+        .afTodayWindow {
+
+          height:180px;
+
+overflow:hidden;
+
+position:relative;
+
+background:white;
+
+        }
+
+
+        #afTodaysChecklist
+        .afTodayTrack {
+
+position:absolute;
+
+          top:0;
+
+          left:0;
+
+          right:0;
+
+          transition:
+            transform .65s ease;
+
+        }
+
+
+        #afTodaysChecklist
+        .afTodayRow {
+
+          min-height:60px;
+
+box-sizing:border-box;
+
+display:flex;
+
+align-items:center;
+
+          justify-content:
+            space-between;
+
+          gap:10px;
+
+          padding:9px 14px;
+
+          border-bottom:
+            1px solid #eeeeee;
+
+background:white;
+
+        }
+
+
+        #afTodaysChecklist
+        .afTodayRow.done {
+
+          background:#f6fbf8;
+
+        }
+
+
+        #afTodaysChecklist
+        .afTodayLeft {
+
+display:flex;
+
+align-items:center;
+
+          gap:9px;
+
+          min-width:0;
+
+          flex:1;
+
+        }
+
+
+        #afTodaysChecklist
+        .afTodayIcon {
+
+          width:26px;
+
+          height:26px;
+
+          min-width:26px;
+
+          border-radius:50%;
+
+display:flex;
+
+align-items:center;
+
+justify-content:center;
+
+          background:#eeeeee;
+
+          color:#777;
+
+          font-size:13px;
+
+font-weight:bold;
+
+        }
+
+
+        #afTodaysChecklist
+        .done
+        .afTodayIcon {
+
+          background:#dcefe3;
+
+          color:#0b5d3b;
+
+        }
+
+
+        #afTodaysChecklist
+        .afTodayLabel {
+
+          color:#333;
+
+          font-size:13px;
+
+          font-weight:600;
+
+          line-height:1.3;
+
+        }
+
+
+        #afTodaysChecklist
+        .afTodayStatus {
+
+display:block;
+
+          margin-top:2px;
+
+          color:#777;
+
+          font-size:10px;
+
+font-weight:normal;
+
+        }
+
+
+        #afTodaysChecklist
+        .afTodayActions {
+
+display:flex;
+
+justify-content:flex-end;
+
+          gap:5px;
+
+flex-wrap:wrap;
+
+        }
+
+
+        #afTodaysChecklist
+        .afTodayButton {
+
+          border:
+            1px solid #cbd7cf;
+
+background:white;
+
+          color:#0b5d3b;
+
+          border-radius:6px;
+
+          padding:6px 8px;
+
+          font-size:10px;
+
+font-weight:bold;
+
+cursor:pointer;
+
+        }
+
+
+        #afTodaysChecklist
+        .afTodayFooter {
+
+display:flex;
+
+          justify-content:
+            space-between;
+
+align-items:center;
+
+          gap:8px;
+
+flex-wrap:wrap;
+
+          padding:7px 14px;
+
+          background:#fafafa;
+
+          color:#777;
+
+          font-size:10px;
+
+          border-top:
+            1px solid #eeeeee;
+
+        }
+
+
+        @media (
+          max-width:600px
+        ) {
+
+          #afTodaysChecklist
+          .afTodayWindow {
+
+            height:210px;
+
+          }
+
+
+          #afTodaysChecklist
+          .afTodayRow {
+
+            min-height:70px;
+
+          }
+
+
+          #afTodaysChecklist
+          .afTodayLabel {
+
+            font-size:12px;
+
+          }
+
+        }
+
+
+        @media (
+          prefers-reduced-motion:
+          reduce
+        ) {
+
+          #afTodaysChecklist
+          .afTodayTrack {
+
+transition:none;
+
+          }
+
+        }
+
+</style>
+
+
+<div
+        class="afTodayHeader"
+>
+
+<div>
+
+<div
+            class="afTodayTitle"
+>
+✅ Today's Checklist
+</div>
+
+
+<div
+            style="
+              color:#777;
+              font-size:10px;
+              margin-top:3px;
+            "
+>
+            ${afChecklistEscape(
+user.role
+            )}
+            •
+            ${today}
+</div>
+
+</div>
+
+
+<div
+          class="afTodayProgressText"
+>
+          ${completed}/${items.length}
+          Done
+          •
+          ${percentage}%
+</div>
+
+</div>
+
+
+<div
+        class="afTodayProgress"
+>
+
+<div
+          class="afTodayProgressBar"
+          style="
+            width:${percentage}%;
+          "
+></div>
+
+</div>
+
+
+<div
+        class="afTodayWindow"
+>
+
+<div
+          class="afTodayTrack"
+></div>
+
+</div>
+
+
+<div
+        class="afTodayFooter"
+>
+
+<span>
+          Reminders move upward automatically
+</span>
+
+<span>
+          Tap box to pause / continue
+</span>
+
+</div>
+
+    `;
+
+
+    /*
+     * Place the checklist near the top.
+     *
+     * Director/Manager:
+     * before Factory KPI cards.
+     *
+     * Secretary:
+     * before Secretary dashboard.
+     */
+
+const dashboardStart =
+main.querySelector(
+        "#factoryKpis, #afSecretaryDashboard"
+      );
+
+
+    if (dashboardStart) {
+
+main.insertBefore(
+        box,
+dashboardStart
+      );
+
+    } else {
+
+main.prepend(box);
+
+    }
+
+
+const track =
+box.querySelector(
+        ".afTodayTrack"
+      );
+
+
+items.forEach(item => {
+
+const status =
+getAFChecklistItemStatus(
+          item,
+todayData
+        );
+
+
+const row =
+document.createElement(
+          "div"
+        );
+
+
+row.className =
+        "afTodayRow" +
+        (
+status.completed
+            ? " done"
+            : ""
+        );
+
+
+      let statusText =
+        "Pending";
+
+
+      if (
+status.status === "DONE" &&
+status.source === "SYSTEM"
+      ) {
+
+statusText =
+          "Confirmed from today's system record";
+
+      } else if (
+status.status === "DONE"
+      ) {
+
+statusText =
+          "Checked";
+
+      } else if (
+status.status ===
+        "NO_ACTIVITY"
+      ) {
+
+statusText =
+          "No activity today";
+
+      }
+
+
+row.innerHTML = `
+
+<div
+          class="afTodayLeft"
+>
+
+<div
+            class="afTodayIcon"
+>
+            ${
+status.completed
+                ? "✓"
+                : "•"
+            }
+</div>
+
+
+<div
+            class="afTodayLabel"
+>
+
+            ${afChecklistEscape(
+item.label
+            )}
+
+<span
+              class="afTodayStatus"
+>
+              ${afChecklistEscape(
+statusText
+              )}
+</span>
+
+</div>
+
+</div>
+
+
+<div
+          class="afTodayActions"
+></div>
+
+      `;
+
+
+const actions =
+row.querySelector(
+          ".afTodayActions"
+        );
+
+
+      if (!status.completed) {
+
+const doneButton =
+document.createElement(
+            "button"
+          );
+
+
+doneButton.type =
+          "button";
+
+
+doneButton.className =
+          "afTodayButton";
+
+
+doneButton.textContent =
+          "✓ Done";
+
+
+doneButton.addEventListener(
+          "click",
+          function(event) {
+
+event.stopPropagation();
+
+
+saveAFManualChecklistItem(
+item.id,
+              "DONE"
+            );
+
+
+refreshAFTodaysChecklist();
+
+          }
+        );
+
+
+actions.appendChild(
+doneButton
+        );
+
+
+        if (
+item.allowNoActivity
+        ) {
+
+const noActivityButton =
+document.createElement(
+              "button"
+            );
+
+
+noActivityButton.type =
+            "button";
+
+
+noActivityButton.className =
+            "afTodayButton";
+
+
+noActivityButton.textContent =
+            "No Activity";
+
+
+noActivityButton.addEventListener(
+            "click",
+            function(event) {
+
+event.stopPropagation();
+
+
+saveAFManualChecklistItem(
+item.id,
+                "NO_ACTIVITY"
+              );
+
+
+refreshAFTodaysChecklist();
+
+            }
+          );
+
+
+actions.appendChild(
+noActivityButton
+          );
+
+        }
+
+      }
+
+
+track.appendChild(row);
+
+    });
+
+
+    /* =====================================================
+       UPWARD ROTATION
+       ===================================================== */
+
+    let currentIndex = 0;
+
+    let paused = false;
+
+
+    function getVisibleCount() {
+
+      return 3;
+
+    }
+
+
+    function moveChecklistUp() {
+
+      if (paused) {
+        return;
+      }
+
+
+const visibleCount =
+getVisibleCount();
+
+
+      if (
+items.length<=
+visibleCount
+      ) {
+        return;
+      }
+
+
+currentIndex++;
+
+
+const maxStart =
+items.length -
+visibleCount;
+
+
+      if (
+currentIndex>
+maxStart
+      ) {
+
+currentIndex = 0;
+
+      }
+
+
+const firstRow =
+track.querySelector(
+          ".afTodayRow"
+        );
+
+
+      if (!firstRow) {
+        return;
+      }
+
+
+const rowHeight =
+firstRow.offsetHeight;
+
+
+track.style.transform =
+        `translateY(-${
+currentIndex *
+rowHeight
+        }px)`;
+
+    }
+
+
+afChecklistTimer =
+setInterval(
+moveChecklistUp,
+        3000
+      );
+
+
+    /*
+     * Desktop:
+     * pause while reading.
+     */
+
+box.addEventListener(
+      "mouseenter",
+      function() {
+
+        paused = true;
+
+      }
+    );
+
+
+box.addEventListener(
+      "mouseleave",
+      function() {
+
+        paused = false;
+
+      }
+    );
+
+
+    /*
+     * Phone/tablet:
+     * tap blank area to pause/resume.
+     */
+
+box.addEventListener(
+      "click",
+      function(event) {
+
+        if (
+event.target.closest(
+            "button"
+          )
+        ) {
+          return;
+        }
+
+
+        paused =
+          !paused;
+
+      }
+    );
+
+  }
+
+
+  /* =======================================================
+     PUBLIC REFRESH
+     ======================================================= */
+
+  function refreshAFTodaysChecklist() {
+
+    if (afChecklistTimer) {
+
+clearInterval(
+afChecklistTimer
+      );
+
+afChecklistTimer =
+        null;
+
+    }
+
+
+renderAFTodaysChecklist();
+
+  }
+
+
+window.refreshAFTodaysChecklist =
+refreshAFTodaysChecklist;
+
+
+  /* =======================================================
+     CONNECT TO EXISTING ROLE DASHBOARD
+     ======================================================= */
+
+  if (
+typeof applyAFRoleDashboard ===
+    "function"
+  ) {
+
+const previousApplyAFRoleDashboard =
+applyAFRoleDashboard;
+
+
+applyAFRoleDashboard =
+      function() {
+
+const result =
+previousApplyAFRoleDashboard.apply(
+            this,
+            arguments
+          );
+
+
+setTimeout(
+refreshAFTodaysChecklist,
+          0
+        );
+
+
+        return result;
+
+      };
+
+  }
+
+
+  /*
+   * Existing logged-in session.
+   */
+
+setTimeout(
+refreshAFTodaysChecklist,
+    0
+  );
+
+})();
+
+ 
