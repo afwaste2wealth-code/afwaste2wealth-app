@@ -23877,5 +23877,741 @@ document.body.classList.remove(
   );
 }
 
+/* =========================================================
+   A&F LIVE DIRECTOR DASHBOARD
+   Real Material → Washing → Production figures
+   ========================================================= */
+
+function refreshAFDirectorDashboard() {
+
+const currentUser =
+typeof getAFCurrentUser === "function"
+      ? getAFCurrentUser()
+      : JSON.parse(
+localStorage.getItem("currentUser") || "null"
+        );
+
+  if (
+    !currentUser ||
+currentUser.role !== "Director"
+  ) {
+    return;
+  }
+
+
+  /* =======================================================
+     READ REAL SAVED DATA
+     ======================================================= */
+
+const materialRecords =
+JSON.parse(
+localStorage.getItem("materialRecords") || "[]"
+    );
+
+const washingRecords =
+typeof getWashingShiftRecords === "function"
+      ? getWashingShiftRecords()
+      : JSON.parse(
+localStorage.getItem("washingShiftRecords") || "[]"
+        );
+
+const productionRecords =
+JSON.parse(
+localStorage.getItem("productionRecords") || "[]"
+    );
+
+
+  /* =======================================================
+     HELPERS
+     ======================================================= */
+
+  function number(value) {
+    return Number(value || 0);
+  }
+
+
+  function formatKg(value) {
+
+    return number(value).toLocaleString(
+      undefined,
+      {
+minimumFractionDigits: 0,
+maximumFractionDigits: 2
+      }
+    ) + " kg";
+  }
+
+
+  function formatNumber(value) {
+
+    return number(value).toLocaleString(
+      undefined,
+      {
+minimumFractionDigits: 0,
+maximumFractionDigits: 2
+      }
+    );
+  }
+
+
+  function percent(value, total) {
+
+const actual =
+      number(value);
+
+const target =
+      number(total);
+
+    if (target <= 0) {
+      return "—";
+    }
+
+    return (
+      (
+        actual /
+        target
+      ) * 100
+    ).toFixed(1) + "%";
+  }
+
+
+  /* =======================================================
+     COMPANY MATERIAL ONLY
+     Exclude client-owned washing material.
+     ======================================================= */
+
+const companyMaterials =
+materialRecords.filter(record =>
+      String(
+record.materialSource || ""
+      ).toLowerCase() !== "client" &&
+      /^KB\d+$/i.test(
+        String(record.batchNumber || "")
+      )
+    );
+
+
+  /* =======================================================
+     PURCHASE TOTALS
+     ======================================================= */
+
+const grossReceivedKg =
+companyMaterials.reduce(
+      (total, record) =>
+        total +
+        number(record.grossWeight),
+      0
+    );
+
+
+const netUsableKg =
+companyMaterials.reduce(
+      (total, record) =>
+        total +
+        number(
+record.openingBatchKg ??
+record.netWeight ??
+record.grossWeight
+        ),
+      0
+    );
+
+
+const kbAwaitingWashingKg =
+companyMaterials.reduce(
+      (total, record) =>
+        total +
+Math.max(
+          number(
+record.batchBalanceKg ??
+record.openingBatchKg ??
+record.netWeight ??
+            0
+          ),
+          0
+        ),
+      0
+    );
+
+
+const openKbBatches =
+companyMaterials.filter(record =>
+      number(
+record.batchBalanceKg ??
+record.openingBatchKg ??
+record.netWeight ??
+        0
+      ) > 0.01
+    ).length;
+
+
+  /* =======================================================
+     COMPANY WASHING RECORDS
+     ======================================================= */
+
+const companyBatchNumbers =
+    new Set(
+companyMaterials.map(record =>
+        String(record.batchNumber || "")
+      )
+    );
+
+
+const completedCompanyWashing =
+washingRecords.filter(record => {
+
+const completed =
+        String(
+record.targetStatus || ""
+        ).toUpperCase() === "COMPLETED" ||
+record.washingComplete === true;
+
+const notCancelled =
+        String(
+record.status || ""
+        ).toUpperCase() !== "CANCELLED";
+
+const companyBatch =
+companyBatchNumbers.has(
+          String(record.batchNumber || "")
+        );
+
+      return (
+        completed &&
+notCancelled&&
+companyBatch
+      );
+    });
+
+
+  /*
+   * IMPORTANT:
+   * This is the pre-wash KG processed through washing.
+   * Kavera is not weighed again after washing.
+   */
+
+const processedThroughWashingKg =
+completedCompanyWashing.reduce(
+      (total, record) =>
+        total +
+        number(record.actualWashedKg),
+      0
+    );
+
+
+  /* =======================================================
+     PRODUCTION INPUT
+     ======================================================= */
+
+const productionInputKg =
+productionRecords.reduce(
+      (total, record) =>
+        total +
+        number(record.productionInputKg),
+      0
+    );
+
+
+const kbwAwaitingProductionKg =
+Math.max(
+processedThroughWashingKg -
+productionInputKg,
+      0
+    );
+
+
+  /* =======================================================
+     FINISHED POLES
+     ======================================================= */
+
+const totalPolesProduced =
+productionRecords.reduce(
+      (total, record) =>
+        total +
+        number(record.totalPoles),
+      0
+    );
+
+
+const finishedPoleKg =
+productionRecords.reduce(
+      (total, record) =>
+        total +
+        number(record.productionWeight),
+      0
+    );
+
+
+const productionLossKg =
+Math.max(
+productionInputKg -
+finishedPoleKg,
+      0
+    );
+
+
+const recoveryPercent =
+productionInputKg> 0
+      ? (
+finishedPoleKg /
+productionInputKg
+        ) * 100
+      : 0;
+
+
+const lossPercent =
+productionInputKg> 0
+      ? (
+productionLossKg /
+productionInputKg
+        ) * 100
+      : 0;
+
+
+  /* =======================================================
+     REBUILD LIVE KPI AREA
+     ======================================================= */
+
+const kpiArea =
+document.getElementById("factoryKpis");
+
+
+  if (kpiArea) {
+
+kpiArea.style.display = "";
+
+kpiArea.style.gridTemplateColumns =
+      "repeat(auto-fit,minmax(165px,1fr))";
+
+
+kpiArea.innerHTML = `
+
+<div class="card">
+
+<div class="kt">
+Kavera Purchased
+</div>
+
+<div class="kv">
+    ${formatKg(grossReceivedKg)}
+</div>
+
+<div class="note">
+    Gross company purchases
+</div>
+
+</div>
+
+
+<div class="card">
+
+<div class="kt">
+    Net Usable Material
+</div>
+
+<div class="kv">
+    ${formatKg(netUsableKg)}
+</div>
+
+<div class="note">
+    After purchase deduction
+</div>
+
+</div>
+
+
+<div class="card">
+
+<div class="kt">
+    Processed Through Washing
+</div>
+
+<div class="kv">
+    ${formatKg(processedThroughWashingKg)}
+</div>
+
+<div class="note">
+    Pre-wash KG processed
+</div>
+
+</div>
+
+
+<div class="card">
+
+<div class="kt">
+    KB Awaiting Washing
+</div>
+
+<div class="kv">
+    ${formatKg(kbAwaitingWashingKg)}
+</div>
+
+<div class="note">
+    ${openKbBatches} open KB batch(es)
+</div>
+
+</div>
+
+
+<div class="card">
+
+<div class="kt">
+    KBW Awaiting Production
+</div>
+
+<div class="kv">
+    ${formatKg(kbwAwaitingProductionKg)}
+</div>
+
+<div class="note">
+    Processed material not yet used
+</div>
+
+</div>
+
+
+<div class="card">
+
+<div class="kt">
+    Poles Produced
+</div>
+
+<div class="kv">
+    ${formatNumber(totalPolesProduced)}
+</div>
+
+<div class="note">
+    ${formatKg(finishedPoleKg)} finished
+</div>
+
+</div>
+
+
+<div class="card">
+
+<div class="kt">
+    Finished Pole Weight
+</div>
+
+<div class="kv">
+    ${formatKg(finishedPoleKg)}
+</div>
+
+<div class="note">
+    Actual finished production
+</div>
+
+</div>
+
+
+<div class="card">
+
+<div class="kt">
+    Production Recovery
+</div>
+
+<div class="kv">
+    ${recoveryPercent.toFixed(1)}%
+</div>
+
+<div class="note">
+    Loss ${lossPercent.toFixed(1)}%
+</div>
+
+</div>
+
+    `;
+  }
+
+
+  /* =======================================================
+     REBUILD OPERATIONS OVERVIEW
+     No invented targets.
+     Targets will be connected later to Director Targets.
+     ======================================================= */
+
+const operations =
+document.getElementById(
+      "operationsOverview"
+    );
+
+
+  if (operations) {
+
+operations.innerHTML = `
+
+<div class="title">
+  Operations Overview
+</div>
+
+<div class="sub"
+     style="margin-bottom:14px;">
+  Live company material and production position
+</div>
+
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>
+  Activity
+</th>
+
+<th style="text-align:right;">
+  Actual
+</th>
+
+<th>
+  Position
+</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+
+<tr>
+
+<td>
+  Gross Kavera Purchased
+</td>
+
+<td style="text-align:right;font-weight:bold;">
+  ${formatKg(grossReceivedKg)}
+</td>
+
+<td>
+  Purchase records
+</td>
+
+</tr>
+
+
+<tr>
+
+<td>
+  Net Usable Material
+</td>
+
+<td style="text-align:right;font-weight:bold;">
+  ${formatKg(netUsableKg)}
+</td>
+
+<td>
+  After purchase deduction
+</td>
+
+</tr>
+
+
+<tr>
+
+<td>
+  Processed Through Washing
+</td>
+
+<td style="text-align:right;font-weight:bold;">
+  ${formatKg(processedThroughWashingKg)}
+</td>
+
+<td>
+  KB → KBW
+</td>
+
+</tr>
+
+
+<tr>
+
+<td>
+  KB Awaiting Washing
+</td>
+
+<td style="text-align:right;font-weight:bold;">
+  ${formatKg(kbAwaitingWashingKg)}
+</td>
+
+<td>
+  ${openKbBatches} open batch(es)
+</td>
+
+</tr>
+
+
+<tr>
+
+<td>
+  KBW Awaiting Production
+</td>
+
+<td style="text-align:right;font-weight:bold;">
+  ${formatKg(kbwAwaitingProductionKg)}
+</td>
+
+<td>
+  Available for production
+</td>
+
+</tr>
+
+
+<tr>
+
+<td>
+  KBW Used In Production
+</td>
+
+<td style="text-align:right;font-weight:bold;">
+  ${formatKg(productionInputKg)}
+</td>
+
+<td>
+  Production input
+</td>
+
+</tr>
+
+
+<tr>
+
+<td>
+  Finished Poles
+</td>
+
+<td style="text-align:right;font-weight:bold;">
+  ${formatNumber(totalPolesProduced)}
+</td>
+
+<td>
+  ${formatKg(finishedPoleKg)}
+</td>
+
+</tr>
+
+
+<tr>
+
+<td>
+  Production Process Loss
+</td>
+
+<td style="text-align:right;font-weight:bold;">
+  ${formatKg(productionLossKg)}
+</td>
+
+<td>
+  ${lossPercent.toFixed(2)}% loss
+</td>
+
+</tr>
+
+
+<tr>
+
+<td>
+  Production Recovery
+</td>
+
+<td style="text-align:right;font-weight:bold;">
+  ${recoveryPercent.toFixed(2)}%
+</td>
+
+<td>
+  Finished KG ÷ production input KG
+</td>
+
+</tr>
+
+</tbody>
+
+</table>
+
+
+<div style="
+  margin-top:16px;
+  padding:11px 13px;
+  background:#eef8f2;
+  border:1px solid #cfe6d8;
+  border-radius:8px;
+  color:#0b5d3b;
+  font-size:12px;
+  line-height:1.5;
+">
+
+<b>Live accounting:</b>
+KB Awaiting Washing and KBW Awaiting Production
+are stock positions and are not treated as loss.
+Production loss is calculated only from material
+actually taken into pole production.
+
+</div>
+
+    `;
+  }
+
+
+  /* =======================================================
+     KEEP WORKING DASHBOARD FEATURES UPDATED
+     ======================================================= */
+
+  if (
+typeof refreshAFDashboardBirthdays ===
+    "function"
+  ) {
+refreshAFDashboardBirthdays();
+  }
+
+}
+
+
+/* =========================================================
+   CONNECT LIVE DIRECTOR DASHBOARD TO EXISTING ROLE SYSTEM
+   without replacing the working role controller
+   ========================================================= */
+
+(function connectAFDirectorDashboard() {
+
+  if (
+typeof applyAFRoleDashboard !==
+    "function"
+  ) {
+    return;
+  }
+
+
+const originalApplyAFRoleDashboard =
+applyAFRoleDashboard;
+
+
+applyAFRoleDashboard = function () {
+
+const result =
+originalApplyAFRoleDashboard.apply(
+        this,
+        arguments
+      );
+
+
+    if (
+typeof getAFCurrentRole ===
+        "function" &&
+getAFCurrentRole() === "Director"
+    ) {
+
+refreshAFDirectorDashboard();
+    }
+
+
+    return result;
+  };
+
+})();
+
 
 
