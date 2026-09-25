@@ -22676,6 +22676,656 @@ modal.querySelector(
 modal.remove();
   };
 }
+/* =========================================================
+   KB PURCHASE & RECOVERY ANALYSIS
+   ========================================================= */
+
+function viewPurchaseRecoveryAnalysis() {
+
+const materialRecords = JSON.parse(
+localStorage.getItem("materialRecords") || "[]"
+  );
+
+const washingRecords =
+typeof getWashingShiftRecords === "function"
+      ? getWashingShiftRecords()
+      : JSON.parse(
+localStorage.getItem("washingShiftRecords") || "[]"
+        );
+
+const productionRecords = JSON.parse(
+localStorage.getItem("productionRecords") || "[]"
+  );
+
+
+  function esc(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+
+  function round2(value) {
+    return Math.round(
+      (Number(value || 0) + Number.EPSILON) * 100
+    ) / 100;
+  }
+
+
+const companyBatches = materialRecords.filter(record => {
+
+const batchNumber =
+      String(record.batchNumber || "");
+
+    return (
+      /^KB\d+$/i.test(batchNumber) &&
+      String(record.materialSource || "")
+        .toLowerCase() !== "client"
+    );
+  });
+
+
+const summaries = companyBatches.map(batch => {
+
+const batchNumber =
+      String(batch.batchNumber || "");
+
+
+const grossPurchasedKg =
+      Number(
+batch.grossWeight ??
+batch.openingBatchKg ??
+batch.netWeight ??
+        0
+      );
+
+
+const netPaidKg =
+      Number(
+batch.netWeight ??
+batch.openingBatchKg ??
+grossPurchasedKg
+      );
+
+
+    let deductionKg =
+      Number(batch.dirtWeightKg || 0);
+
+
+    let deductionPercent =
+      Number(batch.dirtPercent || 0);
+
+
+    if (
+deductionKg<= 0 &&
+grossPurchasedKg>netPaidKg
+    ) {
+deductionKg =
+grossPurchasedKg - netPaidKg;
+    }
+
+
+    if (
+deductionPercent<= 0 &&
+grossPurchasedKg> 0 &&
+deductionKg> 0
+    ) {
+deductionPercent =
+        (deductionKg / grossPurchasedKg) * 100;
+    }
+
+
+const batchWashingRecords =
+washingRecords.filter(record =>
+        String(record.batchNumber || "") ===
+batchNumber&&
+        (
+          String(record.targetStatus || "")
+            .toUpperCase() === "COMPLETED" ||
+record.washingComplete === true
+        )
+      );
+
+
+const processedThroughWashingKg =
+batchWashingRecords.reduce(
+        (total, record) =>
+          total +
+          Number(record.actualWashedKg || 0),
+        0
+      );
+
+
+const kbAwaitingWashingKg =
+Math.max(
+        Number(
+batch.batchBalanceKg ??
+          (
+netPaidKg -
+processedThroughWashingKg
+          )
+        ),
+        0
+      );
+
+
+const kbwNumbers =
+      new Set(
+batchWashingRecords
+          .map(record =>
+            String(
+record.washingSubBatchNumber ||
+record.cycleNumber ||
+              ""
+            )
+          )
+          .filter(value =>
+            /^KBW\d+$/i.test(value)
+          )
+      );
+
+
+    let productionInputKg = 0;
+    let finishedPoleKg = 0;
+
+
+productionRecords.forEach(record => {
+
+const sources =
+Array.isArray(record.washedSources)
+          ? record.washedSources
+          : [];
+
+
+const sourceKgForBatch =
+sources.reduce(
+          (total, source) => {
+
+const sourceBatch =
+              String(
+source.sourceBatchNumber || ""
+              );
+
+const sourceKbw =
+              String(
+source.washingSubBatchNumber ||
+source.subBatchNumber ||
+source.cycleNumber ||
+                ""
+              );
+
+
+const belongsToBatch =
+sourceBatch === batchNumber ||
+kbwNumbers.has(sourceKbw);
+
+
+            return belongsToBatch
+              ? total +
+                Number(source.kgUsed || 0)
+              : total;
+          },
+          0
+        );
+
+
+      if (sourceKgForBatch<= 0) {
+        return;
+      }
+
+
+productionInputKg +=
+sourceKgForBatch;
+
+
+const recordInputKg =
+        Number(record.productionInputKg || 0);
+
+const recordFinishedKg =
+        Number(record.productionWeight || 0);
+
+
+const batchShare =
+recordInputKg> 0
+          ? Math.min(
+sourceKgForBatch / recordInputKg,
+              1
+            )
+          : 0;
+
+
+finishedPoleKg +=
+recordFinishedKg * batchShare;
+    });
+
+
+const kbwAwaitingProductionKg =
+Math.max(
+processedThroughWashingKg -
+productionInputKg,
+        0
+      );
+
+
+const batchComplete =
+netPaidKg> 0 &&
+kbAwaitingWashingKg<= 0.01 &&
+kbwAwaitingProductionKg<= 0.01;
+
+
+    let batchStatus = "AWAITING WASHING";
+
+
+    if (batchComplete) {
+
+batchStatus = "BATCH COMPLETE";
+
+    } else if (productionInputKg> 0) {
+
+batchStatus = "IN PRODUCTION";
+
+    } else if (processedThroughWashingKg> 0) {
+
+batchStatus =
+        "WASHING / AWAITING PRODUCTION";
+    }
+
+
+    let actualTotalLossKg = null;
+    let actualLossPercent = null;
+    let deductionDifference = null;
+
+
+    /*
+      IMPORTANT:
+      Final purchase-to-poles loss is calculated
+      ONLY after the entire KB batch has been
+      converted into finished poles.
+    */
+
+    if (batchComplete) {
+
+actualTotalLossKg =
+Math.max(
+grossPurchasedKg -
+finishedPoleKg,
+          0
+        );
+
+
+actualLossPercent =
+grossPurchasedKg> 0
+          ? (
+actualTotalLossKg /
+grossPurchasedKg
+            ) * 100
+          : 0;
+
+
+deductionDifference =
+actualLossPercent -
+deductionPercent;
+    }
+
+
+    return {
+
+batchNumber,
+
+grossPurchasedKg:
+        round2(grossPurchasedKg),
+
+deductionPercent:
+        round2(deductionPercent),
+
+deductionKg:
+        round2(deductionKg),
+
+netPaidKg:
+        round2(netPaidKg),
+
+finishedPoleKg:
+        round2(finishedPoleKg),
+
+actualTotalLossKg:
+actualTotalLossKg === null
+          ? null
+          : round2(actualTotalLossKg),
+
+actualLossPercent:
+actualLossPercent === null
+          ? null
+          : round2(actualLossPercent),
+
+deductionDifference:
+deductionDifference === null
+          ? null
+          : round2(deductionDifference),
+
+batchStatus
+    };
+  });
+
+
+summaries.sort((a, b) =>
+    String(a.batchNumber)
+      .localeCompare(
+        String(b.batchNumber),
+        undefined,
+        {
+          numeric: true,
+          sensitivity: "base"
+        }
+      )
+  );
+
+
+const rowsHtml =
+summaries.length
+      ? summaries.map(summary => {
+
+const completed =
+summary.batchStatus ===
+            "BATCH COMPLETE";
+
+
+const lossKgDisplay =
+            completed
+              ? summary.actualTotalLossKg
+                  .toFixed(2)
+              : "Pending Batch Completion";
+
+
+const lossPercentDisplay =
+            completed
+              ? summary.actualLossPercent
+                  .toFixed(2) + "%"
+              : "Pending Batch Completion";
+
+
+          let differenceDisplay =
+            "Pending Batch Completion";
+
+
+          if (completed) {
+
+const difference =
+summary.deductionDifference;
+
+differenceDisplay =
+              (
+                difference > 0
+                  ? "+"
+                  : ""
+              ) +
+difference.toFixed(2) +
+              "%";
+          }
+
+
+          return `
+
+<tr>
+
+<td style="font-weight:bold;">
+  ${esc(summary.batchNumber)}
+</td>
+
+<td style="text-align:right;">
+  ${summary.grossPurchasedKg.toFixed(2)}
+</td>
+
+<td style="text-align:right;">
+  ${summary.deductionPercent.toFixed(2)}%
+</td>
+
+<td style="text-align:right;">
+  ${summary.deductionKg.toFixed(2)}
+</td>
+
+<td style="text-align:right;">
+  ${summary.netPaidKg.toFixed(2)}
+</td>
+
+<td style="text-align:right;">
+  ${summary.finishedPoleKg.toFixed(2)}
+</td>
+
+<td style="
+text-align:right;
+  ${completed ? "" : "color:#777;"}
+">
+  ${lossKgDisplay}
+</td>
+
+<td style="
+text-align:right;
+  ${completed ? "" : "color:#777;"}
+">
+  ${lossPercentDisplay}
+</td>
+
+<td style="
+text-align:center;
+font-weight:bold;
+  ${completed ? "" : "color:#777;"}
+">
+  ${differenceDisplay}
+</td>
+
+<td style="
+text-align:center;
+font-weight:bold;
+">
+  ${esc(summary.batchStatus)}
+</td>
+
+</tr>
+
+          `;
+        }).join("")
+      : `
+
+<tr>
+
+<td
+colspan="10"
+  style="
+    padding:20px;
+text-align:center;
+    color:#666;
+  "
+>
+  No company KB batches found.
+</td>
+
+</tr>
+
+      `;
+
+
+const modal =
+document.createElement("div");
+
+
+modal.style.cssText = `
+position:fixed;
+    inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+align-items:center;
+justify-content:center;
+    z-index:10000;
+    padding:10px;
+font-family:Arial,sans-serif;
+  `;
+
+
+modal.innerHTML = `
+
+<div style="
+background:white;
+  width:98%;
+  max-width:1450px;
+  max-height:94vh;
+overflow:auto;
+  border-radius:14px;
+  padding:22px;
+  box-shadow:0 12px 35px rgba(0,0,0,.28);
+">
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:flex-start;
+  gap:15px;
+  margin-bottom:16px;
+">
+
+<div>
+
+<h2 style="
+  margin:0;
+  color:#0b5d3b;
+">
+  KB Purchase vs Actual Recovery Analysis
+</h2>
+
+<div style="
+  margin-top:6px;
+  color:#666;
+  font-size:13px;
+  line-height:1.45;
+">
+  Comparison of the deduction made before
+  purchasing with the actual final loss after
+  the entire KB batch has been converted into poles.
+</div>
+
+</div>
+
+
+<button
+  id="closePurchaseRecoveryAnalysis"
+  type="button"
+  style="
+    padding:9px 16px;
+    border:1px solid #ccc;
+    border-radius:7px;
+background:white;
+cursor:pointer;
+  "
+>
+  Close
+</button>
+
+</div>
+
+
+<div style="
+  background:#eef7f2;
+  border:1px solid #cfe4d8;
+  border-radius:9px;
+  padding:11px 13px;
+  margin-bottom:15px;
+  font-size:13px;
+  line-height:1.5;
+">
+
+<b>Final-loss rule:</b>
+Actual Total Loss KG, Actual Loss % and
+Deduction Difference are calculated only when
+the whole KB batch has been processed into finished poles.
+Incomplete batches remain
+<b>Pending Batch Completion</b>.
+
+</div>
+
+
+<div style="overflow-x:auto;">
+
+<table
+  id="purchaseRecoveryAnalysisTable"
+  style="
+    width:100%;
+    min-width:1150px;
+border-collapse:collapse;
+    font-size:12px;
+  "
+>
+
+<thead>
+
+<tr style="
+  background:#0b5d3b;
+color:white;
+">
+
+<th>KB Batch</th>
+<th>Gross Purchased KG</th>
+<th>Deduction %</th>
+<th>Deducted KG</th>
+<th>Net Paid KG</th>
+<th>Finished Pole KG</th>
+<th>Actual Total Loss KG</th>
+<th>Actual Loss %</th>
+<th>Deduction Difference (%)</th>
+<th>Batch Status</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+  ${rowsHtml}
+</tbody>
+
+</table>
+
+</div>
+
+</div>
+  `;
+
+
+modal.querySelectorAll(
+    "#purchaseRecoveryAnalysisTableth"
+  ).forEach(cell => {
+
+cell.style.padding = "7px 6px";
+cell.style.border =
+      "1px solid #d8e1dc";
+cell.style.whiteSpace = "normal";
+cell.style.lineHeight = "1.2";
+  });
+
+
+modal.querySelectorAll(
+    "#purchaseRecoveryAnalysisTable td"
+  ).forEach(cell => {
+
+cell.style.padding = "7px 6px";
+cell.style.border =
+      "1px solid #ddd";
+cell.style.verticalAlign = "top";
+cell.style.lineHeight = "1.25";
+  });
+
+
+document.body.appendChild(modal);
+
+
+modal.querySelector(
+    "#closePurchaseRecoveryAnalysis"
+  ).onclick = function () {
+
+modal.remove();
+  };
+}
 
 
 /* =========================================================
