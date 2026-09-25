@@ -19386,6 +19386,27 @@ box-sizing:border-box;
 
 <div>
 <label>
+Kavera Input - Pre-Wash Weight (KG)
+</label>
+
+<input
+              id="productionSummaryInputKg"
+              type="number"
+readonly
+              value="0"
+              step="0.01"
+              style="
+                width:100%;
+box-sizing:border-box;
+                padding:10px;
+                margin-top:5px;
+              "
+>
+</div>
+
+
+<div>
+<label>
               Finished Pole Weight (KG)
 </label>
 
@@ -19407,11 +19428,11 @@ box-sizing:border-box;
 
 <div>
 <label>
-              Pending / Unaccounted KG
+              Process Loss (KG)
 </label>
 
 <input
-              id="productionPendingKg"
+              id="productionProcessLossKg"
               type="number"
 readonly
               value="0"
@@ -19428,11 +19449,32 @@ box-sizing:border-box;
 
 <div>
 <label>
-              Production Weight %
+              Recovery %
 </label>
 
 <input
-              id="productionCompletion"
+              id="productionRecoveryPercent"
+              type="number"
+readonly
+              value="0"
+              step="0.01"
+              style="
+                width:100%;
+box-sizing:border-box;
+                padding:10px;
+                margin-top:5px;
+              "
+>
+</div>
+
+
+<div>
+<label>
+              Loss %
+</label>
+
+<input
+              id="productionLossPercent"
               type="number"
 readonly
               value="0"
@@ -19456,7 +19498,7 @@ box-sizing:border-box;
               id="productionStatus"
               type="text"
 readonly
-              value="PENDING"
+              value="COMPLETED"
               style="
                 width:100%;
 box-sizing:border-box;
@@ -19473,18 +19515,19 @@ font-weight:bold;
 
 
 <div style="
-        background:#fff8e6;
-        border:1px solid #f0d89a;
+        background:#eef8f2;
+        border:1px solid #cfe6d8;
         padding:12px;
         border-radius:8px;
         margin-bottom:18px;
         font-size:13px;
         line-height:1.45;
       ">
-<b>Important:</b>
-        Remaining KG is not automatically treated as waste or loss.
-        The record remains <b>PENDING</b> until the production completion
-        workflow is introduced.
+<b>Production Accounting:</b>
+        KBW KG represents the pre-wash kavera weight originally
+        sent through washing. Kavera is not weighed again after
+        washing. Process loss is therefore calculated when finished
+        pole weight is recorded.
 </div>
 
 
@@ -20037,7 +20080,7 @@ entry.quantity
   }
 
 
-  function calculateProductionSummary() {
+ function calculateProductionSummary() {
 
 const totalPoles =
 productionPoleEntries.reduce(
@@ -20077,7 +20120,7 @@ productionInput.value
       ) || 0;
 
 
-const pendingKg =
+const processLossKg =
 Math.max(
 productionInputKg -
 productionWeight,
@@ -20085,10 +20128,19 @@ productionWeight,
       );
 
 
-const completion =
+const recoveryPercent =
 productionInputKg> 0
         ? (
 productionWeight /
+productionInputKg
+          ) * 100
+        : 0;
+
+
+const lossPercent =
+productionInputKg> 0
+        ? (
+processLossKg /
 productionInputKg
           ) * 100
         : 0;
@@ -20101,27 +20153,39 @@ totalPoles;
 
 
 modal.querySelector(
+      "#productionSummaryInputKg"
+    ).value =
+productionInputKg.toFixed(2);
+
+
+modal.querySelector(
       "#totalProductionWeight"
     ).value =
 productionWeight.toFixed(2);
 
 
 modal.querySelector(
-      "#productionPendingKg"
+      "#productionProcessLossKg"
     ).value =
-pendingKg.toFixed(2);
+processLossKg.toFixed(2);
 
 
 modal.querySelector(
-      "#productionCompletion"
+      "#productionRecoveryPercent"
     ).value =
-completion.toFixed(2);
+recoveryPercent.toFixed(2);
+
+
+modal.querySelector(
+      "#productionLossPercent"
+    ).value =
+lossPercent.toFixed(2);
 
 
 modal.querySelector(
       "#productionStatus"
     ).value =
-      "PENDING";
+      "COMPLETED";
   }
 
 
