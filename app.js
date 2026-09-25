@@ -20817,18 +20817,20 @@ getPoleQuantities();
 
 
 const totalPoles =
-      quantities.pole4X4X7Square +
-      quantities.pole3X3X6Square +
-      quantities.pole4x7Round +
-      quantities.pole3X3X2Square +
-      quantities.pole4x4X2Square +
-      quantities.pole4x2Round;
+productionPoleEntries.reduce(
+        (total, entry) =>
+          total +
+          Number(
+entry.quantity || 0
+          ),
+        0
+      );
 
 
     if (totalPoles<= 0) {
 
       alert(
-        "Please enter the number of poles produced."
+        "Please add at least one pole category and quantity produced."
       );
 
       return;
@@ -20839,85 +20841,18 @@ const totalPoles =
        DIRECTOR APPROVED WEIGHTS
        ------------------------- */
 
-const missingWeights = [];
-
-
-    if (
-      quantities.pole4X4X7Square > 0 &&
-      Number(
-        poleStandardWeights.pole4X4X7Square || 0
-      ) <= 0
-    ) {
-
-missingWeights.push(
-        '4"x4"x7ft Square'
-      );
-    }
-
-
-    if (
-      quantities.pole3X3X6Square > 0 &&
-      Number(
-        poleStandardWeights.pole3X3X6Square || 0
-      ) <= 0
-    ) {
-
-missingWeights.push(
-        '3"x3"x6ft Square'
-      );
-    }
-
-
-    if (
-      quantities.pole4x7Round > 0 &&
-      Number(
-        poleStandardWeights.pole4x7Round || 0
-      ) <= 0
-    ) {
-
-missingWeights.push(
-        '4"x7ft Round'
-      );
-    }
-
-
-    if (
-      quantities.pole3X3X2Square > 0 &&
-      Number(
-        poleStandardWeights.pole3X3X2Square || 0
-      ) <= 0
-    ) {
-
-missingWeights.push(
-        '3"x3"x2ft Square'
-      );
-    }
-
-
-    if (
-      quantities.pole4x4X2Square > 0 &&
-      Number(
-        poleStandardWeights.pole4x4X2Square || 0
-      ) <= 0
-    ) {
-
-missingWeights.push(
-        '4"x4"x2ft Square'
-      );
-    }
-
-
-    if (
-      quantities.pole4x2Round > 0 &&
-      Number(
-        poleStandardWeights.pole4x2Round || 0
-      ) <= 0
-    ) {
-
-missingWeights.push(
-        '4"x2ft Round'
-      );
-    }
+const missingWeights =
+productionPoleEntries
+        .filter(entry =>
+          Number(
+poleStandardWeights[
+entry.key
+            ] || 0
+          ) <= 0
+        )
+        .map(entry =>
+entry.name
+        );
 
 
     if (missingWeights.length) {
@@ -20933,49 +20868,26 @@ missingWeights.join("\n")
 
 
 const productionWeight =
+productionPoleEntries.reduce(
+        (total, entry) => {
 
-      (
-        quantities.pole4X4X7Square *
-        Number(
-          poleStandardWeights.pole4X4X7Square || 0
-        )
-      ) +
+          return (
+            total +
+            (
+              Number(
+entry.quantity || 0
+              ) *
+              Number(
+poleStandardWeights[
+entry.key
+                ] || 0
+              )
+            )
+          );
 
-      (
-        quantities.pole3X3X6Square *
-        Number(
-          poleStandardWeights.pole3X3X6Square || 0
-        )
-      ) +
-
-      (
-        quantities.pole4x7Round *
-        Number(
-          poleStandardWeights.pole4x7Round || 0
-        )
-      ) +
-
-      (
-        quantities.pole3X3X2Square *
-        Number(
-          poleStandardWeights.pole3X3X2Square || 0
-        )
-      ) +
-
-      (
-        quantities.pole4x4X2Square *
-        Number(
-          poleStandardWeights.pole4x4X2Square || 0
-        )
-      ) +
-
-      (
-        quantities.pole4x2Round *
-        Number(
-          poleStandardWeights.pole4x2Round || 0
-        )
+        },
+        0
       );
-
 
     /*
      * Finished pole weight should not exceed
@@ -21112,23 +21024,67 @@ roundProductionKg(
 productionInputKg
         ),
 
-      pole4X4X7Square:
-        quantities.pole4X4X7Square,
-
       pole3X3X6Square:
-        quantities.pole3X3X6Square,
+        quantities.pole3X3X6Square || 0,
+
+      pole3X3X6_5Square:
+        quantities.pole3X3X6_5Square || 0,
+
+      pole4X4X6Square:
+        quantities.pole4X4X6Square || 0,
+
+      pole4X4X7Square:
+        quantities.pole4X4X7Square || 0,
+
+      pole3x6Round:
+        quantities.pole3x6Round || 0,
 
       pole4x7Round:
-        quantities.pole4x7Round,
+        quantities.pole4x7Round || 0,
 
       pole3X3X2Square:
-        quantities.pole3X3X2Square,
+        quantities.pole3X3X2Square || 0,
 
       pole4x4X2Square:
-        quantities.pole4x4X2Square,
+        quantities.pole4x4X2Square || 0,
 
       pole4x2Round:
-        quantities.pole4x2Round,
+        quantities.pole4x2Round || 0,
+
+poleEntries:
+productionPoleEntries.map(entry => ({
+
+        key:
+entry.key,
+
+        name:
+entry.name,
+
+        quantity:
+          Number(
+entry.quantity || 0
+          ),
+
+standardWeight:
+roundProductionKg(
+poleStandardWeights[
+entry.key
+            ] || 0
+          ),
+
+finishedKg:
+roundProductionKg(
+            Number(
+entry.quantity || 0
+            ) *
+            Number(
+poleStandardWeights[
+entry.key
+              ] || 0
+            )
+          )
+
+      })),
 
 totalPoles:
 totalPoles,
