@@ -27626,7 +27626,7 @@ box.className =
 
 
 box.style.cssText = `
-      width:48%;
+      width:40%;
       max-width:620px;
       min-width:420px;
       margin:14px 0 16px 0;
