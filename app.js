@@ -21396,105 +21396,621 @@ calculateProductionSummary();
 
 
 function viewProductionRecords() {
-const records = JSON.parse(
-localStorage.getItem("productionRecords") || "[]"
+
+const records =
+JSON.parse(
+localStorage.getItem(
+      "productionRecords"
+    ) || "[]"
   );
 
-const modal = document.createElement("div");
+
+function escapeProductionRecordText(value) {
+
+    return String(
+      value ?? ""
+    )
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+
+function getRecordSources(record) {
+
+const sources =
+Array.isArray(record.washedSources)
+      ? record.washedSources
+      : [];
+
+
+    if (!sources.length) {
+      return "—";
+    }
+
+
+    return sources
+      .map(source => {
+
+const kbw =
+source.washingSubBatchNumber ||
+source.subBatchNumber ||
+source.cycleNumber ||
+          "";
+
+
+const kb =
+source.sourceBatchNumber ||
+          "";
+
+
+        if (kbw&& kb) {
+          return kbw + " / " + kb;
+        }
+
+
+        return kbw || kb || "—";
+      })
+      .join(", ");
+  }
+
+
+function getRecordPoleDetails(record) {
+
+const entries =
+Array.isArray(record.poleEntries)
+      ? record.poleEntries
+      : [];
+
+
+    if (entries.length) {
+
+      return entries
+        .filter(entry =>
+          Number(entry.quantity || 0) > 0
+        )
+        .map(entry => {
+
+          return (
+escapeProductionRecordText(
+entry.name || entry.key || "Pole"
+            ) +
+            " × " +
+            Number(entry.quantity || 0)
+          );
+
+        })
+        .join("<br>");
+    }
+
+
+const legacyCategories = [
+
+      [
+        "pole3X3X6Square",
+        '3"x3"x6ft Square'
+      ],
+
+      [
+        "pole3X3X6_5Square",
+        '3"x3"x6.5ft Square'
+      ],
+
+      [
+        "pole4X4X6Square",
+        '4"x4"x6ft Square'
+      ],
+
+      [
+        "pole4X4X7Square",
+        '4"x4"x7ft Square'
+      ],
+
+      [
+        "pole3x6Round",
+        '3" Round x 6ft'
+      ],
+
+      [
+        "pole4x7Round",
+        '4" Round x 7ft'
+      ],
+
+      [
+        "pole3X3X2Square",
+        '3"x3"x2ft Square'
+      ],
+
+      [
+        "pole4x4X2Square",
+        '4"x4"x2ft Square'
+      ],
+
+      [
+        "pole4x2Round",
+        '4" Round x 2ft'
+      ]
+
+    ];
+
+
+const details =
+legacyCategories
+      .filter(item =>
+        Number(record[item[0]] || 0) > 0
+      )
+      .map(item =>
+escapeProductionRecordText(item[1]) +
+        " × " +
+        Number(record[item[0]] || 0)
+      );
+
+
+    return details.length
+      ? details.join("<br>")
+      : "—";
+  }
+
+
+function getInputKg(record) {
+
+    return Number(
+record.productionInputKg || 0
+    );
+  }
+
+
+function getFinishedKg(record) {
+
+    return Number(
+record.productionWeight || 0
+    );
+  }
+
+
+function getProcessLossKg(record) {
+
+    if (
+record.productionProcessLossKg !== undefined
+    ) {
+
+      return Number(
+record.productionProcessLossKg || 0
+      );
+    }
+
+
+    if (
+record.productionPendingKg !== undefined
+    ) {
+
+      return Number(
+record.productionPendingKg || 0
+      );
+    }
+
+
+    return Math.max(
+getInputKg(record) -
+getFinishedKg(record),
+      0
+    );
+  }
+
+
+function getRecoveryPercent(record) {
+
+    if (
+record.productionRecoveryPercent !== undefined
+    ) {
+
+      return Number(
+record.productionRecoveryPercent || 0
+      );
+    }
+
+
+    if (
+record.productionCompletion !== undefined
+    ) {
+
+      return Number(
+record.productionCompletion || 0
+      );
+    }
+
+
+const inputKg =
+getInputKg(record);
+
+
+    return inputKg> 0
+      ? (
+getFinishedKg(record) /
+inputKg
+        ) * 100
+      : 0;
+  }
+
+
+function getLossPercent(record) {
+
+    if (
+record.productionLossPercent !== undefined
+    ) {
+
+      return Number(
+record.productionLossPercent || 0
+      );
+    }
+
+
+const inputKg =
+getInputKg(record);
+
+
+    return inputKg> 0
+      ? (
+getProcessLossKg(record) /
+inputKg
+        ) * 100
+      : 0;
+  }
+
+
+const modal =
+document.createElement("div");
+
 
 modal.style.cssText = `
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.55);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 9999;
-    font-family: Arial, sans-serif;
+position:fixed;
+    inset:0;
+background:rgba(0,0,0,0.55);
+display:flex;
+align-items:center;
+justify-content:center;
+    z-index:9999;
+font-family:Arial,sans-serif;
+    padding:10px;
   `;
 
+
+const sortedRecords =
+records
+    .slice()
+    .sort((a, b) => {
+
+const dateCompare =
+String(b.date || "")
+        .localeCompare(
+String(a.date || "")
+        );
+
+
+      if (dateCompare !== 0) {
+        return dateCompare;
+      }
+
+
+      return (
+        Number(b.id || 0) -
+        Number(a.id || 0)
+      );
+    });
+
+
+const rowsHtml =
+sortedRecords.length
+    ? sortedRecords
+        .map(record => {
+
+const inputKg =
+getInputKg(record);
+
+const finishedKg =
+getFinishedKg(record);
+
+const lossKg =
+getProcessLossKg(record);
+
+const recovery =
+getRecoveryPercent(record);
+
+const lossPercent =
+getLossPercent(record);
+
+
+const status =
+record.productionStatus ||
+          (
+inputKg> 0
+              ? "COMPLETED"
+              : "—"
+          );
+
+
+          return `
+
+<tr>
+
+<td style="padding:9px;border:1px solid #ddd;">
+  ${escapeProductionRecordText(
+record.date || ""
+  )}
+</td>
+
+<td style="padding:9px;border:1px solid #ddd;">
+  ${escapeProductionRecordText(
+getRecordSources(record)
+  )}
+</td>
+
+<td style="padding:9px;border:1px solid #ddd;">
+  ${escapeProductionRecordText(
+record.shiftName ||
+record.shift ||
+      ""
+  )}
+</td>
+
+<td style="padding:9px;border:1px solid #ddd;">
+  ${escapeProductionRecordText(
+record.staff ||
+      (
+Array.isArray(record.staffWorked)
+          ? record.staffWorked
+              .map(person =>
+person.fullName || ""
+              )
+              .filter(Boolean)
+              .join(", ")
+          : ""
+      )
+  )}
+</td>
+
+<td style="
+  padding:9px;
+  border:1px solid #ddd;
+text-align:right;
+">
+  ${inputKg.toFixed(2)}
+</td>
+
+<td style="
+  padding:9px;
+  border:1px solid #ddd;
+  min-width:190px;
+">
+  ${getRecordPoleDetails(record)}
+</td>
+
+<td style="
+  padding:9px;
+  border:1px solid #ddd;
+text-align:center;
+font-weight:bold;
+">
+  ${Number(
+record.totalPoles || 0
+  )}
+</td>
+
+<td style="
+  padding:9px;
+  border:1px solid #ddd;
+text-align:right;
+">
+  ${finishedKg.toFixed(2)}
+</td>
+
+<td style="
+  padding:9px;
+  border:1px solid #ddd;
+text-align:right;
+">
+  ${lossKg.toFixed(2)}
+</td>
+
+<td style="
+  padding:9px;
+  border:1px solid #ddd;
+text-align:right;
+">
+  ${recovery.toFixed(2)}%
+</td>
+
+<td style="
+  padding:9px;
+  border:1px solid #ddd;
+text-align:right;
+">
+  ${lossPercent.toFixed(2)}%
+</td>
+
+<td style="
+  padding:9px;
+  border:1px solid #ddd;
+text-align:center;
+font-weight:bold;
+">
+  ${escapeProductionRecordText(status)}
+</td>
+
+</tr>
+
+          `;
+
+        })
+        .join("")
+    : `
+
+<tr>
+<td
+colspan="12"
+  style="
+    padding:18px;
+text-align:center;
+    border:1px solid #ddd;
+    color:#666;
+  "
+>
+  No production records found.
+</td>
+</tr>
+
+      `;
+
+
 modal.innerHTML = `
+
 <div style="
 background:white;
-      width:95%;
-      max-width:1200px;
-      max-height:90vh;
+      width:97%;
+      max-width:1500px;
+      max-height:92vh;
 overflow:auto;
-      padding:20px;
-      border-radius:10px;
+      padding:22px;
+      border-radius:12px;
+      box-shadow:0 12px 35px rgba(0,0,0,0.25);
     ">
 
-<h2 style="margin-top:0;">
-        Production Records
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:center;
+      gap:15px;
+      margin-bottom:16px;
+    ">
+
+<div>
+
+<h2 style="
+          margin:0;
+          color:#0b5d3b;
+        ">
+          Production Records
 </h2>
+
+<div style="
+          margin-top:5px;
+          color:#666;
+          font-size:13px;
+        ">
+          Production traceability from KB / KBW input
+          to finished poles, recovery and process loss.
+</div>
+
+</div>
+
 
 <button
         id="closeProductionRecords"
         type="button"
         style="
-float:right;
-          padding:8px 14px;
-          border-radius:6px;
+          padding:9px 16px;
+          border:1px solid #ccc;
+          border-radius:7px;
+background:white;
 cursor:pointer;
         "
 >
         Close
 </button>
 
+</div>
+
+
+<div style="overflow-x:auto;">
+
 <table style="
         width:100%;
 border-collapse:collapse;
-        margin-top:20px;
+        min-width:1350px;
+        font-size:13px;
       ">
+
 <thead>
-<tr>
-<th>Date</th>
-<th>Shift</th>
-<th>Staff</th>
-<th>Production KG</th>
-<th>4"x4"x7ft Square</th>
-<th>3"x3"x6ft Square</th>
-<th>4"x7ft Round</th>
-<th>3"x3"x2ft Square</th>
-<th>4"x4"x2ft Square</th>
-<th>4"x2ft Round</th>
-<th>Total Poles</th>
+
+<tr style="
+        background:#0b5d3b;
+color:white;
+      ">
+
+<th style="padding:10px;border:1px solid #ddd;">
+          Date
+</th>
+
+<th style="padding:10px;border:1px solid #ddd;">
+          KBW / KB Source
+</th>
+
+<th style="padding:10px;border:1px solid #ddd;">
+          Shift
+</th>
+
+<th style="padding:10px;border:1px solid #ddd;">
+          Staff
+</th>
+
+<th style="padding:10px;border:1px solid #ddd;">
+Kavera Input KG
+</th>
+
+<th style="padding:10px;border:1px solid #ddd;">
+          Pole Production
+</th>
+
+<th style="padding:10px;border:1px solid #ddd;">
+          Total Poles
+</th>
+
+<th style="padding:10px;border:1px solid #ddd;">
+          Finished KG
+</th>
+
+<th style="padding:10px;border:1px solid #ddd;">
+          Process Loss KG
+</th>
+
+<th style="padding:10px;border:1px solid #ddd;">
+          Recovery %
+</th>
+
+<th style="padding:10px;border:1px solid #ddd;">
+          Loss %
+</th>
+
+<th style="padding:10px;border:1px solid #ddd;">
+          Status
+</th>
+
 </tr>
+
 </thead>
 
-<tbody id="productionRecordsBody">
+
+<tbody>
+        ${rowsHtml}
 </tbody>
+
 </table>
+
+</div>
 
 </div>
   `;
 
+
 document.body.appendChild(modal);
 
-const productionRecordsBody =
-modal.querySelector("#productionRecordsBody");
 
-records.forEach(record => {
-const row = document.createElement("tr");
+modal.querySelector(
+    "#closeProductionRecords"
+  ).onclick = function () {
 
-row.innerHTML = `
-<td>${record.date || ""}</td>
-<td>${record.shift || ""}</td>
-<td>${record.staff || ""}</td>
-<td>${Number(record.productionWeight || 0).toFixed(2)}</td>
-<td>${record.pole4X4X7Square || 0}</td>
-<td>${record.pole3X3X6Square || 0}</td>
-<td>${record.pole4x7Round || 0}</td>
-<td>${record.pole3X3X2Square || 0}</td>
-<td>${record.pole4x4X2Square || 0}</td>
-<td>${record.pole4x2Round || 0}</td>
-<td>${record.totalPoles || 0}</td>
-    `;
-
-productionRecordsBody.appendChild(row);
-  });
-
-modal.querySelector("#closeProductionRecords").onclick = function() {
 modal.remove();
   };
 }
