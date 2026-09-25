@@ -24613,5 +24613,2132 @@ refreshAFDirectorDashboard();
 
 })();
 
+/* =========================================================
+   A&F QUALITY & DISCIPLINE WEEKLY ASSESSMENT
+   Manager assesses staff
+   Director assesses Manager
+   Printable hard-copy form
+   ========================================================= */
+
+function getAFQualityDisciplineRecords() {
+  return JSON.parse(
+localStorage.getItem("afQualityDisciplineRecords") || "[]"
+  );
+}
+
+
+function saveAFQualityDisciplineRecords(records) {
+localStorage.setItem(
+    "afQualityDisciplineRecords",
+JSON.stringify(records)
+  );
+}
+
+
+function openAFQualityDisciplineAssessment() {
+
+const currentUser =
+typeof getAFCurrentUser === "function"
+      ? getAFCurrentUser()
+      : JSON.parse(
+localStorage.getItem("currentUser") || "null"
+        );
+
+  if (
+    !currentUser ||
+    !["Manager", "Director"].includes(currentUser.role)
+  ) {
+    alert(
+      "Access Denied\n\n" +
+      "Quality & Discipline assessment can only be recorded by the Manager or Director."
+    );
+    return;
+  }
+
+
+const allEmployees =
+typeof getEmployees === "function"
+      ? getEmployees()
+      : JSON.parse(
+localStorage.getItem("employees") || "[]"
+        );
+
+
+const teams =
+typeof getTeams === "function"
+      ? getTeams()
+      : JSON.parse(
+localStorage.getItem("factoryTeams") || "[]"
+        );
+
+
+const activeEmployees =
+allEmployees.filter(employee => {
+
+const active =
+        String(
+employee.employmentStatus || ""
+        ).toLowerCase() === "active";
+
+      if (!active) {
+        return false;
+      }
+
+      /*
+       * Nobody assesses himself.
+       */
+      if (
+        String(employee.employeeId) ===
+        String(currentUser.employeeId)
+      ) {
+        return false;
+      }
+
+      /*
+       * Manager assesses staff,
+       * but cannot assess another Manager.
+       */
+      if (currentUser.role === "Manager") {
+        return String(employee.role || "") !== "Manager";
+      }
+
+      /*
+       * Director uses this form to assess Manager.
+       */
+      if (currentUser.role === "Director") {
+        return String(employee.role || "") === "Manager";
+      }
+
+      return false;
+    });
+
+
+  if (!activeEmployees.length) {
+    alert(
+currentUser.role === "Director"
+        ? "There is no active Manager available for assessment."
+        : "There are no active employees available for assessment."
+    );
+    return;
+  }
+
+
+  function escapeQD(value) {
+const div = document.createElement("div");
+div.textContent = String(value ?? "");
+    return div.innerHTML;
+  }
+
+
+  function getEmployeeTeam(employeeId) {
+
+    return teams.find(team => {
+
+      if (
+        String(team.status || "").toLowerCase() !== "active"
+      ) {
+        return false;
+      }
+
+      if (
+        String(team.leaderEmployeeId || "") ===
+        String(employeeId)
+      ) {
+        return true;
+      }
+
+      return (
+Array.isArray(team.memberEmployeeIds) &&
+team.memberEmployeeIds.some(
+          id => String(id) === String(employeeId)
+        )
+      );
+    }) || null;
+  }
+
+
+  function getEmployeePosition(employee) {
+
+    return (
+employee.position ||
+employee.jobTitle ||
+employee.designation ||
+employee.role ||
+      ""
+    );
+  }
+
+
+  function getWeekStart(dateString) {
+
+const date =
+      new Date(dateString + "T00:00:00");
+
+const day =
+date.getDay();
+
+const difference =
+      day === 0
+        ? -6
+        : 1 - day;
+
+date.setDate(
+date.getDate() + difference
+    );
+
+    return date
+      .toISOString()
+      .slice(0, 10);
+  }
+
+
+  function getWeekEnd(weekStart) {
+
+const date =
+      new Date(weekStart + "T00:00:00");
+
+date.setDate(
+date.getDate() + 6
+    );
+
+    return date
+      .toISOString()
+      .slice(0, 10);
+  }
+
+
+  function readableDate(dateString) {
+
+    if (!dateString) {
+      return "";
+    }
+
+    return new Date(
+dateString + "T00:00:00"
+    ).toLocaleDateString(
+      undefined,
+      {
+        day: "numeric",
+        month: "short",
+        year: "numeric"
+      }
+    );
+  }
+
+
+const criteria = [
+    {
+      key: "qualityOfWork",
+      label: "Quality of Work / Workmanship"
+    },
+    {
+      key: "instructions",
+      label: "Follows Work Instructions & Procedures"
+    },
+    {
+      key: "equipmentCare",
+      label: "Care of Machines, Tools & Company Property"
+    },
+    {
+      key: "safety",
+      label: "Safety Procedures / PPE Compliance"
+    },
+    {
+      key: "cleanliness",
+      label: "Cleanliness of Work Area"
+    },
+    {
+      key: "teamwork",
+      label: "Teamwork & Cooperation"
+    },
+    {
+      key: "initiative",
+      label: "Initiative / Willingness to Work"
+    },
+    {
+      key: "discipline",
+      label: "Discipline & Respect"
+    },
+    {
+      key: "responsibility",
+      label: "Responsibility / Works Without Unnecessary Supervision"
+    },
+    {
+      key: "materialHandling",
+      label: "Proper Material Handling / Avoiding Unnecessary Waste"
+    }
+  ];
+
+
+const modal =
+document.createElement("div");
+
+modal.id =
+    "afQualityDisciplineModal";
+
+modal.style.cssText = `
+position:fixed;
+    inset:0;
+    z-index:100000;
+background:rgba(0,0,0,.58);
+display:flex;
+align-items:center;
+justify-content:center;
+    padding:10px;
+font-family:Arial,sans-serif;
+  `;
+
+
+modal.innerHTML = `
+
+<div style="
+  width:1000px;
+  max-width:98%;
+  max-height:96vh;
+overflow:auto;
+background:white;
+  border-radius:15px;
+  box-shadow:0 12px 40px rgba(0,0,0,.3);
+">
+
+<div style="
+  background:#0b5d3b;
+color:white;
+  padding:20px 24px;
+display:flex;
+justify-content:space-between;
+align-items:center;
+  gap:15px;
+">
+
+<div>
+<div style="
+    font-size:12px;
+    letter-spacing:1.4px;
+font-weight:bold;
+    opacity:.85;
+  ">
+    A&F WEKAVERA LTD • WASTE2WEALTH SOLUTIONS
+</div>
+
+<h2 style="
+    margin:5px 0 0;
+    font-size:23px;
+  ">
+    Employee Quality & Discipline
+</h2>
+
+<div style="
+    margin-top:4px;
+    font-size:13px;
+    opacity:.9;
+  ">
+    Weekly Performance Assessment
+</div>
+</div>
+
+<button
+  id="closeQDForm"
+  type="button"
+  style="
+    border:0;
+background:white;
+    color:#0b5d3b;
+    padding:9px 14px;
+    border-radius:7px;
+cursor:pointer;
+font-weight:bold;
+  "
+>
+✕ Close
+</button>
+
+</div>
+
+
+<div style="padding:22px;">
+
+<div style="
+  background:#eef8f2;
+  border:1px solid #cfe6d8;
+  padding:12px;
+  border-radius:9px;
+  margin-bottom:18px;
+  font-size:13px;
+  line-height:1.5;
+">
+
+<b>Assessment Authority:</b>
+${
+currentUser.role === "Manager"
+    ? "Manager assesses active employees. The Manager cannot assess himself."
+    : "Director assesses the Manager."
+}
+
+<br>
+
+Each criterion is scored from
+<b>0 to 10</b>.
+Total Quality & Discipline score is
+<b>100 points</b>.
+
+</div>
+
+
+<div style="
+display:grid;
+  grid-template-columns:1fr 150px;
+  gap:18px;
+  margin-bottom:20px;
+">
+
+<div>
+
+<label style="font-weight:bold;">
+  Employee Name
+</label>
+
+<select
+  id="qdEmployee"
+  style="
+    width:100%;
+    padding:11px;
+    margin:6px 0 14px;
+    border:1px solid #ccc;
+    border-radius:7px;
+  "
+>
+
+<option value="">
+  Select Employee
+</option>
+
+${activeEmployees
+  .sort((a, b) =>
+    String(a.fullName || "")
+      .localeCompare(
+        String(b.fullName || "")
+      )
+  )
+  .map(employee => `
+<option value="${escapeQD(employee.employeeId)}">
+      ${escapeQD(employee.fullName)}
+      • ${escapeQD(employee.employeeId)}
+</option>
+  `)
+  .join("")}
+
+</select>
+
+
+<div style="
+display:grid;
+grid-template-columns:repeat(2,1fr);
+  gap:10px;
+">
+
+<div>
+<label style="font-size:12px;color:#666;">
+    Employee ID
+</label>
+<input
+    id="qdEmployeeId"
+readonly
+    style="
+      width:100%;
+box-sizing:border-box;
+      padding:9px;
+      background:#f5f7f6;
+      border:1px solid #ddd;
+      border-radius:6px;
+    "
+>
+</div>
+
+
+<div>
+<label style="font-size:12px;color:#666;">
+    Department
+</label>
+<input
+    id="qdDepartment"
+readonly
+    style="
+      width:100%;
+box-sizing:border-box;
+      padding:9px;
+      background:#f5f7f6;
+      border:1px solid #ddd;
+      border-radius:6px;
+    "
+>
+</div>
+
+
+<div>
+<label style="font-size:12px;color:#666;">
+    Position
+</label>
+<input
+    id="qdPosition"
+readonly
+    style="
+      width:100%;
+box-sizing:border-box;
+      padding:9px;
+      background:#f5f7f6;
+      border:1px solid #ddd;
+      border-radius:6px;
+    "
+>
+</div>
+
+
+<div>
+<label style="font-size:12px;color:#666;">
+    Team
+</label>
+<input
+    id="qdTeam"
+readonly
+    style="
+      width:100%;
+box-sizing:border-box;
+      padding:9px;
+      background:#f5f7f6;
+      border:1px solid #ddd;
+      border-radius:6px;
+    "
+>
+</div>
+
+</div>
+
+</div>
+
+
+<div style="
+  border:1px solid #d9e3de;
+  border-radius:9px;
+  min-height:170px;
+display:flex;
+align-items:center;
+justify-content:center;
+  background:#f7faf8;
+overflow:hidden;
+">
+
+<div
+  id="qdNoPhoto"
+  style="
+    color:#777;
+text-align:center;
+    font-size:13px;
+  "
+>
+👤
+<br>
+  No Photo
+</div>
+
+<img
+  id="qdEmployeePhoto"
+  alt="Employee Photo"
+  style="
+    width:100%;
+    height:170px;
+object-fit:cover;
+display:none;
+  "
+>
+
+</div>
+
+</div>
+
+
+<div style="
+display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:15px;
+  margin-bottom:20px;
+">
+
+<div>
+<label style="font-weight:bold;">
+    Assessment Date
+</label>
+
+<input
+    id="qdAssessmentDate"
+    type="date"
+    value="${new Date().toISOString().slice(0, 10)}"
+    style="
+      width:100%;
+box-sizing:border-box;
+      padding:10px;
+      margin-top:6px;
+      border:1px solid #ccc;
+      border-radius:7px;
+    "
+>
+</div>
+
+
+<div>
+<label style="font-weight:bold;">
+    Assessment Week
+</label>
+
+<input
+    id="qdWeekDisplay"
+readonly
+    style="
+      width:100%;
+box-sizing:border-box;
+      padding:10px;
+      margin-top:6px;
+      background:#f5f7f6;
+      border:1px solid #ccc;
+      border-radius:7px;
+    "
+>
+</div>
+
+</div>
+
+
+<div style="overflow-x:auto;">
+
+<table
+  id="qdScoreTable"
+  style="
+    width:100%;
+    min-width:650px;
+border-collapse:collapse;
+    font-size:13px;
+  "
+>
+
+<thead>
+
+<tr style="
+  background:#0b5d3b;
+color:white;
+">
+
+<th style="padding:10px;border:1px solid #ddd;">
+  #
+</th>
+
+<th style="
+  padding:10px;
+  border:1px solid #ddd;
+text-align:left;
+">
+  Quality & Discipline Criterion
+</th>
+
+<th style="
+  padding:10px;
+  border:1px solid #ddd;
+  width:130px;
+">
+  Score /10
+</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+${criteria.map((item, index) => `
+
+<tr>
+
+<td style="
+  padding:9px;
+  border:1px solid #ddd;
+text-align:center;
+">
+  ${index + 1}
+</td>
+
+<td style="
+  padding:9px;
+  border:1px solid #ddd;
+">
+  ${escapeQD(item.label)}
+</td>
+
+<td style="
+  padding:7px;
+  border:1px solid #ddd;
+text-align:center;
+">
+
+<input
+  type="number"
+  class="qdScore"
+  data-key="${item.key}"
+  min="0"
+  max="10"
+  step="1"
+  placeholder="0–10"
+  style="
+    width:80px;
+    padding:7px;
+text-align:center;
+    border:1px solid #aaa;
+    border-radius:6px;
+  "
+>
+
+</td>
+
+</tr>
+
+`).join("")}
+
+<tr style="
+  background:#eef8f2;
+font-weight:bold;
+">
+
+<td
+colspan="2"
+  style="
+    padding:11px;
+    border:1px solid #ddd;
+text-align:right;
+  "
+>
+  TOTAL QUALITY & DISCIPLINE SCORE
+</td>
+
+<td style="
+  padding:11px;
+  border:1px solid #ddd;
+text-align:center;
+  color:#0b5d3b;
+  font-size:17px;
+">
+<span id="qdTotalScore">0</span>/100
+</td>
+
+</tr>
+
+</tbody>
+
+</table>
+
+</div>
+
+
+<div style="
+  margin-top:14px;
+  padding:11px;
+  background:#f5f7f6;
+  border-radius:7px;
+  font-size:12px;
+  line-height:1.5;
+">
+
+<b>Scoring guide:</b>
+0–2 Poor •
+3–4 Needs Improvement •
+5–6 Satisfactory •
+7–8 Good •
+9–10 Excellent
+
+</div>
+
+
+<div style="margin-top:18px;">
+
+<label style="font-weight:bold;">
+  Manager / Director Comments
+</label>
+
+<textarea
+  id="qdComments"
+  rows="4"
+  placeholder="Enter observations, strengths, concerns or action required..."
+  style="
+    width:100%;
+box-sizing:border-box;
+    padding:10px;
+    margin-top:6px;
+    border:1px solid #ccc;
+    border-radius:7px;
+resize:vertical;
+  "
+></textarea>
+
+</div>
+
+
+<div style="
+  margin-top:18px;
+  background:#eef8f2;
+  padding:13px;
+  border-radius:8px;
+display:grid;
+grid-template-columns:repeat(2,1fr);
+  gap:12px;
+">
+
+<div>
+<b>Assessed By</b>
+<br>
+<span id="qdAssessorName">
+    ${escapeQD(currentUser.fullName || "")}
+</span>
+</div>
+
+<div>
+<b>Role</b>
+<br>
+  ${escapeQD(currentUser.role || "")}
+</div>
+
+</div>
+
+
+<div style="
+display:flex;
+flex-wrap:wrap;
+justify-content:flex-end;
+  gap:10px;
+  margin-top:22px;
+">
+
+<button
+  id="qdViewRecords"
+  type="button"
+  style="
+    padding:11px 16px;
+    border:1px solid #0d6efd;
+background:white;
+    color:#0d6efd;
+    border-radius:7px;
+cursor:pointer;
+font-weight:bold;
+  "
+>
+📋 View Assessments
+</button>
+
+<button
+  id="qdPrintDraft"
+  type="button"
+  style="
+    padding:11px 16px;
+    border:1px solid #555;
+background:white;
+    color:#333;
+    border-radius:7px;
+cursor:pointer;
+font-weight:bold;
+  "
+>
+🖨 Print Form
+</button>
+
+<button
+  id="qdSaveAssessment"
+  type="button"
+  style="
+    padding:11px 18px;
+    border:0;
+    background:#0b5d3b;
+color:white;
+    border-radius:7px;
+cursor:pointer;
+font-weight:bold;
+  "
+>
+💾 Submit Weekly Assessment
+</button>
+
+</div>
+
+</div>
+
+</div>
+  `;
+
+
+document.body.appendChild(modal);
+
+
+const employeeSelect =
+modal.querySelector("#qdEmployee");
+
+const assessmentDate =
+modal.querySelector("#qdAssessmentDate");
+
+
+  function updateWeek() {
+
+    if (!assessmentDate.value) {
+      return;
+    }
+
+const start =
+getWeekStart(
+assessmentDate.value
+      );
+
+const end =
+getWeekEnd(start);
+
+modal.querySelector(
+      "#qdWeekDisplay"
+    ).value =
+readableDate(start) +
+      " – " +
+readableDate(end);
+  }
+
+
+  function updateEmployeeDetails() {
+
+const employee =
+allEmployees.find(item =>
+        String(item.employeeId) ===
+        String(employeeSelect.value)
+      );
+
+const photo =
+modal.querySelector(
+        "#qdEmployeePhoto"
+      );
+
+const noPhoto =
+modal.querySelector(
+        "#qdNoPhoto"
+      );
+
+    if (!employee) {
+
+modal.querySelector(
+        "#qdEmployeeId"
+      ).value = "";
+
+modal.querySelector(
+        "#qdDepartment"
+      ).value = "";
+
+modal.querySelector(
+        "#qdPosition"
+      ).value = "";
+
+modal.querySelector(
+        "#qdTeam"
+      ).value = "";
+
+photo.style.display = "none";
+photo.removeAttribute("src");
+
+noPhoto.style.display = "block";
+
+      return;
+    }
+
+
+const team =
+getEmployeeTeam(
+employee.employeeId
+      );
+
+
+modal.querySelector(
+      "#qdEmployeeId"
+    ).value =
+employee.employeeId || "";
+
+
+modal.querySelector(
+      "#qdDepartment"
+    ).value =
+employee.department || "";
+
+
+modal.querySelector(
+      "#qdPosition"
+    ).value =
+getEmployeePosition(employee);
+
+
+modal.querySelector(
+      "#qdTeam"
+    ).value =
+      team
+        ? team.name || ""
+        : "Not Assigned";
+
+
+    if (employee.passportPhoto) {
+
+photo.src =
+employee.passportPhoto;
+
+photo.style.display =
+        "block";
+
+noPhoto.style.display =
+        "none";
+
+    } else {
+
+photo.style.display =
+        "none";
+
+photo.removeAttribute("src");
+
+noPhoto.style.display =
+        "block";
+    }
+  }
+
+
+  function calculateTotal() {
+
+    let total = 0;
+
+    modal
+      .querySelectorAll(".qdScore")
+      .forEach(input => {
+
+        let score =
+          Number(input.value);
+
+        if (
+Number.isNaN(score)
+        ) {
+          score = 0;
+        }
+
+        if (score < 0) {
+          score = 0;
+        }
+
+        if (score > 10) {
+          score = 10;
+        }
+
+        total += score;
+      });
+
+
+modal.querySelector(
+      "#qdTotalScore"
+    ).textContent =
+total.toFixed(0);
+
+    return total;
+  }
+
+
+  function collectAssessmentData(
+requireComplete = true
+  ) {
+
+const employee =
+allEmployees.find(item =>
+        String(item.employeeId) ===
+        String(employeeSelect.value)
+      );
+
+
+    if (!employee) {
+
+      alert(
+        "Please select the employee being assessed."
+      );
+
+      return null;
+    }
+
+
+    if (!assessmentDate.value) {
+
+      alert(
+        "Please select the assessment date."
+      );
+
+      return null;
+    }
+
+
+const scores = {};
+
+    let total = 0;
+
+    let complete = true;
+
+
+    modal
+      .querySelectorAll(".qdScore")
+      .forEach(input => {
+
+        if (
+input.value === ""
+        ) {
+          complete = false;
+        }
+
+const score =
+          Number(input.value);
+
+        if (
+          !Number.isFinite(score) ||
+          score < 0 ||
+          score > 10
+        ) {
+          complete = false;
+        }
+
+        scores[
+input.dataset.key
+        ] =
+Number.isFinite(score)
+            ? score
+            : 0;
+
+        total +=
+Number.isFinite(score)
+            ? score
+            : 0;
+      });
+
+
+    if (
+requireComplete&&
+      !complete
+    ) {
+
+      alert(
+        "Please score all 10 Quality & Discipline items from 0 to 10."
+      );
+
+      return null;
+    }
+
+
+const weekStart =
+getWeekStart(
+assessmentDate.value
+      );
+
+const weekEnd =
+getWeekEnd(
+weekStart
+      );
+
+const team =
+getEmployeeTeam(
+employee.employeeId
+      );
+
+
+    return {
+      employee,
+      team,
+      scores,
+      total:
+        Number(total.toFixed(0)),
+weekStart,
+weekEnd
+    };
+  }
+
+
+  function printAssessment(data) {
+
+    if (!data) {
+      return;
+    }
+
+
+const employee =
+data.employee;
+
+const team =
+data.team;
+
+const comments =
+modal.querySelector(
+        "#qdComments"
+      ).value.trim();
+
+
+const printWindow =
+window.open(
+        "",
+        "_blank",
+        "width=1000,height=800"
+      );
+
+
+    if (!printWindow) {
+
+      alert(
+        "The print window was blocked by the browser. Please allow pop-ups and try again."
+      );
+
+      return;
+    }
+
+
+const photoHtml =
+employee.passportPhoto
+        ? `
+<img
+src="${employee.passportPhoto}"
+            style="
+              width:105px;
+              height:125px;
+object-fit:cover;
+              border:1px solid #777;
+            "
+>
+        `
+        : `
+<div style="
+            width:105px;
+            height:125px;
+            border:1px solid #777;
+display:flex;
+align-items:center;
+justify-content:center;
+            font-size:12px;
+            color:#666;
+          ">
+            No Photo
+</div>
+        `;
+
+
+const scoreRows =
+criteria.map(
+        (item, index) => `
+<tr>
+<td>${index + 1}</td>
+<td>${escapeQD(item.label)}</td>
+<td style="text-align:center;">
+              ${Number(
+data.scores[item.key] || 0
+              )}
+</td>
+</tr>
+        `
+      ).join("");
+
+
+printWindow.document.write(`
+
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<title>
+  Quality & Discipline Assessment
+</title>
+
+<style>
+
+@page {
+  size: A4 portrait;
+  margin: 12mm;
+}
+
+body {
+  font-family: Arial, sans-serif;
+  color: #111;
+  font-size: 11px;
+  margin: 0;
+}
+
+.header {
+  border: 2px solid #0b5d3b;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+.company {
+  color: #0b5d3b;
+  font-size: 20px;
+  font-weight: bold;
+}
+
+.subtitle {
+  margin-top: 3px;
+  font-weight: bold;
+}
+
+.employee-area {
+  display: grid;
+  grid-template-columns: 1fr 115px;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.details {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.details td {
+  border: 1px solid #777;
+  padding: 6px;
+}
+
+.score-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+.score-table th,
+.score-table td {
+  border: 1px solid #555;
+  padding: 6px;
+}
+
+.score-table th {
+  background: #e6efe9;
+}
+
+.total {
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.comments {
+  min-height: 55px;
+  border: 1px solid #777;
+  padding: 8px;
+  margin-top: 8px;
+  white-space: pre-wrap;
+}
+
+.signatures {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+  margin-top: 28px;
+}
+
+.signature-line {
+  border-top: 1px solid #333;
+  padding-top: 5px;
+}
+
+.footer {
+  margin-top: 15px;
+  font-size: 9px;
+  text-align: center;
+  color: #555;
+}
+
+.no-print {
+  margin-bottom: 12px;
+}
+
+@media print {
+  .no-print {
+    display: none;
+  }
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="no-print">
+<button onclick="window.print()">
+    Print
+</button>
+</div>
+
+
+<div class="header">
+
+<div class="company">
+  A&F WEKAVERA LTD
+</div>
+
+<div>
+  Waste2Wealth Solutions
+</div>
+
+<div class="subtitle">
+  EMPLOYEE QUALITY & DISCIPLINE –
+  WEEKLY PERFORMANCE ASSESSMENT
+</div>
+
+
+<div class="employee-area">
+
+<div>
+
+<table class="details">
+
+<tr>
+<td><b>Employee Name</b></td>
+<td>
+    ${escapeQD(employee.fullName || "")}
+</td>
+</tr>
+
+<tr>
+<td><b>Employee ID</b></td>
+<td>
+    ${escapeQD(employee.employeeId || "")}
+</td>
+</tr>
+
+<tr>
+<td><b>Department</b></td>
+<td>
+    ${escapeQD(employee.department || "")}
+</td>
+</tr>
+
+<tr>
+<td><b>Position</b></td>
+<td>
+    ${escapeQD(getEmployeePosition(employee))}
+</td>
+</tr>
+
+<tr>
+<td><b>Team</b></td>
+<td>
+    ${escapeQD(
+      team
+        ? team.name || ""
+        : "Not Assigned"
+    )}
+</td>
+</tr>
+
+<tr>
+<td><b>Assessment Week</b></td>
+<td>
+    ${escapeQD(readableDate(data.weekStart))}
+    –
+    ${escapeQD(readableDate(data.weekEnd))}
+</td>
+</tr>
+
+</table>
+
+</div>
+
+<div>
+  ${photoHtml}
+</div>
+
+</div>
+
+</div>
+
+
+<table class="score-table">
+
+<thead>
+
+<tr>
+<th style="width:35px;">#</th>
+<th>Quality & Discipline Criterion</th>
+<th style="width:85px;">Score /10</th>
+</tr>
+
+</thead>
+
+<tbody>
+
+${scoreRows}
+
+<tr class="total">
+<td colspan="2" style="text-align:right;">
+    TOTAL SCORE
+</td>
+<td style="text-align:center;">
+    ${data.total}/100
+</td>
+</tr>
+
+</tbody>
+
+</table>
+
+
+<div style="margin-top:9px;">
+<b>Scoring Guide:</b>
+  0–2 Poor |
+  3–4 Needs Improvement |
+  5–6 Satisfactory |
+  7–8 Good |
+  9–10 Excellent
+</div>
+
+
+<div style="margin-top:12px;">
+<b>Manager / Director Comments</b>
+</div>
+
+<div class="comments">
+${escapeQD(comments || "No comments recorded.")}
+</div>
+
+
+<div style="margin-top:12px;">
+<b>Assessed By:</b>
+  ${escapeQD(currentUser.fullName || "")}
+  •
+  ${escapeQD(currentUser.role || "")}
+</div>
+
+
+<div class="signatures">
+
+<div class="signature-line">
+  Assessor Signature / Date
+</div>
+
+<div class="signature-line">
+  Employee Signature / Date
+</div>
+
+</div>
+
+
+<div class="footer">
+  A&F Wekavera Ltd • Waste2Wealth Solutions •
+  Employee Quality & Discipline Record
+</div>
+
+</body>
+
+</html>
+
+    `);
+
+
+printWindow.document.close();
+
+printWindow.focus();
+  }
+
+
+employeeSelect.onchange =
+updateEmployeeDetails;
+
+
+assessmentDate.onchange =
+updateWeek;
+
+
+modal.addEventListener(
+    "input",
+    function(event) {
+
+      if (
+event.target.classList.contains(
+          "qdScore"
+        )
+      ) {
+
+        if (
+          Number(event.target.value) > 10
+        ) {
+event.target.value = 10;
+        }
+
+        if (
+          Number(event.target.value) < 0
+        ) {
+event.target.value = 0;
+        }
+
+calculateTotal();
+      }
+    }
+  );
+
+
+modal.querySelector(
+    "#closeQDForm"
+  ).onclick = () => {
+modal.remove();
+  };
+
+
+modal.querySelector(
+    "#qdPrintDraft"
+  ).onclick = () => {
+
+const data =
+collectAssessmentData(true);
+
+    if (!data) {
+      return;
+    }
+
+printAssessment(data);
+  };
+
+
+modal.querySelector(
+    "#qdSaveAssessment"
+  ).onclick = () => {
+
+const data =
+collectAssessmentData(true);
+
+    if (!data) {
+      return;
+    }
+
+
+const records =
+getAFQualityDisciplineRecords();
+
+
+const duplicate =
+records.some(record =>
+        String(record.employeeId) ===
+          String(data.employee.employeeId) &&
+record.weekStart ===
+data.weekStart&&
+        String(record.status || "") !==
+          "CANCELLED"
+      );
+
+
+    if (duplicate) {
+
+      alert(
+data.employee.fullName +
+        " already has a submitted Quality & Discipline assessment for this week.\n\n" +
+        "Submitted weekly assessments are locked. The Director can correct a saved assessment through the correction process."
+      );
+
+      return;
+    }
+
+
+const record = {
+
+      id:
+Date.now(),
+
+assessmentDate:
+assessmentDate.value,
+
+weekStart:
+data.weekStart,
+
+weekEnd:
+data.weekEnd,
+
+employeeId:
+data.employee.employeeId,
+
+employeeName:
+data.employee.fullName,
+
+      department:
+data.employee.department || "",
+
+      position:
+getEmployeePosition(
+data.employee
+        ),
+
+teamId:
+data.team
+          ? data.team.id || ""
+          : "",
+
+teamName:
+data.team
+          ? data.team.name || ""
+          : "",
+
+passportPhoto:
+data.employee.passportPhoto || "",
+
+      scores:
+data.scores,
+
+totalScore:
+data.total,
+
+qualityDisciplinePercent:
+data.total,
+
+performanceContribution:
+        Number(
+          (
+data.total *
+            0.10
+          ).toFixed(2)
+        ),
+
+      comments:
+modal.querySelector(
+          "#qdComments"
+        ).value.trim(),
+
+assessorEmployeeId:
+currentUser.employeeId || "",
+
+assessorName:
+currentUser.fullName || "",
+
+assessorRole:
+currentUser.role || "",
+
+      status:
+        "SUBMITTED",
+
+      locked:
+        true,
+
+correctionHistory:
+        [],
+
+submittedAt:
+        new Date().toISOString()
+    };
+
+
+records.push(record);
+
+saveAFQualityDisciplineRecords(
+      records
+    );
+
+
+    alert(
+      "Weekly Quality & Discipline assessment submitted successfully.\n\n" +
+      "Employee: " +
+data.employee.fullName +
+      "\nScore: " +
+data.total +
+      "/100\n" +
+      "Performance contribution: " +
+record.performanceContribution.toFixed(2) +
+      "/10\n\n" +
+      "This assessment is now locked."
+    );
+
+
+modal.remove();
+  };
+
+
+modal.querySelector(
+    "#qdViewRecords"
+  ).onclick = () => {
+
+viewAFQualityDisciplineRecords();
+  };
+
+
+updateWeek();
+updateEmployeeDetails();
+}
+
+
+/* =========================================================
+   VIEW SAVED QUALITY & DISCIPLINE ASSESSMENTS
+   ========================================================= */
+
+function viewAFQualityDisciplineRecords() {
+
+const currentUser =
+typeof getAFCurrentUser === "function"
+      ? getAFCurrentUser()
+      : JSON.parse(
+localStorage.getItem("currentUser") || "null"
+        );
+
+
+  if (
+    !currentUser ||
+    !["Manager", "Director"].includes(currentUser.role)
+  ) {
+    alert("Access Denied.");
+    return;
+  }
+
+
+const records =
+getAFQualityDisciplineRecords()
+      .slice()
+      .sort((a, b) =>
+        String(b.weekStart || "")
+          .localeCompare(
+            String(a.weekStart || "")
+          )
+      );
+
+
+const modal =
+document.createElement("div");
+
+modal.style.cssText = `
+position:fixed;
+    inset:0;
+    z-index:100001;
+background:rgba(0,0,0,.58);
+display:flex;
+align-items:center;
+justify-content:center;
+    padding:10px;
+font-family:Arial,sans-serif;
+  `;
+
+
+const rows =
+records.length
+      ? records.map(record => `
+
+<tr>
+
+<td>
+  ${record.weekStart || ""}
+<br>
+  to
+<br>
+  ${record.weekEnd || ""}
+</td>
+
+<td>
+<b>${record.employeeName || ""}</b>
+<br>
+<small>${record.employeeId || ""}</small>
+</td>
+
+<td>
+  ${record.teamName || "—"}
+</td>
+
+<td style="
+text-align:center;
+font-weight:bold;
+">
+  ${Number(record.totalScore || 0).toFixed(0)}/100
+</td>
+
+<td style="
+text-align:center;
+font-weight:bold;
+">
+  ${Number(
+record.performanceContribution || 0
+  ).toFixed(2)}/10
+</td>
+
+<td>
+  ${record.assessorName || ""}
+<br>
+<small>${record.assessorRole || ""}</small>
+</td>
+
+<td style="text-align:center;">
+  ${record.status || "SUBMITTED"}
+</td>
+
+</tr>
+
+      `).join("")
+      : `
+
+<tr>
+
+<td
+colspan="7"
+  style="
+text-align:center;
+    padding:20px;
+    color:#666;
+  "
+>
+  No Quality & Discipline assessments have been submitted yet.
+</td>
+
+</tr>
+
+      `;
+
+
+modal.innerHTML = `
+
+<div style="
+  width:1000px;
+  max-width:98%;
+  max-height:94vh;
+overflow:auto;
+background:white;
+  border-radius:14px;
+  padding:22px;
+">
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:center;
+  gap:15px;
+  margin-bottom:18px;
+">
+
+<div>
+
+<h2 style="
+  margin:0;
+  color:#0b5d3b;
+">
+  Quality & Discipline Records
+</h2>
+
+<div style="
+  margin-top:5px;
+  color:#666;
+  font-size:13px;
+">
+  Submitted weekly assessments are locked.
+</div>
+
+</div>
+
+<button
+  id="closeQDRecords"
+  type="button"
+  style="
+    padding:9px 15px;
+    border:1px solid #ccc;
+background:white;
+    border-radius:7px;
+cursor:pointer;
+  "
+>
+  Close
+</button>
+
+</div>
+
+
+<div style="overflow-x:auto;">
+
+<table
+  id="qdRecordsTable"
+  style="
+    width:100%;
+    min-width:850px;
+border-collapse:collapse;
+    font-size:12px;
+  "
+>
+
+<thead>
+
+<tr style="
+  background:#0b5d3b;
+color:white;
+">
+
+<th>Week</th>
+<th>Employee</th>
+<th>Team</th>
+<th>Score</th>
+<th>Contribution</th>
+<th>Assessed By</th>
+<th>Status</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+  ${rows}
+</tbody>
+
+</table>
+
+</div>
+
+</div>
+  `;
+
+
+modal.querySelectorAll(
+    "#qdRecordsTableth, #qdRecordsTable td"
+  ).forEach(cell => {
+
+cell.style.border =
+      "1px solid #ddd";
+
+cell.style.padding =
+      "8px";
+
+cell.style.verticalAlign =
+      "top";
+  });
+
+
+document.body.appendChild(modal);
+
+
+modal.querySelector(
+    "#closeQDRecords"
+  ).onclick = () => {
+modal.remove();
+  };
+}
+
+
+/* =========================================================
+   TEMPORARY ACCESS BUTTON
+   Adds Quality & Discipline to Staff & HR without disturbing
+   the existing Staff & HR function.
+   ========================================================= */
+
+(function connectAFQualityDisciplineToStaffHR() {
+
+  if (
+typeof staffHR !== "function"
+  ) {
+    return;
+  }
+
+
+const originalStaffHR =
+staffHR;
+
+
+staffHR = function() {
+
+originalStaffHR();
+
+
+setTimeout(() => {
+
+const modals =
+Array.from(
+document.querySelectorAll("body > div")
+        );
+
+
+const staffModal =
+        modals
+          .reverse()
+          .find(modal =>
+modal.querySelector(
+              "#closeStaffHR"
+            )
+          );
+
+
+      if (!staffModal) {
+        return;
+      }
+
+
+      if (
+staffModal.querySelector(
+          "#qualityDisciplineHRBtn"
+        )
+      ) {
+        return;
+      }
+
+
+const currentUser =
+typeof getAFCurrentUser === "function"
+          ? getAFCurrentUser()
+          : JSON.parse(
+localStorage.getItem("currentUser") || "null"
+            );
+
+
+      if (
+        !currentUser ||
+        !["Manager", "Director"].includes(
+currentUser.role
+        )
+      ) {
+        return;
+      }
+
+
+const grid =
+staffModal.querySelector(
+          "#closeStaffHR"
+        )
+        ?.closest("div")
+        ?.parentElement
+        ?.querySelector(
+          "div[style*='grid-template-columns']"
+        );
+
+
+      if (!grid) {
+        return;
+      }
+
+
+const button =
+document.createElement("button");
+
+button.id =
+        "qualityDisciplineHRBtn";
+
+
+      if (
+typeof systemSettingsButtonStyle ===
+        "function"
+      ) {
+button.style.cssText =
+systemSettingsButtonStyle();
+      }
+
+
+button.innerHTML = `
+📝
+<strong>
+          Quality & Discipline
+</strong>
+<span>
+          Weekly employee performance assessment
+</span>
+      `;
+
+
+button.onclick = () => {
+
+staffModal.remove();
+
+openAFQualityDisciplineAssessment();
+      };
+
+
+grid.appendChild(button);
+
+    }, 0);
+  };
+
+})();
 
 
