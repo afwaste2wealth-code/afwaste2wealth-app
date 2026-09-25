@@ -27626,14 +27626,17 @@ box.className =
 
 
 box.style.cssText = `
+      width:48%;
+      max-width:620px;
+      min-width:420px;
       margin:14px 0 16px 0;
       padding:0;
 overflow:hidden;
       border:1px solid #d6e4db;
       border-radius:12px;
 background:white;
+box-sizing:border-box;
     `;
-
 
 box.innerHTML = `
 
