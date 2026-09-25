@@ -20977,7 +20977,7 @@ productionInputKg.toFixed(2) +
     }
 
 
-const productionPendingKg =
+const productionProcessLossKg =
 Math.max(
 productionInputKg -
 productionWeight,
@@ -20985,10 +20985,17 @@ productionWeight,
       );
 
 
-const productionCompletion =
+const productionRecoveryPercent =
 productionInputKg> 0
         ? (
 productionWeight /
+productionInputKg
+          ) * 100
+        : 0;
+const productionLossPercent =
+productionInputKg> 0
+        ? (
+productionProcessLossKg /
 productionInputKg
           ) * 100
         : 0;
@@ -21158,18 +21165,23 @@ roundProductionKg(
 productionWeight
         ),
 
-productionPendingKg:
+productionProcessLossKg:
 roundProductionKg(
-productionPendingKg
+productionProcessLossKg
         ),
 
-productionCompletion:
+productionRecoveryPercent:
 roundProductionKg(
-productionCompletion
+productionRecoveryPercent
+        ),
+
+productionLossPercent:
+roundProductionKg(
+productionLossPercent
         ),
 
 productionStatus:
-        "PENDING",
+        "COMPLETED",
 
 standardWeightsUsed: {
 
@@ -21329,7 +21341,7 @@ legacyStockAfter.toFixed(2)
     }
 
 
-    alert(
+   alert(
       "Production record saved successfully.\n\n" +
 
       "Shift: " +
@@ -21340,7 +21352,7 @@ selectedShift.name +
 selectedStaff.length +
       "\n" +
 
-      "Washed Kavera Issued: " +
+      "Kavera Input (Pre-Wash Weight): " +
 productionInputKg.toFixed(2) +
       " KG\n" +
 
@@ -21348,15 +21360,23 @@ productionInputKg.toFixed(2) +
 productionWeight.toFixed(2) +
       " KG\n" +
 
-      "Pending / Unaccounted: " +
-productionPendingKg.toFixed(2) +
+      "Process Loss: " +
+productionProcessLossKg.toFixed(2) +
       " KG\n" +
+
+      "Recovery: " +
+productionRecoveryPercent.toFixed(2) +
+      "%\n" +
+
+      "Loss: " +
+productionLossPercent.toFixed(2) +
+      "%\n" +
 
       "Total Poles: " +
 totalPoles +
       "\n\n" +
 
-      "Status: PENDING"
+      "Status: COMPLETED"
     );
 
 
