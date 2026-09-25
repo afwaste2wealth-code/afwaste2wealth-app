@@ -21109,14 +21109,29 @@ productionStatus:
 
 standardWeightsUsed: {
 
+        pole3X3X6Square:
+          Number(
+            poleStandardWeights.pole3X3X6Square || 0
+          ),
+
+        pole3X3X6_5Square:
+          Number(
+            poleStandardWeights.pole3X3X6_5Square || 0
+          ),
+
+        pole4X4X6Square:
+          Number(
+            poleStandardWeights.pole4X4X6Square || 0
+          ),
+
         pole4X4X7Square:
           Number(
             poleStandardWeights.pole4X4X7Square || 0
           ),
 
-        pole3X3X6Square:
+        pole3x6Round:
           Number(
-            poleStandardWeights.pole3X3X6Square || 0
+            poleStandardWeights.pole3x6Round || 0
           ),
 
         pole4x7Round:
@@ -21138,6 +21153,7 @@ standardWeightsUsed: {
           Number(
             poleStandardWeights.pole4x2Round || 0
           )
+
       },
 
 recordedByEmployeeId:
