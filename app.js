@@ -29298,4 +29298,2182 @@ renderAFManagerDailyStatusCards,
 
 })();
 
+/* =========================================================
+   A&F QUALITY & DISCIPLINE
+   DIRECTOR CORRECTION + AUDIT HISTORY
+   ========================================================= */
+
+(function connectAFQualityDisciplineDirectorCorrection() {
+
+const originalViewQDRecords =
+typeof viewAFQualityDisciplineRecords === "function"
+      ? viewAFQualityDisciplineRecords
+      : null;
+
+
+  if (!originalViewQDRecords) {
+    return;
+  }
+
+
+const criteria = [
+
+    {
+      key: "qualityOfWork",
+      label: "Quality of Work / Workmanship"
+    },
+
+    {
+      key: "instructions",
+      label: "Follows Work Instructions & Procedures"
+    },
+
+    {
+      key: "equipmentCare",
+      label: "Care of Machines, Tools & Company Property"
+    },
+
+    {
+      key: "safety",
+      label: "Safety Procedures / PPE Compliance"
+    },
+
+    {
+      key: "cleanliness",
+      label: "Cleanliness of Work Area"
+    },
+
+    {
+      key: "teamwork",
+      label: "Teamwork & Cooperation"
+    },
+
+    {
+      key: "initiative",
+      label: "Initiative / Willingness to Work"
+    },
+
+    {
+      key: "discipline",
+      label: "Discipline & Respect"
+    },
+
+    {
+      key: "responsibility",
+      label: "Responsibility / Works Without Unnecessary Supervision"
+    },
+
+    {
+      key: "materialHandling",
+      label: "Proper Material Handling / Avoiding Unnecessary Waste"
+    }
+
+  ];
+
+
+  /* =======================================================
+     HELPERS
+     ======================================================= */
+
+  function getQDCurrentUser() {
+
+    if (
+typeof getAFCurrentUser ===
+      "function"
+    ) {
+
+      return getAFCurrentUser();
+
+    }
+
+
+    try {
+
+      return JSON.parse(
+localStorage.getItem(
+          "currentUser"
+        ) || "null"
+      );
+
+    } catch (error) {
+
+      return null;
+
+    }
+
+  }
+
+
+  function escapeQD(value) {
+
+const div =
+document.createElement("div");
+
+div.textContent =
+      String(value ?? "");
+
+    return div.innerHTML;
+
+  }
+
+
+  function getQDRating(score) {
+
+const value =
+      Number(score || 0);
+
+
+    if (value >= 90) {
+      return "Excellent";
+    }
+
+
+    if (value >= 70) {
+      return "Good";
+    }
+
+
+    if (value >= 50) {
+      return "Fair";
+    }
+
+
+    if (value >= 30) {
+      return "Poor";
+    }
+
+
+    return "Very Poor";
+
+  }
+
+
+  function formatQDDateTime(value) {
+
+    if (!value) {
+      return "—";
+    }
+
+
+const date =
+      new Date(value);
+
+
+    if (
+Number.isNaN(
+date.getTime()
+      )
+    ) {
+
+      return String(value);
+
+    }
+
+
+    return date.toLocaleString();
+
+  }
+
+
+  function getQDRecordId(record) {
+
+    return String(
+record.id ||
+      ""
+    );
+
+  }
+
+
+  /* =======================================================
+     OPEN DIRECTOR CORRECTION FORM
+     ======================================================= */
+
+  function openQDDirectorCorrection(
+recordId
+  ) {
+
+const currentUser =
+getQDCurrentUser();
+
+
+    if (
+      !currentUser ||
+currentUser.role !== "Director"
+    ) {
+
+      alert(
+        "Access Denied.\n\n" +
+        "Only the Director can correct a submitted Quality & Discipline assessment."
+      );
+
+      return;
+
+    }
+
+
+const records =
+getAFQualityDisciplineRecords();
+
+
+const recordIndex =
+records.findIndex(
+        record =>
+getQDRecordId(record) ===
+          String(recordId)
+      );
+
+
+    if (recordIndex< 0) {
+
+      alert(
+        "Assessment record could not be found."
+      );
+
+      return;
+
+    }
+
+
+const record =
+      records[recordIndex];
+
+
+const existingScores =
+record.scores || {};
+
+
+const modal =
+document.createElement(
+        "div"
+      );
+
+
+modal.id =
+      "afQDCorrectionModal";
+
+
+modal.style.cssText = `
+position:fixed;
+      inset:0;
+      z-index:100005;
+background:rgba(0,0,0,.62);
+display:flex;
+align-items:center;
+justify-content:center;
+      padding:10px;
+font-family:Arial,sans-serif;
+    `;
+
+
+const criteriaRows =
+criteria.map(
+        (criterion, index) => {
+
+const score =
+            Number(
+existingScores[
+criterion.key
+              ] || 0
+            );
+
+
+          /*
+           * When Director assesses/corrects
+           * the Manager, use management wording.
+           */
+
+const label =
+criterion.key ===
+              "instructions" &&
+            String(
+record.employeeRole ||
+record.position ||
+              ""
+            ).toLowerCase()
+              .includes("manager")
+
+              ? "Follows Management Instructions & Company Procedures"
+
+              : criterion.label;
+
+
+          return `
+
+<tr>
+
+<td
+                style="
+                  padding:9px;
+                  border:1px solid #ddd;
+                "
+>
+                ${index + 1}
+</td>
+
+
+<td
+                style="
+                  padding:9px;
+                  border:1px solid #ddd;
+                "
+>
+                ${escapeQD(label)}
+</td>
+
+
+<td
+                style="
+                  padding:7px;
+                  border:1px solid #ddd;
+text-align:center;
+                "
+>
+
+<input
+                  type="number"
+                  class="qdCorrectionScore"
+                  data-key="${escapeQD(
+criterion.key
+                  )}"
+                  min="0"
+                  max="10"
+                  step="1"
+                  value="${score}"
+                  style="
+                    width:75px;
+                    padding:7px;
+text-align:center;
+                    border:1px solid #bbb;
+                    border-radius:6px;
+                  "
+>
+
+</td>
+
+</tr>
+
+          `;
+
+        }
+      ).join("");
+
+
+modal.innerHTML = `
+
+<div
+        style="
+          width:900px;
+          max-width:98%;
+          max-height:95vh;
+overflow:auto;
+background:white;
+          border-radius:14px;
+          box-shadow:
+            0 12px 40px
+rgba(0,0,0,.35);
+        "
+>
+
+<div
+          style="
+            background:#0b5d3b;
+color:white;
+            padding:18px 22px;
+display:flex;
+            justify-content:
+              space-between;
+align-items:center;
+            gap:15px;
+          "
+>
+
+<div>
+
+<div
+              style="
+                font-size:11px;
+                letter-spacing:1.2px;
+font-weight:bold;
+                opacity:.85;
+              "
+>
+              A&F WEKAVERA LTD
+              •
+              WASTE2WEALTH SOLUTIONS
+</div>
+
+
+<h2
+              style="
+                margin:5px 0 0;
+                font-size:21px;
+              "
+>
+              Director Assessment Correction
+</h2>
+
+</div>
+
+
+<button
+            id="closeQDCorrection"
+            type="button"
+            style="
+              border:0;
+background:white;
+              color:#0b5d3b;
+              padding:8px 13px;
+              border-radius:7px;
+font-weight:bold;
+cursor:pointer;
+            "
+>
+✕ Close
+</button>
+
+</div>
+
+
+<div
+          style="
+            padding:20px;
+          "
+>
+
+<div
+            style="
+              background:#fff8e7;
+              border:1px solid #ead69a;
+              padding:12px;
+              border-radius:8px;
+              margin-bottom:16px;
+              font-size:12px;
+              line-height:1.5;
+            "
+>
+
+<b>
+              Director Correction Control
+</b>
+
+<br>
+
+            The submitted assessment remains
+            part of the audit history.
+            A correction can only be saved
+            after a reason is entered.
+
+</div>
+
+
+<div
+            style="
+display:grid;
+              grid-template-columns:
+                repeat(2,1fr);
+              gap:10px;
+              margin-bottom:16px;
+            "
+>
+
+<div>
+
+<b>Employee:</b>
+
+<br>
+
+              ${escapeQD(
+record.employeeName ||
+                ""
+              )}
+
+<br>
+
+<small>
+                ${escapeQD(
+record.employeeId ||
+                  ""
+                )}
+</small>
+
+</div>
+
+
+<div>
+
+<b>Week:</b>
+
+<br>
+
+              ${escapeQD(
+record.weekStart ||
+                ""
+              )}
+
+              to
+
+              ${escapeQD(
+record.weekEnd ||
+                ""
+              )}
+
+</div>
+
+
+<div>
+
+<b>Original Assessor:</b>
+
+<br>
+
+              ${escapeQD(
+record.assessorName ||
+                ""
+              )}
+
+<small>
+                (
+                ${escapeQD(
+record.assessorRole ||
+                  ""
+                )}
+                )
+</small>
+
+</div>
+
+
+<div>
+
+<b>Current Score:</b>
+
+<br>
+
+<span
+                id="qdCurrentCorrectionScore"
+                style="
+                  font-size:18px;
+font-weight:bold;
+                  color:#0b5d3b;
+                "
+>
+                ${Number(
+record.totalScore ||
+                  0
+                ).toFixed(0)}
+                /100
+</span>
+
+              •
+
+<span
+                id="qdCurrentCorrectionRating"
+>
+                ${escapeQD(
+getQDRating(
+record.totalScore
+                  )
+                )}
+</span>
+
+</div>
+
+</div>
+
+
+<div
+            style="
+              overflow-x:auto;
+              margin-bottom:16px;
+            "
+>
+
+<table
+              style="
+                width:100%;
+border-collapse:collapse;
+                font-size:12px;
+              "
+>
+
+<thead>
+
+<tr
+                  style="
+                    background:#eef7f1;
+                    color:#173027;
+                  "
+>
+
+<th
+                    style="
+                      padding:9px;
+                      border:1px solid #ddd;
+                      width:45px;
+                    "
+>
+                    #
+</th>
+
+<th
+                    style="
+                      padding:9px;
+                      border:1px solid #ddd;
+text-align:left;
+                    "
+>
+                    Assessment Criterion
+</th>
+
+<th
+                    style="
+                      padding:9px;
+                      border:1px solid #ddd;
+                      width:110px;
+                    "
+>
+                    Score /10
+</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+
+                ${criteriaRows}
+
+</tbody>
+
+</table>
+
+</div>
+
+
+<div
+            style="
+display:grid;
+              grid-template-columns:
+                1fr 180px;
+              gap:12px;
+              margin-bottom:16px;
+            "
+>
+
+<div>
+
+<label
+                style="
+font-weight:bold;
+                  font-size:12px;
+                "
+>
+                Manager / Assessor Comments
+</label>
+
+<textarea
+                id="qdCorrectionComments"
+                rows="4"
+                style="
+                  width:100%;
+box-sizing:border-box;
+                  margin-top:6px;
+                  padding:10px;
+                  border:1px solid #ccc;
+                  border-radius:7px;
+resize:vertical;
+                "
+>${escapeQD(
+record.comments ||
+record.managerComments ||
+                ""
+              )}</textarea>
+
+</div>
+
+
+<div
+              style="
+                background:#f5f8f6;
+                border:1px solid #dce6e0;
+                border-radius:8px;
+                padding:12px;
+              "
+>
+
+<div
+                style="
+                  font-size:11px;
+                  color:#666;
+                "
+>
+                CORRECTED TOTAL
+</div>
+
+
+<div
+                id="qdCorrectionTotal"
+                style="
+                  margin-top:5px;
+                  font-size:25px;
+font-weight:bold;
+                  color:#0b5d3b;
+                "
+>
+                0/100
+</div>
+
+
+<div
+                id="qdCorrectionContribution"
+                style="
+                  margin-top:4px;
+                  font-size:12px;
+                  color:#555;
+                "
+>
+                Contribution:
+                0.00/10
+</div>
+
+
+<div
+                id="qdCorrectionRating"
+                style="
+                  margin-top:4px;
+                  font-size:12px;
+font-weight:bold;
+                "
+>
+</div>
+
+</div>
+
+</div>
+
+
+<div
+            style="
+              margin-bottom:18px;
+            "
+>
+
+<label
+              style="
+font-weight:bold;
+                color:#8a4f00;
+              "
+>
+              Reason for Correction *
+</label>
+
+
+<textarea
+              id="qdCorrectionReason"
+              rows="3"
+              placeholder="Director must explain why this submitted assessment is being corrected."
+              style="
+                width:100%;
+box-sizing:border-box;
+                margin-top:6px;
+                padding:10px;
+                border:1px solid #d7b46a;
+                border-radius:7px;
+resize:vertical;
+                background:#fffdf7;
+              "
+></textarea>
+
+</div>
+
+
+<div
+            style="
+display:flex;
+justify-content:flex-end;
+              gap:8px;
+flex-wrap:wrap;
+            "
+>
+
+<button
+              id="cancelQDCorrection"
+              type="button"
+              style="
+                padding:10px 15px;
+                border:1px solid #ccc;
+background:white;
+                border-radius:7px;
+cursor:pointer;
+              "
+>
+              Cancel
+</button>
+
+
+<button
+              id="saveQDCorrection"
+              type="button"
+              style="
+                padding:10px 16px;
+                border:0;
+                background:#0b5d3b;
+color:white;
+                border-radius:7px;
+font-weight:bold;
+cursor:pointer;
+              "
+>
+              Save Director Correction
+</button>
+
+</div>
+
+</div>
+
+</div>
+
+    `;
+
+
+document.body.appendChild(
+      modal
+    );
+
+
+    function calculateCorrection() {
+
+      let total = 0;
+
+
+      modal
+        .querySelectorAll(
+          ".qdCorrectionScore"
+        )
+        .forEach(input => {
+
+          let value =
+            Number(input.value);
+
+
+          if (
+            !Number.isFinite(value)
+          ) {
+
+            value = 0;
+
+          }
+
+
+          value =
+Math.max(
+              0,
+Math.min(
+                10,
+                value
+              )
+            );
+
+
+          total += value;
+
+        });
+
+
+const contribution =
+        total * 0.10;
+
+
+modal.querySelector(
+        "#qdCorrectionTotal"
+      ).textContent =
+total.toFixed(0) +
+        "/100";
+
+
+modal.querySelector(
+        "#qdCorrectionContribution"
+      ).textContent =
+        "Contribution: " +
+contribution.toFixed(2) +
+        "/10";
+
+
+modal.querySelector(
+        "#qdCorrectionRating"
+      ).textContent =
+getQDRating(total);
+
+
+      return {
+        total,
+        contribution,
+        rating:
+getQDRating(total)
+      };
+
+    }
+
+
+    modal
+      .querySelectorAll(
+        ".qdCorrectionScore"
+      )
+      .forEach(input => {
+
+input.addEventListener(
+          "input",
+calculateCorrection
+        );
+
+      });
+
+
+calculateCorrection();
+
+
+modal.querySelector(
+      "#closeQDCorrection"
+    ).onclick = () => {
+
+modal.remove();
+
+    };
+
+
+modal.querySelector(
+      "#cancelQDCorrection"
+    ).onclick = () => {
+
+modal.remove();
+
+    };
+
+
+modal.querySelector(
+      "#saveQDCorrection"
+    ).onclick = () => {
+
+const reason =
+modal.querySelector(
+          "#qdCorrectionReason"
+        ).value.trim();
+
+
+      if (!reason) {
+
+        alert(
+          "Please enter the reason for this correction."
+        );
+
+        return;
+
+      }
+
+
+const correctedScores = {};
+
+      let invalidScore = false;
+
+
+      modal
+        .querySelectorAll(
+          ".qdCorrectionScore"
+        )
+        .forEach(input => {
+
+const value =
+            Number(input.value);
+
+
+          if (
+            !Number.isFinite(value) ||
+            value < 0 ||
+            value > 10
+          ) {
+
+invalidScore = true;
+
+            return;
+
+          }
+
+
+correctedScores[
+input.dataset.key
+          ] = value;
+
+        });
+
+
+      if (invalidScore) {
+
+        alert(
+          "Every criterion must have a score from 0 to 10."
+        );
+
+        return;
+
+      }
+
+
+const result =
+calculateCorrection();
+
+
+const newComments =
+modal.querySelector(
+          "#qdCorrectionComments"
+        ).value.trim();
+
+
+const latestRecords =
+getAFQualityDisciplineRecords();
+
+
+const latestIndex =
+latestRecords.findIndex(
+          item =>
+getQDRecordId(item) ===
+            String(recordId)
+        );
+
+
+      if (latestIndex< 0) {
+
+        alert(
+          "The assessment could not be found. No correction was saved."
+        );
+
+        return;
+
+      }
+
+
+const latestRecord =
+latestRecords[
+latestIndex
+        ];
+
+
+      if (
+        !Array.isArray(
+latestRecord.correctionHistory
+        )
+      ) {
+
+latestRecord.correctionHistory =
+          [];
+
+      }
+
+
+      /*
+       * Preserve complete BEFORE state.
+       */
+
+const beforeSnapshot = {
+
+        scores:
+JSON.parse(
+JSON.stringify(
+latestRecord.scores ||
+              {}
+            )
+          ),
+
+totalScore:
+          Number(
+latestRecord.totalScore ||
+            0
+          ),
+
+performanceContribution:
+          Number(
+latestRecord
+              .performanceContribution ||
+            0
+          ),
+
+        rating:
+latestRecord.rating ||
+getQDRating(
+latestRecord.totalScore
+          ),
+
+        comments:
+latestRecord.comments ||
+latestRecord.managerComments ||
+          ""
+
+      };
+
+
+const afterSnapshot = {
+
+        scores:
+JSON.parse(
+JSON.stringify(
+correctedScores
+            )
+          ),
+
+totalScore:
+result.total,
+
+performanceContribution:
+result.contribution,
+
+        rating:
+result.rating,
+
+        comments:
+newComments
+
+      };
+
+
+latestRecord
+        .correctionHistory
+        .push({
+
+correctedAt:
+            new Date()
+              .toISOString(),
+
+correctedByEmployeeId:
+currentUser.employeeId ||
+            "",
+
+correctedByName:
+currentUser.fullName ||
+            "",
+
+correctedByRole:
+currentUser.role ||
+            "Director",
+
+          reason:
+            reason,
+
+          before:
+beforeSnapshot,
+
+          after:
+afterSnapshot
+
+        });
+
+
+      /*
+       * Apply corrected current values.
+       */
+
+latestRecord.scores =
+correctedScores;
+
+
+latestRecord.totalScore =
+result.total;
+
+
+latestRecord
+        .qualityDisciplinePercent =
+result.total;
+
+
+latestRecord
+        .performanceContribution =
+result.contribution;
+
+
+latestRecord.rating =
+result.rating;
+
+
+latestRecord.comments =
+newComments;
+
+
+latestRecord.managerComments =
+newComments;
+
+
+latestRecord.status =
+        "CORRECTED";
+
+
+latestRecord.locked =
+        true;
+
+
+latestRecord.lastCorrectedAt =
+        new Date().toISOString();
+
+
+latestRecord
+        .lastCorrectedByEmployeeId =
+currentUser.employeeId ||
+        "";
+
+
+latestRecord
+        .lastCorrectedByName =
+currentUser.fullName ||
+        "";
+
+
+latestRecord
+        .lastCorrectionReason =
+        reason;
+
+
+saveAFQualityDisciplineRecords(
+latestRecords
+      );
+
+
+      alert(
+        "Director correction saved successfully.\n\n" +
+        "Employee: " +
+        (
+latestRecord.employeeName ||
+          ""
+        ) +
+        "\nCorrected Score: " +
+result.total.toFixed(0) +
+        "/100\nRating: " +
+result.rating +
+        "\nPerformance Contribution: " +
+result.contribution.toFixed(2) +
+        "/10\n\n" +
+        "The previous assessment has been preserved in the audit history."
+      );
+
+
+modal.remove();
+
+
+viewAFQualityDisciplineRecords();
+
+    };
+
+  }
+
+
+  /* =======================================================
+     VIEW AUDIT HISTORY
+     ======================================================= */
+
+  function openQDAuditHistory(
+recordId
+  ) {
+
+const records =
+getAFQualityDisciplineRecords();
+
+
+const record =
+records.find(
+        item =>
+getQDRecordId(item) ===
+          String(recordId)
+      );
+
+
+    if (!record) {
+
+      alert(
+        "Assessment record could not be found."
+      );
+
+      return;
+
+    }
+
+
+const history =
+Array.isArray(
+record.correctionHistory
+      )
+        ? record.correctionHistory
+        : [];
+
+
+const modal =
+document.createElement(
+        "div"
+      );
+
+
+modal.style.cssText = `
+position:fixed;
+      inset:0;
+      z-index:100006;
+background:rgba(0,0,0,.6);
+display:flex;
+align-items:center;
+justify-content:center;
+      padding:10px;
+font-family:Arial,sans-serif;
+    `;
+
+
+const historyRows =
+history.length
+
+        ? history
+            .slice()
+            .reverse()
+            .map(
+              (entry, index) => {
+
+const before =
+entry.before || {};
+
+const after =
+entry.after || {};
+
+
+                return `
+
+<tr>
+
+<td>
+                      ${
+history.length -
+                        index
+                      }
+</td>
+
+<td>
+                      ${escapeQD(
+formatQDDateTime(
+entry.correctedAt
+                        )
+                      )}
+</td>
+
+<td>
+
+<b>
+                        ${escapeQD(
+entry.correctedByName ||
+                          ""
+                        )}
+</b>
+
+<br>
+
+<small>
+                        ${escapeQD(
+entry.correctedByRole ||
+                          "Director"
+                        )}
+</small>
+
+</td>
+
+<td>
+                      ${Number(
+before.totalScore ||
+                        0
+                      ).toFixed(0)}
+                      /100
+</td>
+
+<td>
+                      ${Number(
+after.totalScore ||
+                        0
+                      ).toFixed(0)}
+                      /100
+</td>
+
+<td>
+                      ${escapeQD(
+entry.reason ||
+                        ""
+                      )}
+</td>
+
+</tr>
+
+                `;
+
+              }
+            )
+            .join("")
+
+        : `
+
+<tr>
+
+<td
+colspan="6"
+                style="
+text-align:center;
+                  padding:20px;
+                  color:#666;
+                "
+>
+                No corrections have been made
+                to this assessment.
+</td>
+
+</tr>
+
+          `;
+
+
+modal.innerHTML = `
+
+<div
+        style="
+          width:950px;
+          max-width:98%;
+          max-height:92vh;
+overflow:auto;
+background:white;
+          border-radius:14px;
+          padding:20px;
+        "
+>
+
+<div
+          style="
+display:flex;
+            justify-content:
+              space-between;
+align-items:center;
+            gap:12px;
+            margin-bottom:16px;
+          "
+>
+
+<div>
+
+<h2
+              style="
+                margin:0;
+                color:#0b5d3b;
+              "
+>
+              Assessment Audit History
+</h2>
+
+
+<div
+              style="
+                margin-top:5px;
+                font-size:12px;
+                color:#666;
+              "
+>
+              ${escapeQD(
+record.employeeName ||
+                ""
+              )}
+              •
+              ${escapeQD(
+record.weekStart ||
+                ""
+              )}
+              to
+              ${escapeQD(
+record.weekEnd ||
+                ""
+              )}
+</div>
+
+</div>
+
+
+<button
+            id="closeQDAudit"
+            type="button"
+            style="
+              padding:8px 13px;
+              border:1px solid #ccc;
+background:white;
+              border-radius:7px;
+cursor:pointer;
+            "
+>
+            Close
+</button>
+
+</div>
+
+
+<div
+          style="
+            overflow-x:auto;
+          "
+>
+
+<table
+            id="qdAuditTable"
+            style="
+              width:100%;
+              min-width:760px;
+border-collapse:collapse;
+              font-size:12px;
+            "
+>
+
+<thead>
+
+<tr
+                style="
+                  background:#0b5d3b;
+color:white;
+                "
+>
+
+<th>#</th>
+
+<th>
+                  Date / Time
+</th>
+
+<th>
+                  Corrected By
+</th>
+
+<th>
+                  Previous Score
+</th>
+
+<th>
+                  New Score
+</th>
+
+<th>
+                  Reason
+</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+
+              ${historyRows}
+
+</tbody>
+
+</table>
+
+</div>
+
+</div>
+
+    `;
+
+
+document.body.appendChild(
+      modal
+    );
+
+
+    modal
+      .querySelectorAll(
+        "#qdAuditTableth, #qdAuditTable td"
+      )
+      .forEach(cell => {
+
+cell.style.border =
+          "1px solid #ddd";
+
+cell.style.padding =
+          "8px";
+
+cell.style.verticalAlign =
+          "top";
+
+      });
+
+
+modal.querySelector(
+      "#closeQDAudit"
+    ).onclick = () => {
+
+modal.remove();
+
+    };
+
+  }
+
+
+  /* =======================================================
+     REPLACE RECORDS VIEW WITH CONTROLLED VERSION
+     ======================================================= */
+
+viewAFQualityDisciplineRecords =
+    function() {
+
+const currentUser =
+getQDCurrentUser();
+
+
+      if (
+        !currentUser ||
+        ![
+          "Manager",
+          "Director"
+        ].includes(
+currentUser.role
+        )
+      ) {
+
+        alert(
+          "Access Denied."
+        );
+
+        return;
+
+      }
+
+
+const records =
+getAFQualityDisciplineRecords()
+          .slice()
+          .sort(
+            (a, b) =>
+              String(
+b.weekStart ||
+                ""
+              ).localeCompare(
+                String(
+a.weekStart ||
+                  ""
+                )
+              )
+          );
+
+
+const modal =
+document.createElement(
+          "div"
+        );
+
+
+modal.id =
+        "afQDRecordsModal";
+
+
+modal.style.cssText = `
+position:fixed;
+        inset:0;
+        z-index:100001;
+background:rgba(0,0,0,.58);
+display:flex;
+align-items:center;
+justify-content:center;
+        padding:10px;
+font-family:Arial,sans-serif;
+      `;
+
+
+const rows =
+records.length
+
+          ? records.map(record => {
+
+const historyCount =
+Array.isArray(
+record.correctionHistory
+                )
+                  ? record
+                      .correctionHistory
+                      .length
+                  : 0;
+
+
+const rating =
+record.rating ||
+getQDRating(
+record.totalScore
+                );
+
+
+const directorActions =
+currentUser.role ===
+                  "Director"
+
+                  ? `
+
+<button
+                      type="button"
+                      class="qdDirectorCorrectBtn"
+                      data-record-id="${escapeQD(
+getQDRecordId(
+                          record
+                        )
+                      )}"
+                      style="
+                        padding:6px 8px;
+                        border:0;
+                        border-radius:5px;
+                        background:#0b5d3b;
+color:white;
+                        font-size:10px;
+font-weight:bold;
+cursor:pointer;
+                        margin:2px;
+                      "
+>
+                      Correct
+</button>
+
+                  `
+
+                  : "";
+
+
+              return `
+
+<tr>
+
+<td>
+
+                    ${escapeQD(
+record.weekStart ||
+                      ""
+                    )}
+
+<br>
+
+                    to
+
+<br>
+
+                    ${escapeQD(
+record.weekEnd ||
+                      ""
+                    )}
+
+</td>
+
+
+<td>
+
+<b>
+                      ${escapeQD(
+record.employeeName ||
+                        ""
+                      )}
+</b>
+
+<br>
+
+<small>
+                      ${escapeQD(
+record.employeeId ||
+                        ""
+                      )}
+</small>
+
+</td>
+
+
+<td>
+                    ${escapeQD(
+record.teamName ||
+                      "—"
+                    )}
+</td>
+
+
+<td
+                    style="
+text-align:center;
+font-weight:bold;
+                    "
+>
+                    ${Number(
+record.totalScore ||
+                      0
+                    ).toFixed(0)}
+                    /100
+</td>
+
+
+<td>
+                    ${escapeQD(
+                      rating
+                    )}
+</td>
+
+
+<td
+                    style="
+text-align:center;
+font-weight:bold;
+                    "
+>
+                    ${Number(
+                      record
+                        .performanceContribution ||
+                      0
+                    ).toFixed(2)}
+                    /10
+</td>
+
+
+<td>
+
+                    ${escapeQD(
+record.assessorName ||
+                      ""
+                    )}
+
+<br>
+
+<small>
+                      ${escapeQD(
+record.assessorRole ||
+                        ""
+                      )}
+</small>
+
+</td>
+
+
+<td
+                    style="
+text-align:center;
+                    "
+>
+
+                    ${
+record.status ===
+                      "CORRECTED"
+
+                        ? `
+<b
+                            style="
+                              color:#8a5a00;
+                            "
+>
+                            CORRECTED
+</b>
+                        `
+
+                        : `
+<b>
+                            ${escapeQD(
+record.status ||
+                              "SUBMITTED"
+                            )}
+</b>
+                        `
+                    }
+
+</td>
+
+
+<td
+                    style="
+text-align:center;
+white-space:nowrap;
+                    "
+>
+
+                    ${directorActions}
+
+
+<button
+                      type="button"
+                      class="qdAuditHistoryBtn"
+                      data-record-id="${escapeQD(
+getQDRecordId(
+                          record
+                        )
+                      )}"
+                      style="
+                        padding:6px 8px;
+                        border:1px solid #bbb;
+                        border-radius:5px;
+background:white;
+                        font-size:10px;
+cursor:pointer;
+                        margin:2px;
+                      "
+>
+                      Audit
+                      ${
+historyCount> 0
+                          ? "(" +
+historyCount +
+                            ")"
+                          : ""
+                      }
+</button>
+
+</td>
+
+</tr>
+
+              `;
+
+            }).join("")
+
+          : `
+
+<tr>
+
+<td
+colspan="9"
+                  style="
+text-align:center;
+                    padding:20px;
+                    color:#666;
+                  "
+>
+                  No Quality & Discipline
+                  assessments have been
+                  submitted yet.
+</td>
+
+</tr>
+
+            `;
+
+
+modal.innerHTML = `
+
+<div
+          style="
+            width:1150px;
+            max-width:98%;
+            max-height:94vh;
+overflow:auto;
+background:white;
+            border-radius:14px;
+            padding:22px;
+          "
+>
+
+<div
+            style="
+display:flex;
+              justify-content:
+                space-between;
+align-items:center;
+              gap:15px;
+              margin-bottom:18px;
+            "
+>
+
+<div>
+
+<h2
+                style="
+                  margin:0;
+                  color:#0b5d3b;
+                "
+>
+                Quality & Discipline Records
+</h2>
+
+
+<div
+                style="
+                  margin-top:5px;
+                  color:#666;
+                  font-size:13px;
+                "
+>
+
+                ${
+currentUser.role ===
+                  "Director"
+
+                    ? "Submitted assessments are locked. Director corrections require a reason and are preserved in the audit history."
+
+                    : "Submitted assessments are locked and read-only."
+                }
+
+</div>
+
+</div>
+
+
+<button
+              id="closeQDRecords"
+              type="button"
+              style="
+                padding:9px 15px;
+                border:1px solid #ccc;
+background:white;
+                border-radius:7px;
+cursor:pointer;
+              "
+>
+              Close
+</button>
+
+</div>
+
+
+<div
+            style="
+              overflow-x:auto;
+            "
+>
+
+<table
+              id="qdRecordsTable"
+              style="
+                width:100%;
+                min-width:1050px;
+border-collapse:collapse;
+                font-size:12px;
+              "
+>
+
+<thead>
+
+<tr
+                  style="
+                    background:#0b5d3b;
+color:white;
+                  "
+>
+
+<th>Week</th>
+
+<th>Employee</th>
+
+<th>Team</th>
+
+<th>Score</th>
+
+<th>Rating</th>
+
+<th>
+                    Contribution
+</th>
+
+<th>
+                    Assessed By
+</th>
+
+<th>Status</th>
+
+<th>Action</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+
+                ${rows}
+
+</tbody>
+
+</table>
+
+</div>
+
+</div>
+
+      `;
+
+
+document.body.appendChild(
+        modal
+      );
+
+
+      modal
+        .querySelectorAll(
+          "#qdRecordsTableth, #qdRecordsTable td"
+        )
+        .forEach(cell => {
+
+cell.style.border =
+            "1px solid #ddd";
+
+cell.style.padding =
+            "8px";
+
+cell.style.verticalAlign =
+            "top";
+
+        });
+
+
+modal.querySelector(
+        "#closeQDRecords"
+      ).onclick = () => {
+
+modal.remove();
+
+      };
+
+
+      modal
+        .querySelectorAll(
+          ".qdDirectorCorrectBtn"
+        )
+        .forEach(button => {
+
+button.onclick = () => {
+
+const recordId =
+button.dataset.recordId;
+
+
+modal.remove();
+
+
+openQDDirectorCorrection(
+recordId
+            );
+
+          };
+
+        });
+
+
+      modal
+        .querySelectorAll(
+          ".qdAuditHistoryBtn"
+        )
+        .forEach(button => {
+
+button.onclick = () => {
+
+openQDAuditHistory(
+button.dataset.recordId
+            );
+
+          };
+
+        });
+
+    };
+
+
+  /*
+   * Expose these for future performance
+   * and reporting modules.
+   */
+
+window.openQDDirectorCorrection =
+openQDDirectorCorrection;
+
+
+window.openQDAuditHistory =
+openQDAuditHistory;
+
+})();
  
