@@ -19122,140 +19122,226 @@ font-weight:bold;
         Pole Quantities Produced
 </h3>
 
-
 <div style="
-display:grid;
-grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
-        gap:15px;
+        border:1px solid #d9e5de;
+        border-radius:10px;
+        padding:15px;
         margin-bottom:24px;
       ">
 
+<div style="
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+        gap:12px;
+align-items:end;
+        margin-bottom:14px;
+      ">
+
 <div>
-<label>
-            4"x4"x7ft Square
+<label style="
+display:block;
+          margin-bottom:6px;
+          font-weight:600;
+        ">
+          Pole Category
 </label>
 
-<input
-            id="pole4X4X7Square"
-            type="number"
-            min="0"
-            step="1"
-            value="0"
-            style="
-              width:100%;
+<select
+          id="productionPoleCategory"
+          style="
+            width:100%;
 box-sizing:border-box;
-              padding:10px;
-              margin-top:5px;
-            "
+            padding:10px;
+            border:1px solid #ccc;
+            border-radius:8px;
+          "
 >
-</div>
+<option value="">
+            Select Pole Category
+</option>
 
-
-<div>
-<label>
+<option value="pole3X3X6Square">
             3"x3"x6ft Square
-</label>
+</option>
 
-<input
-            id="pole3X3X6Square"
-            type="number"
-            min="0"
-            step="1"
-            value="0"
-            style="
-              width:100%;
-box-sizing:border-box;
-              padding:10px;
-              margin-top:5px;
-            "
->
-</div>
+<option value="pole3X3X6_5Square">
+            3"x3"x6.5ft Square
+</option>
 
+<option value="pole4X4X6Square">
+            4"x4"x6ft Square
+</option>
 
-<div>
-<label>
-            4"x7ft Round
-</label>
+<option value="pole4X4X7Square">
+            4"x4"x7ft Square
+</option>
 
-<input
-            id="pole4x7Round"
-            type="number"
-            min="0"
-            step="1"
-            value="0"
-            style="
-              width:100%;
-box-sizing:border-box;
-              padding:10px;
-              margin-top:5px;
-            "
->
-</div>
+<option value="pole3x6Round">
+            3" Round x 6ft
+</option>
 
+<option value="pole4x7Round">
+            4" Round x 7ft
+</option>
 
-<div>
-<label>
+<option value="pole3X3X2Square">
             3"x3"x2ft Square
-</label>
+</option>
 
-<input
-            id="pole3X3X2Square"
-            type="number"
-            min="0"
-            step="1"
-            value="0"
-            style="
-              width:100%;
-box-sizing:border-box;
-              padding:10px;
-              margin-top:5px;
-            "
->
-</div>
-
-
-<div>
-<label>
+<option value="pole4x4X2Square">
             4"x4"x2ft Square
+</option>
+
+<option value="pole4x2Round">
+            4" Round x 2ft
+</option>
+
+</select>
+</div>
+
+
+<div>
+<label style="
+display:block;
+          margin-bottom:6px;
+          font-weight:600;
+        ">
+          Quantity Produced
 </label>
 
 <input
-            id="pole4x4X2Square"
-            type="number"
-            min="0"
-            step="1"
-            value="0"
-            style="
-              width:100%;
+          id="productionPoleQuantity"
+          type="number"
+          min="1"
+          step="1"
+          placeholder="Enter quantity"
+          style="
+            width:100%;
 box-sizing:border-box;
-              padding:10px;
-              margin-top:5px;
-            "
+            padding:10px;
+            border:1px solid #ccc;
+            border-radius:8px;
+          "
 >
 </div>
 
 
 <div>
-<label>
-            4"x2ft Round
-</label>
-
-<input
-            id="pole4x2Round"
-            type="number"
-            min="0"
-            step="1"
-            value="0"
-            style="
-              width:100%;
-box-sizing:border-box;
-              padding:10px;
-              margin-top:5px;
-            "
+<button
+          id="addProductionPoleBtn"
+          type="button"
+          style="
+            width:100%;
+            background:#0b5d3b;
+color:white;
+border:none;
+            padding:11px 16px;
+            border-radius:8px;
+            font-weight:600;
+cursor:pointer;
+          "
 >
+          Add Pole Category
+</button>
 </div>
 
 </div>
+
+
+<div style="
+        font-size:13px;
+        color:#666;
+        margin-bottom:12px;
+        line-height:1.4;
+      ">
+      The standard KG per pole will come automatically from
+      the Director-approved Pole Standard Weights.
+</div>
+
+
+<div style="overflow-x:auto;">
+
+<table style="
+        width:100%;
+border-collapse:collapse;
+        min-width:650px;
+      ">
+
+<thead>
+
+<tr>
+
+<th style="
+          border:1px solid #ddd;
+          padding:8px;
+text-align:left;
+        ">
+        Pole Category
+</th>
+
+<th style="
+          border:1px solid #ddd;
+          padding:8px;
+text-align:center;
+        ">
+        Quantity
+</th>
+
+<th style="
+          border:1px solid #ddd;
+          padding:8px;
+text-align:center;
+        ">
+        KG / Pole
+</th>
+
+<th style="
+          border:1px solid #ddd;
+          padding:8px;
+text-align:center;
+        ">
+        Finished KG
+</th>
+
+<th style="
+          border:1px solid #ddd;
+          padding:8px;
+text-align:center;
+        ">
+        Action
+</th>
+
+</tr>
+
+</thead>
+
+
+<tbody id="productionPoleEntriesTable">
+
+<tr>
+
+<td
+colspan="5"
+          style="
+            border:1px solid #ddd;
+            padding:12px;
+text-align:center;
+            color:#666;
+          "
+>
+          No pole categories added yet.
+</td>
+
+</tr>
+
+</tbody>
+
+</table>
+
+</div>
+
+</div>
+
 
 
 <div style="
