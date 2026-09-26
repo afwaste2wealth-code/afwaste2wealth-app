@@ -32487,3 +32487,1087 @@ actionName
 
 
 })();
+/* =========================================================
+   A&F PRODUCTION TARGET → PRODUCTION INTEGRATION
+   Connects Director target to Manager Record Production
+   without replacing the existing production function.
+   ========================================================= */
+
+(function connectAFProductionTargetToProduction() {
+
+const TARGET_STORAGE_KEY =
+    "afProductionTargets";
+
+
+  /* =======================================================
+     HELPERS
+     ======================================================= */
+
+  function getTargets() {
+
+    try {
+
+const records =
+JSON.parse(
+localStorage.getItem(
+            TARGET_STORAGE_KEY
+          ) || "[]"
+        );
+
+      return Array.isArray(records)
+        ? records
+        : [];
+
+    } catch (error) {
+
+console.error(
+        "Production target read error:",
+        error
+      );
+
+      return [];
+    }
+  }
+
+
+  function saveTargets(records) {
+
+localStorage.setItem(
+      TARGET_STORAGE_KEY,
+JSON.stringify(records)
+    );
+  }
+
+
+  function getPendingTargets() {
+
+    return getTargets()
+      .filter(
+        record =>
+          String(
+record.status || ""
+          ).toUpperCase() ===
+          "TARGET SET"
+      )
+      .sort(
+        (a, b) => {
+
+          return String(
+a.date || ""
+          ).localeCompare(
+            String(
+b.date || ""
+            )
+          );
+        }
+      );
+  }
+
+
+  function escapeTargetText(value) {
+
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+
+  function getProductionRecords() {
+
+    try {
+
+const records =
+JSON.parse(
+localStorage.getItem(
+            "productionRecords"
+          ) || "[]"
+        );
+
+      return Array.isArray(records)
+        ? records
+        : [];
+
+    } catch (error) {
+
+      return [];
+    }
+  }
+
+
+  /* =======================================================
+     SAVE TARGET COMPLETION
+     ======================================================= */
+
+  function completeProductionTarget(
+targetId,
+productionRecord
+  ) {
+
+const targets =
+getTargets();
+
+
+const index =
+targets.findIndex(
+        record =>
+          String(record.id) ===
+          String(targetId)
+      );
+
+
+    if (index === -1) {
+
+console.warn(
+        "Production target could not be found:",
+targetId
+      );
+
+      return;
+    }
+
+
+const target =
+      targets[index];
+
+
+    /*
+     * Do not complete a target twice.
+     */
+    if (
+      String(
+target.status || ""
+      ).toUpperCase() !==
+      "TARGET SET"
+    ) {
+
+      return;
+    }
+
+
+const actualPoles =
+      Number(
+productionRecord.totalPoles || 0
+      );
+
+
+const targetPoles =
+      Number(
+target.targetPoles || 0
+      );
+
+
+const achievement =
+targetPoles> 0
+
+        ? (
+actualPoles /
+targetPoles
+          ) * 100
+
+        : 0;
+
+
+target.actualPoles =
+actualPoles;
+
+
+target.achievementPercent =
+      Number(
+achievement.toFixed(2)
+      );
+
+
+target.productionRecordId =
+productionRecord.id || "";
+
+
+target.status =
+      "COMPLETED";
+
+
+target.completedAt =
+      new Date().toISOString();
+
+
+    /*
+     * Also copy target information into the
+     * production record itself.
+     *
+     * This will make the future performance
+     * calculation much easier and safer.
+     */
+
+productionRecord.productionTargetId =
+target.id;
+
+
+productionRecord.productionTargetPoles =
+targetPoles;
+
+
+productionRecord.productionAchievementPercent =
+      Number(
+achievement.toFixed(2)
+      );
+
+
+    /*
+     * Update the production record.
+     */
+const productionRecords =
+getProductionRecords();
+
+
+const productionIndex =
+productionRecords.findIndex(
+        record =>
+          String(record.id) ===
+          String(productionRecord.id)
+      );
+
+
+    if (productionIndex !== -1) {
+
+productionRecords[
+productionIndex
+      ] = productionRecord;
+
+
+localStorage.setItem(
+        "productionRecords",
+JSON.stringify(
+productionRecords
+        )
+      );
+    }
+
+
+    targets[index] =
+      target;
+
+
+saveTargets(
+      targets
+    );
+  }
+
+
+  /* =======================================================
+     WAIT FOR EXISTING PRODUCTION MODAL
+     ======================================================= */
+
+  function connectTargetToOpenProduction() {
+
+const dateInput =
+document.querySelector(
+        "#productionDate"
+      );
+
+
+const shiftSelect =
+document.querySelector(
+        "#productionShift"
+      );
+
+
+const saveButton =
+document.querySelector(
+        "#saveProductionBtn"
+      );
+
+
+    if (
+      !dateInput ||
+      !shiftSelect ||
+      !saveButton
+    ) {
+
+      return false;
+    }
+
+
+    /*
+     * Prevent connecting twice to the
+     * same production window.
+     */
+    if (
+saveButton.dataset
+        .afProductionTargetConnected ===
+      "yes"
+    ) {
+
+      return true;
+    }
+
+
+const pendingTargets =
+getPendingTargets();
+
+
+    /*
+     * Production now requires a Director target.
+     */
+    if (!pendingTargets.length) {
+
+      alert(
+        "There is no production target waiting for production.\n\n" +
+        "The Director must set a Production Target before production can be recorded."
+      );
+
+
+const productionModal =
+saveButton.closest(
+          'div[style*="position:fixed"]'
+        );
+
+
+      if (productionModal) {
+
+productionModal.remove();
+      }
+
+
+      return true;
+    }
+
+
+saveButton.dataset
+      .afProductionTargetConnected =
+      "yes";
+
+
+    /*
+     * Find the main white production panel.
+     */
+    let productionPanel =
+saveButton.parentElement;
+
+
+    while (
+productionPanel&&
+productionPanel.parentElement&&
+productionPanel.parentElement !==
+document.body
+    ) {
+
+      if (
+productionPanel.querySelector(
+          "#productionDate"
+        ) &&
+productionPanel.querySelector(
+          "#productionPoleCategory"
+        )
+      ) {
+
+        break;
+      }
+
+
+productionPanel =
+productionPanel.parentElement;
+    }
+
+
+    /*
+     * Create target selector area.
+     */
+const targetArea =
+document.createElement("div");
+
+
+targetArea.id =
+      "afProductionTargetConnection";
+
+
+targetArea.style.cssText = `
+      background:#fff8e6;
+      border:1px solid #e5cf91;
+      border-radius:10px;
+      padding:15px;
+      margin-bottom:20px;
+    `;
+
+
+targetArea.innerHTML = `
+
+<div style="
+font-weight:bold;
+        color:#7a5500;
+        margin-bottom:9px;
+        font-size:15px;
+      ">
+        Director Production Target
+</div>
+
+
+<div style="
+        font-size:13px;
+        color:#66521e;
+        margin-bottom:12px;
+        line-height:1.5;
+      ">
+        Select the production target set by
+        the Director. Date, shift and target
+        quantity will be locked automatically.
+</div>
+
+
+<select
+        id="afProductionTargetSelector"
+        style="
+          width:100%;
+box-sizing:border-box;
+          padding:10px;
+          border:1px solid #d1b96f;
+          border-radius:8px;
+background:white;
+          margin-bottom:12px;
+        "
+>
+
+<option value="">
+          Select Director Production Target
+</option>
+
+        ${
+pendingTargets.map(
+            target => `
+
+<option
+                value="${
+escapeTargetText(
+target.id
+                  )
+                }"
+>
+
+                ${
+escapeTargetText(
+target.date
+                  )
+                }
+
+                • ${
+escapeTargetText(
+target.shiftName
+                  )
+                }
+
+                • Target ${
+                  Number(
+target.targetPoles || 0
+                  ).toLocaleString()
+                } poles
+
+</option>
+
+            `
+          ).join("")
+        }
+
+</select>
+
+
+<div style="
+display:grid;
+        grid-template-columns:
+          repeat(auto-fit,minmax(160px,1fr));
+        gap:10px;
+      ">
+
+
+<div>
+
+<label style="
+display:block;
+            font-size:12px;
+font-weight:bold;
+            margin-bottom:4px;
+          ">
+            Target Poles
+</label>
+
+<input
+            id="afProductionTargetDisplay"
+            type="text"
+readonly
+            value="—"
+            style="
+              width:100%;
+box-sizing:border-box;
+              padding:9px;
+              background:#f4f4f4;
+              border:1px solid #ccc;
+              border-radius:7px;
+font-weight:bold;
+            "
+>
+
+</div>
+
+
+<div>
+
+<label style="
+display:block;
+            font-size:12px;
+font-weight:bold;
+            margin-bottom:4px;
+          ">
+            Achievement
+</label>
+
+<input
+            id="afProductionAchievementDisplay"
+            type="text"
+readonly
+            value="Waiting for production"
+            style="
+              width:100%;
+box-sizing:border-box;
+              padding:9px;
+              background:#f4f4f4;
+              border:1px solid #ccc;
+              border-radius:7px;
+            "
+>
+
+</div>
+
+
+</div>
+
+    `;
+
+
+    /*
+     * Insert immediately before the
+     * existing Date / Shift section.
+     */
+const dateContainer =
+dateInput.parentElement
+        ? dateInput.parentElement
+            .parentElement
+        : null;
+
+
+    if (
+dateContainer&&
+dateContainer.parentElement
+    ) {
+
+dateContainer.parentElement
+        .insertBefore(
+targetArea,
+dateContainer
+        );
+
+    } else if (productionPanel) {
+
+productionPanel.insertBefore(
+targetArea,
+productionPanel.firstChild
+      );
+    }
+
+
+const selector =
+targetArea.querySelector(
+        "#afProductionTargetSelector"
+      );
+
+
+const targetDisplay =
+targetArea.querySelector(
+        "#afProductionTargetDisplay"
+      );
+
+
+const achievementDisplay =
+targetArea.querySelector(
+        "#afProductionAchievementDisplay"
+      );
+
+
+    let selectedTarget =
+      null;
+
+
+    /* =====================================================
+       TARGET SELECTION
+       ===================================================== */
+
+selector.addEventListener(
+      "change",
+      function() {
+
+selectedTarget =
+pendingTargets.find(
+            target =>
+              String(target.id) ===
+              String(selector.value)
+          ) || null;
+
+
+        if (!selectedTarget) {
+
+dateInput.disabled =
+            false;
+
+
+shiftSelect.disabled =
+            false;
+
+
+targetDisplay.value =
+            "—";
+
+
+achievementDisplay.value =
+            "Waiting for production";
+
+
+          return;
+        }
+
+
+        /*
+         * Lock Director-controlled values.
+         */
+dateInput.value =
+selectedTarget.date || "";
+
+
+shiftSelect.value =
+          String(
+selectedTarget.shiftId || ""
+          );
+
+
+dateInput.disabled =
+          true;
+
+
+shiftSelect.disabled =
+          true;
+
+
+targetDisplay.value =
+          Number(
+selectedTarget.targetPoles || 0
+          ).toLocaleString() +
+          " poles";
+
+
+achievementDisplay.value =
+          "Waiting for production";
+
+
+        /*
+         * Existing production code listens for
+         * shift change to load the correct team.
+         */
+shiftSelect.dispatchEvent(
+          new Event(
+            "change",
+            {
+              bubbles: true
+            }
+          )
+        );
+      }
+    );
+
+
+    /* =====================================================
+       LIVE ACHIEVEMENT DISPLAY
+       ===================================================== */
+
+    function refreshAchievementPreview() {
+
+      if (!selectedTarget) {
+
+achievementDisplay.value =
+          "Waiting for production";
+
+        return;
+      }
+
+
+const totalPolesField =
+document.querySelector(
+          "#totalPolesProduced"
+        );
+
+
+const actualPoles =
+        Number(
+totalPolesField
+            ? totalPolesField.value
+            : 0
+        ) || 0;
+
+
+const targetPoles =
+        Number(
+selectedTarget.targetPoles || 0
+        );
+
+
+      if (
+actualPoles<= 0 ||
+targetPoles<= 0
+      ) {
+
+achievementDisplay.value =
+          "Waiting for production";
+
+        return;
+      }
+
+
+const achievement =
+        (
+actualPoles /
+targetPoles
+        ) * 100;
+
+
+achievementDisplay.value =
+actualPoles.toLocaleString() +
+        " / " +
+targetPoles.toLocaleString() +
+        " = " +
+achievement.toFixed(1) +
+        "%";
+    }
+
+
+const observer =
+      new MutationObserver(
+refreshAchievementPreview
+      );
+
+
+const totalPolesField =
+document.querySelector(
+        "#totalPolesProduced"
+      );
+
+
+    if (totalPolesField) {
+
+observer.observe(
+totalPolesField,
+        {
+          attributes: true,
+attributeFilter: [
+            "value"
+          ]
+        }
+      );
+
+
+      /*
+       * Existing code changes the input
+       * property rather than necessarily
+       * changing the HTML attribute.
+       *
+       * Refresh after clicks/input as well.
+       */
+productionPanel.addEventListener(
+        "click",
+        function() {
+
+setTimeout(
+refreshAchievementPreview,
+            0
+          );
+        }
+      );
+
+
+productionPanel.addEventListener(
+        "input",
+        function() {
+
+setTimeout(
+refreshAchievementPreview,
+            0
+          );
+        }
+      );
+    }
+
+
+    /* =====================================================
+       INTERCEPT SAVE
+       ===================================================== */
+
+saveButton.addEventListener(
+      "click",
+      function(event) {
+
+        /*
+         * Run BEFORE the existing production
+         * save handler.
+         */
+        if (!selectedTarget) {
+
+event.preventDefault();
+
+event.stopImmediatePropagation();
+
+
+          alert(
+            "Please select the Director Production Target before saving production."
+          );
+
+
+          return;
+        }
+
+
+        /*
+         * Protect against any later manual
+         * changes to Date or Shift.
+         */
+dateInput.value =
+selectedTarget.date || "";
+
+
+shiftSelect.value =
+          String(
+selectedTarget.shiftId || ""
+          );
+
+
+const recordsBefore =
+getProductionRecords();
+
+
+const recordIdsBefore =
+          new Set(
+recordsBefore.map(
+              record =>
+                String(record.id)
+            )
+          );
+
+
+        /*
+         * Let the original production save
+         * function run first.
+         */
+setTimeout(
+          function() {
+
+const recordsAfter =
+getProductionRecords();
+
+
+const newRecords =
+recordsAfter.filter(
+                record =>
+                  !recordIdsBefore.has(
+                    String(record.id)
+                  )
+              );
+
+
+            if (!newRecords.length) {
+
+              /*
+               * Existing validation failed or
+               * Manager cancelled the save.
+               * Target remains TARGET SET.
+               */
+              return;
+            }
+
+
+            /*
+             * The existing production screen
+             * saves one record per Save action.
+             */
+const newRecord =
+newRecords[
+newRecords.length - 1
+              ];
+
+
+            /*
+             * Extra safety:
+             * production must match Director
+             * target date and shift.
+             */
+            if (
+              String(
+newRecord.date || ""
+              ) !==
+              String(
+selectedTarget.date || ""
+              ) ||
+
+              String(
+newRecord.shiftId || ""
+              ) !==
+              String(
+selectedTarget.shiftId || ""
+              )
+            ) {
+
+console.error(
+                "Production saved but target did not match date/shift."
+              );
+
+              return;
+            }
+
+
+completeProductionTarget(
+selectedTarget.id,
+newRecord
+            );
+
+
+const actualPoles =
+              Number(
+newRecord.totalPoles || 0
+              );
+
+
+const targetPoles =
+              Number(
+selectedTarget.targetPoles || 0
+              );
+
+
+const achievement =
+targetPoles> 0
+                ? (
+actualPoles /
+targetPoles
+                  ) * 100
+                : 0;
+
+
+            /*
+             * Refresh dashboard cards if
+             * those functions exist.
+             */
+            if (
+typeof window
+                .refreshAFManagerDailyStatusCards ===
+              "function"
+            ) {
+
+              window
+                .refreshAFManagerDailyStatusCards();
+            }
+
+
+            if (
+typeof window
+                .refreshAFDirectorDashboard ===
+              "function"
+            ) {
+
+              window
+                .refreshAFDirectorDashboard();
+            }
+
+
+console.log(
+              "Production target completed:",
+              {
+                target:
+targetPoles,
+                actual:
+actualPoles,
+                achievement:
+achievement.toFixed(2) +
+                  "%"
+              }
+            );
+
+          },
+          100
+        );
+
+      },
+      true
+    );
+
+
+    return true;
+  }
+
+
+  /* =======================================================
+     WRAP EXISTING recordProduction()
+     ======================================================= */
+
+  if (
+typeof window.recordProduction ===
+    "function"
+  ) {
+
+const originalRecordProduction =
+window.recordProduction;
+
+
+window.recordProduction =
+      function() {
+
+        /*
+         * Check before opening the large
+         * production screen.
+         */
+const pendingTargets =
+getPendingTargets();
+
+
+        if (!pendingTargets.length) {
+
+          alert(
+            "There is no production target waiting for production.\n\n" +
+            "The Director must first set a Production Target."
+          );
+
+          return;
+        }
+
+
+originalRecordProduction();
+
+
+        /*
+         * Existing production modal is created
+         * synchronously, but a short delay makes
+         * this safe across browsers.
+         */
+setTimeout(
+          function() {
+
+connectTargetToOpenProduction();
+
+          },
+          0
+        );
+      };
+  }
+
+
+  /* =======================================================
+     PUBLIC HELPERS
+     ======================================================= */
+
+window.connectAFProductionTargetToOpenProduction =
+connectTargetToOpenProduction;
+
+
+})();
