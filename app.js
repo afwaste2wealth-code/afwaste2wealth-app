@@ -37517,6 +37517,18 @@ justify-content:center;
 </div>
     `;
   }
+function isRecognitionEligible(result) {
+
+  return Boolean(
+    result &&
+result.output&&
+result.output.applicable === true &&
+result.attendance&&
+result.attendance.applicable === true &&
+result.quality&&
+result.quality.applicable === true
+  );
+}
 
 
   function getTopTeam(results) {
@@ -37761,6 +37773,17 @@ window.calculateAFEmployeeRankings(
         "month",
         date
       ).results || [];
+const weekEligible =
+week.filter(
+isRecognitionEligible
+);
+
+
+const monthEligible =
+month.filter(
+isRecognitionEligible
+);
+
 
 
 const box =
@@ -37804,25 +37827,25 @@ box.innerHTML = `
 
         ${card(
           "Best Employee — Week",
-          week[0] || null,
+          weekEligible[0] || null,
           false
         )}
 
         ${card(
           "Best Employee — Month",
-          month[0] || null,
+          monthEligible[0] || null,
           false
         )}
 
         ${card(
           "Best Team — Week",
-getTopTeam(week),
+getTopTeam(weekEligible),
           true
         )}
 
         ${card(
           "Best Team — Month",
-getTopTeam(month),
+getTopTeam(monthEligible),
           true
         )}
 
