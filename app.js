@@ -37033,3 +37033,2001 @@ manageAFDateTimeSettings;
 
 
 })();
+/* =========================================================
+   A&F DATE & TIME DISPLAY SETTINGS
+   Director controlled
+   Storage: afSystemSettings
+
+   IMPORTANT:
+   These settings change DISPLAY only.
+   Stored dates remain YYYY-MM-DD for calculations,
+   sorting, attendance, production and reports.
+   ========================================================= */
+
+(function connectAFDateTimeSettings() {
+
+const STORAGE_KEY = "afSystemSettings";
+
+
+  /* =======================================================
+     READ SETTINGS
+     ======================================================= */
+
+  function getAFSystemSettings() {
+
+    let saved = {};
+
+    try {
+
+      saved = JSON.parse(
+localStorage.getItem(STORAGE_KEY) || "{}"
+      );
+
+    } catch (error) {
+
+      saved = {};
+    }
+
+
+    return {
+
+dateFormat:
+saved.dateFormat ||
+        "DD/MM/YYYY",
+
+timeFormat:
+saved.timeFormat ||
+        "12"
+    };
+  }
+
+
+  /* =======================================================
+     SAVE SETTINGS
+     ======================================================= */
+
+  function saveAFSystemSettings(settings) {
+
+const oldSettings =
+getAFSystemSettings();
+
+
+const combined = {
+      ...oldSettings,
+      ...settings
+    };
+
+
+localStorage.setItem(
+      STORAGE_KEY,
+JSON.stringify(combined)
+    );
+
+
+    return combined;
+  }
+
+
+  /* =======================================================
+     DATE PARSER
+     ======================================================= */
+
+  function parseAFDate(value) {
+
+    if (!value) {
+      return null;
+    }
+
+
+    if (
+      value instanceof Date
+    ) {
+
+      return Number.isNaN(
+value.getTime()
+      )
+        ? null
+        : value;
+    }
+
+
+const text =
+      String(value).trim();
+
+
+    /*
+     * YYYY-MM-DD
+     */
+const simpleMatch =
+text.match(
+        /^(\d{4})-(\d{2})-(\d{2})$/
+      );
+
+
+    if (simpleMatch) {
+
+      return new Date(
+        Number(simpleMatch[1]),
+        Number(simpleMatch[2]) - 1,
+        Number(simpleMatch[3])
+      );
+    }
+
+
+    /*
+     * ISO timestamp
+     */
+const parsed =
+      new Date(text);
+
+
+    if (
+Number.isNaN(
+parsed.getTime()
+      )
+    ) {
+
+      return null;
+    }
+
+
+    return parsed;
+  }
+
+
+  /* =======================================================
+     CENTRAL DATE FORMATTER
+     ======================================================= */
+
+  function formatAFDate(value) {
+
+const date =
+parseAFDate(value);
+
+
+    if (!date) {
+
+      return value
+        ? String(value)
+        : "";
+    }
+
+
+const settings =
+getAFSystemSettings();
+
+
+const day =
+      String(
+date.getDate()
+      ).padStart(2, "0");
+
+
+const month =
+      String(
+date.getMonth() + 1
+      ).padStart(2, "0");
+
+
+const year =
+      String(
+date.getFullYear()
+      );
+
+
+    switch (
+settings.dateFormat
+    ) {
+
+      case "MM/DD/YYYY":
+
+        return (
+          month +
+          "/" +
+          day +
+          "/" +
+          year
+        );
+
+
+      case "YYYY-MM-DD":
+
+        return (
+          year +
+          "-" +
+          month +
+          "-" +
+          day
+        );
+
+
+      case "DD/MM/YYYY":
+
+      default:
+
+        return (
+          day +
+          "/" +
+          month +
+          "/" +
+          year
+        );
+    }
+  }
+
+
+  /* =======================================================
+     CENTRAL TIME FORMATTER
+     Accepts:
+       HH:MM
+       HH:MM:SS
+       ISO timestamps
+       Date objects
+     ======================================================= */
+
+  function formatAFTime(value) {
+
+    if (!value) {
+      return "";
+    }
+
+
+const settings =
+getAFSystemSettings();
+
+
+    let hours = 0;
+    let minutes = 0;
+
+
+    /*
+     * Plain 24-hour stored time.
+     */
+const timeMatch =
+      String(value).match(
+        /^(\d{1,2}):(\d{2})(?::\d{2})?$/
+      );
+
+
+    if (timeMatch) {
+
+      hours =
+        Number(
+timeMatch[1]
+        );
+
+      minutes =
+        Number(
+timeMatch[2]
+        );
+
+    } else {
+
+const date =
+parseAFDate(value);
+
+
+      if (!date) {
+
+        return String(value);
+      }
+
+
+      hours =
+date.getHours();
+
+      minutes =
+date.getMinutes();
+    }
+
+
+const minuteText =
+      String(minutes)
+        .padStart(2, "0");
+
+
+    /*
+     * 24-HOUR CLOCK
+     */
+    if (
+settings.timeFormat ===
+      "24"
+    ) {
+
+      return (
+        String(hours)
+          .padStart(2, "0") +
+        ":" +
+minuteText
+      );
+    }
+
+
+    /*
+     * 12-HOUR CLOCK
+     */
+const period =
+      hours >= 12
+        ? "PM"
+        : "AM";
+
+
+    let displayHour =
+      hours % 12;
+
+
+    if (
+displayHour === 0
+    ) {
+
+displayHour = 12;
+    }
+
+
+    return (
+displayHour +
+      ":" +
+minuteText +
+      " " +
+      period
+    );
+  }
+
+
+  /* =======================================================
+     DATE + TIME FORMATTER
+     ======================================================= */
+
+  function formatAFDateTime(value) {
+
+    if (!value) {
+      return "";
+    }
+
+
+const date =
+parseAFDate(value);
+
+
+    if (!date) {
+
+      return String(value);
+    }
+
+
+    return (
+formatAFDate(date) +
+      ", " +
+formatAFTime(date)
+    );
+  }
+
+
+  /* =======================================================
+     OPEN DATE & TIME SETTINGS
+     DIRECTOR ONLY
+     ======================================================= */
+
+  function manageAFDateTimeSettings() {
+
+    let currentUser = null;
+
+
+    try {
+
+currentUser =
+JSON.parse(
+localStorage.getItem(
+            "currentUser"
+          ) || "null"
+        );
+
+    } catch (error) {
+
+currentUser = null;
+    }
+
+
+    if (
+      !currentUser ||
+currentUser.role !==
+        "Director"
+    ) {
+
+      alert(
+        "Access Denied\n\n" +
+        "Only the Director can change Date & Time Format settings."
+      );
+
+      return;
+    }
+
+
+const settings =
+getAFSystemSettings();
+
+
+const modal =
+document.createElement(
+        "div"
+      );
+
+
+modal.style.cssText = `
+position:fixed;
+      inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+align-items:center;
+justify-content:center;
+      z-index:100000;
+      padding:10px;
+font-family:Arial,sans-serif;
+    `;
+
+
+modal.innerHTML = `
+
+<div style="
+background:white;
+        width:560px;
+        max-width:95%;
+        max-height:92vh;
+overflow:auto;
+        border-radius:14px;
+        padding:24px;
+        box-shadow:
+          0 10px 40px
+rgba(0,0,0,.3);
+      ">
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:flex-start;
+          gap:12px;
+          margin-bottom:20px;
+        ">
+
+<div>
+
+<h2 style="
+              margin:0;
+              color:#0b5d3b;
+            ">
+              Date & Time Format
+</h2>
+
+<div style="
+              margin-top:5px;
+              color:#666;
+              font-size:13px;
+            ">
+              Company-wide display settings
+</div>
+
+</div>
+
+
+<button
+            id="afCloseDateTimeSettings"
+            type="button"
+            style="
+              border:0;
+              background:#eee;
+              padding:8px 12px;
+              border-radius:7px;
+cursor:pointer;
+font-weight:bold;
+            "
+>
+✕ Close
+</button>
+
+</div>
+
+
+<div style="
+          background:#eef8f2;
+          padding:12px;
+          border-radius:8px;
+          margin-bottom:20px;
+          font-size:13px;
+          line-height:1.5;
+        ">
+
+          Select how dates and times should appear
+          throughout the A&F system.
+
+<br><br>
+
+          Stored dates and times are not changed.
+          Only their display format is changed.
+
+</div>
+
+
+<label style="
+display:block;
+font-weight:bold;
+          margin-bottom:6px;
+        ">
+          Date Format
+</label>
+
+
+<select
+          id="afDateFormatSetting"
+          style="
+            width:100%;
+box-sizing:border-box;
+            padding:11px;
+            border:1px solid #ccc;
+            border-radius:8px;
+            margin-bottom:20px;
+background:white;
+          "
+>
+
+<option value="DD/MM/YYYY">
+            DD/MM/YYYY — 26/09/2026
+</option>
+
+<option value="MM/DD/YYYY">
+            MM/DD/YYYY — 09/26/2026
+</option>
+
+<option value="YYYY-MM-DD">
+            YYYY-MM-DD — 2026-09-26
+</option>
+
+</select>
+
+
+<label style="
+display:block;
+font-weight:bold;
+          margin-bottom:6px;
+        ">
+          Time Format
+</label>
+
+
+<select
+          id="afTimeFormatSetting"
+          style="
+            width:100%;
+box-sizing:border-box;
+            padding:11px;
+            border:1px solid #ccc;
+            border-radius:8px;
+            margin-bottom:20px;
+background:white;
+          "
+>
+
+<option value="12">
+            12-Hour Clock — 4:30 PM
+</option>
+
+<option value="24">
+            24-Hour Clock — 16:30
+</option>
+
+</select>
+
+
+<div
+          id="afDateTimePreview"
+          style="
+            padding:15px;
+            background:#f8f9f8;
+            border:1px solid #ddd;
+            border-radius:9px;
+            margin-bottom:20px;
+          "
+></div>
+
+
+<button
+          id="afSaveDateTimeSettings"
+          type="button"
+          style="
+            width:100%;
+            padding:12px;
+            border:0;
+            border-radius:8px;
+            background:#0b5d3b;
+color:white;
+font-weight:bold;
+cursor:pointer;
+          "
+>
+          Save Date & Time Settings
+</button>
+
+</div>
+    `;
+
+
+document.body.appendChild(
+      modal
+    );
+
+
+const dateSelect =
+modal.querySelector(
+        "#afDateFormatSetting"
+      );
+
+
+const timeSelect =
+modal.querySelector(
+        "#afTimeFormatSetting"
+      );
+
+
+const preview =
+modal.querySelector(
+        "#afDateTimePreview"
+      );
+
+
+dateSelect.value =
+settings.dateFormat;
+
+
+timeSelect.value =
+settings.timeFormat;
+
+
+    function updatePreview() {
+
+const exampleDate =
+        new Date(
+          2026,
+          8,
+          26,
+          16,
+          30
+        );
+
+
+const day = "26";
+const month = "09";
+const year = "2026";
+
+
+      let dateText = "";
+
+
+      if (
+dateSelect.value ===
+        "MM/DD/YYYY"
+      ) {
+
+dateText =
+          month +
+          "/" +
+          day +
+          "/" +
+          year;
+
+      } else if (
+dateSelect.value ===
+        "YYYY-MM-DD"
+      ) {
+
+dateText =
+          year +
+          "-" +
+          month +
+          "-" +
+          day;
+
+      } else {
+
+dateText =
+          day +
+          "/" +
+          month +
+          "/" +
+          year;
+      }
+
+
+      let timeText = "";
+
+
+      if (
+timeSelect.value ===
+        "24"
+      ) {
+
+timeText = "16:30";
+
+      } else {
+
+timeText = "4:30 PM";
+      }
+
+
+preview.innerHTML = `
+
+<div style="
+          font-size:12px;
+          color:#666;
+          margin-bottom:5px;
+        ">
+          Preview
+</div>
+
+<div style="
+          font-size:20px;
+font-weight:bold;
+          color:#0b5d3b;
+        ">
+          ${dateText} • ${timeText}
+</div>
+      `;
+    }
+
+
+dateSelect.onchange =
+updatePreview;
+
+
+timeSelect.onchange =
+updatePreview;
+
+
+updatePreview();
+
+
+modal.querySelector(
+      "#afCloseDateTimeSettings"
+    ).onclick = () => {
+
+modal.remove();
+    };
+
+
+modal.querySelector(
+      "#afSaveDateTimeSettings"
+    ).onclick = () => {
+
+saveAFSystemSettings({
+
+dateFormat:
+dateSelect.value,
+
+timeFormat:
+timeSelect.value
+
+      });
+
+
+      alert(
+        "Date & Time Format saved successfully.\n\n" +
+        "Date: " +
+dateSelect.value +
+        "\n" +
+        "Time: " +
+        (
+timeSelect.value === "12"
+            ? "12-Hour Clock"
+            : "24-Hour Clock"
+        )
+      );
+
+
+modal.remove();
+    };
+  }
+
+
+  /* =======================================================
+     CONNECT TO EXISTING SYSTEM SETTINGS
+     WITHOUT REPLACING systemSettings()
+     ======================================================= */
+
+  function connectToSystemSettings() {
+
+    /*
+     * Locate the existing System Settings
+     * using one of its known buttons.
+     */
+const teamButton =
+document.querySelector(
+        "#teamSettingsBtn"
+      );
+
+
+    if (!teamButton) {
+      return;
+    }
+
+
+const settingsModal =
+teamButton.closest(
+        'div[style*="position: fixed"], div[style*="position:fixed"]'
+      );
+
+
+    if (!settingsModal) {
+      return;
+    }
+
+
+    /*
+     * Do not add twice.
+     */
+    if (
+settingsModal.querySelector(
+        "#afDateTimeSettingsBtn"
+      )
+    ) {
+
+      return;
+    }
+
+
+    /*
+     * Director only.
+     */
+    let currentUser = null;
+
+
+    try {
+
+currentUser =
+JSON.parse(
+localStorage.getItem(
+            "currentUser"
+          ) || "null"
+        );
+
+    } catch (error) {
+
+currentUser = null;
+    }
+
+
+    if (
+      !currentUser ||
+currentUser.role !==
+        "Director"
+    ) {
+
+      return;
+    }
+
+
+const grid =
+teamButton.parentElement;
+
+
+    if (!grid) {
+      return;
+    }
+
+
+const button =
+document.createElement(
+        "button"
+      );
+
+
+button.id =
+      "afDateTimeSettingsBtn";
+
+
+    if (
+typeof systemSettingsButtonStyle ===
+      "function"
+    ) {
+
+button.style.cssText =
+systemSettingsButtonStyle();
+
+    } else {
+
+button.style.cssText = `
+        padding:16px;
+        border:1px solid #ddd;
+        border-radius:10px;
+background:white;
+cursor:pointer;
+text-align:left;
+      `;
+    }
+
+
+button.innerHTML = `
+📅
+<strong>
+        Date & Time Format
+</strong>
+
+<span>
+        Date format and 12/24-hour clock
+</span>
+    `;
+
+
+button.onclick =
+      function() {
+
+settingsModal.remove();
+
+manageAFDateTimeSettings();
+      };
+
+
+grid.appendChild(
+      button
+    );
+  }
+
+
+  /*
+   * System Settings is created dynamically,
+   * therefore watch for it safely.
+   */
+
+const observer =
+    new MutationObserver(
+      function() {
+
+connectToSystemSettings();
+      }
+    );
+
+
+observer.observe(
+document.body,
+    {
+childList:true,
+subtree:true
+    }
+  );
+
+
+connectToSystemSettings();
+
+
+  /* =======================================================
+     PUBLIC FUNCTIONS
+
+     Other modules can now use:
+
+formatAFDate(date)
+formatAFTime(time)
+formatAFDateTime(timestamp)
+
+     ======================================================= */
+
+window.getAFSystemSettings =
+getAFSystemSettings;
+
+
+window.saveAFSystemSettings =
+saveAFSystemSettings;
+
+
+window.formatAFDate =
+formatAFDate;
+
+
+window.formatAFTime =
+formatAFTime;
+
+
+window.formatAFDateTime =
+formatAFDateTime;
+
+
+window.manageAFDateTimeSettings =
+manageAFDateTimeSettings;
+
+
+})();
+/* =========================================================
+   A&F DATE & TIME DISPLAY SETTINGS
+   Director controlled
+   Storage: afSystemSettings
+
+   IMPORTANT:
+   These settings change DISPLAY only.
+   Stored dates remain YYYY-MM-DD for calculations,
+   sorting, attendance, production and reports.
+   ========================================================= */
+
+(function connectAFDateTimeSettings() {
+
+const STORAGE_KEY = "afSystemSettings";
+
+
+  /* =======================================================
+     READ SETTINGS
+     ======================================================= */
+
+  function getAFSystemSettings() {
+
+    let saved = {};
+
+    try {
+
+      saved = JSON.parse(
+localStorage.getItem(STORAGE_KEY) || "{}"
+      );
+
+    } catch (error) {
+
+      saved = {};
+    }
+
+
+    return {
+
+dateFormat:
+saved.dateFormat ||
+        "DD/MM/YYYY",
+
+timeFormat:
+saved.timeFormat ||
+        "12"
+    };
+  }
+
+
+  /* =======================================================
+     SAVE SETTINGS
+     ======================================================= */
+
+  function saveAFSystemSettings(settings) {
+
+const oldSettings =
+getAFSystemSettings();
+
+
+const combined = {
+      ...oldSettings,
+      ...settings
+    };
+
+
+localStorage.setItem(
+      STORAGE_KEY,
+JSON.stringify(combined)
+    );
+
+
+    return combined;
+  }
+
+
+  /* =======================================================
+     DATE PARSER
+     ======================================================= */
+
+  function parseAFDate(value) {
+
+    if (!value) {
+      return null;
+    }
+
+
+    if (
+      value instanceof Date
+    ) {
+
+      return Number.isNaN(
+value.getTime()
+      )
+        ? null
+        : value;
+    }
+
+
+const text =
+      String(value).trim();
+
+
+    /*
+     * YYYY-MM-DD
+     */
+const simpleMatch =
+text.match(
+        /^(\d{4})-(\d{2})-(\d{2})$/
+      );
+
+
+    if (simpleMatch) {
+
+      return new Date(
+        Number(simpleMatch[1]),
+        Number(simpleMatch[2]) - 1,
+        Number(simpleMatch[3])
+      );
+    }
+
+
+    /*
+     * ISO timestamp
+     */
+const parsed =
+      new Date(text);
+
+
+    if (
+Number.isNaN(
+parsed.getTime()
+      )
+    ) {
+
+      return null;
+    }
+
+
+    return parsed;
+  }
+
+
+  /* =======================================================
+     CENTRAL DATE FORMATTER
+     ======================================================= */
+
+  function formatAFDate(value) {
+
+const date =
+parseAFDate(value);
+
+
+    if (!date) {
+
+      return value
+        ? String(value)
+        : "";
+    }
+
+
+const settings =
+getAFSystemSettings();
+
+
+const day =
+      String(
+date.getDate()
+      ).padStart(2, "0");
+
+
+const month =
+      String(
+date.getMonth() + 1
+      ).padStart(2, "0");
+
+
+const year =
+      String(
+date.getFullYear()
+      );
+
+
+    switch (
+settings.dateFormat
+    ) {
+
+      case "MM/DD/YYYY":
+
+        return (
+          month +
+          "/" +
+          day +
+          "/" +
+          year
+        );
+
+
+      case "YYYY-MM-DD":
+
+        return (
+          year +
+          "-" +
+          month +
+          "-" +
+          day
+        );
+
+
+      case "DD/MM/YYYY":
+
+      default:
+
+        return (
+          day +
+          "/" +
+          month +
+          "/" +
+          year
+        );
+    }
+  }
+
+
+  /* =======================================================
+     CENTRAL TIME FORMATTER
+     Accepts:
+       HH:MM
+       HH:MM:SS
+       ISO timestamps
+       Date objects
+     ======================================================= */
+
+  function formatAFTime(value) {
+
+    if (!value) {
+      return "";
+    }
+
+
+const settings =
+getAFSystemSettings();
+
+
+    let hours = 0;
+    let minutes = 0;
+
+
+    /*
+     * Plain 24-hour stored time.
+     */
+const timeMatch =
+      String(value).match(
+        /^(\d{1,2}):(\d{2})(?::\d{2})?$/
+      );
+
+
+    if (timeMatch) {
+
+      hours =
+        Number(
+timeMatch[1]
+        );
+
+      minutes =
+        Number(
+timeMatch[2]
+        );
+
+    } else {
+
+const date =
+parseAFDate(value);
+
+
+      if (!date) {
+
+        return String(value);
+      }
+
+
+      hours =
+date.getHours();
+
+      minutes =
+date.getMinutes();
+    }
+
+
+const minuteText =
+      String(minutes)
+        .padStart(2, "0");
+
+
+    /*
+     * 24-HOUR CLOCK
+     */
+    if (
+settings.timeFormat ===
+      "24"
+    ) {
+
+      return (
+        String(hours)
+          .padStart(2, "0") +
+        ":" +
+minuteText
+      );
+    }
+
+
+    /*
+     * 12-HOUR CLOCK
+     */
+const period =
+      hours >= 12
+        ? "PM"
+        : "AM";
+
+
+    let displayHour =
+      hours % 12;
+
+
+    if (
+displayHour === 0
+    ) {
+
+displayHour = 12;
+    }
+
+
+    return (
+displayHour +
+      ":" +
+minuteText +
+      " " +
+      period
+    );
+  }
+
+
+  /* =======================================================
+     DATE + TIME FORMATTER
+     ======================================================= */
+
+  function formatAFDateTime(value) {
+
+    if (!value) {
+      return "";
+    }
+
+
+const date =
+parseAFDate(value);
+
+
+    if (!date) {
+
+      return String(value);
+    }
+
+
+    return (
+formatAFDate(date) +
+      ", " +
+formatAFTime(date)
+    );
+  }
+
+
+  /* =======================================================
+     OPEN DATE & TIME SETTINGS
+     DIRECTOR ONLY
+     ======================================================= */
+
+  function manageAFDateTimeSettings() {
+
+    let currentUser = null;
+
+
+    try {
+
+currentUser =
+JSON.parse(
+localStorage.getItem(
+            "currentUser"
+          ) || "null"
+        );
+
+    } catch (error) {
+
+currentUser = null;
+    }
+
+
+    if (
+      !currentUser ||
+currentUser.role !==
+        "Director"
+    ) {
+
+      alert(
+        "Access Denied\n\n" +
+        "Only the Director can change Date & Time Format settings."
+      );
+
+      return;
+    }
+
+
+const settings =
+getAFSystemSettings();
+
+
+const modal =
+document.createElement(
+        "div"
+      );
+
+
+modal.style.cssText = `
+position:fixed;
+      inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+align-items:center;
+justify-content:center;
+      z-index:100000;
+      padding:10px;
+font-family:Arial,sans-serif;
+    `;
+
+
+modal.innerHTML = `
+
+<div style="
+background:white;
+        width:560px;
+        max-width:95%;
+        max-height:92vh;
+overflow:auto;
+        border-radius:14px;
+        padding:24px;
+        box-shadow:
+          0 10px 40px
+rgba(0,0,0,.3);
+      ">
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:flex-start;
+          gap:12px;
+          margin-bottom:20px;
+        ">
+
+<div>
+
+<h2 style="
+              margin:0;
+              color:#0b5d3b;
+            ">
+              Date & Time Format
+</h2>
+
+<div style="
+              margin-top:5px;
+              color:#666;
+              font-size:13px;
+            ">
+              Company-wide display settings
+</div>
+
+</div>
+
+
+<button
+            id="afCloseDateTimeSettings"
+            type="button"
+            style="
+              border:0;
+              background:#eee;
+              padding:8px 12px;
+              border-radius:7px;
+cursor:pointer;
+font-weight:bold;
+            "
+>
+✕ Close
+</button>
+
+</div>
+
+
+<div style="
+          background:#eef8f2;
+          padding:12px;
+          border-radius:8px;
+          margin-bottom:20px;
+          font-size:13px;
+          line-height:1.5;
+        ">
+
+          Select how dates and times should appear
+          throughout the A&F system.
+
+<br><br>
+
+          Stored dates and times are not changed.
+          Only their display format is changed.
+
+</div>
+
+
+<label style="
+display:block;
+font-weight:bold;
+          margin-bottom:6px;
+        ">
+          Date Format
+</label>
+
+
+<select
+          id="afDateFormatSetting"
+          style="
+            width:100%;
+box-sizing:border-box;
+            padding:11px;
+            border:1px solid #ccc;
+            border-radius:8px;
+            margin-bottom:20px;
+background:white;
+          "
+>
+
+<option value="DD/MM/YYYY">
+            DD/MM/YYYY — 26/09/2026
+</option>
+
+<option value="MM/DD/YYYY">
+            MM/DD/YYYY — 09/26/2026
+</option>
+
+<option value="YYYY-MM-DD">
+            YYYY-MM-DD — 2026-09-26
+</option>
+
+</select>
+
+
+<label style="
+display:block;
+font-weight:bold;
+          margin-bottom:6px;
+        ">
+          Time Format
+</label>
+
+
+<select
+          id="afTimeFormatSetting"
+          style="
+            width:100%;
+box-sizing:border-box;
+            padding:11px;
+            border:1px solid #ccc;
+            border-radius:8px;
+            margin-bottom:20px;
+background:white;
+          "
+>
+
+<option value="12">
+            12-Hour Clock — 4:30 PM
+</option>
+
+<option value="24">
+            24-Hour Clock — 16:30
+</option>
+
+</select>
+
+
+<div
+          id="afDateTimePreview"
+          style="
+            padding:15px;
+            background:#f8f9f8;
+            border:1px solid #ddd;
+            border-radius:9px;
+            margin-bottom:20px;
+          "
+></div>
+
+
+<button
+          id="afSaveDateTimeSettings"
+          type="button"
+          style="
+            width:100%;
+            padding:12px;
+            border:0;
+            border-radius:8px;
+            background:#0b5d3b;
+color:white;
+font-weight:bold;
+cursor:pointer;
+          "
+>
+          Save Date & Time Settings
+</button>
+
+</div>
+    `;
+
+
+document.body.appendChild(
+      modal
+    );
+
+
+const dateSelect =
+modal.querySelector(
+        "#afDateFormatSetting"
+      );
+
+
+const timeSelect =
+modal.querySelector(
+        "#afTimeFormatSetting"
+      );
+
+
+const preview =
+modal.querySelector(
+        "#afDateTimePreview"
+      );
+
+
+dateSelect.value =
+settings.dateFormat;
+
+
+timeSelect.value =
+settings.timeFormat;
+
+
+    function updatePreview() {
+
+const exampleDate =
+        new Date(
+          2026,
+          8,
+          26,
+          16,
+          30
+        );
+
+
+const day = "26";
+const month = "09";
+const year = "2026";
+
+
+      let dateText = "";
+
+
+      if (
+dateSelect.value ===
+        "MM/DD/YYYY"
+      ) {
+
+dateText =
+          month +
+          "/" +
+          day +
+          "/" +
+          year;
+
+      } else if (
+dateSelect.value ===
+        "YYYY-MM-DD"
+      ) {
+
+dateText =
+          year +
+          "-" +
+          month +
+          "-" +
+          day;
+
+      } else {
+
+dateText =
+          day +
+          "/" +
+          month +
+          "/" +
+          year;
+      }
+
+
+      let timeText = "";
+
+
+      if (
+timeSelect.value ===
+        "24"
+      ) {
+
+timeText = "16:30";
+
+      } else {
+
+timeText = "4:30 PM";
+      }
+
+
+preview.innerHTML = `
+
+<div style="
+          font-size:12px;
+          color:#666;
+          margin-bottom:5px;
+        ">
+          Preview
+</div>
+
+<div style="
+          font-size:20px;
+font-weight:bold;
+          color:#0b5d3b;
+        ">
+          ${dateText} • ${timeText}
+</div>
+      `;
+    }
+
+
+dateSelect.onchange =
+updatePreview;
+
+
+timeSelect.onchange =
+updatePreview;
+
+
+updatePreview();
+
+
+modal.querySelector(
+      "#afCloseDateTimeSettings"
+    ).onclick = () => {
+
+modal.remove();
+    };
+
+
+modal.querySelector(
+      "#afSaveDateTimeSettings"
+    ).onclick = () => {
+
+saveAFSystemSettings({
+
+dateFormat:
+dateSelect.value,
+
+timeFormat:
+timeSelect.value
+
+      });
+
+
+      alert(
+        "Date & Time Format saved successfully.\n\n" +
+        "Date: " +
+dateSelect.value +
+        "\n" +
+        "Time: " +
+        (
+timeSelect.value === "12"
+            ? "12-Hour Clock"
+            : "24-Hour Clock"
+        )
+      );
+
+
+modal.remove();
+    };
+  }
+
+
+  /* =======================================================
+     CONNECT TO EXISTING SYSTEM SETTINGS
+     WITHOUT REPLACING systemSettings()
+     ======================================================= */
+
+  function connectToSystemSettings() {
+
+    /*
+     * Locate the existing System Settings
+     * using one of its known buttons.
+     */
+const teamButton =
+document.querySelector(
+        "#teamSettingsBtn"
+      );
+
+
+    if (!teamButton) {
+      return;
+    }
+
+
+const settingsModal =
+teamButton.closest(
+        'div[style*="position: fixed"], div[style*="position:fixed"]'
+      );
+
+
+    if (!settingsModal) {
+      return;
+    }
+
+
+    /*
+     * Do not add twice.
+     */
+    if (
+settingsModal.querySelector(
+        "#afDateTimeSettingsBtn"
+      )
+    ) {
+
+      return;
+    }
+
+
+    /*
+     * Director only.
+     */
+    let currentUser = null;
+
+
+    try {
+
+currentUser =
+JSON.parse(
+localStorage.getItem(
+            "currentUser"
+          ) || "null"
+        );
+
+    } catch (error) {
+
+currentUser = null;
+    }
+
+
+    if (
+      !currentUser ||
+currentUser.role !==
+        "Director"
+    ) {
+
+      return;
+    }
+
+
+const grid =
+teamButton.parentElement;
+
+
+    if (!grid) {
+      return;
+    }
+
+
+const button =
+document.createElement(
+        "button"
+      );
+
+
+button.id =
+      "afDateTimeSettingsBtn";
+
+
+    if (
+typeof systemSettingsButtonStyle ===
+      "function"
+    ) {
+
+button.style.cssText =
+systemSettingsButtonStyle();
+
+    } else {
+
+button.style.cssText = `
+        padding:16px;
+        border:1px solid #ddd;
+        border-radius:10px;
+background:white;
+cursor:pointer;
+text-align:left;
+      `;
+    }
+
+
+button.innerHTML = `
+📅
+<strong>
+        Date & Time Format
+</strong>
+
+<span>
+        Date format and 12/24-hour clock
+</span>
+    `;
+
+
+button.onclick =
+      function() {
+
+settingsModal.remove();
+
+manageAFDateTimeSettings();
+      };
+
+
+grid.appendChild(
+      button
+    );
+  }
+
+
+  /*
+   * System Settings is created dynamically,
+   * therefore watch for it safely.
+   */
+
+const observer =
+    new MutationObserver(
+      function() {
+
+connectToSystemSettings();
+      }
+    );
+
+
+observer.observe(
+document.body,
+    {
+childList:true,
+subtree:true
+    }
+  );
+
+
+connectToSystemSettings();
+
+
+  /* =======================================================
+     PUBLIC FUNCTIONS
+
+     Other modules can now use:
+
+formatAFDate(date)
+formatAFTime(time)
+formatAFDateTime(timestamp)
+
+     ======================================================= */
+
+window.getAFSystemSettings =
+getAFSystemSettings;
+
+
+window.saveAFSystemSettings =
+saveAFSystemSettings;
+
+
+window.formatAFDate =
+formatAFDate;
+
+
+window.formatAFTime =
+formatAFTime;
+
+
+window.formatAFDateTime =
+formatAFDateTime;
+
+
+window.manageAFDateTimeSettings =
+manageAFDateTimeSettings;
+
+
+})();
