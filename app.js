@@ -1,8 +1,4 @@
-/* =========================================================
-   A&F STAFF & HR LOGIN SCREEN
-   ========================================================= */
-
-function showAFLoginScreen() {
+/* ==============================================T
 
   /* Remove any existing login screen */
 const oldLogin = document.getElementById("afLoginScreen");
@@ -32188,8 +32184,10 @@ record.achievementPercent || 0
 <td>
                     ${
 escapeText(
-record.date
-                      )
+typeof window.formatAFDate === "function"
+    ? window.formatAFDate(record.date)
+    : record.date
+)
                     }
 </td>
 
