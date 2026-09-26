@@ -33571,3 +33571,2460 @@ connectTargetToOpenProduction;
 
 
 })();
+
+/* =========================================================
+   A&F EMPLOYEE PERFORMANCE & RANKINGS
+   Actual records only
+   Output 50%
+   Attendance & Punctuality 25%
+   Waste / Efficiency 15%
+   Quality & Discipline 10%
+
+   IMPORTANT:
+   - Unassigned activities are N/A, not zero.
+   - Applicable weights are normalized fairly.
+   - Washing and Production only affect employees
+     who actually participated.
+   ========================================================= */
+
+(function connectAFEmployeePerformanceRankings() {
+
+  /* =======================================================
+     BASIC HELPERS
+     ======================================================= */
+
+  function readArray(key) {
+
+    try {
+
+const value =
+JSON.parse(
+localStorage.getItem(key) || "[]"
+        );
+
+      return Array.isArray(value)
+        ? value
+        : [];
+
+    } catch (error) {
+
+console.error(
+        "Performance data read error:",
+        key,
+        error
+      );
+
+      return [];
+    }
+  }
+
+
+  function getCurrentUser() {
+
+    try {
+
+      return JSON.parse(
+localStorage.getItem(
+          "currentUser"
+        ) || "null"
+      );
+
+    } catch (error) {
+
+      return null;
+    }
+  }
+
+
+  function escapeText(value) {
+
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+
+  function number(value) {
+
+const result =
+      Number(value);
+
+    return Number.isFinite(result)
+      ? result
+      : 0;
+  }
+
+
+  function round(value, decimals = 1) {
+
+const factor =
+Math.pow(10, decimals);
+
+    return (
+Math.round(
+        number(value) * factor
+      ) / factor
+    );
+  }
+
+
+  function clampScore(value) {
+
+    return Math.max(
+      0,
+Math.min(
+        number(value),
+        100
+      )
+    );
+  }
+
+
+  function localDateString(date) {
+
+const value =
+      date || new Date();
+
+const year =
+value.getFullYear();
+
+const month =
+      String(
+value.getMonth() + 1
+      ).padStart(2, "0");
+
+const day =
+      String(
+value.getDate()
+      ).padStart(2, "0");
+
+    return (
+      year +
+      "-" +
+      month +
+      "-" +
+      day
+    );
+  }
+
+
+  function parseLocalDate(value) {
+
+    if (!value) {
+      return null;
+    }
+
+const clean =
+      String(value).slice(0, 10);
+
+const parts =
+clean.split("-");
+
+    if (parts.length !== 3) {
+      return null;
+    }
+
+const date =
+      new Date(
+        Number(parts[0]),
+        Number(parts[1]) - 1,
+        Number(parts[2])
+      );
+
+    return Number.isNaN(
+date.getTime()
+    )
+      ? null
+      : date;
+  }
+
+
+  function recordDate(record) {
+
+    return String(
+record.date ||
+record.attendanceDate ||
+record.assessmentDate ||
+record.completedAt ||
+record.recordedAt ||
+record.createdAt ||
+      ""
+    ).slice(0, 10);
+  }
+
+
+  function dateWithin(
+    value,
+    start,
+    end
+  ) {
+
+    if (!value) {
+      return false;
+    }
+
+const date =
+      String(value).slice(0, 10);
+
+    return (
+      date >= start &&
+      date <= end
+    );
+  }
+
+
+  function rangesOverlap(
+    start1,
+    end1,
+    start2,
+    end2
+  ) {
+
+    return (
+      String(start1) <=
+        String(end2) &&
+      String(end1) >=
+        String(start2)
+    );
+  }
+
+
+  /* =======================================================
+     PERIOD HELPERS
+     ======================================================= */
+
+  function getPeriodRange(
+periodType,
+selectedDate
+  ) {
+
+const base =
+parseLocalDate(
+selectedDate
+      ) || new Date();
+
+
+    if (
+periodType === "today"
+    ) {
+
+const day =
+localDateString(base);
+
+      return {
+        start: day,
+        end: day,
+        label: day
+      };
+    }
+
+
+    if (
+periodType === "week"
+    ) {
+
+const start =
+        new Date(base);
+
+const day =
+start.getDay();
+
+const difference =
+        day === 0
+          ? -6
+          : 1 - day;
+
+start.setDate(
+start.getDate() +
+        difference
+      );
+
+
+const end =
+        new Date(start);
+
+end.setDate(
+end.getDate() + 6
+      );
+
+
+      return {
+
+        start:
+localDateString(start),
+
+        end:
+localDateString(end),
+
+        label:
+localDateString(start) +
+          " to " +
+localDateString(end)
+      };
+    }
+
+
+const start =
+      new Date(
+base.getFullYear(),
+base.getMonth(),
+        1
+      );
+
+
+const end =
+      new Date(
+base.getFullYear(),
+base.getMonth() + 1,
+        0
+      );
+
+
+    return {
+
+      start:
+localDateString(start),
+
+      end:
+localDateString(end),
+
+      label:
+start.toLocaleString(
+          undefined,
+          {
+            month: "long",
+            year: "numeric"
+          }
+        )
+    };
+  }
+
+
+  /* =======================================================
+     SETTINGS
+     ======================================================= */
+
+  function getPerformanceWeights() {
+
+    if (
+typeof getTeamPerformanceSettings ===
+      "function"
+    ) {
+
+const settings =
+getTeamPerformanceSettings();
+
+      return {
+
+        output:
+          number(
+settings.outputWeight
+          ) || 50,
+
+        attendance:
+          number(
+settings.attendanceWeight
+          ) || 25,
+
+        waste:
+          number(
+settings.wasteWeight
+          ) || 15,
+
+        quality:
+          number(
+settings.qualityWeight
+          ) || 10
+      };
+    }
+
+
+    return {
+      output: 50,
+      attendance: 25,
+      waste: 15,
+      quality: 10
+    };
+  }
+
+
+  /* =======================================================
+     EMPLOYEE / TEAM HELPERS
+     ======================================================= */
+
+  function getEmployees() {
+
+    return readArray(
+      "employees"
+    );
+  }
+
+
+  function getActiveEmployees() {
+
+    return getEmployees()
+      .filter(
+        employee =>
+          String(
+employee.employmentStatus ||
+            ""
+          ).toLowerCase() ===
+          "active"
+      );
+  }
+
+
+  function getTeams() {
+
+    return readArray(
+      "factoryTeams"
+    );
+  }
+
+
+  function getEmployeeTeam(
+employeeId
+  ) {
+
+    return getTeams()
+      .find(
+        team => {
+
+          if (
+            String(
+team.status || ""
+            ).toLowerCase() !==
+            "active"
+          ) {
+            return false;
+          }
+
+
+          if (
+            String(
+team.leaderEmployeeId ||
+              ""
+            ) ===
+            String(employeeId)
+          ) {
+            return true;
+          }
+
+
+          return (
+Array.isArray(
+team.memberEmployeeIds
+            ) &&
+team.memberEmployeeIds
+              .some(
+                id =>
+                  String(id) ===
+                  String(employeeId)
+              )
+          );
+        }
+      ) || null;
+  }
+
+
+  /* =======================================================
+     PARTICIPATION HELPERS
+     ======================================================= */
+
+  function employeeInWashing(
+    record,
+employeeId
+  ) {
+
+    if (
+Array.isArray(
+record.staffEmployeeIds
+      )
+    ) {
+
+      return record.staffEmployeeIds
+        .some(
+          id =>
+            String(id) ===
+            String(employeeId)
+        );
+    }
+
+
+    if (
+Array.isArray(
+record.staffEmployees
+      )
+    ) {
+
+      return record.staffEmployees
+        .some(
+          person =>
+            String(
+person.employeeId ||
+              ""
+            ) ===
+            String(employeeId)
+        );
+    }
+
+
+    return false;
+  }
+
+
+  function employeeInProduction(
+    record,
+employeeId
+  ) {
+
+    if (
+Array.isArray(
+record.staffEmployeeIds
+      )
+    ) {
+
+      return record.staffEmployeeIds
+        .some(
+          id =>
+            String(id) ===
+            String(employeeId)
+        );
+    }
+
+
+    if (
+Array.isArray(
+record.staffWorked
+      )
+    ) {
+
+      return record.staffWorked
+        .some(
+          person =>
+            String(
+person.employeeId ||
+              ""
+            ) ===
+            String(employeeId)
+        );
+    }
+
+
+    return false;
+  }
+
+
+  /* =======================================================
+     OUTPUT SCORE - 50%
+     Washing and Production achievement.
+     Only activities actually worked count.
+     ======================================================= */
+
+  function calculateOutputScore(
+employeeId,
+    range
+  ) {
+
+const washing =
+readArray(
+        "washingShiftRecords"
+      )
+      .filter(
+        record => {
+
+const completed =
+            String(
+record.targetStatus ||
+              ""
+            ).toUpperCase() ===
+              "COMPLETED" ||
+record.washingComplete ===
+              true;
+
+
+          return (
+            completed &&
+dateWithin(
+recordDate(record),
+range.start,
+range.end
+            ) &&
+employeeInWashing(
+              record,
+employeeId
+            )
+          );
+        }
+      );
+
+
+const production =
+readArray(
+        "productionRecords"
+      )
+      .filter(
+        record => {
+
+const completed =
+            String(
+record.productionStatus ||
+record.status ||
+              ""
+            ).toUpperCase() ===
+              "COMPLETED";
+
+
+          return (
+            completed &&
+dateWithin(
+recordDate(record),
+range.start,
+range.end
+            ) &&
+employeeInProduction(
+              record,
+employeeId
+            )
+          );
+        }
+      );
+
+
+const activityScores = [];
+
+
+washing.forEach(
+      record => {
+
+const target =
+          number(
+record.targetKg
+          );
+
+const actual =
+          number(
+record.actualWashedKg
+          );
+
+
+        if (target > 0) {
+
+activityScores.push({
+
+            type:
+              "Washing",
+
+            score:
+clampScore(
+                (
+                  actual /
+                  target
+                ) * 100
+              )
+          });
+        }
+      }
+    );
+
+
+production.forEach(
+      record => {
+
+const target =
+          number(
+record.productionTargetPoles
+          );
+
+const actual =
+          number(
+record.totalPoles
+          );
+
+
+        if (target > 0) {
+
+activityScores.push({
+
+            type:
+              "Production",
+
+            score:
+clampScore(
+                (
+                  actual /
+                  target
+                ) * 100
+              )
+          });
+        }
+      }
+    );
+
+
+    if (!activityScores.length) {
+
+      return {
+
+        applicable: false,
+        score: null,
+washingCount:
+washing.length,
+productionCount:
+production.length,
+activityCount: 0
+      };
+    }
+
+
+const total =
+activityScores.reduce(
+        (sum, item) =>
+          sum + item.score,
+        0
+      );
+
+
+    return {
+
+      applicable: true,
+
+      score:
+        round(
+          total /
+activityScores.length,
+          1
+        ),
+
+washingCount:
+washing.length,
+
+productionCount:
+production.length,
+
+activityCount:
+activityScores.length
+    };
+  }
+
+
+  /* =======================================================
+     ATTENDANCE & PUNCTUALITY - 25%
+
+     Only saved attendance records count.
+     No attendance record = N/A, not zero.
+
+     Present day:
+       working-time score based on scheduled
+       time versus shortfall.
+
+     Absent day:
+       0 for that recorded day.
+
+     Late / early leave are already reflected
+     through shortfall where applicable.
+     ======================================================= */
+
+  function calculateAttendanceScore(
+employeeId,
+    range
+  ) {
+
+const records =
+readArray(
+        "attendanceRecords"
+      )
+      .filter(
+        record =>
+          String(
+record.employeeId ||
+            ""
+          ) ===
+            String(employeeId) &&
+
+dateWithin(
+recordDate(record),
+range.start,
+range.end
+          )
+      );
+
+
+    if (!records.length) {
+
+      return {
+
+        applicable: false,
+        score: null,
+recordedDays: 0,
+presentDays: 0,
+absentDays: 0
+      };
+    }
+
+
+const dailyScores = [];
+
+
+    let presentDays = 0;
+    let absentDays = 0;
+
+
+records.forEach(
+      record => {
+
+const status =
+          String(
+record.status || ""
+          ).toLowerCase();
+
+
+        if (
+          status === "absent"
+        ) {
+
+absentDays++;
+
+dailyScores.push(0);
+
+          return;
+        }
+
+
+        if (
+          status !== "present"
+        ) {
+          return;
+        }
+
+
+presentDays++;
+
+
+const worked =
+          number(
+record.workedMinutes
+          );
+
+
+const shortfall =
+          number(
+record.shortfallMinutes
+          );
+
+
+        /*
+         * Scheduled minutes can be reconstructed
+         * from worked + shortfall where attendance
+         * has already calculated the day's time.
+         */
+const expected =
+          worked +
+          shortfall;
+
+
+        let score = 100;
+
+
+        if (expected > 0) {
+
+          score =
+            (
+              worked /
+              expected
+            ) * 100;
+        }
+
+
+        /*
+         * Never award more than 100% attendance.
+         * Overtime is not used to inflate attendance.
+         */
+dailyScores.push(
+clampScore(score)
+        );
+      }
+    );
+
+
+    if (!dailyScores.length) {
+
+      return {
+
+        applicable: false,
+        score: null,
+recordedDays:
+records.length,
+presentDays,
+absentDays
+      };
+    }
+
+
+const average =
+dailyScores.reduce(
+        (sum, value) =>
+          sum + value,
+        0
+      ) /
+dailyScores.length;
+
+
+    return {
+
+      applicable: true,
+
+      score:
+        round(
+          average,
+          1
+        ),
+
+recordedDays:
+dailyScores.length,
+
+presentDays,
+
+absentDays
+    };
+  }
+
+
+  /* =======================================================
+     WASTE / EFFICIENCY - 15%
+
+     Currently derived from production recovery.
+     Only employees who actually worked that
+     production run receive this component.
+
+     Washing-only staff are not penalized.
+     ======================================================= */
+
+  function calculateWasteScore(
+employeeId,
+    range
+  ) {
+
+const records =
+readArray(
+        "productionRecords"
+      )
+      .filter(
+        record => {
+
+const completed =
+            String(
+record.productionStatus ||
+record.status ||
+              ""
+            ).toUpperCase() ===
+              "COMPLETED";
+
+
+          return (
+            completed &&
+dateWithin(
+recordDate(record),
+range.start,
+range.end
+            ) &&
+employeeInProduction(
+              record,
+employeeId
+            )
+          );
+        }
+      );
+
+
+const scores =
+      records
+        .map(
+          record => {
+
+            let recovery =
+              number(
+record.productionRecoveryPercent
+              );
+
+
+            if (
+              recovery <= 0
+            ) {
+
+const input =
+                number(
+record.productionInputKg
+                );
+
+const finished =
+                number(
+record.productionWeight
+                );
+
+
+              if (input > 0) {
+
+                recovery =
+                  (
+                    finished /
+                    input
+                  ) * 100;
+              }
+            }
+
+
+            return recovery;
+          }
+        )
+        .filter(
+          value =>
+            value >= 0 &&
+Number.isFinite(value)
+        );
+
+
+    if (!scores.length) {
+
+      return {
+
+        applicable: false,
+        score: null,
+productionRuns: 0
+      };
+    }
+
+
+const average =
+scores.reduce(
+        (sum, value) =>
+          sum +
+clampScore(value),
+        0
+      ) /
+scores.length;
+
+
+    return {
+
+      applicable: true,
+
+      score:
+        round(
+          average,
+          1
+        ),
+
+productionRuns:
+scores.length
+    };
+  }
+
+
+  /* =======================================================
+     QUALITY & DISCIPLINE - 10%
+     Weekly assessments overlapping selected period.
+     ======================================================= */
+
+  function calculateQualityScore(
+employeeId,
+    range
+  ) {
+
+const records =
+readArray(
+        "afQualityDisciplineRecords"
+      )
+      .filter(
+        record => {
+
+          if (
+            String(
+record.employeeId ||
+              ""
+            ) !==
+            String(employeeId)
+          ) {
+            return false;
+          }
+
+
+          if (
+            String(
+record.status ||
+              ""
+            ).toUpperCase() ===
+            "CANCELLED"
+          ) {
+            return false;
+          }
+
+
+const weekStart =
+            String(
+record.weekStart ||
+record.assessmentDate ||
+              ""
+            ).slice(0, 10);
+
+
+const weekEnd =
+            String(
+record.weekEnd ||
+record.weekStart ||
+record.assessmentDate ||
+              ""
+            ).slice(0, 10);
+
+
+          if (
+            !weekStart ||
+            !weekEnd
+          ) {
+            return false;
+          }
+
+
+          return rangesOverlap(
+weekStart,
+weekEnd,
+range.start,
+range.end
+          );
+        }
+      );
+
+
+    if (!records.length) {
+
+      return {
+
+        applicable: false,
+        score: null,
+assessmentCount: 0
+      };
+    }
+
+
+const scores =
+      records
+        .map(
+          record =>
+clampScore(
+              number(
+record.totalScore ??
+record.qualityDisciplinePercent
+              )
+            )
+        );
+
+
+const average =
+scores.reduce(
+        (sum, value) =>
+          sum + value,
+        0
+      ) /
+scores.length;
+
+
+    return {
+
+      applicable: true,
+
+      score:
+        round(
+          average,
+          1
+        ),
+
+assessmentCount:
+scores.length
+    };
+  }
+
+
+  /* =======================================================
+     FINAL EMPLOYEE SCORE
+
+     Fair normalization:
+     Only applicable components enter denominator.
+
+     Example:
+       Output 50%
+       Attendance 25%
+       Quality 10%
+       Waste N/A
+
+     Applicable weight = 85
+
+     Final score =
+       earned weighted points / 85 × 100
+
+     Therefore an employee is NOT given zero
+     for work that was never assigned.
+     ======================================================= */
+
+  function calculateEmployeePerformance(
+    employee,
+    range
+  ) {
+
+const weights =
+getPerformanceWeights();
+
+
+const output =
+calculateOutputScore(
+employee.employeeId,
+        range
+      );
+
+
+const attendance =
+calculateAttendanceScore(
+employee.employeeId,
+        range
+      );
+
+
+const waste =
+calculateWasteScore(
+employee.employeeId,
+        range
+      );
+
+
+const quality =
+calculateQualityScore(
+employee.employeeId,
+        range
+      );
+
+
+const components = [
+
+      {
+        key: "output",
+        weight: weights.output,
+        result: output
+      },
+
+      {
+        key: "attendance",
+        weight: weights.attendance,
+        result: attendance
+      },
+
+      {
+        key: "waste",
+        weight: weights.waste,
+        result: waste
+      },
+
+      {
+        key: "quality",
+        weight: weights.quality,
+        result: quality
+      }
+
+    ];
+
+
+    let applicableWeight = 0;
+    let weightedPoints = 0;
+
+
+components.forEach(
+      component => {
+
+        if (
+component.result.applicable
+        ) {
+
+applicableWeight +=
+component.weight;
+
+
+weightedPoints +=
+            (
+component.result.score /
+              100
+            ) *
+component.weight;
+        }
+      }
+    );
+
+
+const finalScore =
+applicableWeight> 0
+
+        ? (
+weightedPoints /
+applicableWeight
+          ) * 100
+
+        : null;
+
+
+const team =
+getEmployeeTeam(
+employee.employeeId
+      );
+
+
+    return {
+
+employeeId:
+employee.employeeId,
+
+employeeName:
+employee.fullName ||
+employee.employeeName ||
+employee.employeeId,
+
+      role:
+employee.role || "",
+
+      department:
+employee.department || "",
+
+passportPhoto:
+employee.passportPhoto || "",
+
+teamId:
+        team
+          ? team.id || ""
+          : "",
+
+teamName:
+        team
+          ? team.name || ""
+          : "",
+
+      output,
+
+      attendance,
+
+      waste,
+
+      quality,
+
+applicableWeight:
+        round(
+applicableWeight,
+          1
+        ),
+
+finalScore:
+finalScore === null
+          ? null
+          : round(
+finalScore,
+              1
+            )
+    };
+  }
+
+
+  /* =======================================================
+     RATING
+     ======================================================= */
+
+  function getPerformanceRating(
+    score
+  ) {
+
+    if (
+      score === null ||
+      score === undefined
+    ) {
+      return "No Data";
+    }
+
+
+const value =
+      number(score);
+
+
+    if (value >= 90) {
+      return "Excellent";
+    }
+
+    if (value >= 70) {
+      return "Good";
+    }
+
+    if (value >= 50) {
+      return "Fair";
+    }
+
+    if (value >= 30) {
+      return "Poor";
+    }
+
+    return "Very Poor";
+  }
+
+
+  /* =======================================================
+     GENERATE RANKINGS
+     ======================================================= */
+
+  function calculateRankings(
+periodType,
+selectedDate
+  ) {
+
+const range =
+getPeriodRange(
+periodType,
+selectedDate
+      );
+
+
+    let employees =
+getActiveEmployees();
+
+
+const currentUser =
+getCurrentUser();
+
+
+    /*
+     * Employee can only see himself.
+     */
+    if (
+currentUser&&
+currentUser.role ===
+        "Employee"
+    ) {
+
+      employees =
+employees.filter(
+          employee =>
+            String(
+employee.employeeId
+            ) ===
+            String(
+currentUser.employeeId
+            )
+        );
+    }
+
+
+const results =
+      employees
+        .map(
+          employee =>
+calculateEmployeePerformance(
+              employee,
+              range
+            )
+        )
+        .filter(
+          result =>
+result.finalScore !==
+            null
+        )
+        .sort(
+          (a, b) => {
+
+            if (
+b.finalScore !==
+a.finalScore
+            ) {
+
+              return (
+b.finalScore -
+a.finalScore
+              );
+            }
+
+
+            return String(
+a.employeeName
+            ).localeCompare(
+              String(
+b.employeeName
+              )
+            );
+          }
+        );
+
+
+    let previousScore = null;
+    let previousRank = 0;
+
+
+results.forEach(
+      (result, index) => {
+
+        if (
+previousScore !== null &&
+result.finalScore ===
+previousScore
+        ) {
+
+result.rank =
+previousRank;
+
+        } else {
+
+result.rank =
+            index + 1;
+
+previousRank =
+result.rank;
+        }
+
+
+previousScore =
+result.finalScore;
+      }
+    );
+
+
+    return {
+      range,
+      results
+    };
+  }
+
+
+  /* =======================================================
+     DISPLAY HELPERS
+     ======================================================= */
+
+  function componentDisplay(
+    component
+  ) {
+
+    if (
+      !component ||
+      !component.applicable
+    ) {
+
+      return `
+<span style="
+          color:#888;
+font-weight:normal;
+        ">
+          N/A
+</span>
+      `;
+    }
+
+
+    return `
+<strong>
+        ${round(component.score, 1).toFixed(1)}%
+</strong>
+    `;
+  }
+
+
+  function photoHTML(
+    result
+  ) {
+
+    if (
+result.passportPhoto
+    ) {
+
+      return `
+<img
+src="${escapeText(
+result.passportPhoto
+          )}"
+          alt=""
+          style="
+            width:42px;
+            height:42px;
+object-fit:cover;
+            border-radius:50%;
+            border:1px solid #ddd;
+            flex:0 0 auto;
+          "
+>
+      `;
+    }
+
+
+    return `
+<div style="
+        width:42px;
+        height:42px;
+        border-radius:50%;
+        background:#eef3ef;
+display:flex;
+align-items:center;
+justify-content:center;
+        font-size:20px;
+        flex:0 0 auto;
+      ">
+👤
+</div>
+    `;
+  }
+
+
+  /* =======================================================
+     PERFORMANCE & RANKINGS WINDOW
+     ======================================================= */
+
+  function openAFEmployeePerformanceRankings() {
+
+const currentUser =
+getCurrentUser();
+
+
+    if (!currentUser) {
+
+      alert(
+        "Please log in first."
+      );
+
+      return;
+    }
+
+
+const allowedRoles = [
+      "Director",
+      "Manager",
+      "HR",
+      "Secretary",
+      "Team Leader",
+      "Employee"
+    ];
+
+
+    if (
+      !allowedRoles.includes(
+currentUser.role
+      )
+    ) {
+
+      alert(
+        "Access Denied."
+      );
+
+      return;
+    }
+
+
+const modal =
+document.createElement("div");
+
+
+modal.id =
+      "afEmployeePerformanceRankingsModal";
+
+
+modal.style.cssText = `
+position:fixed;
+      inset:0;
+background:rgba(0,0,0,.58);
+display:flex;
+align-items:center;
+justify-content:center;
+      z-index:100000;
+      padding:10px;
+font-family:Arial,sans-serif;
+    `;
+
+
+modal.innerHTML = `
+
+<div style="
+background:white;
+        width:1180px;
+        max-width:98%;
+        max-height:94vh;
+overflow:auto;
+        border-radius:14px;
+        padding:24px;
+        box-shadow:
+          0 12px 40px
+rgba(0,0,0,.3);
+      ">
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:flex-start;
+          gap:15px;
+flex-wrap:wrap;
+          margin-bottom:18px;
+        ">
+
+<div>
+
+<h2 style="
+              margin:0;
+              color:#0b5d3b;
+            ">
+              Employee Performance & Rankings
+</h2>
+
+<div style="
+              color:#666;
+              font-size:13px;
+              margin-top:5px;
+            ">
+              Actual factory and HR records only
+</div>
+
+</div>
+
+
+<button
+            id="afClosePerformanceRankings"
+            type="button"
+            style="
+              padding:9px 16px;
+              border:0;
+              border-radius:8px;
+              background:#555;
+color:white;
+cursor:pointer;
+            "
+>
+✕ Close
+</button>
+
+</div>
+
+
+<div style="
+          background:#eef8f2;
+          border:1px solid #d1e7d9;
+          padding:13px;
+          border-radius:9px;
+          margin-bottom:16px;
+          font-size:13px;
+          line-height:1.55;
+        ">
+
+<strong>Performance Weights:</strong>
+
+          Output 50% •
+          Attendance & Punctuality 25% •
+          Waste / Efficiency 15% •
+          Quality & Discipline 10%
+
+<br>
+
+<span style="color:#555;">
+            An activity the employee did not participate in
+            is shown as N/A and does not reduce the employee's score.
+</span>
+
+</div>
+
+
+<div style="
+display:grid;
+          grid-template-columns:
+minmax(150px,1fr)
+minmax(180px,1fr)
+minmax(160px,1fr);
+          gap:12px;
+          margin-bottom:16px;
+        ">
+
+<div>
+
+<label style="
+display:block;
+              font-size:12px;
+font-weight:bold;
+              margin-bottom:5px;
+            ">
+              Period
+</label>
+
+<select
+              id="afPerformancePeriod"
+              style="
+                width:100%;
+box-sizing:border-box;
+                padding:10px;
+                border:1px solid #ccc;
+                border-radius:8px;
+              "
+>
+<option value="today">
+                Today
+</option>
+
+<option value="week" selected>
+                Week
+</option>
+
+<option value="month">
+                Month
+</option>
+</select>
+
+</div>
+
+
+<div>
+
+<label style="
+display:block;
+              font-size:12px;
+font-weight:bold;
+              margin-bottom:5px;
+            ">
+              Select Date
+</label>
+
+<input
+              id="afPerformanceDate"
+              type="date"
+              value="${localDateString()}"
+              style="
+                width:100%;
+box-sizing:border-box;
+                padding:9px;
+                border:1px solid #ccc;
+                border-radius:8px;
+              "
+>
+
+</div>
+
+
+<div style="
+display:flex;
+align-items:flex-end;
+          ">
+
+<button
+              id="afRefreshPerformance"
+              type="button"
+              style="
+                width:100%;
+                padding:10px;
+                border:0;
+                border-radius:8px;
+                background:#0b5d3b;
+color:white;
+font-weight:bold;
+cursor:pointer;
+              "
+>
+              Calculate Rankings
+</button>
+
+</div>
+
+</div>
+
+
+<div
+          id="afPerformancePeriodLabel"
+          style="
+font-weight:bold;
+            color:#333;
+            margin-bottom:12px;
+          "
+></div>
+
+
+<div
+          id="afPerformanceSummary"
+          style="
+display:grid;
+            grid-template-columns:
+              repeat(3,minmax(160px,1fr));
+            gap:10px;
+            margin-bottom:16px;
+          "
+></div>
+
+
+<div style="
+overflow:auto;
+          border:1px solid #ddd;
+          border-radius:9px;
+        ">
+
+<table style="
+            width:100%;
+            min-width:1050px;
+border-collapse:collapse;
+            font-size:13px;
+          ">
+
+<thead>
+
+<tr style="
+                background:#eaf5ee;
+text-align:left;
+              ">
+
+<th>Rank</th>
+<th>Employee</th>
+<th>Team</th>
+<th>Output<br>50%</th>
+<th>Attendance<br>25%</th>
+<th>Efficiency<br>15%</th>
+<th>Quality & Discipline<br>10%</th>
+<th>Applicable Weight</th>
+<th>Final Score</th>
+<th>Rating</th>
+
+</tr>
+
+</thead>
+
+
+<tbody
+              id="afPerformanceRows"
+></tbody>
+
+</table>
+
+</div>
+
+
+<div style="
+          margin-top:14px;
+          padding:12px;
+          background:#fff8e6;
+          border:1px solid #ead7a0;
+          border-radius:8px;
+          font-size:12px;
+          color:#66521e;
+          line-height:1.5;
+        ">
+
+<strong>Fairness Rule:</strong>
+
+          N/A means there was no applicable saved activity for that
+          employee during the selected period. N/A is not treated as zero.
+
+          Rankings only include employees who have at least one applicable
+          performance component for the selected period.
+
+</div>
+
+</div>
+    `;
+
+
+document.body.appendChild(
+      modal
+    );
+
+
+const periodSelect =
+modal.querySelector(
+        "#afPerformancePeriod"
+      );
+
+
+const dateInput =
+modal.querySelector(
+        "#afPerformanceDate"
+      );
+
+
+const rowsContainer =
+modal.querySelector(
+        "#afPerformanceRows"
+      );
+
+
+const periodLabel =
+modal.querySelector(
+        "#afPerformancePeriodLabel"
+      );
+
+
+const summary =
+modal.querySelector(
+        "#afPerformanceSummary"
+      );
+
+
+    function summaryCard(
+      title,
+      value,
+      note
+    ) {
+
+      return `
+<div style="
+          border:1px solid #dce6df;
+          border-radius:9px;
+          padding:12px;
+          background:#fafcfb;
+        ">
+
+<div style="
+            font-size:12px;
+            color:#666;
+          ">
+            ${escapeText(title)}
+</div>
+
+<div style="
+            font-size:22px;
+font-weight:bold;
+            color:#0b5d3b;
+            margin:4px 0;
+          ">
+            ${escapeText(value)}
+</div>
+
+<div style="
+            font-size:11px;
+            color:#777;
+          ">
+            ${escapeText(note)}
+</div>
+
+</div>
+      `;
+    }
+
+
+    function render() {
+
+const calculation =
+calculateRankings(
+periodSelect.value,
+dateInput.value
+        );
+
+
+const results =
+calculation.results;
+
+
+periodLabel.textContent =
+        "Performance Period: " +
+calculation.range.label;
+
+
+const averageScore =
+results.length
+
+          ? results.reduce(
+              (sum, item) =>
+                sum +
+                number(
+item.finalScore
+                ),
+              0
+            ) /
+results.length
+
+          : 0;
+
+
+const topEmployee =
+results.length
+          ? results[0]
+          : null;
+
+
+summary.innerHTML =
+
+summaryCard(
+          "Employees Ranked",
+          String(
+results.length
+          ),
+          "Employees with applicable records"
+        ) +
+
+summaryCard(
+          "Average Performance",
+results.length
+            ? round(
+averageScore,
+                1
+              ).toFixed(1) + "%"
+            : "—",
+          "Average of ranked employees"
+        ) +
+
+summaryCard(
+          "Highest Recorded Score",
+topEmployee
+            ? topEmployee.finalScore
+                .toFixed(1) + "%"
+            : "—",
+topEmployee
+            ? topEmployee.employeeName
+            : "No applicable records"
+        );
+
+
+      if (!results.length) {
+
+rowsContainer.innerHTML = `
+
+<tr>
+
+<td
+colspan="10"
+              style="
+                padding:30px;
+text-align:center;
+                color:#666;
+              "
+>
+
+              No applicable employee performance records
+              were found for this period.
+
+</td>
+
+</tr>
+        `;
+
+        return;
+      }
+
+
+rowsContainer.innerHTML =
+results.map(
+          result => `
+
+<tr>
+
+<td style="
+                font-size:18px;
+font-weight:bold;
+                color:#0b5d3b;
+              ">
+                #${result.rank}
+</td>
+
+
+<td>
+
+<div style="
+display:flex;
+align-items:center;
+                  gap:9px;
+                  min-width:180px;
+                ">
+
+                  ${photoHTML(result)}
+
+<div>
+
+<div style="
+font-weight:bold;
+                    ">
+                      ${
+escapeText(
+result.employeeName
+                        )
+                      }
+</div>
+
+<div style="
+                      color:#777;
+                      font-size:11px;
+                    ">
+                      ${
+escapeText(
+result.employeeId
+                        )
+                      }
+
+                      ${
+result.role
+                          ? " • " +
+escapeText(
+result.role
+                            )
+                          : ""
+                      }
+</div>
+
+</div>
+
+</div>
+
+</td>
+
+
+<td>
+                ${
+escapeText(
+result.teamName ||
+                    "—"
+                  )
+                }
+</td>
+
+
+<td>
+                ${
+componentDisplay(
+result.output
+                  )
+                }
+</td>
+
+
+<td>
+                ${
+componentDisplay(
+result.attendance
+                  )
+                }
+</td>
+
+
+<td>
+                ${
+componentDisplay(
+result.waste
+                  )
+                }
+</td>
+
+
+<td>
+                ${
+componentDisplay(
+result.quality
+                  )
+                }
+</td>
+
+
+<td>
+                ${
+result.applicableWeight
+                    .toFixed(0)
+                }%
+</td>
+
+
+<td style="
+                font-size:16px;
+font-weight:bold;
+                color:#0b5d3b;
+              ">
+                ${
+result.finalScore
+                    .toFixed(1)
+                }%
+</td>
+
+
+<td>
+                ${
+escapeText(
+getPerformanceRating(
+result.finalScore
+                    )
+                  )
+                }
+</td>
+
+</tr>
+
+          `
+        ).join("");
+
+
+modal.querySelectorAll(
+        "th,td"
+      ).forEach(
+        cell => {
+
+cell.style.padding =
+            "10px";
+
+cell.style.borderBottom =
+            "1px solid #eee";
+
+cell.style.verticalAlign =
+            "middle";
+        }
+      );
+    }
+
+
+modal.querySelector(
+      "#afRefreshPerformance"
+    ).onclick =
+      render;
+
+
+periodSelect.onchange =
+      render;
+
+
+dateInput.onchange =
+      render;
+
+
+modal.querySelector(
+      "#afClosePerformanceRankings"
+    ).onclick = () => {
+
+modal.remove();
+    };
+
+
+    render();
+  }
+
+
+  /* =======================================================
+     EXPOSE PERFORMANCE ENGINE
+     ======================================================= */
+
+window.calculateAFEmployeePerformance =
+calculateEmployeePerformance;
+
+
+window.calculateAFEmployeeRankings =
+calculateRankings;
+
+
+window.openAFEmployeePerformanceRankings =
+openAFEmployeePerformanceRankings;
+
+
+  /* =======================================================
+     CONNECT TO STAFF & HR
+
+     We deliberately do NOT replace the existing
+     Staff & HR function.
+
+     When Staff & HR opens, this converts the existing
+     Employee & Team Performance button into the
+     rankings viewer for authorized non-Director roles.
+
+     Director can still reach the existing performance
+     weight settings through System Settings.
+     ======================================================= */
+
+  function connectPerformanceButton() {
+
+const button =
+document.querySelector(
+        "#performanceHRBtn"
+      );
+
+
+    if (!button) {
+      return;
+    }
+
+
+    if (
+button.dataset
+        .afRankingsConnected ===
+      "yes"
+    ) {
+      return;
+    }
+
+
+button.dataset
+      .afRankingsConnected =
+      "yes";
+
+
+const replacement =
+button.cloneNode(true);
+
+
+button.parentNode
+      .replaceChild(
+        replacement,
+        button
+      );
+
+
+replacement.onclick =
+      function() {
+
+const modal =
+replacement.closest(
+            'div[style*="position:fixed"]'
+          );
+
+
+        if (modal) {
+modal.remove();
+        }
+
+
+openAFEmployeePerformanceRankings();
+      };
+
+
+const strong =
+replacement.querySelector(
+        "strong"
+      );
+
+
+    if (strong) {
+
+strong.textContent =
+        "Employee Performance & Rankings";
+    }
+
+
+const span =
+replacement.querySelector(
+        "span"
+      );
+
+
+    if (span) {
+
+span.textContent =
+        "View actual employee performance and rankings";
+    }
+  }
+
+
+  /*
+   * Staff & HR is generated dynamically.
+   * Watch only for the performance button.
+   */
+
+const observer =
+    new MutationObserver(
+      function() {
+
+connectPerformanceButton();
+      }
+    );
+
+
+observer.observe(
+document.body,
+    {
+childList: true,
+      subtree: true
+    }
+  );
+
+
+connectPerformanceButton();
+
+
+})();
