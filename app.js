@@ -3541,6 +3541,7 @@ const roleButtons = {
       "teamsHRBtn",
       "shiftsHRBtn",
       "attendanceHRBtn",
+      "performanceHRBtn",
       ],
 
 
@@ -3634,6 +3635,11 @@ setStaffHRButtonViewOnly(
       "View employee attendance"
     );
 
+setStaffHRButtonViewOnly(
+      modal,
+      "performanceHRBtn",
+      "View actual employee performance and rankings"
+    );
   }
 
 
