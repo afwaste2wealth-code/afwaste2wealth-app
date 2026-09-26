@@ -4360,22 +4360,42 @@ updateAFDashboardBirthdays();
 }
 
 function updateLoggedInUserHeader() {
-const date = document.getElementById("dashboardDate");
-   if (date) {
-      date.textContent = new Date().toLocaleDateString("en-GB", {
-         day: "numeric",
-         month: "long",
-         year: "numeric"
-      });
-   }
+
+const date =
+document.getElementById("dashboardDate");
+
+  if (date) {
+
+    if (
+typeof window.formatAFDate ===
+      "function"
+    ) {
+
+date.textContent =
+window.formatAFDate(
+        new Date()
+      );
+
+    } else {
+
+date.textContent =
+      new Date().toLocaleDateString(
+        "en-GB"
+      );
+    }
+  }
+
+
 const currentUser =
 JSON.parse(
 localStorage.getItem("currentUser") || "null"
-    );
+);
+
 
   if (!currentUser) {
     return;
   }
+
 
 const title =
 document.getElementById("dashboardTitle");
@@ -4386,21 +4406,29 @@ document.getElementById("dashboardUserName");
 const role =
 document.getElementById("dashboardUserRole");
 
+
   if (title) {
+
 title.textContent =
-currentUser.role + " Dashboard";
+currentUser.role +
+    " Dashboard";
   }
 
+
   if (name) {
+
 name.textContent =
 currentUser.fullName;
   }
 
+
   if (role) {
+
 role.textContent =
 currentUser.role;
   }
 }
+
 function logoutAFUser() {
   // Remove only the active login session
 localStorage.removeItem("currentUser");
