@@ -1,4 +1,8 @@
-/* ==============================================T
+/* =========================================================
+   A&F STAFF & HR LOGIN SCREEN
+   ========================================================= */
+
+function showAFLoginScreen() {
 
   /* Remove any existing login screen */
 const oldLogin = document.getElementById("afLoginScreen");
