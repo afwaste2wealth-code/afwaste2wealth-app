@@ -37403,3 +37403,652 @@ refreshAFDateTimeFormats();
 
 })();
 
+/* =========================================================
+   A&F BEST PERFORMANCE & RECOGNITION
+   ========================================================= */
+
+(function () {
+
+const ROLES = [
+    "Director",
+    "Manager",
+    "HR",
+    "Secretary",
+    "Team Leader"
+  ];
+
+
+  function read(key) {
+
+    try {
+
+const value =
+JSON.parse(
+localStorage.getItem(key) || "[]"
+        );
+
+      return Array.isArray(value)
+        ? value
+        : [];
+
+    } catch (error) {
+
+      return [];
+    }
+  }
+
+
+  function getUser() {
+
+    try {
+
+      return JSON.parse(
+localStorage.getItem("currentUser") ||
+        "null"
+      );
+
+    } catch (error) {
+
+      return null;
+    }
+  }
+
+
+  function esc(value) {
+
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+
+  function today() {
+
+const date = new Date();
+
+    return (
+date.getFullYear() +
+      "-" +
+      String(
+date.getMonth() + 1
+      ).padStart(2, "0") +
+      "-" +
+      String(
+date.getDate()
+      ).padStart(2, "0")
+    );
+  }
+
+
+  function photo(src) {
+
+    if (src) {
+
+      return `
+<img
+src="${esc(src)}"
+          style="
+            width:58px;
+            height:58px;
+            border-radius:50%;
+object-fit:cover;
+            border:2px solid #dbe9e1;
+          "
+>
+      `;
+    }
+
+
+    return `
+<div style="
+        width:58px;
+        height:58px;
+        border-radius:50%;
+        background:#edf3ef;
+display:flex;
+align-items:center;
+justify-content:center;
+        font-size:26px;
+      ">
+👤
+</div>
+    `;
+  }
+
+
+  function getTopTeam(results) {
+
+const teams =
+      read("factoryTeams");
+
+const employees =
+      read("employees");
+
+
+const ranked =
+      teams
+        .map(
+          team => {
+
+const members =
+results.filter(
+                result =>
+                  String(
+result.teamId || ""
+                  ) ===
+                  String(
+team.id || ""
+                  )
+              );
+
+
+            if (!members.length) {
+              return null;
+            }
+
+
+const score =
+members.reduce(
+                (sum, member) =>
+                  sum +
+                  Number(
+member.finalScore || 0
+                  ),
+                0
+              ) /
+members.length;
+
+
+const leader =
+employees.find(
+                employee =>
+                  String(
+employee.employeeId || ""
+                  ) ===
+                  String(
+team.leaderEmployeeId || ""
+                  )
+              );
+
+
+            return {
+
+              name:
+team.name || "Team",
+
+              score,
+
+              leader:
+                leader
+                  ? leader.fullName || ""
+                  : team.leader || "",
+
+              photo:
+                leader
+                  ? leader.passportPhoto || ""
+                  : ""
+            };
+          }
+        )
+        .filter(Boolean);
+
+
+ranked.sort(
+      (a, b) =>
+b.score - a.score ||
+a.name.localeCompare(
+b.name
+        )
+    );
+
+
+    return ranked[0] || null;
+  }
+
+
+  function card(
+    title,
+    item,
+isTeam
+  ) {
+
+    if (!item) {
+
+      return `
+<div class="af-rec-card">
+
+<b>${title}</b>
+
+<div class="af-rec-empty">
+            No qualifying data yet
+</div>
+
+</div>
+      `;
+    }
+
+
+const name =
+isTeam
+        ? item.name
+        : item.employeeName;
+
+
+const score =
+isTeam
+        ? item.score
+        : item.finalScore;
+
+
+const picture =
+isTeam
+        ? item.photo
+        : item.passportPhoto;
+
+
+const subText =
+isTeam
+        ? "Team Leader: " +
+          (
+item.leader ||
+            "Not Assigned"
+          )
+        : (
+item.teamName ||
+            "No Team"
+          );
+
+
+    return `
+<div class="af-rec-card">
+
+<b>
+🏆 ${title}
+</b>
+
+<div class="af-rec-row">
+
+          ${photo(picture)}
+
+<div>
+
+<strong>
+              ${esc(name)}
+</strong>
+
+<small>
+              ${esc(subText)}
+</small>
+
+<span>
+              ${Number(score).toFixed(1)}%
+</span>
+
+</div>
+
+</div>
+
+</div>
+    `;
+  }
+
+
+  function render() {
+
+const currentUser =
+getUser();
+
+
+const old =
+document.getElementById(
+        "afBestPerformance"
+      );
+
+
+    if (old) {
+old.remove();
+    }
+
+
+    if (
+      !currentUser ||
+      !ROLES.includes(
+currentUser.role
+      )
+    ) {
+
+      return;
+    }
+
+
+    if (
+typeof window
+        .calculateAFEmployeeRankings !==
+      "function"
+    ) {
+
+      return;
+    }
+
+
+const main =
+document.querySelector(
+        "#mainApplication .main"
+      );
+
+
+    if (!main) {
+      return;
+    }
+
+
+const date =
+      today();
+
+
+const week =
+window.calculateAFEmployeeRankings(
+        "week",
+        date
+      ).results || [];
+
+
+const month =
+window.calculateAFEmployeeRankings(
+        "month",
+        date
+      ).results || [];
+
+
+const box =
+document.createElement(
+        "div"
+      );
+
+
+box.id =
+      "afBestPerformance";
+
+
+box.innerHTML = `
+
+<div class="af-rec-head">
+
+<div>
+
+<strong>
+🏆 Performance & Recognition
+</strong>
+
+<small>
+            Based on actual performance records
+</small>
+
+</div>
+
+
+<button
+          id="afViewRankings"
+          type="button"
+>
+          View Full Rankings
+</button>
+
+</div>
+
+
+<div class="af-rec-grid">
+
+        ${card(
+          "Best Employee — Week",
+          week[0] || null,
+          false
+        )}
+
+        ${card(
+          "Best Employee — Month",
+          month[0] || null,
+          false
+        )}
+
+        ${card(
+          "Best Team — Week",
+getTopTeam(week),
+          true
+        )}
+
+        ${card(
+          "Best Team — Month",
+getTopTeam(month),
+          true
+        )}
+
+</div>
+
+
+<style>
+
+        #afBestPerformance {
+          margin:16px 0;
+          padding:15px;
+          border:1px solid #d8e6dd;
+          border-radius:12px;
+          background:#f8fbf9;
+        }
+
+        .af-rec-head {
+display:flex;
+justify-content:space-between;
+          gap:10px;
+align-items:center;
+          margin-bottom:12px;
+        }
+
+        .af-rec-head strong {
+          color:#0b5d3b;
+          font-size:17px;
+        }
+
+        .af-rec-head small {
+display:block;
+          color:#68776f;
+          margin-top:3px;
+        }
+
+        .af-rec-head button {
+          padding:8px 12px;
+          border:1px solid #0b5d3b;
+background:white;
+          color:#0b5d3b;
+          border-radius:7px;
+cursor:pointer;
+font-weight:bold;
+        }
+
+        .af-rec-grid {
+display:grid;
+          grid-template-columns:
+            repeat(4,minmax(170px,1fr));
+          gap:10px;
+        }
+
+        .af-rec-card {
+background:white;
+          border:1px solid #dce8e2;
+          border-radius:10px;
+          padding:13px;
+          min-height:120px;
+        }
+
+        .af-rec-card > b {
+          font-size:12px;
+          color:#68776f;
+        }
+
+        .af-rec-row {
+display:flex;
+          gap:10px;
+align-items:center;
+          margin-top:12px;
+        }
+
+        .af-rec-row strong,
+        .af-rec-row small,
+        .af-rec-row span {
+display:block;
+        }
+
+        .af-rec-row strong {
+          color:#173027;
+        }
+
+        .af-rec-row small {
+          color:#777;
+          margin-top:3px;
+        }
+
+        .af-rec-row span {
+          color:#0b5d3b;
+          font-size:19px;
+font-weight:bold;
+          margin-top:6px;
+        }
+
+        .af-rec-empty {
+          color:#888;
+          margin-top:25px;
+          font-size:13px;
+        }
+
+        @media(max-width:900px) {
+
+          .af-rec-grid {
+            grid-template-columns:
+              repeat(2,1fr);
+          }
+
+        }
+
+        @media(max-width:520px) {
+
+          .af-rec-grid {
+            grid-template-columns:
+              1fr;
+          }
+
+        }
+
+</style>
+    `;
+
+
+const birthday =
+document.getElementById(
+        "dashboardBirthdayCard"
+      );
+
+
+const checklist =
+document.getElementById(
+        "afTodaysChecklist"
+      );
+
+
+    if (
+      birthday &&
+birthday.parentElement ===
+        main
+    ) {
+
+main.insertBefore(
+        box,
+        birthday
+      );
+
+    } else if (
+      checklist &&
+checklist.parentElement ===
+        main
+    ) {
+
+main.insertBefore(
+        box,
+        checklist
+      );
+
+    } else {
+
+main.appendChild(
+        box
+      );
+    }
+
+
+const button =
+box.querySelector(
+        "#afViewRankings"
+      );
+
+
+    if (button) {
+
+button.onclick =
+        function() {
+
+          if (
+typeof window
+              .openAFEmployeePerformanceRankings ===
+            "function"
+          ) {
+
+            window
+              .openAFEmployeePerformanceRankings();
+          }
+        };
+    }
+  }
+
+
+window.refreshAFBestPerformance =
+    render;
+
+
+  if (
+typeof applyAFRoleDashboard ===
+    "function"
+  ) {
+
+const oldApply =
+applyAFRoleDashboard;
+
+
+applyAFRoleDashboard =
+      function() {
+
+const result =
+oldApply.apply(
+            this,
+            arguments
+          );
+
+
+setTimeout(
+          render,
+          50
+        );
+
+
+        return result;
+      };
+  }
+
+
+setTimeout(
+    render,
+    100
+  );
+
+})();
