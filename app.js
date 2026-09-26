@@ -31477,3 +31477,1013 @@ openQDAuditHistory;
 
 })();
  
+/* =========================================================
+   A&F DIRECTOR PRODUCTION TARGETS
+   Director sets production target.
+   Manager uses the target during production.
+   ========================================================= */
+
+(function connectAFProductionTargets() {
+
+const STORAGE_KEY =
+    "afProductionTargets";
+
+
+  /* =======================================================
+     BASIC HELPERS
+     ======================================================= */
+
+  function getProductionTargets() {
+
+    try {
+
+const records =
+JSON.parse(
+localStorage.getItem(
+            STORAGE_KEY
+          ) || "[]"
+        );
+
+      return Array.isArray(records)
+        ? records
+        : [];
+
+    } catch (error) {
+
+console.error(
+        "Unable to read production targets:",
+        error
+      );
+
+      return [];
+    }
+  }
+
+
+  function saveProductionTargets(records) {
+
+localStorage.setItem(
+      STORAGE_KEY,
+JSON.stringify(records)
+    );
+  }
+
+
+  function getCurrentUser() {
+
+    try {
+
+      return JSON.parse(
+localStorage.getItem(
+          "currentUser"
+        ) || "{}"
+      );
+
+    } catch (error) {
+
+      return {};
+    }
+  }
+
+
+  function escapeText(value) {
+
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+
+  function localDateString() {
+
+const now =
+      new Date();
+
+const year =
+now.getFullYear();
+
+const month =
+      String(
+now.getMonth() + 1
+      ).padStart(2, "0");
+
+const day =
+      String(
+now.getDate()
+      ).padStart(2, "0");
+
+    return (
+      year +
+      "-" +
+      month +
+      "-" +
+      day
+    );
+  }
+
+
+  function getActiveShifts() {
+
+    if (
+typeof getShiftSettings !==
+      "function"
+    ) {
+      return [];
+    }
+
+const shifts =
+getShiftSettings();
+
+    if (!Array.isArray(shifts)) {
+      return [];
+    }
+
+    return shifts.filter(
+      shift =>
+        String(
+shift.status || ""
+        ).toLowerCase() ===
+        "active"
+    );
+  }
+
+
+  /* =======================================================
+     SET PRODUCTION TARGET
+     DIRECTOR ONLY
+     ======================================================= */
+
+  function setAFProductionTarget() {
+
+const currentUser =
+getCurrentUser();
+
+    if (
+      String(
+currentUser.role || ""
+      ) !== "Director"
+    ) {
+
+      alert(
+        "Access Denied\n\n" +
+        "Only the Director can set production targets."
+      );
+
+      return;
+    }
+
+
+const shifts =
+getActiveShifts();
+
+
+    if (!shifts.length) {
+
+      alert(
+        "There is no active working shift.\n\n" +
+        "Please configure an active shift first."
+      );
+
+      return;
+    }
+
+
+const modal =
+document.createElement("div");
+
+
+modal.style.cssText = `
+position:fixed;
+      inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+align-items:center;
+justify-content:center;
+      z-index:100000;
+font-family:Arial,sans-serif;
+      padding:10px;
+    `;
+
+
+modal.innerHTML = `
+
+<div style="
+background:white;
+        width:620px;
+        max-width:95%;
+        max-height:92vh;
+overflow:auto;
+        border-radius:14px;
+        padding:26px;
+        box-shadow:
+          0 12px 35px
+rgba(0,0,0,.28);
+      ">
+
+<h2 style="
+          margin:0 0 6px;
+          color:#0b5d3b;
+        ">
+          Set Production Target
+</h2>
+
+
+<div style="
+          color:#666;
+          font-size:13px;
+          margin-bottom:20px;
+          line-height:1.5;
+        ">
+          Director sets the expected number
+          of finished fencing poles for the
+          selected date and working shift.
+          The Manager cannot change this target.
+</div>
+
+
+<label style="
+display:block;
+font-weight:bold;
+          margin-bottom:6px;
+        ">
+          Production Date
+</label>
+
+<input
+          id="afProductionTargetDate"
+          type="date"
+          value="${localDateString()}"
+          style="
+            width:100%;
+box-sizing:border-box;
+            padding:11px;
+            margin-bottom:16px;
+            border:1px solid #ccc;
+            border-radius:8px;
+          "
+>
+
+
+<label style="
+display:block;
+font-weight:bold;
+          margin-bottom:6px;
+        ">
+          Working Shift
+</label>
+
+<select
+          id="afProductionTargetShift"
+          style="
+            width:100%;
+box-sizing:border-box;
+            padding:11px;
+            margin-bottom:16px;
+            border:1px solid #ccc;
+            border-radius:8px;
+          "
+>
+
+<option value="">
+            Select Working Shift
+</option>
+
+          ${shifts.map(
+            shift => `
+
+<option
+                value="${
+escapeText(
+shift.id
+                  )
+                }"
+>
+                ${
+escapeText(
+shift.name
+                  )
+                }
+</option>
+
+            `
+          ).join("")}
+
+</select>
+
+
+<label style="
+display:block;
+font-weight:bold;
+          margin-bottom:6px;
+        ">
+          Target Number of Poles
+</label>
+
+<input
+          id="afProductionTargetPoles"
+          type="number"
+          min="1"
+          step="1"
+          placeholder="Example: 80"
+          style="
+            width:100%;
+box-sizing:border-box;
+            padding:11px;
+            margin-bottom:8px;
+            border:1px solid #ccc;
+            border-radius:8px;
+          "
+>
+
+
+<div style="
+          background:#eef8f2;
+          border:1px solid #cfe6d8;
+          color:#0b5d3b;
+          padding:12px;
+          border-radius:8px;
+          font-size:13px;
+          line-height:1.5;
+          margin:14px 0 20px;
+        ">
+
+<b>Performance Control</b><br>
+
+          Production Achievement will later
+          be calculated as:
+
+<br><br>
+
+<b>
+            Actual Poles Produced ÷
+            Target Poles × 100
+</b>
+
+</div>
+
+
+<div style="
+display:flex;
+justify-content:flex-end;
+          gap:10px;
+flex-wrap:wrap;
+        ">
+
+<button
+            id="afCloseProductionTarget"
+            type="button"
+            style="
+              padding:10px 18px;
+              border:1px solid #ccc;
+background:white;
+              border-radius:8px;
+cursor:pointer;
+            "
+>
+            Close
+</button>
+
+
+<button
+            id="afSaveProductionTarget"
+            type="button"
+            style="
+              padding:10px 18px;
+              border:0;
+              background:#0b5d3b;
+color:white;
+              border-radius:8px;
+cursor:pointer;
+font-weight:bold;
+            "
+>
+            Save Production Target
+</button>
+
+</div>
+
+</div>
+    `;
+
+
+document.body.appendChild(
+      modal
+    );
+
+
+modal.querySelector(
+      "#afCloseProductionTarget"
+    ).onclick = () => {
+
+modal.remove();
+    };
+
+
+modal.querySelector(
+      "#afSaveProductionTarget"
+    ).onclick = () => {
+
+const date =
+modal.querySelector(
+          "#afProductionTargetDate"
+        ).value;
+
+
+const shiftId =
+modal.querySelector(
+          "#afProductionTargetShift"
+        ).value;
+
+
+const targetPoles =
+Math.floor(
+          Number(
+modal.querySelector(
+              "#afProductionTargetPoles"
+            ).value
+          ) || 0
+        );
+
+
+const shift =
+shifts.find(
+          item =>
+            String(item.id) ===
+            String(shiftId)
+        );
+
+
+      if (!date) {
+
+        alert(
+          "Please select the production date."
+        );
+
+        return;
+      }
+
+
+      if (!shift) {
+
+        alert(
+          "Please select the working shift."
+        );
+
+        return;
+      }
+
+
+      if (targetPoles<= 0) {
+
+        alert(
+          "Target poles must be greater than zero."
+        );
+
+        return;
+      }
+
+
+const records =
+getProductionTargets();
+
+
+const duplicate =
+records.some(
+          record =>
+
+record.date === date &&
+
+            String(
+record.shiftId || ""
+            ) ===
+            String(shift.id) &&
+
+            String(
+record.status || ""
+            ).toUpperCase() ===
+            "TARGET SET"
+        );
+
+
+      if (duplicate) {
+
+        alert(
+          "A pending production target already exists " +
+          "for this date and shift."
+        );
+
+        return;
+      }
+
+
+const record = {
+
+        id:
+Date.now(),
+
+        date:
+          date,
+
+shiftId:
+shift.id,
+
+shiftName:
+shift.name,
+
+targetPoles:
+targetPoles,
+
+actualPoles:
+          0,
+
+achievementPercent:
+          0,
+
+        status:
+          "TARGET SET",
+
+productionRecordId:
+          "",
+
+targetSetByEmployeeId:
+currentUser.employeeId || "",
+
+targetSetByName:
+currentUser.fullName || "",
+
+targetSetByRole:
+currentUser.role || "",
+
+createdAt:
+          new Date().toISOString(),
+
+completedAt:
+          "",
+
+correctionHistory:
+          []
+      };
+
+
+records.push(
+        record
+      );
+
+
+saveProductionTargets(
+        records
+      );
+
+
+      alert(
+        "Production target saved successfully.\n\n" +
+
+        "Date: " +
+        date +
+
+        "\nShift: " +
+shift.name +
+
+        "\nTarget: " +
+targetPoles.toLocaleString() +
+        " poles\n\n" +
+
+        "The target is now waiting for production."
+      );
+
+
+modal.remove();
+    };
+  }
+
+
+  /* =======================================================
+     VIEW PRODUCTION TARGETS
+     ======================================================= */
+
+  function viewAFProductionTargets() {
+
+const currentUser =
+getCurrentUser();
+
+const role =
+      String(
+currentUser.role || ""
+      );
+
+
+    if (
+      ![
+        "Director",
+        "Manager"
+      ].includes(role)
+    ) {
+
+      alert(
+        "Access Denied\n\n" +
+        "You are not authorised to view production targets."
+      );
+
+      return;
+    }
+
+
+const records =
+getProductionTargets()
+        .slice()
+        .sort(
+          (a, b) => {
+
+            return String(
+b.date || ""
+            ).localeCompare(
+              String(
+a.date || ""
+              )
+            );
+          }
+        );
+
+
+const modal =
+document.createElement("div");
+
+
+modal.style.cssText = `
+position:fixed;
+      inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+align-items:center;
+justify-content:center;
+      z-index:100000;
+font-family:Arial,sans-serif;
+      padding:10px;
+    `;
+
+
+const rows =
+records.length
+
+        ? records.map(
+            record => {
+
+const target =
+                Number(
+record.targetPoles || 0
+                );
+
+const actual =
+                Number(
+record.actualPoles || 0
+                );
+
+const achievement =
+                Number(
+record.achievementPercent || 0
+                );
+
+
+              return `
+
+<tr>
+
+<td>
+                    ${
+escapeText(
+record.date
+                      )
+                    }
+</td>
+
+<td>
+                    ${
+escapeText(
+record.shiftName
+                      )
+                    }
+</td>
+
+<td>
+                    ${
+target.toLocaleString()
+                    }
+</td>
+
+<td>
+                    ${
+actual.toLocaleString()
+                    }
+</td>
+
+<td>
+                    ${
+achievement.toFixed(1)
+                    }%
+</td>
+
+<td>
+                    ${
+escapeText(
+record.status
+                      )
+                    }
+</td>
+
+<td>
+                    ${
+escapeText(
+record.targetSetByName ||
+                        "—"
+                      )
+                    }
+</td>
+
+</tr>
+
+              `;
+            }
+          ).join("")
+
+        : `
+
+<tr>
+
+<td
+colspan="7"
+              style="
+                padding:25px;
+text-align:center;
+                color:#666;
+              "
+>
+              No production targets
+              have been recorded yet.
+</td>
+
+</tr>
+
+        `;
+
+
+modal.innerHTML = `
+
+<div style="
+background:white;
+        width:900px;
+        max-width:97%;
+        max-height:92vh;
+overflow:auto;
+        border-radius:14px;
+        padding:24px;
+      ">
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:flex-start;
+          gap:15px;
+flex-wrap:wrap;
+          margin-bottom:18px;
+        ">
+
+<div>
+
+<h2 style="
+              margin:0;
+              color:#0b5d3b;
+            ">
+              Production Targets
+</h2>
+
+<div style="
+              color:#666;
+              font-size:13px;
+              margin-top:5px;
+            ">
+              Director production targets
+              and actual achievement
+</div>
+
+</div>
+
+
+          ${
+            role === "Director"
+
+              ? `
+
+<button
+                  id="afNewProductionTarget"
+                  type="button"
+                  style="
+                    border:0;
+                    background:#0b5d3b;
+color:white;
+                    padding:10px 15px;
+                    border-radius:8px;
+cursor:pointer;
+font-weight:bold;
+                  "
+>
+                  + Set Production Target
+</button>
+
+              `
+
+              : ""
+          }
+
+</div>
+
+
+<div style="
+overflow:auto;
+          border:1px solid #ddd;
+          border-radius:9px;
+        ">
+
+<table style="
+            width:100%;
+            min-width:760px;
+border-collapse:collapse;
+            font-size:13px;
+          ">
+
+<thead>
+
+<tr style="
+                background:#eef8f2;
+text-align:left;
+              ">
+
+<th>Date</th>
+<th>Shift</th>
+<th>Target Poles</th>
+<th>Actual Poles</th>
+<th>Achievement</th>
+<th>Status</th>
+<th>Set By</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+              ${rows}
+</tbody>
+
+</table>
+
+</div>
+
+
+<div style="
+text-align:right;
+          margin-top:18px;
+        ">
+
+<button
+            id="afCloseProductionTargets"
+            type="button"
+            style="
+              padding:10px 18px;
+              border:0;
+              background:#555;
+color:white;
+              border-radius:8px;
+cursor:pointer;
+            "
+>
+            Close
+</button>
+
+</div>
+
+</div>
+    `;
+
+
+document.body.appendChild(
+      modal
+    );
+
+
+modal.querySelectorAll(
+      "th,td"
+    ).forEach(
+      cell => {
+
+cell.style.padding =
+          "10px";
+
+cell.style.borderBottom =
+          "1px solid #eee";
+      }
+    );
+
+
+modal.querySelector(
+      "#afCloseProductionTargets"
+    ).onclick = () => {
+
+modal.remove();
+    };
+
+
+const newButton =
+modal.querySelector(
+        "#afNewProductionTarget"
+      );
+
+
+    if (newButton) {
+
+newButton.onclick = () => {
+
+modal.remove();
+
+setAFProductionTarget();
+      };
+    }
+  }
+
+
+  /* =======================================================
+     EXPOSE FUNCTIONS
+     ======================================================= */
+
+window.getAFProductionTargets =
+getProductionTargets;
+
+window.saveAFProductionTargets =
+saveProductionTargets;
+
+window.setAFProductionTarget =
+setAFProductionTarget;
+
+window.viewAFProductionTargets =
+viewAFProductionTargets;
+
+
+  /* =======================================================
+     CONNECT TO DIRECTOR QUICK ACTION
+
+     Existing Director "Plan Production"
+     button will now open Production Targets.
+     ======================================================= */
+
+  if (
+typeof window.runRoleAction ===
+    "function"
+  ) {
+
+const originalRunRoleAction =
+window.runRoleAction;
+
+
+window.runRoleAction =
+      function(actionName) {
+
+        if (
+actionName ===
+          "planProduction"
+        ) {
+
+const currentUser =
+getCurrentUser();
+
+
+          if (
+            String(
+currentUser.role || ""
+            ) !== "Director"
+          ) {
+
+            alert(
+              "Access Denied\n\n" +
+              "Only the Director can set production targets."
+            );
+
+            return;
+          }
+
+
+viewAFProductionTargets();
+
+          return;
+        }
+
+
+        return originalRunRoleAction(
+actionName
+        );
+      };
+  }
+
+
+})();
