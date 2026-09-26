@@ -37403,3 +37403,79 @@ refreshAFDateTimeFormats();
 
 })();
 
+/* =========================================================
+   A&F PERFORMANCE & RECOGNITION
+   Best Employee Week / Month
+   Best Team Week / Month
+
+   Uses the existing Employee Performance & Rankings engine.
+   Actual saved records only.
+   ========================================================= */
+
+(function connectAFPerformanceRecognition() {
+
+const ALLOWED_ROLES = [
+    "Director",
+    "Manager",
+    "HR",
+    "Secretary",
+    "Team Leader"
+  ];
+
+
+  function readArray(key) {
+
+    try {
+
+const value =
+JSON.parse(
+localStorage.getItem(key) || "[]"
+        );
+
+      return Array.isArray(value)
+        ? value
+        : [];
+
+    } catch (error) {
+
+      return [];
+    }
+  }
+
+
+  function currentUser() {
+
+    try {
+
+      return JSON.parse(
+localStorage.getItem("currentUser") ||
+        "null"
+      );
+
+    } catch (error) {
+
+      return null;
+    }
+  }
+
+
+  function esc(value) {
+
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+
+  function todayString() {
+
+const now = new Date();
+
+    return (
+now.getFullYear() +
+      "-" +
+      String(
+        now
