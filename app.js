@@ -37066,3 +37066,340 @@ manageAFDateTimeSettings;
 
 })();
 
+/* =========================================================
+   A&F GLOBAL DATE & TIME FORMAT CONNECTION
+   Applies Director settings across displayed system records.
+   Does NOT alter stored values or form input values.
+   ========================================================= */
+
+(function connectAFGlobalDateTimeFormat() {
+
+const originalText = new WeakMap();
+  let formatting = false;
+
+
+  function shouldSkip(node) {
+
+const parent = node &&node.parentElement;
+
+    if (!parent) {
+      return true;
+    }
+
+    return Boolean(
+parent.closest(
+        "input, select, option, textarea, script, style, pre, code"
+      )
+    );
+  }
+
+
+  function formatVisibleText(text) {
+
+    if (!text) {
+      return text;
+    }
+
+
+    /*
+     * Matches:
+     *
+     * 2026-09-26T16:30:00.000Z
+     * 2026-09-26T16:30:00
+     * 2026-09-26
+     * 16:30
+     * 16:30:00
+     */
+const pattern =
+      /\b(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})?|\d{4}-\d{2}-\d{2}|(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?)\b(?!\s*[APap][Mm])/g;
+
+
+    return String(text).replace(
+      pattern,
+      function(value) {
+
+        /*
+         * Full timestamp
+         */
+        if (
+value.includes("T") &&
+typeof window.formatAFDateTime === "function"
+        ) {
+
+          return window.formatAFDateTime(
+            value
+          );
+        }
+
+
+        /*
+         * YYYY-MM-DD
+         */
+        if (
+          /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+typeof window.formatAFDate === "function"
+        ) {
+
+          return window.formatAFDate(
+            value
+          );
+        }
+
+
+        /*
+         * HH:MM or HH:MM:SS
+         */
+        if (
+          /^\d{1,2}:\d{2}(?::\d{2})?$/.test(value) &&
+typeof window.formatAFTime === "function"
+        ) {
+
+          return window.formatAFTime(
+            value
+          );
+        }
+
+
+        return value;
+      }
+    );
+  }
+
+
+  function formatTextNode(node) {
+
+    if (
+      !node ||
+node.nodeType !== Node.TEXT_NODE ||
+shouldSkip(node)
+    ) {
+
+      return;
+    }
+
+
+    /*
+     * Preserve the original raw value.
+     *
+     * This means changing the Director setting later
+     * can re-format the same screen again correctly.
+     */
+    if (!originalText.has(node)) {
+
+originalText.set(
+        node,
+node.nodeValue
+      );
+    }
+
+
+const raw =
+originalText.get(node);
+
+
+const formatted =
+formatVisibleText(raw);
+
+
+    if (
+node.nodeValue !== formatted
+    ) {
+
+node.nodeValue =
+        formatted;
+    }
+  }
+
+
+  function formatContainer(root) {
+
+    if (!root) {
+      return;
+    }
+
+
+    if (
+root.nodeType === Node.TEXT_NODE
+    ) {
+
+formatTextNode(root);
+
+      return;
+    }
+
+
+    if (
+root.nodeType !== Node.ELEMENT_NODE&&
+root.nodeType !== Node.DOCUMENT_NODE
+    ) {
+
+      return;
+    }
+
+
+const walker =
+document.createTreeWalker(
+        root,
+NodeFilter.SHOW_TEXT
+      );
+
+
+const nodes = [];
+
+
+    while (
+walker.nextNode()
+    ) {
+
+nodes.push(
+walker.currentNode
+      );
+    }
+
+
+nodes.forEach(
+formatTextNode
+    );
+  }
+
+
+  function refreshAFDateTimeFormats() {
+
+    if (formatting) {
+      return;
+    }
+
+
+    formatting = true;
+
+
+    try {
+
+formatContainer(
+document.body
+      );
+
+
+      /*
+       * Keep dashboard date synchronized too.
+       */
+const dashboardDate =
+document.getElementById(
+          "dashboardDate"
+        );
+
+
+      if (
+dashboardDate&&
+typeof window.formatAFDate === "function"
+      ) {
+
+dashboardDate.textContent =
+window.formatAFDate(
+            new Date()
+          );
+      }
+
+    } finally {
+
+      formatting = false;
+    }
+  }
+
+
+  /*
+   * Automatically format new modals,
+   * tables, reports and dashboard content.
+   */
+const observer =
+    new MutationObserver(
+      function(mutations) {
+
+        if (formatting) {
+          return;
+        }
+
+
+        formatting = true;
+
+
+        try {
+
+mutations.forEach(
+            function(mutation) {
+
+mutation.addedNodes.forEach(
+                function(node) {
+
+formatContainer(
+                    node
+                  );
+                }
+              );
+            }
+          );
+
+        } finally {
+
+          formatting = false;
+        }
+      }
+    );
+
+
+observer.observe(
+document.body,
+    {
+childList: true,
+      subtree: true
+    }
+  );
+
+
+  /*
+   * Refresh immediately whenever the Director
+   * changes Date & Time Format settings.
+   */
+  if (
+typeof window.saveAFSystemSettings === "function" &&
+    !window.saveAFSystemSettings.afFormatConnected
+  ) {
+
+const originalSave =
+window.saveAFSystemSettings;
+
+
+const connectedSave =
+      function(settings) {
+
+const result =
+originalSave(settings);
+
+
+setTimeout(
+refreshAFDateTimeFormats,
+          0
+        );
+
+
+        return result;
+      };
+
+
+connectedSave.afFormatConnected =
+      true;
+
+
+window.saveAFSystemSettings =
+connectedSave;
+  }
+
+
+window.refreshAFDateTimeFormats =
+refreshAFDateTimeFormats;
+
+
+refreshAFDateTimeFormats();
+
+})();
+
