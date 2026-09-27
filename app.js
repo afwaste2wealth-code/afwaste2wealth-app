@@ -1930,10 +1930,30 @@ localStorage.getItem(
   }
 
 
-const winnerRecords =
-readArray(
-    "afMonthEndWinners"
+let winnerRecords = [];
+
+try {
+const savedWinners =
+JSON.parse(
+localStorage.getItem(
+      "afMonthEndWinners"
+    ) || "[]"
   );
+
+winnerRecords =
+Array.isArray(savedWinners)
+    ? savedWinners
+    : [];
+
+} catch (error) {
+
+console.error(
+    "Unable to read month-end winners:",
+    error
+  );
+
+winnerRecords = [];
+}
 
   if (!winnerRecords.length) {
     return;
