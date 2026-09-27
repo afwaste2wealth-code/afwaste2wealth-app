@@ -1900,6 +1900,310 @@ integration.style.display = "";
 
 }
 
+/* =========================================================
+   PERFORMANCE WINNERS - ALL DASHBOARDS
+   ========================================================= */
+
+function renderAFPerformanceWinnerDashboardCard() {
+
+const oldCard =
+document.getElementById(
+    "afPerformanceWinnerDashboardCard"
+  );
+
+  if (oldCard) {
+oldCard.remove();
+  }
+
+
+const currentUser =
+typeof getAFCurrentUser === "function"
+    ? getAFCurrentUser()
+    : JSON.parse(
+localStorage.getItem(
+          "currentUser"
+        ) || "null"
+      );
+
+  if (!currentUser) {
+    return;
+  }
+
+
+const winnerRecords =
+readArray(
+    "afMonthEndWinners"
+  );
+
+  if (!winnerRecords.length) {
+    return;
+  }
+
+
+const sortedWinners =
+  [...winnerRecords].sort(
+    (a, b) => {
+
+const aMonth =
+      Number(a.year || 0) * 12 +
+      Number(a.month || 0);
+
+const bMonth =
+      Number(b.year || 0) * 12 +
+      Number(b.month || 0);
+
+      return bMonth - aMonth;
+    }
+  );
+
+
+const latestWinner =
+sortedWinners[0];
+
+  if (!latestWinner) {
+    return;
+  }
+
+
+const main =
+document.querySelector(
+    "#mainApplication .main"
+  );
+
+  if (!main) {
+    return;
+  }
+
+
+const money =
+  amount =>
+typeof formatPayrollMoney ===
+    "function"
+      ? formatPayrollMoney(amount)
+      : "UGX " +
+        Number(
+          amount || 0
+        ).toLocaleString();
+
+
+const isBestEmployee =
+  String(
+currentUser.employeeId || ""
+  ) ===
+  String(
+latestWinner.bestEmployeeId || ""
+  );
+
+
+const card =
+document.createElement(
+    "section"
+  );
+
+card.id =
+  "afPerformanceWinnerDashboardCard";
+
+card.className = "card";
+
+card.style.cssText = `
+    margin-bottom:16px;
+    padding:18px;
+    border:1px solid #e0c26b;
+    background:#fff8e1;
+    border-radius:12px;
+  `;
+
+
+card.innerHTML = `
+
+<div style="
+      font-size:18px;
+font-weight:bold;
+      color:#0b5d3b;
+      margin-bottom:12px;
+    ">
+🏆 ${
+escapeText(
+latestWinner.label || ""
+        )
+      } Performance Winners
+</div>
+
+
+    ${
+isBestEmployee
+        ? `
+<div style="
+            background:#e8f5e9;
+            padding:12px;
+            border-radius:8px;
+            margin-bottom:12px;
+font-weight:bold;
+            color:#0b5d3b;
+          ">
+🎉 Congratulations!
+            You are the Best Employee
+            of the Month.
+            Your cash prize is
+            ${money(
+latestWinner
+                .bestEmployeePrize
+            )}.
+</div>
+        `
+        : ""
+    }
+
+
+<div style="
+display:grid;
+      grid-template-columns:
+        repeat(
+          auto-fit,
+minmax(220px,1fr)
+        );
+      gap:12px;
+    ">
+
+<div style="
+background:white;
+        padding:13px;
+        border-radius:9px;
+        border:1px solid #ddd;
+      ">
+
+<div style="
+          font-size:12px;
+          color:#666;
+        ">
+🥇 Best Employee
+</div>
+
+<div style="
+          font-size:17px;
+font-weight:bold;
+          margin-top:5px;
+        ">
+          ${
+escapeText(
+latestWinner
+                .bestEmployeeName ||
+              ""
+            )
+          }
+</div>
+
+<div style="margin-top:6px;">
+          Score:
+<b>
+            ${
+              Number(
+latestWinner
+                  .bestEmployeeScore ||
+                0
+              ).toFixed(1)
+            }%
+</b>
+</div>
+
+<div style="
+          margin-top:6px;
+          color:#0b5d3b;
+font-weight:bold;
+        ">
+          Prize:
+          ${
+            money(
+latestWinner
+                .bestEmployeePrize
+            )
+          }
+</div>
+
+</div>
+
+
+<div style="
+background:white;
+        padding:13px;
+        border-radius:9px;
+        border:1px solid #ddd;
+      ">
+
+<div style="
+          font-size:12px;
+          color:#666;
+        ">
+🏆 Best Team
+</div>
+
+<div style="
+          font-size:17px;
+font-weight:bold;
+          margin-top:5px;
+        ">
+          ${
+escapeText(
+latestWinner
+                .bestTeamName ||
+              ""
+            )
+          }
+</div>
+
+<div style="margin-top:6px;">
+          Team Score:
+<b>
+            ${
+              Number(
+latestWinner
+                  .bestTeamScore ||
+                0
+              ).toFixed(1)
+            }%
+</b>
+</div>
+
+<div style="
+          margin-top:6px;
+          color:#0b5d3b;
+font-weight:bold;
+        ">
+          Team Prize:
+          ${
+            money(
+latestWinner
+                .bestTeamPrize
+            )
+          }
+</div>
+
+</div>
+
+</div>
+  `;
+
+
+const notice =
+document.getElementById(
+    "roleAccessNotice"
+  );
+
+  if (notice) {
+
+notice.insertAdjacentElement(
+      "afterend",
+      card
+    );
+
+  } else {
+
+main.prepend(card);
+
+  }
+
+}
+
 
 /* =========================================================
    APPLY ROLE DASHBOARD
@@ -2018,6 +2322,12 @@ notice.textContent =
 roleAccess.accessText;
 
   }
+if (
+typeof renderAFPerformanceWinnerDashboardCard ===
+  "function"
+) {
+renderAFPerformanceWinnerDashboardCard();
+}
 
 
   /* =======================================================
