@@ -40743,40 +40743,37 @@ afReadArray(
 
 const unwashedKaveraKg =
 materialRecords
-      .filter(record => {
+  .filter(record => {
 
-const source =
-        String(
+    return (
+record.batchNumber&&
+      String(
 record.materialSource || ""
-        ).toLowerCase();
-
-const status =
-        String(
+      ).toLowerCase() !== "client" &&
+      String(
 record.status || ""
-        ).toUpperCase();
+      ).toUpperCase() !== "CANCELLED"
+    );
 
-        return (
-          source !== "client" &&
-          status !== "CANCELLED"
-        );
+  })
+  .reduce(
+    (total, record) => {
 
-      })
-      .reduce(
-        (total, record) => {
-
-          return (
-            total +
-            Number(
-record.batchBalanceKg ??
-record.openingBatchKg ??
-record.netWeight ??
-              0
+const balance =
+typeof getBatchPendingKg ===
+        "function"
+          ? getBatchPendingKg(
+record.batchNumber
             )
-          );
+          : Number(
+record.batchBalanceKg || 0
+            );
 
-        },
-        0
-      );
+      return total + balance;
+
+    },
+    0
+  );
 
 
     /* -------------------------
