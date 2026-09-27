@@ -40731,7 +40731,7 @@ afReadArray(
       "productionRecords"
     );
 
-constd eliveryRecords =
+const deliveryRecords =
 afReadArray(
       "afDeliveryRecords"
     );
