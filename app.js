@@ -9475,9 +9475,19 @@ function payrollMonthName(year, month) {
   }) + " " + year;
 }
 
+function roundDownTo100(amount) {
+  return Math.floor(
+    Number(amount || 0) / 100
+  ) * 100;
+}
+
+
 function formatPayrollMoney(amount) {
   return "UGX " +
-    Number(amount || 0).toLocaleString();
+    Number(amount || 0)
+      .toLocaleString("en-US", {
+maximumFractionDigits: 0
+      });
 }
 
 function getPayrollPeriodValues() {
@@ -9608,7 +9618,8 @@ daysInMonth> 0
       : 0;
 
 const absenceDeduction =
-dailyAllowance * absentDays;
+roundDownTo100(
+   dailyAllowance * absentDays);
 
 const earnedAllowance =
 Math.max(
