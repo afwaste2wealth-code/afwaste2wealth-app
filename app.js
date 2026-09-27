@@ -6145,7 +6145,12 @@ bestTeam,
 teamMembers = []
 }) {
 
-    if (!month || !year) {
+    if (
+       month === null || 
+       month === undefined ||  
+       year === null || 
+       year === undefined
+       ) {
         alert("Please select the award month and year.");
         return;
     }
@@ -6199,7 +6204,7 @@ createdAt: new Date().toISOString()
 const totalPrize = settings.bestTeamPrize;
 
 const sharePerEmployee =
-Math.floor(totalPrize / teamMembers.length);
+Math.floor(totalPrize / teamMembers.length/100)*100;
 
 const remainder =
 totalPrize - (sharePerEmployee * teamMembers.length);
@@ -36368,6 +36373,17 @@ display:grid;
           "
 ></div>
 
+<div
+  id="afMonthEndWinners"
+  style="
+display:none;
+    margin-bottom:16px;
+    padding:16px;
+    background:#fff8e1;
+    border:1px solid #e0c26b;
+    border-radius:10px;
+  "
+></div>
 
 <div style="
 overflow:auto;
@@ -36527,6 +36543,965 @@ dateInput.value
 
 const results =
 calculation.results;
+
+
+       
+/* =======================================================
+   MONTH-END WINNERS
+   ======================================================= */
+
+const monthEndPanel =
+modal.querySelector(
+  "#afMonthEndWinners"
+);
+
+if (monthEndPanel) {
+
+monthEndPanel.style.display = "none";
+monthEndPanel.innerHTML = "";
+
+  if (
+periodSelect.value === "month"
+  ) {
+
+const monthEndDate =
+parseLocalDate(
+dateInput.value
+      ) || new Date();
+
+const monthEndYear =
+monthEndDate.getFullYear();
+
+const monthEndMonth =
+monthEndDate.getMonth();
+
+const monthEndKey =
+monthEndYear +
+      "-" +
+      String(
+monthEndMonth + 1
+      ).padStart(2, "0");
+
+
+const monthEndSaved =
+readArray(
+        "afMonthEndWinners"
+      );
+
+const monthEndLocked =
+monthEndSaved.find(
+        item =>
+item.periodKey ===
+monthEndKey
+      );
+
+
+const monthEndPrizeSettings =
+typeof getPerformanceAwardSettings ===
+      "function"
+        ? getPerformanceAwardSettings()
+        : {
+bestEmployeePrize: 50000,
+bestTeamPrize: 100000
+          };
+
+
+const monthEndMoney =
+      amount =>
+typeof formatPayrollMoney ===
+        "function"
+          ? formatPayrollMoney(amount)
+          : "UGX " +
+            Number(
+              amount || 0
+            ).toLocaleString();
+
+
+monthEndPanel.style.display =
+      "block";
+
+
+    /* -----------------------------------------------
+       ALREADY CONFIRMED / LOCKED
+       ----------------------------------------------- */
+
+    if (monthEndLocked) {
+
+monthEndPanel.innerHTML = `
+<div style="
+          font-size:18px;
+font-weight:bold;
+          color:#0b5d3b;
+          margin-bottom:12px;
+        ">
+🏆 Month-End Winners —
+          ${escapeText(
+monthEndLocked.label ||
+calculation.range.label
+          )}
+</div>
+
+<div style="
+          background:#e8f5e9;
+          border:1px solid #a8d5b5;
+          padding:10px;
+          border-radius:8px;
+          margin-bottom:12px;
+font-weight:bold;
+          color:#0b5d3b;
+        ">
+          ✓ Confirmed and Locked
+</div>
+
+<div style="
+display:grid;
+          grid-template-columns:
+            repeat(2,minmax(220px,1fr));
+          gap:12px;
+        ">
+
+<div style="
+background:white;
+            padding:14px;
+            border-radius:9px;
+            border:1px solid #ddd;
+          ">
+<div style="
+              font-size:12px;
+              color:#666;
+            ">
+🥇 Best Employee of the Month
+</div>
+
+<div style="
+              font-size:18px;
+font-weight:bold;
+              margin-top:5px;
+            ">
+              ${escapeText(
+monthEndLocked.bestEmployeeName ||
+                ""
+              )}
+</div>
+
+<div style="margin-top:6px;">
+              Score:
+<b>
+                ${Number(
+monthEndLocked.bestEmployeeScore ||
+                  0
+                ).toFixed(1)}%
+</b>
+</div>
+
+<div style="margin-top:6px;">
+              Cash Prize:
+<b>
+                ${monthEndMoney(
+monthEndLocked.bestEmployeePrize
+                )}
+</b>
+</div>
+</div>
+
+
+<div style="
+background:white;
+            padding:14px;
+            border-radius:9px;
+            border:1px solid #ddd;
+          ">
+<div style="
+              font-size:12px;
+              color:#666;
+            ">
+🏆 Best Team of the Month
+</div>
+
+<div style="
+              font-size:18px;
+font-weight:bold;
+              margin-top:5px;
+            ">
+              ${escapeText(
+monthEndLocked.bestTeamName ||
+                ""
+              )}
+</div>
+
+<div style="margin-top:6px;">
+              Team Score:
+<b>
+                ${Number(
+monthEndLocked.bestTeamScore ||
+                  0
+                ).toFixed(1)}%
+</b>
+</div>
+
+<div style="margin-top:6px;">
+              Team Cash Prize:
+<b>
+                ${monthEndMoney(
+monthEndLocked.bestTeamPrize
+                )}
+</b>
+</div>
+
+<div style="
+              font-size:12px;
+              color:#666;
+              margin-top:5px;
+            ">
+              Prize shared among active team members.
+</div>
+</div>
+
+</div>
+      `;
+
+    } else {
+
+      /* -----------------------------------------------
+         BEST EMPLOYEE
+         ----------------------------------------------- */
+
+const monthEndTopScore =
+results.length
+          ? number(
+              results[0].finalScore
+            )
+          : null;
+
+const monthEndTopEmployees =
+monthEndTopScore === null
+          ? []
+          : results.filter(
+              result =>
+Math.abs(
+                  number(
+result.finalScore
+                  ) -
+monthEndTopScore
+                ) < 0.0001
+            );
+
+const monthEndBestEmployee =
+monthEndTopEmployees.length === 1
+          ? monthEndTopEmployees[0]
+          : null;
+
+
+      /* -----------------------------------------------
+         TEAM SCORES
+
+         Each active team's score is the average
+         performance score of team members who had
+         applicable performance records that month.
+         ----------------------------------------------- */
+
+const monthEndTeams =
+getTeams().filter(
+          team =>
+            String(
+team.status || ""
+            ).toLowerCase() ===
+            "active"
+        );
+
+
+const monthEndTeamScores =
+monthEndTeams
+          .map(team => {
+
+const employeeIds =
+Array.from(
+                new Set([
+                  String(
+team.leaderEmployeeId ||
+                    ""
+                  ),
+
+                  ...(
+Array.isArray(
+team.memberEmployeeIds
+                    )
+                      ? team.memberEmployeeIds.map(
+                          id => String(id)
+                        )
+                      : []
+                  )
+                ])
+              ).filter(Boolean);
+
+
+const memberResults =
+results.filter(
+                result =>
+employeeIds.includes(
+                    String(
+result.employeeId
+                    )
+                  )
+              );
+
+
+            if (
+              !memberResults.length
+            ) {
+              return null;
+            }
+
+
+const average =
+memberResults.reduce(
+                (total, result) =>
+                  total +
+                  number(
+result.finalScore
+                  ),
+                0
+              ) /
+memberResults.length;
+
+
+            return {
+teamId:
+team.id,
+
+teamName:
+team.name || "",
+
+              score:
+                round(
+                  average,
+                  1
+                ),
+
+rankedMembers:
+memberResults.length,
+
+              team:
+                team
+            };
+          })
+          .filter(Boolean)
+          .sort(
+            (a, b) => {
+
+              if (
+b.score !== a.score
+              ) {
+                return (
+b.score -
+a.score
+                );
+              }
+
+              return String(
+a.teamName
+              ).localeCompare(
+                String(
+b.teamName
+                )
+              );
+            }
+          );
+
+
+const monthEndTopTeamScore =
+monthEndTeamScores.length
+          ? monthEndTeamScores[0].score
+          : null;
+
+
+const monthEndTopTeams =
+monthEndTopTeamScore === null
+          ? []
+          : monthEndTeamScores.filter(
+              team =>
+Math.abs(
+team.score -
+monthEndTopTeamScore
+                ) < 0.0001
+            );
+
+
+const monthEndBestTeam =
+monthEndTopTeams.length === 1
+          ? monthEndTopTeams[0]
+          : null;
+
+
+      /* -----------------------------------------------
+         MONTH MUST BE FINISHED
+         ----------------------------------------------- */
+
+const now =
+        new Date();
+
+const currentMonthIndex =
+now.getFullYear() * 12 +
+now.getMonth();
+
+const selectedMonthIndex =
+monthEndYear * 12 +
+monthEndMonth;
+
+const monthIsClosed =
+selectedMonthIndex<
+currentMonthIndex;
+
+
+const loggedInUser =
+getCurrentUser();
+
+const directorCanConfirm =
+loggedInUser&&
+loggedInUser.role ===
+          "Director";
+
+
+const employeeTie =
+monthEndTopEmployees.length> 1;
+
+const teamTie =
+monthEndTopTeams.length> 1;
+
+
+monthEndPanel.innerHTML = `
+<div style="
+          font-size:18px;
+font-weight:bold;
+          color:#0b5d3b;
+          margin-bottom:5px;
+        ">
+🏆 Month-End Winners —
+          ${escapeText(
+calculation.range.label
+          )}
+</div>
+
+<div style="
+          font-size:12px;
+          color:#666;
+          margin-bottom:14px;
+        ">
+          Winners remain provisional until
+          the Director confirms the completed month.
+</div>
+
+
+<div style="
+display:grid;
+          grid-template-columns:
+            repeat(2,minmax(220px,1fr));
+          gap:12px;
+        ">
+
+<div style="
+background:white;
+            padding:14px;
+            border-radius:9px;
+            border:1px solid #ddd;
+          ">
+
+<div style="
+              font-size:12px;
+              color:#666;
+            ">
+🥇 Best Employee of the Month
+</div>
+
+<div style="
+              font-size:18px;
+font-weight:bold;
+              margin-top:5px;
+            ">
+              ${
+monthEndBestEmployee
+                  ? escapeText(
+monthEndBestEmployee
+                        .employeeName
+                    )
+                  : employeeTie
+                    ? "Tie — confirmation required"
+                    : "No eligible employee"
+              }
+</div>
+
+            ${
+monthEndBestEmployee
+                ? `
+<div style="margin-top:6px;">
+                    Score:
+<b>
+                      ${monthEndBestEmployee
+                        .finalScore
+                        .toFixed(1)}%
+</b>
+</div>
+                `
+                : ""
+            }
+
+<div style="margin-top:6px;">
+              Cash Prize:
+<b>
+                ${monthEndMoney(
+monthEndPrizeSettings
+                    .bestEmployeePrize
+                )}
+</b>
+</div>
+
+</div>
+
+
+<div style="
+background:white;
+            padding:14px;
+            border-radius:9px;
+            border:1px solid #ddd;
+          ">
+
+<div style="
+              font-size:12px;
+              color:#666;
+            ">
+🏆 Best Team of the Month
+</div>
+
+<div style="
+              font-size:18px;
+font-weight:bold;
+              margin-top:5px;
+            ">
+              ${
+monthEndBestTeam
+                  ? escapeText(
+monthEndBestTeam
+                        .teamName
+                    )
+                  : teamTie
+                    ? "Tie — confirmation required"
+                    : "No eligible team"
+              }
+</div>
+
+            ${
+monthEndBestTeam
+                ? `
+<div style="margin-top:6px;">
+                    Team Score:
+<b>
+                      ${monthEndBestTeam
+                        .score
+                        .toFixed(1)}%
+</b>
+</div>
+
+<div style="
+                    margin-top:4px;
+                    font-size:12px;
+                    color:#666;
+                  ">
+                    ${monthEndBestTeam
+                      .rankedMembers}
+                    ranked member(s)
+</div>
+                `
+                : ""
+            }
+
+<div style="margin-top:6px;">
+              Team Cash Prize:
+<b>
+                ${monthEndMoney(
+monthEndPrizeSettings
+                    .bestTeamPrize
+                )}
+</b>
+</div>
+
+<div style="
+              margin-top:4px;
+              font-size:12px;
+              color:#666;
+            ">
+              Divided among active team members.
+</div>
+
+</div>
+
+</div>
+
+
+        ${
+employeeTie
+            ? `
+<div style="
+                margin-top:12px;
+                padding:10px;
+                background:#fff3cd;
+                border-radius:7px;
+              ">
+                Best Employee has a tied top score.
+                Month-end confirmation is blocked
+                until the tie is resolved.
+</div>
+            `
+            : ""
+        }
+
+
+        ${
+teamTie
+            ? `
+<div style="
+                margin-top:12px;
+                padding:10px;
+                background:#fff3cd;
+                border-radius:7px;
+              ">
+                Best Team has a tied top score.
+                Month-end confirmation is blocked
+                until the tie is resolved.
+</div>
+            `
+            : ""
+        }
+
+
+        ${
+          !monthIsClosed
+            ? `
+<div style="
+                margin-top:12px;
+                padding:10px;
+                background:#fff3cd;
+                border-radius:7px;
+                color:#664d03;
+              ">
+                This month is still open.
+                Winners can only be confirmed
+                after the month has ended.
+</div>
+            `
+            : ""
+        }
+
+
+<button
+          id="afConfirmMonthEndWinners"
+          type="button"
+          ${
+            !monthIsClosed ||
+            !directorCanConfirm ||
+            !monthEndBestEmployee ||
+            !monthEndBestTeam
+              ? "disabled"
+              : ""
+          }
+          style="
+            margin-top:14px;
+            width:100%;
+            padding:11px;
+            border:0;
+            border-radius:8px;
+            background:${
+monthIsClosed&&
+directorCanConfirm&&
+monthEndBestEmployee&&
+monthEndBestTeam
+                ? "#0b5d3b"
+                : "#aaa"
+            };
+color:white;
+font-weight:bold;
+            cursor:${
+monthIsClosed&&
+directorCanConfirm&&
+monthEndBestEmployee&&
+monthEndBestTeam
+                ? "pointer"
+                : "not-allowed"
+            };
+          "
+>
+          Confirm & Lock Month-End Winners
+</button>
+      `;
+
+
+const confirmWinnersButton =
+monthEndPanel.querySelector(
+          "#afConfirmMonthEndWinners"
+        );
+
+
+      if (
+confirmWinnersButton&&
+monthIsClosed&&
+directorCanConfirm&&
+monthEndBestEmployee&&
+monthEndBestTeam
+      ) {
+
+confirmWinnersButton.onclick =
+          () => {
+
+const confirmed =
+              confirm(
+                "Confirm and lock the month-end winners for " +
+calculation.range.label +
+                "?\n\n" +
+                "Best Employee: " +
+monthEndBestEmployee
+                  .employeeName +
+                "\nBest Team: " +
+monthEndBestTeam
+                  .teamName +
+                "\n\nCash awards will be sent to payroll."
+              );
+
+            if (!confirmed) {
+              return;
+            }
+
+
+confirmWinnersButton.disabled =
+              true;
+
+
+const activeEmployees =
+getActiveEmployees();
+
+
+const winningTeamIds =
+Array.from(
+                new Set([
+                  String(
+monthEndBestTeam
+                      .team
+                      .leaderEmployeeId ||
+                    ""
+                  ),
+
+                  ...(
+Array.isArray(
+monthEndBestTeam
+                        .team
+                        .memberEmployeeIds
+                    )
+                      ? monthEndBestTeam
+                          .team
+                          .memberEmployeeIds
+                          .map(
+                            id =>
+                              String(id)
+                          )
+                      : []
+                  )
+                ])
+              ).filter(Boolean);
+
+
+const winningTeamMembers =
+winningTeamIds
+                .map(
+employeeId =>
+activeEmployees.find(
+                      employee =>
+                        String(
+employee.employeeId
+                        ) ===
+                        String(
+employeeId
+                        )
+                    )
+                )
+                .filter(Boolean);
+
+
+            if (
+              !winningTeamMembers.length
+            ) {
+
+              alert(
+                "The winning team has no active members."
+              );
+
+confirmWinnersButton.disabled =
+                false;
+
+              return;
+            }
+
+
+saveMonthlyPerformanceAwards({
+              month:
+monthEndMonth,
+
+              year:
+monthEndYear,
+
+bestEmployee: {
+employeeId:
+monthEndBestEmployee
+                    .employeeId,
+
+employeeName:
+monthEndBestEmployee
+                    .employeeName
+              },
+
+bestTeam: {
+teamId:
+monthEndBestTeam
+                    .teamId,
+
+teamName:
+monthEndBestTeam
+                    .teamName
+              },
+
+teamMembers:
+winningTeamMembers
+            });
+
+
+const winnerRecord = {
+
+periodKey:
+monthEndKey,
+
+              year:
+monthEndYear,
+
+              month:
+monthEndMonth,
+
+              label:
+calculation.range.label,
+
+bestEmployeeId:
+monthEndBestEmployee
+                  .employeeId,
+
+bestEmployeeName:
+monthEndBestEmployee
+                  .employeeName,
+
+bestEmployeeScore:
+monthEndBestEmployee
+                  .finalScore,
+
+bestTeamId:
+monthEndBestTeam
+                  .teamId,
+
+bestTeamName:
+monthEndBestTeam
+                  .teamName,
+
+bestTeamScore:
+monthEndBestTeam
+                  .score,
+
+bestEmployeePrize:
+monthEndPrizeSettings
+                  .bestEmployeePrize,
+
+bestTeamPrize:
+monthEndPrizeSettings
+                  .bestTeamPrize,
+
+confirmedBy:
+loggedInUser
+                  .employeeName ||
+loggedInUser
+                  .fullName ||
+loggedInUser
+                  .username ||
+                "Director",
+
+confirmedAt:
+                new Date()
+                  .toISOString()
+            };
+
+
+monthEndSaved.push(
+winnerRecord
+            );
+
+
+localStorage.setItem(
+              "afMonthEndWinners",
+JSON.stringify(
+monthEndSaved
+              )
+            );
+
+
+            /*
+             * Immediately refresh payroll for everyone
+             * receiving an award.
+             */
+
+const affectedEmployeeIds =
+Array.from(
+                new Set([
+                  String(
+monthEndBestEmployee
+                      .employeeId
+                  ),
+
+                  ...winningTeamMembers.map(
+                    employee =>
+                      String(
+employee.employeeId
+                      )
+                  )
+                ])
+              );
+
+
+            if (
+typeof calculateEmployeePayroll ===
+                "function" &&
+typeof saveCalculatedPayroll ===
+                "function"
+            ) {
+
+affectedEmployeeIds
+                .forEach(
+employeeId => {
+
+const payroll =
+calculateEmployeePayroll(
+employeeId,
+monthEndYear,
+monthEndMonth
+                      );
+
+                    if (payroll) {
+saveCalculatedPayroll(
+                        payroll
+                      );
+                    }
+                  }
+                );
+            }
+
+
+            render();
+          };
+      }
+    }
+  }
+}
 
 
 periodLabel.textContent =
