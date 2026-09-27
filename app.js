@@ -6088,6 +6088,269 @@ qualityWeight:
   };
 }
 
+// ======================================================
+// A&F MONTHLY PERFORMANCE AWARDS
+// ======================================================
+
+const PERFORMANCE_AWARD_KEY = "afPerformanceAwards";
+const PERFORMANCE_AWARD_SETTINGS_KEY = "afPerformanceAwardSettings";
+
+// Default cash prizes
+function getPerformanceAwardSettings() {
+const saved = JSON.parse(
+localStorage.getItem(PERFORMANCE_AWARD_SETTINGS_KEY) || "{}"
+    );
+
+    return {
+bestEmployeePrize: Number(saved.bestEmployeePrize || 50000),
+bestTeamPrize: Number(saved.bestTeamPrize || 100000)
+    };
+}
+
+function savePerformanceAwardSettings(bestEmployeePrize, bestTeamPrize) {
+const settings = {
+bestEmployeePrize: Number(bestEmployeePrize) || 0,
+bestTeamPrize: Number(bestTeamPrize) || 0
+    };
+
+localStorage.setItem(
+        PERFORMANCE_AWARD_SETTINGS_KEY,
+JSON.stringify(settings)
+    );
+
+    return settings;
+}
+
+
+// ------------------------------------------------------
+// GET ALL SAVED MONTHLY AWARDS
+// ------------------------------------------------------
+
+function getPerformanceAwards() {
+    return JSON.parse(
+localStorage.getItem(PERFORMANCE_AWARD_KEY) || "[]"
+    );
+}
+
+
+// ------------------------------------------------------
+// SAVE MONTHLY PERFORMANCE AWARDS
+// ------------------------------------------------------
+
+function saveMonthlyPerformanceAwards({
+    month,
+    year,
+bestEmployee,
+bestTeam,
+teamMembers = []
+}) {
+
+    if (!month || !year) {
+        alert("Please select the award month and year.");
+        return;
+    }
+
+const settings = getPerformanceAwardSettings();
+    let awards = getPerformanceAwards();
+
+    // Remove an older calculation for the same month
+    awards = awards.filter(
+        a => !(String(a.month) === String(month) &&
+               String(a.year) === String(year))
+    );
+
+    // ==================================================
+    // BEST EMPLOYEE AWARD
+    // ==================================================
+
+    if (bestEmployee) {
+
+awards.push({
+            id: "EMP-" + Date.now(),
+            month: month,
+            year: year,
+
+employeeId:
+bestEmployee.employeeId ||
+bestEmployee.id ||
+                "",
+
+employeeName:
+bestEmployee.employeeName ||
+bestEmployee.fullName ||
+bestEmployee.name ||
+                "",
+
+awardType: "Best Employee of the Month",
+            amount: settings.bestEmployeePrize,
+
+            source: "Performance Award",
+createdAt: new Date().toISOString()
+        });
+    }
+
+
+    // ==================================================
+    // BEST TEAM AWARD
+    // ==================================================
+
+    if (bestTeam&&teamMembers.length> 0) {
+
+const totalPrize = settings.bestTeamPrize;
+
+const sharePerEmployee =
+Math.floor(totalPrize / teamMembers.length);
+
+const remainder =
+totalPrize - (sharePerEmployee * teamMembers.length);
+
+teamMembers.forEach((employee, index) => {
+
+            // Give any small rounding remainder to first member
+const employeeShare =
+sharePerEmployee +
+                (index === 0 ? remainder : 0);
+
+awards.push({
+                id:
+                    "TEAM-" +
+Date.now() +
+                    "-" +
+                    index,
+
+                month: month,
+                year: year,
+
+employeeId:
+employee.employeeId ||
+employee.id ||
+                    "",
+
+employeeName:
+employee.employeeName ||
+employee.fullName ||
+employee.name ||
+                    "",
+
+teamId:
+bestTeam.teamId ||
+bestTeam.id ||
+                    "",
+
+teamName:
+bestTeam.teamName ||
+bestTeam.name ||
+                    "",
+
+awardType:
+                    "Best Team of the Month",
+
+                amount: employeeShare,
+
+totalTeamPrize: totalPrize,
+numberOfTeamMembers: teamMembers.length,
+
+                source: "Performance Award",
+createdAt: new Date().toISOString()
+            });
+        });
+    }
+
+localStorage.setItem(
+        PERFORMANCE_AWARD_KEY,
+JSON.stringify(awards)
+    );
+
+    alert(
+        "Performance awards for " +
+        month +
+        "/" +
+        year +
+        " have been saved successfully."
+    );
+
+    return awards;
+}
+
+
+// ------------------------------------------------------
+// GET ONE EMPLOYEE'S AWARDS FOR PAYROLL
+// ------------------------------------------------------
+
+function getEmployeePerformanceAwards(
+employeeId,
+    month,
+    year
+) {
+
+const awards = getPerformanceAwards();
+
+    return awards.filter(
+        award =>
+            String(award.employeeId) === String(employeeId) &&
+            String(award.month) === String(month) &&
+            String(award.year) === String(year)
+    );
+}
+
+
+// ------------------------------------------------------
+// GET TOTAL PERFORMANCE BONUS FOR PAYROLL
+// ------------------------------------------------------
+
+function getEmployeePerformanceAwardTotal(
+employeeId,
+    month,
+    year
+) {
+
+const awards =
+getEmployeePerformanceAwards(
+employeeId,
+            month,
+            year
+        );
+
+    return awards.reduce(
+        (total, award) =>
+            total + Number(award.amount || 0),
+        0
+    );
+}
+
+
+// ------------------------------------------------------
+// GET AWARD BREAKDOWN FOR PAYSLIP
+// ------------------------------------------------------
+
+function getEmployeePerformanceAwardBreakdown(
+employeeId,
+    month,
+    year
+) {
+
+const awards =
+getEmployeePerformanceAwards(
+employeeId,
+            month,
+            year
+        );
+
+    return awards.map(award => ({
+        description:
+award.awardType ===
+            "Best Team of the Month"
+                ? "Best Team Award Share"
+                : "Best Employee Award",
+
+        amount: Number(award.amount || 0),
+
+teamName:
+award.teamName || ""
+    }));
+}
+
+
 /* =========================================================
    EMPLOYEE TEAM TRANSFER
    ========================================================= */
@@ -9300,7 +9563,6 @@ recoveries.reduce(
     0
   );
 }
-
 function calculateEmployeePayroll(
 employeeId,
   year,
@@ -9355,6 +9617,30 @@ absenceDeduction,
       0
     );
 
+
+  // =====================================================
+  // PERFORMANCE AWARDS
+  // =====================================================
+
+const performanceAwardBreakdown =
+getEmployeePerformanceAwardBreakdown(
+employeeId,
+      month,
+      year
+    );
+
+const performanceAwardTotal =
+getEmployeePerformanceAwardTotal(
+employeeId,
+      month,
+      year
+    );
+
+
+  // =====================================================
+  // DEDUCTIONS & ADVANCES
+  // =====================================================
+
 const adjustments =
 getEmployeePayrollAdjustments(
 employeeId,
@@ -9368,13 +9654,24 @@ adjustments.deductionTotal;
 const advanceRecovery =
 adjustments.recoveryTotal;
 
+
+  // =====================================================
+  // NET PAYABLE
+  // =====================================================
+
 const netPayable =
 Math.max(
-earnedAllowance -
+earnedAllowance +
+performanceAwardTotal -
 approvedDeductions -
 advanceRecovery,
       0
     );
+
+
+  // =====================================================
+  // OVERTIME
+  // =====================================================
 
 const netOvertimeMinutes =
     Number(
@@ -9383,6 +9680,11 @@ const netOvertimeMinutes =
 
 const netOvertimeHours =
 netOvertimeMinutes / 60;
+
+
+  // =====================================================
+  // EXISTING PAYROLL RECORD
+  // =====================================================
 
 const payrollRecords =
 getPayrollRecords();
@@ -9396,7 +9698,9 @@ item.employeeId === employeeId&&
     );
 
 const amountPaid =
-    Number(existing?.amountPaid || 0);
+    Number(
+      existing?.amountPaid || 0
+    );
 
 const balance =
 Math.max(
@@ -9406,49 +9710,90 @@ netPayable - amountPaid,
 
   let status = "UNPAID";
 
-  if (balance <= 0 &&netPayable> 0) {
+  if (
+    balance <= 0 &&
+netPayable> 0
+  ) {
     status = "PAID";
-  } else if (amountPaid> 0) {
+
+  } else if (
+amountPaid> 0
+  ) {
     status = "PARTIALLY PAID";
   }
 
+
+  // =====================================================
+  // RETURN PAYROLL
+  // =====================================================
+
   return {
 employeeId,
+
 employeeName:
 employee.fullName || "",
+
     employee,
-    year: Number(year),
-    month: Number(month),
+
+    year:
+      Number(year),
+
+    month:
+      Number(month),
+
 monthName:
-payrollMonthName(year, month),
+payrollMonthName(
+        year,
+        month
+      ),
+
 monthlyAllowance,
+
 daysInMonth,
+
 dailyAllowance,
+
 absentDays,
+
 absenceDeduction,
+
 earnedAllowance,
+
+    // Performance Awards
+performanceAwardTotal,
+performanceAwardBreakdown,
+
 approvedDeductions,
+
 advanceRecovery,
+
 netPayable,
+
 amountPaid,
+
     balance,
+
     status,
+
 totalOvertimeMinutes:
       Number(
         attendance?.totalOvertimeMinutes || 0
       ),
+
 totalShortfallMinutes:
       Number(
         attendance?.totalShortfallMinutes || 0
       ),
+
 netOvertimeMinutes,
+
 netOvertimeHours,
+
 createdAt:
       existing?.createdAt ||
       new Date().toISOString()
   };
 }
-
 function getPreviousUnpaidPayrollBalance(
 employeeId,
   year,
@@ -9522,6 +9867,14 @@ absenceDeduction:
 payroll.absenceDeduction,
 earnedAllowance:
 payroll.earnedAllowance,
+performanceAwardTotal:
+Number(
+payroll.performanceAwardTotal || 0
+),
+
+performanceAwardBreakdown:
+payroll.performanceAwardBreakdown || [],
+
 approvedDeductions:
 payroll.approvedDeductions,
 advanceRecovery:
@@ -10583,25 +10936,47 @@ record.balance
 </td>
 
 <td style="padding:8px;">
-              ${
-                Number(record.balance || 0) > 0
-                  ? `
+<div style="
+display:flex;
+    gap:6px;
+flex-wrap:wrap;
+  ">
+
+<button
+onclick="printPayrollPayslip('${record.id}')"
+      style="
+        background:#0b5d3b;
+color:white;
+        border:0;
+        padding:7px 10px;
+        border-radius:6px;
+cursor:pointer;
+      ">
+      Print Payslip
+</button>
+
+    ${
+      Number(record.balance || 0) > 0
+        ? `
 <button
 onclick="recordPayrollPayment(
-                        '${record.id}'
-                      )"
-                      style="
-                        background:#198754;
+              '${record.id}'
+            )"
+            style="
+              background:#198754;
 color:white;
-                        border:0;
-                        padding:7px 10px;
-                        border-radius:6px;
-                      ">
-                      Record Payment
+              border:0;
+              padding:7px 10px;
+              border-radius:6px;
+cursor:pointer;
+            ">
+            Record Payment
 </button>
-                  `
-                  : "—"
-              }
+        `
+        : ""
+    }
+
+</div>
 </td>
 </tr>
         `)
@@ -10696,6 +11071,38 @@ saved.absenceDeduction
 saved.earnedAllowance
           )}</b>
 </p>
+<p>
+          Performance award:
+<b>${formatPayrollMoney(
+Number(saved.performanceAwardTotal || 0)
+          )}</b>
+</p>
+${Array.isArray(saved.performanceAwardBreakdown) &&
+saved.performanceAwardBreakdown.length
+  ? `
+<div style="
+    margin:6px 0 14px 20px;
+    padding:10px;
+    background:#fff8e1;
+    border-radius:7px;
+    font-size:14px;
+  ">
+    ${saved.performanceAwardBreakdown
+      .map(award => `
+<div style="margin:4px 0;">
+🏆 ${award.description}
+          ${award.teamName ? ` - ${award.teamName}` : ""}
+          :
+<b>${formatPayrollMoney(
+            Number(award.amount || 0)
+          )}</b>
+</div>
+      `)
+      .join("")}
+</div>
+`
+  : ""
+}
 
 <p>
           Approved deductions:
@@ -10758,6 +11165,471 @@ modal.querySelector(
 refreshLedger();
 }
 
+/* =========================================================
+   PRINT EMPLOYEE PAYSLIP
+   ========================================================= */
+
+function printPayrollPayslip(payrollId) {
+
+const records = getPayrollRecords();
+
+const record = records.find(
+    item =>
+      String(item.id) ===
+      String(payrollId)
+  );
+
+  if (!record) {
+    alert("Payroll record not found.");
+    return;
+  }
+
+const awards =
+Array.isArray(record.performanceAwardBreakdown)
+      ? record.performanceAwardBreakdown
+      : [];
+
+const awardRows =
+awards.length
+      ? awards.map(award => `
+<tr>
+<td>
+              ${award.description || "Performance Award"}
+              ${
+award.teamName
+                  ? ` - ${award.teamName}`
+                  : ""
+              }
+</td>
+
+<td class="amount">
+              ${formatPayrollMoney(
+                Number(award.amount || 0)
+              )}
+</td>
+</tr>
+        `).join("")
+      : `
+<tr>
+<td>Performance Award</td>
+<td class="amount">
+              ${formatPayrollMoney(
+                Number(
+record.performanceAwardTotal || 0
+                )
+              )}
+</td>
+</tr>
+        `;
+
+
+const printWindow =
+window.open(
+      "",
+      "_blank",
+      "width=850,height=900"
+    );
+
+  if (!printWindow) {
+    alert(
+      "Please allow pop-ups to print the payslip."
+    );
+    return;
+  }
+
+
+printWindow.document.write(`
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<title>
+Payslip - ${record.employeeName || ""}
+</title>
+
+<style>
+
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 30px;
+    color: #222;
+    background: white;
+  }
+
+  .payslip {
+    max-width: 760px;
+    margin: auto;
+    border: 2px solid #0b5d3b;
+    padding: 25px;
+  }
+
+  .header {
+    text-align: center;
+    border-bottom: 3px solid #0b5d3b;
+    padding-bottom: 15px;
+    margin-bottom: 20px;
+  }
+
+  .header h1 {
+    margin: 0;
+    color: #0b5d3b;
+    font-size: 25px;
+  }
+
+  .header h2 {
+    margin: 7px 0 0 0;
+    font-size: 18px;
+  }
+
+  .details {
+    width: 100%;
+    margin-bottom: 20px;
+  }
+
+  .details td {
+    padding: 5px;
+  }
+
+  .pay-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+  }
+
+  .pay-table th {
+    background: #0b5d3b;
+    color: white;
+    text-align: left;
+    padding: 10px;
+    border: 1px solid #ccc;
+  }
+
+  .pay-table td {
+    padding: 9px;
+    border: 1px solid #ccc;
+  }
+
+  .amount {
+    text-align: right;
+    font-weight: bold;
+  }
+
+  .net-pay {
+    margin-top: 18px;
+    padding: 15px;
+    background: #e8f5e9;
+    border: 2px solid #0b5d3b;
+    font-size: 20px;
+    font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .status {
+    margin-top: 15px;
+    font-weight: bold;
+  }
+
+  .signatures {
+    margin-top: 60px;
+    display: flex;
+    justify-content: space-between;
+    gap: 50px;
+  }
+
+  .signature {
+    width: 45%;
+    text-align: center;
+    border-top: 1px solid #333;
+    padding-top: 6px;
+  }
+
+  .footer {
+    margin-top: 35px;
+    border-top: 1px solid #aaa;
+    padding-top: 10px;
+    text-align: center;
+    font-size: 11px;
+    color: #666;
+  }
+
+  .print-button {
+    margin: 25px auto;
+    display: block;
+    padding: 12px 25px;
+    background: #0b5d3b;
+    color: white;
+    border: 0;
+    border-radius: 6px;
+    font-size: 15px;
+    cursor: pointer;
+  }
+
+  @media print {
+
+    body {
+      padding: 0;
+    }
+
+    .payslip {
+      border: 0;
+    }
+
+    .print-button {
+      display: none;
+    }
+  }
+
+</style>
+
+</head>
+
+
+<body>
+
+<div class="payslip">
+
+<div class="header">
+
+<h1>
+      A&F Wekavera Ltd
+</h1>
+
+<div>
+      Waste2Wealth Solutions
+</div>
+
+<h2>
+      EMPLOYEE PAYSLIP
+</h2>
+
+</div>
+
+
+<table class="details">
+
+<tr>
+<td>
+<b>Employee:</b>
+</td>
+
+<td>
+        ${record.employeeName || ""}
+</td>
+</tr>
+
+<tr>
+<td>
+<b>Employee ID:</b>
+</td>
+
+<td>
+        ${record.employeeId || ""}
+</td>
+</tr>
+
+<tr>
+<td>
+<b>Payroll Period:</b>
+</td>
+
+<td>
+        ${record.monthName || ""}
+        ${record.year || ""}
+</td>
+</tr>
+
+</table>
+
+
+<table class="pay-table">
+
+<thead>
+
+<tr>
+<th>Description</th>
+<th style="text-align:right;">
+          Amount (UGX)
+</th>
+</tr>
+
+</thead>
+
+<tbody>
+
+<tr>
+<td>Monthly Allowance</td>
+
+<td class="amount">
+          ${formatPayrollMoney(
+            Number(record.monthlyAllowance || 0)
+          )}
+</td>
+</tr>
+
+
+<tr>
+<td>Absence Deduction</td>
+
+<td class="amount">
+          - ${formatPayrollMoney(
+            Number(record.absenceDeduction || 0)
+          )}
+</td>
+</tr>
+
+
+<tr>
+<td>Earned Allowance</td>
+
+<td class="amount">
+          ${formatPayrollMoney(
+            Number(record.earnedAllowance || 0)
+          )}
+</td>
+</tr>
+
+
+      ${awardRows}
+
+
+<tr>
+<td>
+          Total Performance Awards
+</td>
+
+<td class="amount">
+          ${formatPayrollMoney(
+            Number(
+record.performanceAwardTotal || 0
+            )
+          )}
+</td>
+</tr>
+
+
+<tr>
+<td>Approved Deductions</td>
+
+<td class="amount">
+          - ${formatPayrollMoney(
+            Number(record.approvedDeductions || 0)
+          )}
+</td>
+</tr>
+
+
+<tr>
+<td>Advance Recovery</td>
+
+<td class="amount">
+          - ${formatPayrollMoney(
+            Number(record.advanceRecovery || 0)
+          )}
+</td>
+</tr>
+
+</tbody>
+
+</table>
+
+
+<div class="net-pay">
+
+<span>NET PAYABLE</span>
+
+<span>
+      ${formatPayrollMoney(
+        Number(record.netPayable || 0)
+      )}
+</span>
+
+</div>
+
+
+<table class="pay-table"
+         style="margin-top:20px;">
+
+<tbody>
+
+<tr>
+<td>Amount Paid</td>
+
+<td class="amount">
+          ${formatPayrollMoney(
+            Number(record.amountPaid || 0)
+          )}
+</td>
+</tr>
+
+<tr>
+<td>Balance</td>
+
+<td class="amount">
+          ${formatPayrollMoney(
+            Number(record.balance || 0)
+          )}
+</td>
+</tr>
+
+<tr>
+<td>Net Overtime</td>
+
+<td class="amount">
+          ${Number(
+record.netOvertimeHours || 0
+          ).toFixed(2)} hours
+</td>
+</tr>
+
+</tbody>
+
+</table>
+
+
+<div class="status">
+    Payment Status:
+    ${record.status || "UNPAID"}
+</div>
+
+
+<div class="signatures">
+
+<div class="signature">
+      Employee Signature
+</div>
+
+<div class="signature">
+      Authorized Signature
+</div>
+
+</div>
+
+
+<div class="footer">
+    Generated from A&F Staff & HR Management System
+</div>
+
+
+<button
+    class="print-button"
+onclick="window.print()">
+    Print Payslip
+</button>
+
+</div>
+
+</body>
+
+</html>
+  `);
+
+printWindow.document.close();
+printWindow.focus();
+}
 
 /* =========================================================
    RECORD PAYROLL PAYMENT
