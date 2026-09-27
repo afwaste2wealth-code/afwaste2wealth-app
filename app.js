@@ -36906,6 +36906,79 @@ item.periodKey ===
 monthEndKey
       );
 
+/* =======================================================
+   MONTHLY PRIZE PLAN
+   ======================================================= */
+
+const monthEndPrizePlans =
+readArray(
+  "afMonthEndPrizePlans"
+);
+
+let monthEndPrizePlan =
+monthEndPrizePlans.find(
+  item =>
+item.periodKey ===
+monthEndKey
+) || null;
+
+
+/* Previous month */
+const previousMonthDate =
+new Date(
+monthEndYear,
+monthEndMonth - 1,
+  1
+);
+
+const previousMonthKey =
+previousMonthDate.getFullYear() +
+"-" +
+String(
+previousMonthDate.getMonth() + 1
+).padStart(2, "0");
+
+
+/* If this month has no saved amounts,
+   carry forward the previous month */
+if (!monthEndPrizePlan) {
+
+const previousMonthPrizePlan =
+monthEndPrizePlans.find(
+    item =>
+item.periodKey ===
+previousMonthKey
+  );
+
+  if (previousMonthPrizePlan) {
+
+monthEndPrizePlan = {
+periodKey:
+monthEndKey,
+
+      year:
+monthEndYear,
+
+      month:
+monthEndMonth,
+
+bestEmployeePrize:
+        Number(
+previousMonthPrizePlan
+            .bestEmployeePrize || 0
+        ),
+
+bestTeamPrize:
+        Number(
+previousMonthPrizePlan
+            .bestTeamPrize || 0
+        ),
+
+inheritedFrom:
+previousMonthKey
+    };
+  }
+}
 
 
 
@@ -37363,6 +37436,12 @@ font-weight:bold;
     type="number"
     min="0"
     step="100"
+    value="${
+  Number(
+monthEndPrizePlan?.bestEmployeePrize || 0
+  ) || ""
+}"
+
     placeholder="Director enters amount"
     style="
       width:100%;
@@ -37448,6 +37527,11 @@ font-weight:bold;
     type="number"
     min="0"
     step="100"
+    value="${
+  Number(
+     monthEndPrizePlan?.bestTeamPrize || 0
+     ) || ""
+    }"
     placeholder="Director enters amount"
     style="
       width:100%;
@@ -37471,6 +37555,29 @@ box-sizing:border-box;
 
 </div>
 
+${
+directorCanConfirm
+    ? `
+<button
+  id="afSaveMonthPrizeAmounts"
+  type="button"
+  style="
+    margin-top:14px;
+    width:100%;
+    padding:11px;
+    border:0;
+    border-radius:8px;
+    background:#0b5d3b;
+color:white;
+font-weight:bold;
+cursor:pointer;
+  "
+>
+💾 Save Prize Amounts
+</button>
+`
+    : ""
+}
 
         ${
 employeeTie
@@ -37568,7 +37675,132 @@ monthEndBestTeam
 </button>
       `;
 
+const savePrizeButton =
+monthEndPanel.querySelector(
+  "#afSaveMonthPrizeAmounts"
+);
 
+if (savePrizeButton) {
+
+savePrizeButton.onclick = () => {
+
+const employeePrizeInput =
+monthEndPanel.querySelector(
+      "#afBestEmployeePrize"
+    );
+
+const teamPrizeInput =
+monthEndPanel.querySelector(
+      "#afBestTeamPrize"
+    );
+
+const employeePrize =
+    Number(
+employeePrizeInput?.value || 0
+    );
+
+const teamPrize =
+    Number(
+teamPrizeInput?.value || 0
+    );
+
+
+    if (
+employeePrize<= 0 ||
+teamPrize<= 0
+    ) {
+
+      alert(
+        "Please enter both prize amounts."
+      );
+
+      return;
+    }
+
+
+    if (
+employeePrize % 100 !== 0 ||
+teamPrize % 100 !== 0
+    ) {
+
+      alert(
+        "Prize amounts must be in UGX 100 increments."
+      );
+
+      return;
+    }
+
+
+const existingIndex =
+monthEndPrizePlans.findIndex(
+      item =>
+item.periodKey ===
+monthEndKey
+    );
+
+
+const prizePlan = {
+
+periodKey:
+monthEndKey,
+
+      year:
+monthEndYear,
+
+      month:
+monthEndMonth,
+
+bestEmployeePrize:
+employeePrize,
+
+bestTeamPrize:
+teamPrize,
+
+savedBy:
+loggedInUser?.fullName ||
+loggedInUser?.employeeName ||
+        "Director",
+
+savedAt:
+        new Date().toISOString()
+    };
+
+
+    if (existingIndex>= 0) {
+
+monthEndPrizePlans[
+existingIndex
+      ] = prizePlan;
+
+    } else {
+
+monthEndPrizePlans.push(
+prizePlan
+      );
+
+    }
+
+
+localStorage.setItem(
+      "afMonthEndPrizePlans",
+JSON.stringify(
+monthEndPrizePlans
+      )
+    );
+
+
+    alert(
+      "Prize amounts saved successfully for " +
+calculation.range.label +
+      "."
+    );
+
+
+    render();
+  };
+}
+
+       
 const confirmWinnersButton =
 monthEndPanel.querySelector(
           "#afConfirmMonthEndWinners"
