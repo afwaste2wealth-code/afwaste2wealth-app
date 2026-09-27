@@ -6142,7 +6142,9 @@ function saveMonthlyPerformanceAwards({
     year,
 bestEmployee,
 bestTeam,
-teamMembers = []
+teamMembers = [],
+bestEmployeePrize = 0,
+bestTeamPrize = 0
 }) {
 
     if (
@@ -6155,7 +6157,6 @@ teamMembers = []
         return;
     }
 
-const settings = getPerformanceAwardSettings();
     let awards = getPerformanceAwards();
 
     // Remove an older calculation for the same month
@@ -6187,7 +6188,7 @@ bestEmployee.name ||
                 "",
 
 awardType: "Best Employee of the Month",
-            amount: settings.bestEmployeePrize,
+            amount: Number(bestEmployeePrize || 0),
 
             source: "Performance Award",
 createdAt: new Date().toISOString()
@@ -6201,7 +6202,7 @@ createdAt: new Date().toISOString()
 
     if (bestTeam&&teamMembers.length> 0) {
 
-const totalPrize = settings.bestTeamPrize;
+const totalPrize = Number(bestTeamPrize || 0);
 
 const sharePerEmployee =
 Math.floor(totalPrize / teamMembers.length/100)*100;
@@ -36596,14 +36597,6 @@ monthEndKey
       );
 
 
-const monthEndPrizeSettings =
-typeof getPerformanceAwardSettings ===
-      "function"
-        ? getPerformanceAwardSettings()
-        : {
-bestEmployeePrize: 50000,
-bestTeamPrize: 100000
-          };
 
 
 const monthEndMoney =
@@ -37045,14 +37038,30 @@ monthEndBestEmployee
                 : ""
             }
 
-<div style="margin-top:6px;">
-              Cash Prize:
-<b>
-                ${monthEndMoney(
-monthEndPrizeSettings
-                    .bestEmployeePrize
-                )}
-</b>
+<div style="margin-top:10px;">
+<label style="
+display:block;
+    font-size:12px;
+font-weight:bold;
+    margin-bottom:5px;
+  ">
+    Cash Prize (UGX)
+</label>
+
+<input
+    id="afBestEmployeePrize"
+    type="number"
+    min="0"
+    step="100"
+    placeholder="Director enters amount"
+    style="
+      width:100%;
+box-sizing:border-box;
+      padding:9px;
+      border:1px solid #ccc;
+      border-radius:7px;
+    "
+>
 </div>
 
 </div>
@@ -37114,14 +37123,30 @@ monthEndBestTeam
                 : ""
             }
 
-<div style="margin-top:6px;">
-              Team Cash Prize:
-<b>
-                ${monthEndMoney(
-monthEndPrizeSettings
-                    .bestTeamPrize
-                )}
-</b>
+<div style="margin-top:10px;">
+<label style="
+display:block;
+    font-size:12px;
+font-weight:bold;
+    margin-bottom:5px;
+  ">
+    Team Cash Prize (UGX)
+</label>
+
+<input
+    id="afBestTeamPrize"
+    type="number"
+    min="0"
+    step="100"
+    placeholder="Director enters amount"
+    style="
+      width:100%;
+box-sizing:border-box;
+      padding:9px;
+      border:1px solid #ccc;
+      border-radius:7px;
+    "
+>
 </div>
 
 <div style="
@@ -37251,19 +37276,68 @@ monthEndBestTeam
 confirmWinnersButton.onclick =
           () => {
 
+ const bestEmployeePrizeInput =
+monthEndPanel.querySelector(
+  "#afBestEmployeePrize"
+);
+
+const bestTeamPrizeInput =
+monthEndPanel.querySelector(
+  "#afBestTeamPrize"
+);
+
+const bestEmployeePrize =
+Number(
+bestEmployeePrizeInput?.value || 0
+);
+
+const bestTeamPrize =
+Number(
+bestTeamPrizeInput?.value || 0
+);
+
+if (
+bestEmployeePrize<= 0 ||
+bestTeamPrize<= 0
+) {
+  alert(
+    "Please enter the cash prize for both " +
+    "Best Employee and Best Team."
+  );
+  return;
+}
+
+if (
+bestEmployeePrize % 100 !== 0 ||
+bestTeamPrize % 100 !== 0
+) {
+  alert(
+    "Cash prizes must be entered in UGX 100 increments."
+  );
+  return;
+}
+            
+             
 const confirmed =
-              confirm(
-                "Confirm and lock the month-end winners for " +
+confirm(
+  "Confirm and lock the month-end winners for " +
 calculation.range.label +
-                "?\n\n" +
-                "Best Employee: " +
-monthEndBestEmployee
-                  .employeeName +
-                "\nBest Team: " +
-monthEndBestTeam
-                  .teamName +
-                "\n\nCash awards will be sent to payroll."
-              );
+  "?\n\n" +
+
+  "Best Employee: " +
+monthEndBestEmployee.employeeName +
+
+  "\nEmployee Cash Prize: " +
+monthEndMoney(bestEmployeePrize) +
+
+  "\n\nBest Team: " +
+monthEndBestTeam.teamName +
+
+  "\nTeam Cash Prize: " +
+monthEndMoney(bestTeamPrize) +
+
+  "\n\nCash awards will be sent to payroll."
+);
 
             if (!confirmed) {
               return;
@@ -37367,7 +37441,11 @@ monthEndBestTeam
               },
 
 teamMembers:
-winningTeamMembers
+winningTeamMembers,
+   bestEmployeePrize:
+   bestEmployeePrize,
+   bestTeamPrize:
+   bestTeamPrize
             });
 
 
@@ -37410,12 +37488,10 @@ monthEndBestTeam
                   .score,
 
 bestEmployeePrize:
-monthEndPrizeSettings
-                  .bestEmployeePrize,
+bestEmployeePrize,
 
 bestTeamPrize:
-monthEndPrizeSettings
-                  .bestTeamPrize,
+bestTeamPrize,
 
 confirmedBy:
 loggedInUser
