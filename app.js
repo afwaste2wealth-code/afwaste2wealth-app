@@ -40582,3 +40582,1707 @@ setTimeout(
   );
 
 })();
+
+/* =========================================================
+   A&F STOCK + DELIVERY SYSTEM
+   Check Stock + Record Delivery
+   ========================================================= */
+
+(function connectAFStockAndDelivery() {
+
+  /* =======================================================
+     POLE TYPES
+     ======================================================= */
+
+const AF_POLE_TYPES = [
+
+    {
+      key: "pole3X3X6Square",
+      name: '3"x3"x6ft Square'
+    },
+
+    {
+      key: "pole3X3X6_5Square",
+      name: '3"x3"x6.5ft Square'
+    },
+
+    {
+      key: "pole4X4X6Square",
+      name: '4"x4"x6ft Square'
+    },
+
+    {
+      key: "pole4X4X7Square",
+      name: '4"x4"x7ft Square'
+    },
+
+    {
+      key: "pole3x6Round",
+      name: '3" Round x 6ft'
+    },
+
+    {
+      key: "pole4x7Round",
+      name: '4" Round x 7ft'
+    },
+
+    {
+      key: "pole3X3X2Square",
+      name: '3"x3"x2ft Square'
+    },
+
+    {
+      key: "pole4x4X2Square",
+      name: '4"x4"x2ft Square'
+    },
+
+    {
+      key: "pole4x2Round",
+      name: '4" Round x 2ft'
+    }
+
+  ];
+
+
+  /* =======================================================
+     HELPERS
+     ======================================================= */
+
+  function afReadArray(key) {
+
+    try {
+
+const value =
+JSON.parse(
+localStorage.getItem(key) || "[]"
+      );
+
+      return Array.isArray(value)
+        ? value
+        : [];
+
+    } catch (error) {
+
+console.error(
+        "Storage read error:",
+        key,
+        error
+      );
+
+      return [];
+    }
+  }
+
+
+  function afEscape(value) {
+
+    return String(
+      value ?? ""
+    )
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+
+  function afLocalDate() {
+
+const now =
+    new Date();
+
+const year =
+now.getFullYear();
+
+const month =
+    String(
+now.getMonth() + 1
+    ).padStart(2, "0");
+
+const day =
+    String(
+now.getDate()
+    ).padStart(2, "0");
+
+    return (
+      year +
+      "-" +
+      month +
+      "-" +
+      day
+    );
+  }
+
+
+  /* =======================================================
+     CALCULATE FACTORY STOCK
+     ======================================================= */
+
+  function getAFFactoryStock() {
+
+const materialRecords =
+afReadArray(
+      "materialRecords"
+    );
+
+const productionRecords =
+afReadArray(
+      "productionRecords"
+    );
+
+constd eliveryRecords =
+afReadArray(
+      "afDeliveryRecords"
+    );
+
+
+    /* -------------------------
+       UNWASHED COMPANY KAVERA
+       ------------------------- */
+
+const unwashedKaveraKg =
+materialRecords
+      .filter(record => {
+
+const source =
+        String(
+record.materialSource || ""
+        ).toLowerCase();
+
+const status =
+        String(
+record.status || ""
+        ).toUpperCase();
+
+        return (
+          source !== "client" &&
+          status !== "CANCELLED"
+        );
+
+      })
+      .reduce(
+        (total, record) => {
+
+          return (
+            total +
+            Number(
+record.batchBalanceKg ??
+record.openingBatchKg ??
+record.netWeight ??
+              0
+            )
+          );
+
+        },
+        0
+      );
+
+
+    /* -------------------------
+       WASHED COMPANY KAVERA
+       ------------------------- */
+
+const washedKaveraKg =
+    Number(
+localStorage.getItem(
+        "companyWashedKaveraStock"
+      ) || 0
+    );
+
+
+const produced = {};
+
+const delivered = {};
+
+
+AF_POLE_TYPES.forEach(type => {
+
+      produced[type.key] = 0;
+
+      delivered[type.key] = 0;
+
+    });
+
+
+    /* -------------------------
+       PRODUCTION
+       ------------------------- */
+
+productionRecords
+      .filter(record => {
+
+const status =
+        String(
+record.productionStatus ||
+record.status ||
+          ""
+        ).toUpperCase();
+
+        return (
+          status !== "CANCELLED"
+        );
+
+      })
+      .forEach(record => {
+
+        /*
+         * New production records
+         */
+        if (
+Array.isArray(
+record.poleEntries
+          ) &&
+record.poleEntries.length
+        ) {
+
+record.poleEntries
+            .forEach(entry => {
+
+const key =
+              String(
+entry.key || ""
+              );
+
+              if (
+Object.prototype
+                  .hasOwnProperty.call(
+                    produced,
+                    key
+                  )
+              ) {
+
+                produced[key] +=
+                Number(
+entry.quantity || 0
+                );
+
+              }
+
+            });
+
+          return;
+        }
+
+
+        /*
+         * Older production records
+         */
+        AF_POLE_TYPES
+          .forEach(type => {
+
+            produced[type.key] +=
+            Number(
+              record[type.key] || 0
+            );
+
+          });
+
+      });
+
+
+    /* -------------------------
+       DELIVERIES
+       ------------------------- */
+
+deliveryRecords
+      .filter(record => {
+
+        return (
+          String(
+record.status || ""
+          ).toUpperCase() !==
+          "CANCELLED"
+        );
+
+      })
+      .forEach(record => {
+
+const items =
+Array.isArray(record.items)
+          ? record.items
+          : [];
+
+items.forEach(item => {
+
+const key =
+          String(
+item.key || ""
+          );
+
+          if (
+Object.prototype
+              .hasOwnProperty.call(
+                delivered,
+                key
+              )
+          ) {
+
+            delivered[key] +=
+            Number(
+item.quantity || 0
+            );
+
+          }
+
+        });
+
+      });
+
+
+const balances = {};
+
+
+AF_POLE_TYPES.forEach(type => {
+
+      balances[type.key] =
+Math.max(
+        Number(
+          produced[type.key] || 0
+        ) -
+        Number(
+          delivered[type.key] || 0
+        ),
+        0
+      );
+
+    });
+
+
+const totalProduced =
+AF_POLE_TYPES.reduce(
+      (total, type) =>
+        total +
+        Number(
+          produced[type.key] || 0
+        ),
+      0
+    );
+
+
+const totalDelivered =
+AF_POLE_TYPES.reduce(
+      (total, type) =>
+        total +
+        Number(
+          delivered[type.key] || 0
+        ),
+      0
+    );
+
+
+const totalBalance =
+AF_POLE_TYPES.reduce(
+      (total, type) =>
+        total +
+        Number(
+          balances[type.key] || 0
+        ),
+      0
+    );
+
+
+    return {
+
+unwashedKaveraKg,
+
+washedKaveraKg,
+
+      produced,
+
+      delivered,
+
+      balances,
+
+totalProduced,
+
+totalDelivered,
+
+totalBalance,
+
+deliveryRecords
+
+    };
+  }
+
+
+  /* =======================================================
+     CHECK STOCK
+     ======================================================= */
+
+  function checkAFStockInventory() {
+
+const stock =
+getAFFactoryStock();
+
+
+const existing =
+document.getElementById(
+      "afFactoryStockModal"
+    );
+
+    if (existing) {
+existing.remove();
+    }
+
+
+const modal =
+document.createElement(
+      "div"
+    );
+
+modal.id =
+    "afFactoryStockModal";
+
+modal.style.cssText = `
+position:fixed;
+      inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+align-items:center;
+justify-content:center;
+      z-index:99999;
+font-family:Arial,sans-serif;
+      padding:10px;
+box-sizing:border-box;
+    `;
+
+
+modal.innerHTML = `
+
+<div style="
+background:white;
+  width:100%;
+  max-width:950px;
+  max-height:94vh;
+overflow:auto;
+  border-radius:14px;
+  padding:22px;
+box-sizing:border-box;
+">
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:center;
+  gap:12px;
+  margin-bottom:18px;
+">
+
+<div>
+
+<h2 style="
+  margin:0;
+  color:#0b5d3b;
+">
+📦 Factory Stock
+</h2>
+
+<div style="
+  font-size:12px;
+  color:#666;
+  margin-top:4px;
+">
+  Live stock from production and delivery records
+</div>
+
+</div>
+
+<button
+  id="afCloseFactoryStock"
+  type="button"
+  style="
+    border:0;
+    background:#333;
+color:white;
+    padding:8px 13px;
+    border-radius:7px;
+cursor:pointer;
+  "
+>
+✕ Close
+</button>
+
+</div>
+
+
+<div style="
+display:grid;
+  grid-template-columns:
+    repeat(auto-fit,minmax(160px,1fr));
+  gap:10px;
+  margin-bottom:18px;
+">
+
+
+<div style="
+  border:1px solid #ddd;
+  padding:14px;
+  border-radius:9px;
+">
+<div style="
+    font-size:12px;
+    color:#666;
+  ">
+    Unwashed Kavera
+</div>
+
+<div style="
+    font-size:21px;
+font-weight:bold;
+  ">
+    ${Number(
+stock.unwashedKaveraKg
+    ).toLocaleString()} kg
+</div>
+</div>
+
+
+<div style="
+  border:1px solid #ddd;
+  padding:14px;
+  border-radius:9px;
+">
+<div style="
+    font-size:12px;
+    color:#666;
+  ">
+    Washed Kavera
+</div>
+
+<div style="
+    font-size:21px;
+font-weight:bold;
+  ">
+    ${Number(
+stock.washedKaveraKg
+    ).toLocaleString()} kg
+</div>
+</div>
+
+
+<div style="
+  border:1px solid #ddd;
+  padding:14px;
+  border-radius:9px;
+">
+<div style="
+    font-size:12px;
+    color:#666;
+  ">
+    Poles Produced
+</div>
+
+<div style="
+    font-size:21px;
+font-weight:bold;
+  ">
+    ${stock.totalProduced
+      .toLocaleString()}
+</div>
+</div>
+
+
+<div style="
+  border:1px solid #ddd;
+  padding:14px;
+  border-radius:9px;
+">
+<div style="
+    font-size:12px;
+    color:#666;
+  ">
+    Poles Delivered
+</div>
+
+<div style="
+    font-size:21px;
+font-weight:bold;
+  ">
+    ${stock.totalDelivered
+      .toLocaleString()}
+</div>
+</div>
+
+
+<div style="
+  border:1px solid #0b5d3b;
+  padding:14px;
+  border-radius:9px;
+  background:#eef8f2;
+">
+<div style="
+    font-size:12px;
+    color:#666;
+  ">
+    Pole Balance
+</div>
+
+<div style="
+    font-size:23px;
+font-weight:bold;
+    color:#0b5d3b;
+  ">
+    ${stock.totalBalance
+      .toLocaleString()}
+</div>
+</div>
+
+</div>
+
+
+<div style="
+overflow:auto;
+  border:1px solid #ddd;
+  border-radius:9px;
+">
+
+<table style="
+  width:100%;
+  min-width:650px;
+border-collapse:collapse;
+">
+
+<thead>
+
+<tr style="
+  background:#eaf5ee;
+text-align:left;
+">
+
+<th style="padding:10px;">
+  Pole Type
+</th>
+
+<th style="padding:10px;">
+  Produced
+</th>
+
+<th style="padding:10px;">
+  Delivered
+</th>
+
+<th style="padding:10px;">
+  Balance
+</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+
+${AF_POLE_TYPES
+  .map(type => {
+
+const produced =
+    Number(
+stock.produced[
+type.key
+      ] || 0
+    );
+
+const delivered =
+    Number(
+stock.delivered[
+type.key
+      ] || 0
+    );
+
+const balance =
+    Number(
+stock.balances[
+type.key
+      ] || 0
+    );
+
+    return `
+
+<tr>
+
+<td style="
+  padding:10px;
+  border-bottom:1px solid #eee;
+font-weight:bold;
+">
+  ${afEscape(type.name)}
+</td>
+
+<td style="
+  padding:10px;
+  border-bottom:1px solid #eee;
+">
+  ${produced.toLocaleString()}
+</td>
+
+<td style="
+  padding:10px;
+  border-bottom:1px solid #eee;
+">
+  ${delivered.toLocaleString()}
+</td>
+
+<td style="
+  padding:10px;
+  border-bottom:1px solid #eee;
+font-weight:bold;
+  color:#0b5d3b;
+">
+  ${balance.toLocaleString()}
+</td>
+
+</tr>
+
+    `;
+
+  })
+  .join("")}
+
+</tbody>
+
+</table>
+
+</div>
+
+
+<div style="
+display:flex;
+  gap:10px;
+flex-wrap:wrap;
+  margin-top:18px;
+">
+
+<button
+  id="afStockRecordDelivery"
+  type="button"
+  style="
+    border:0;
+    background:#0b5d3b;
+color:white;
+    padding:10px 16px;
+    border-radius:8px;
+font-weight:bold;
+cursor:pointer;
+  "
+>
+🚚 Record Delivery
+</button>
+
+</div>
+
+</div>
+    `;
+
+
+document.body.appendChild(
+      modal
+    );
+
+
+modal.querySelector(
+      "#afCloseFactoryStock"
+    ).onclick = () => {
+
+modal.remove();
+
+    };
+
+
+const deliveryButton =
+modal.querySelector(
+      "#afStockRecordDelivery"
+    );
+
+
+    if (deliveryButton) {
+
+deliveryButton.onclick = () => {
+
+modal.remove();
+
+recordAFDelivery();
+
+      };
+
+    }
+
+  }
+
+
+  /* =======================================================
+     RECORD DELIVERY
+     ======================================================= */
+
+  function recordAFDelivery() {
+
+const stock =
+getAFFactoryStock();
+
+
+    if (
+      Number(
+stock.totalBalance || 0
+      ) <= 0
+    ) {
+
+      alert(
+        "There are currently no finished poles available for delivery."
+      );
+
+      return;
+    }
+
+
+const existing =
+document.getElementById(
+      "afRecordDeliveryModal"
+    );
+
+    if (existing) {
+existing.remove();
+    }
+
+
+const currentUser =
+
+typeof getAFCurrentUser ===
+    "function"
+
+      ? getAFCurrentUser()
+
+      : JSON.parse(
+localStorage.getItem(
+            "currentUser"
+          ) || "{}"
+        );
+
+
+const modal =
+document.createElement(
+      "div"
+    );
+
+modal.id =
+    "afRecordDeliveryModal";
+
+modal.style.cssText = `
+position:fixed;
+      inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+align-items:center;
+justify-content:center;
+      z-index:99999;
+font-family:Arial,sans-serif;
+      padding:10px;
+box-sizing:border-box;
+    `;
+
+
+modal.innerHTML = `
+
+<div style="
+background:white;
+  width:100%;
+  max-width:900px;
+  max-height:94vh;
+overflow:auto;
+  border-radius:14px;
+  padding:22px;
+box-sizing:border-box;
+">
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:center;
+  gap:10px;
+  margin-bottom:18px;
+">
+
+<div>
+
+<h2 style="
+  margin:0;
+  color:#0b5d3b;
+">
+🚚 Record Delivery
+</h2>
+
+<div style="
+  font-size:12px;
+  color:#666;
+  margin-top:4px;
+">
+  Available factory stock:
+<b>
+    ${stock.totalBalance
+      .toLocaleString()} poles
+</b>
+</div>
+
+</div>
+
+<button
+  id="afCloseDelivery"
+  type="button"
+  style="
+    border:0;
+    background:#333;
+color:white;
+    padding:8px 13px;
+    border-radius:7px;
+cursor:pointer;
+  "
+>
+✕ Close
+</button>
+
+</div>
+
+
+<div style="
+display:grid;
+  grid-template-columns:
+    repeat(auto-fit,minmax(220px,1fr));
+  gap:12px;
+">
+
+<div>
+
+<label style="
+  font-size:12px;
+font-weight:bold;
+">
+  Delivery Date *
+</label>
+
+<input
+  id="afDeliveryDate"
+  type="date"
+  value="${afLocalDate()}"
+  style="
+    width:100%;
+box-sizing:border-box;
+    padding:10px;
+    margin-top:5px;
+    border:1px solid #ccc;
+    border-radius:7px;
+  "
+>
+
+</div>
+
+
+<div>
+
+<label style="
+  font-size:12px;
+font-weight:bold;
+">
+  Customer Name *
+</label>
+
+<input
+  id="afDeliveryCustomer"
+  type="text"
+  placeholder="Customer / Client name"
+  style="
+    width:100%;
+box-sizing:border-box;
+    padding:10px;
+    margin-top:5px;
+    border:1px solid #ccc;
+    border-radius:7px;
+  "
+>
+
+</div>
+
+
+<div>
+
+<label style="
+  font-size:12px;
+font-weight:bold;
+">
+  Customer Phone
+</label>
+
+<input
+  id="afDeliveryPhone"
+  type="text"
+  placeholder="Phone number"
+  style="
+    width:100%;
+box-sizing:border-box;
+    padding:10px;
+    margin-top:5px;
+    border:1px solid #ccc;
+    border-radius:7px;
+  "
+>
+
+</div>
+
+
+<div>
+
+<label style="
+  font-size:12px;
+font-weight:bold;
+">
+  Reference / Order No.
+</label>
+
+<input
+  id="afDeliveryReference"
+  type="text"
+  placeholder="Optional"
+  style="
+    width:100%;
+box-sizing:border-box;
+    padding:10px;
+    margin-top:5px;
+    border:1px solid #ccc;
+    border-radius:7px;
+  "
+>
+
+</div>
+
+</div>
+
+
+<h3 style="
+  margin:22px 0 10px;
+  color:#0b5d3b;
+">
+  Pole Quantities
+</h3>
+
+
+<div style="
+overflow:auto;
+  border:1px solid #ddd;
+  border-radius:9px;
+">
+
+<table style="
+  width:100%;
+  min-width:600px;
+border-collapse:collapse;
+">
+
+<thead>
+
+<tr style="
+  background:#eaf5ee;
+text-align:left;
+">
+
+<th style="padding:10px;">
+  Pole Type
+</th>
+
+<th style="padding:10px;">
+  Available
+</th>
+
+<th style="padding:10px;">
+  Deliver
+</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+
+${AF_POLE_TYPES
+  .map(type => {
+
+const balance =
+    Number(
+stock.balances[
+type.key
+      ] || 0
+    );
+
+    return `
+
+<tr>
+
+<td style="
+  padding:10px;
+  border-bottom:1px solid #eee;
+font-weight:bold;
+">
+  ${afEscape(type.name)}
+</td>
+
+<td style="
+  padding:10px;
+  border-bottom:1px solid #eee;
+">
+  ${balance.toLocaleString()}
+</td>
+
+<td style="
+  padding:10px;
+  border-bottom:1px solid #eee;
+">
+
+<input
+  id="afDeliveryQty_${type.key}"
+  type="number"
+  min="0"
+  max="${balance}"
+  step="1"
+  value="0"
+  ${balance <= 0
+    ? "disabled"
+    : ""}
+  style="
+    width:110px;
+    padding:8px;
+    border:1px solid #ccc;
+    border-radius:6px;
+  "
+>
+
+</td>
+
+</tr>
+
+    `;
+
+  })
+  .join("")}
+
+</tbody>
+
+</table>
+
+</div>
+
+
+<div style="
+  margin-top:16px;
+">
+
+<label style="
+  font-size:12px;
+font-weight:bold;
+">
+  Delivery Notes
+</label>
+
+<textarea
+  id="afDeliveryNotes"
+  rows="3"
+  placeholder="Optional delivery notes"
+  style="
+    width:100%;
+box-sizing:border-box;
+    padding:10px;
+    margin-top:5px;
+    border:1px solid #ccc;
+    border-radius:7px;
+  "
+></textarea>
+
+</div>
+
+
+<button
+  id="afSaveDelivery"
+  type="button"
+  style="
+    margin-top:18px;
+    width:100%;
+    padding:12px;
+    border:0;
+    border-radius:8px;
+    background:#0b5d3b;
+color:white;
+font-weight:bold;
+cursor:pointer;
+  "
+>
+  Save Delivery
+</button>
+
+</div>
+    `;
+
+
+document.body.appendChild(
+      modal
+    );
+
+
+modal.querySelector(
+      "#afCloseDelivery"
+    ).onclick = () => {
+
+modal.remove();
+
+    };
+
+
+modal.querySelector(
+      "#afSaveDelivery"
+    ).onclick = () => {
+
+const date =
+modal.querySelector(
+        "#afDeliveryDate"
+      ).value;
+
+
+const customerName =
+modal.querySelector(
+        "#afDeliveryCustomer"
+      ).value.trim();
+
+
+const customerPhone =
+modal.querySelector(
+        "#afDeliveryPhone"
+      ).value.trim();
+
+
+const reference =
+modal.querySelector(
+        "#afDeliveryReference"
+      ).value.trim();
+
+
+const notes =
+modal.querySelector(
+        "#afDeliveryNotes"
+      ).value.trim();
+
+
+      if (!date) {
+
+        alert(
+          "Please select the delivery date."
+        );
+
+        return;
+      }
+
+
+      if (!customerName) {
+
+        alert(
+          "Please enter the customer name."
+        );
+
+        return;
+      }
+
+
+      /*
+       * Recalculate stock immediately
+       * before saving.
+       */
+const latestStock =
+getAFFactoryStock();
+
+
+const items = [];
+
+
+      for (
+const type of
+        AF_POLE_TYPES
+      ) {
+
+const input =
+modal.querySelector(
+          "#afDeliveryQty_" +
+type.key
+        );
+
+
+const quantity =
+        Number(
+input?.value || 0
+        );
+
+
+        if (
+          quantity < 0 ||
+          !Number.isInteger(
+            quantity
+          )
+        ) {
+
+          alert(
+type.name +
+            " quantity must be a whole number."
+          );
+
+          return;
+        }
+
+
+        if (quantity <= 0) {
+          continue;
+        }
+
+
+const available =
+        Number(
+latestStock.balances[
+type.key
+          ] || 0
+        );
+
+
+        if (
+          quantity >
+          available
+        ) {
+
+          alert(
+            "Not enough stock for " +
+type.name +
+            ".\n\nAvailable: " +
+            available +
+            "\nRequested: " +
+            quantity
+          );
+
+          return;
+        }
+
+
+items.push({
+
+          key:
+type.key,
+
+          name:
+type.name,
+
+          quantity:
+            quantity
+
+        });
+
+      }
+
+
+      if (!items.length) {
+
+        alert(
+          "Please enter at least one pole quantity for delivery."
+        );
+
+        return;
+      }
+
+
+const totalPoles =
+items.reduce(
+        (total, item) =>
+          total +
+          Number(
+item.quantity || 0
+          ),
+        0
+      );
+
+
+const deliveryRecords =
+afReadArray(
+        "afDeliveryRecords"
+      );
+
+
+const dateCode =
+date.replace(
+        /-/g,
+        ""
+      );
+
+
+const sameDateCount =
+deliveryRecords.filter(
+        record =>
+          String(
+record.date || ""
+          ) ===
+          String(date)
+      ).length;
+
+
+const deliveryNumber =
+      "DLV-" +
+dateCode +
+      "-" +
+      String(
+sameDateCount + 1
+      ).padStart(3, "0");
+
+
+const deliveryRecord = {
+
+        id:
+Date.now(),
+
+deliveryNumber:
+deliveryNumber,
+
+        date:
+          date,
+
+customerName:
+customerName,
+
+customerPhone:
+customerPhone,
+
+        reference:
+          reference,
+
+        items:
+          items,
+
+totalPoles:
+totalPoles,
+
+        notes:
+          notes,
+
+        status:
+          "COMPLETED",
+
+recordedByEmployeeId:
+currentUser?.employeeId ||
+          "",
+
+recordedByName:
+currentUser?.fullName ||
+currentUser?.employeeName ||
+          "",
+
+recordedByRole:
+currentUser?.role ||
+          "",
+
+createdAt:
+          new Date()
+            .toISOString()
+
+      };
+
+
+deliveryRecords.push(
+deliveryRecord
+      );
+
+
+localStorage.setItem(
+        "afDeliveryRecords",
+JSON.stringify(
+deliveryRecords
+        )
+      );
+
+
+const updatedStock =
+getAFFactoryStock();
+
+
+modal.remove();
+
+
+      alert(
+        "Delivery saved successfully.\n\n" +
+
+        "Delivery No: " +
+deliveryNumber +
+
+        "\nCustomer: " +
+customerName +
+
+        "\nPoles Delivered: " +
+totalPoles.toLocaleString() +
+
+        "\nFactory Balance: " +
+updatedStock
+          .totalBalance
+          .toLocaleString()
+      );
+
+
+      /*
+       * Immediately show updated stock.
+       */
+checkAFStockInventory();
+
+    };
+
+  }
+
+
+  /* =======================================================
+     EXPOSE FUNCTIONS
+     ======================================================= */
+
+window.getAFFactoryStock =
+getAFFactoryStock;
+
+window.checkAFStockInventory =
+checkAFStockInventory;
+
+window.recordAFDelivery =
+recordAFDelivery;
+
+
+  /* =======================================================
+     CONNECT QUICK ACTIONS
+     ======================================================= */
+
+  if (
+typeof runRoleAction ===
+    "function"
+  ) {
+
+const previousRunRoleAction =
+runRoleAction;
+
+
+runRoleAction =
+    function(actionName) {
+
+      if (
+actionName ===
+        "checkStock"
+      ) {
+
+        if (
+typeof canAFRoleRunAction ===
+            "function" &&
+          !canAFRoleRunAction(
+actionName
+          )
+        ) {
+
+          return previousRunRoleAction
+            .apply(
+              this,
+              arguments
+            );
+
+        }
+
+
+checkAFStockInventory();
+
+        return;
+      }
+
+
+      if (
+actionName ===
+        "recordDelivery"
+      ) {
+
+        if (
+typeof canAFRoleRunAction ===
+            "function" &&
+          !canAFRoleRunAction(
+actionName
+          )
+        ) {
+
+          return previousRunRoleAction
+            .apply(
+              this,
+              arguments
+            );
+
+        }
+
+
+recordAFDelivery();
+
+        return;
+      }
+
+
+      return previousRunRoleAction
+        .apply(
+          this,
+          arguments
+        );
+
+    };
+
+  }
+
+
+  /* =======================================================
+     CONNECT STOCK & INVENTORY SIDEBAR TOO
+     ======================================================= */
+
+  if (
+typeof openRoleModule ===
+    "function"
+  ) {
+
+const previousOpenRoleModule =
+openRoleModule;
+
+
+openRoleModule =
+    function(moduleName) {
+
+      if (
+moduleName ===
+        "stockInventory"
+      ) {
+
+        if (
+typeof canAFRoleAccessModule ===
+            "function" &&
+          !canAFRoleAccessModule(
+moduleName
+          )
+        ) {
+
+          return previousOpenRoleModule
+            .apply(
+              this,
+              arguments
+            );
+
+        }
+
+
+checkAFStockInventory();
+
+        return;
+      }
+
+
+      return previousOpenRoleModule
+        .apply(
+          this,
+          arguments
+        );
+
+    };
+
+  }
+
+})();
+
