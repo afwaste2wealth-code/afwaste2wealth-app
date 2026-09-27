@@ -36977,7 +36977,18 @@ previousMonthPrizePlan
 inheritedFrom:
 previousMonthKey
     };
+     monthEndPrizePlans.push(
+monthEndPrizePlan
+);
+
+localStorage.setItem(
+  "afMonthEndPrizePlans",
+JSON.stringify(
+monthEndPrizePlans
+  )
+);
   }
+   
 }
 
 
