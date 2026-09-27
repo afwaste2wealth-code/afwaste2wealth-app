@@ -41411,70 +41411,310 @@ recordAFDelivery();
      RECORD DELIVERY
      ======================================================= */
 
-  function recordAFDelivery() {
+function recordAFDelivery() {
 
 const stock =
 getAFFactoryStock();
 
 
-    if (
-      Number(
-stock.totalBalance || 0
-      ) <= 0
-    ) {
+  /* =====================================================
+     PELLET STOCK
+     Actual pellets recorded from pelletizing jobs
+     minus pellets already delivered.
+     ===================================================== */
 
-      alert(
-        "There are currently no finished poles available for delivery."
+  function getPelletStock() {
+
+const materialRecords =
+afReadArray(
+      "materialRecords"
+    );
+
+const deliveryRecords =
+afReadArray(
+      "afDeliveryRecords"
+    );
+
+
+const produced = {};
+
+
+materialRecords
+      .filter(record => {
+
+const service =
+        String(
+record.clientService ||
+record.service ||
+          ""
+        ).toLowerCase();
+
+const status =
+        String(
+record.status || ""
+        ).toUpperCase();
+
+        return (
+service.includes(
+            "pellet"
+          ) &&
+          status !== "CANCELLED"
+        );
+
+      })
+      .forEach(record => {
+
+const type =
+        String(
+record.materialType ||
+          "Mixed Plastic"
+        );
+
+const kg =
+        Number(
+record.actualPelletWeight ??
+record.pelletWeight ??
+          0
+        );
+
+        produced[type] =
+        Number(
+          produced[type] || 0
+        ) + kg;
+
+      });
+
+
+const delivered = {};
+
+
+deliveryRecords
+      .filter(record => {
+
+        return (
+          String(
+record.status || ""
+          ).toUpperCase() !==
+            "CANCELLED" &&
+
+          String(
+record.deliveryType ||
+            ""
+          ).toLowerCase() ===
+            "pellets"
+        );
+
+      })
+      .forEach(record => {
+
+const type =
+        String(
+record.pelletType ||
+          "Mixed Plastic"
+        );
+
+        delivered[type] =
+        Number(
+          delivered[type] || 0
+        ) +
+        Number(
+record.pelletKg || 0
+        );
+
+      });
+
+
+const types =
+Array.from(
+      new Set([
+        ...Object.keys(
+          produced
+        ),
+        ...Object.keys(
+          delivered
+        )
+      ])
+    );
+
+
+const balances = {};
+
+
+types.forEach(type => {
+
+      balances[type] =
+Math.max(
+        Number(
+          produced[type] || 0
+        ) -
+        Number(
+          delivered[type] || 0
+        ),
+        0
       );
 
-      return;
-    }
+    });
+
+
+const totalProduced =
+Object.values(
+      produced
+    ).reduce(
+      (sum, value) =>
+        sum +
+        Number(
+          value || 0
+        ),
+      0
+    );
+
+
+const totalDelivered =
+Object.values(
+      delivered
+    ).reduce(
+      (sum, value) =>
+        sum +
+        Number(
+          value || 0
+        ),
+      0
+    );
+
+
+    return {
+
+      produced,
+
+      delivered,
+
+      balances,
+
+      types,
+
+totalProduced,
+
+totalDelivered,
+
+totalBalance:
+Math.max(
+totalProduced -
+totalDelivered,
+          0
+        )
+
+    };
+
+  }
+
+
+const pelletStock =
+getPelletStock();
+
+
+  if (
+    Number(
+stock.totalBalance || 0
+    ) <= 0 &&
+    Number(
+pelletStock.totalBalance || 0
+    ) <= 0
+  ) {
+
+    alert(
+      "There are currently no poles or pellets available for delivery."
+    );
+
+    return;
+  }
 
 
 const existing =
 document.getElementById(
-      "afRecordDeliveryModal"
-    );
+    "afRecordDeliveryModal"
+  );
 
-    if (existing) {
+  if (existing) {
 existing.remove();
-    }
+  }
 
 
 const currentUser =
 
 typeof getAFCurrentUser ===
-    "function"
+  "function"
 
-      ? getAFCurrentUser()
+    ? getAFCurrentUser()
 
-      : JSON.parse(
+    : JSON.parse(
 localStorage.getItem(
-            "currentUser"
-          ) || "{}"
-        );
+          "currentUser"
+        ) || "{}"
+      );
+
+
+const pelletTypesAvailable =
+pelletStock.types
+    .filter(
+      type =>
+        Number(
+pelletStock.balances[
+            type
+          ] || 0
+        ) > 0
+    );
+
+
+const pelletOptions =
+pelletTypesAvailable.length
+
+    ? pelletTypesAvailable
+        .map(type => {
+
+const balance =
+          Number(
+pelletStock.balances[
+              type
+            ] || 0
+          );
+
+          return `
+<option value="${afEscape(type)}">
+  ${afEscape(type)}
+  - ${balance.toLocaleString()} kg available
+</option>
+          `;
+
+        })
+        .join("")
+
+    : `
+<option value="">
+  No pellet stock available
+</option>
+      `;
 
 
 const modal =
 document.createElement(
-      "div"
-    );
+    "div"
+  );
 
 modal.id =
-    "afRecordDeliveryModal";
+  "afRecordDeliveryModal";
 
 modal.style.cssText = `
 position:fixed;
-      inset:0;
+    inset:0;
 background:rgba(0,0,0,.55);
 display:flex;
 align-items:center;
 justify-content:center;
-      z-index:99999;
+    z-index:99999;
 font-family:Arial,sans-serif;
-      padding:10px;
+    padding:10px;
 box-sizing:border-box;
-    `;
+  `;
 
 
 modal.innerHTML = `
@@ -41507,19 +41747,31 @@ align-items:center;
 🚚 Record Delivery
 </h2>
 
-<div style="
-  font-size:12px;
-  color:#666;
-  margin-top:4px;
-">
-  Available factory stock:
+<div
+  id="afDeliveryAvailability"
+  style="
+    font-size:12px;
+    color:#666;
+    margin-top:4px;
+  "
+>
+  Pole stock:
 <b>
-    ${stock.totalBalance
-      .toLocaleString()} poles
+    ${Number(
+stock.totalBalance || 0
+    ).toLocaleString()} poles
+</b>
+
+  • Pellet stock:
+<b>
+    ${Number(
+pelletStock.totalBalance || 0
+    ).toLocaleString()} kg
 </b>
 </div>
 
 </div>
+
 
 <button
   id="afCloseDelivery"
@@ -41542,9 +41794,13 @@ cursor:pointer;
 <div style="
 display:grid;
   grid-template-columns:
-    repeat(auto-fit,minmax(220px,1fr));
+    repeat(
+      auto-fit,
+minmax(220px,1fr)
+    );
   gap:12px;
 ">
+
 
 <div>
 
@@ -41568,6 +41824,40 @@ box-sizing:border-box;
     border-radius:7px;
   "
 >
+
+</div>
+
+
+<div>
+
+<label style="
+  font-size:12px;
+font-weight:bold;
+">
+  Delivery Type *
+</label>
+
+<select
+  id="afDeliveryType"
+  style="
+    width:100%;
+box-sizing:border-box;
+    padding:10px;
+    margin-top:5px;
+    border:1px solid #ccc;
+    border-radius:7px;
+  "
+>
+
+<option value="poles">
+  Poles
+</option>
+
+<option value="pellets">
+  Pellets
+</option>
+
+</select>
 
 </div>
 
@@ -41630,6 +41920,32 @@ box-sizing:border-box;
   font-size:12px;
 font-weight:bold;
 ">
+  Delivery Place / Destination *
+</label>
+
+<input
+  id="afDeliveryPlace"
+  type="text"
+  placeholder="Example: Kiteezi, Kampala"
+  style="
+    width:100%;
+box-sizing:border-box;
+    padding:10px;
+    margin-top:5px;
+    border:1px solid #ccc;
+    border-radius:7px;
+  "
+>
+
+</div>
+
+
+<div>
+
+<label style="
+  font-size:12px;
+font-weight:bold;
+">
   Reference / Order No.
 </label>
 
@@ -41651,6 +41967,12 @@ box-sizing:border-box;
 
 </div>
 
+
+<!-- ============================================
+     POLES
+     ============================================ -->
+
+<div id="afPoleDeliverySection">
 
 <h3 style="
   margin:22px 0 10px;
@@ -41765,6 +42087,111 @@ font-weight:bold;
 
 </div>
 
+</div>
+
+
+<!-- ============================================
+     PELLETS
+     ============================================ -->
+
+<div
+  id="afPelletDeliverySection"
+  style="
+display:none;
+    margin-top:22px;
+  "
+>
+
+<h3 style="
+  margin:0 0 10px;
+  color:#0b5d3b;
+">
+  Pellet Delivery
+</h3>
+
+
+<div style="
+display:grid;
+  grid-template-columns:
+    repeat(
+      auto-fit,
+minmax(220px,1fr)
+    );
+  gap:12px;
+">
+
+
+<div>
+
+<label style="
+  font-size:12px;
+font-weight:bold;
+">
+  Pellet Type *
+</label>
+
+<select
+  id="afDeliveryPelletType"
+  style="
+    width:100%;
+box-sizing:border-box;
+    padding:10px;
+    margin-top:5px;
+    border:1px solid #ccc;
+    border-radius:7px;
+  "
+>
+  ${pelletOptions}
+</select>
+
+</div>
+
+
+<div>
+
+<label style="
+  font-size:12px;
+font-weight:bold;
+">
+  Pellet Weight to Deliver (kg) *
+</label>
+
+<input
+  id="afDeliveryPelletKg"
+  type="number"
+  min="0"
+  step="0.01"
+  value="0"
+  style="
+    width:100%;
+box-sizing:border-box;
+    padding:10px;
+    margin-top:5px;
+    border:1px solid #ccc;
+    border-radius:7px;
+  "
+>
+
+</div>
+
+</div>
+
+
+<div
+  id="afPelletAvailableMessage"
+  style="
+    margin-top:10px;
+    padding:10px;
+    background:#eef8f2;
+    border-radius:7px;
+    font-size:13px;
+    color:#0b5d3b;
+  "
+>
+</div>
+
+</div>
+
 
 <div style="
   margin-top:16px;
@@ -41813,82 +42240,250 @@ cursor:pointer;
 </button>
 
 </div>
-    `;
+  `;
 
 
 document.body.appendChild(
-      modal
+    modal
+  );
+
+
+const deliveryType =
+modal.querySelector(
+    "#afDeliveryType"
+  );
+
+
+const poleSection =
+modal.querySelector(
+    "#afPoleDeliverySection"
+  );
+
+
+const pelletSection =
+modal.querySelector(
+    "#afPelletDeliverySection"
+  );
+
+
+const pelletType =
+modal.querySelector(
+    "#afDeliveryPelletType"
+  );
+
+
+const pelletAvailableMessage =
+modal.querySelector(
+    "#afPelletAvailableMessage"
+  );
+
+
+  function updatePelletAvailability() {
+
+const type =
+pelletType?.value || "";
+
+const available =
+    Number(
+pelletStock.balances[
+        type
+      ] || 0
     );
 
 
+    if (
+pelletAvailableMessage
+    ) {
+
+pelletAvailableMessage
+        .textContent =
+        type
+          ? (
+              "Available " +
+              type +
+              " pellets: " +
+available.toLocaleString() +
+              " kg"
+            )
+          : "No pellet stock available.";
+
+    }
+
+  }
+
+
+  function updateDeliveryType() {
+
+const isPellets =
+deliveryType.value ===
+    "pellets";
+
+
+poleSection.style.display =
+isPellets
+      ? "none"
+      : "block";
+
+
+pelletSection.style.display =
+isPellets
+      ? "block"
+      : "none";
+
+
+updatePelletAvailability();
+
+  }
+
+
+deliveryType.addEventListener(
+    "change",
+updateDeliveryType
+  );
+
+
+  if (pelletType) {
+
+pelletType.addEventListener(
+      "change",
+updatePelletAvailability
+    );
+
+  }
+
+
+updateDeliveryType();
+
+
 modal.querySelector(
-      "#afCloseDelivery"
-    ).onclick = () => {
+    "#afCloseDelivery"
+  ).onclick = () => {
 
 modal.remove();
 
-    };
+  };
 
 
 modal.querySelector(
-      "#afSaveDelivery"
-    ).onclick = () => {
+    "#afSaveDelivery"
+  ).onclick = () => {
 
 const date =
 modal.querySelector(
-        "#afDeliveryDate"
-      ).value;
+      "#afDeliveryDate"
+    ).value;
+
+
+const type =
+deliveryType.value;
 
 
 const customerName =
 modal.querySelector(
-        "#afDeliveryCustomer"
-      ).value.trim();
+      "#afDeliveryCustomer"
+    ).value.trim();
 
 
 const customerPhone =
 modal.querySelector(
-        "#afDeliveryPhone"
-      ).value.trim();
+      "#afDeliveryPhone"
+    ).value.trim();
+
+
+const deliveryPlace =
+modal.querySelector(
+      "#afDeliveryPlace"
+    ).value.trim();
 
 
 const reference =
 modal.querySelector(
-        "#afDeliveryReference"
-      ).value.trim();
+      "#afDeliveryReference"
+    ).value.trim();
 
 
 const notes =
 modal.querySelector(
-        "#afDeliveryNotes"
-      ).value.trim();
+      "#afDeliveryNotes"
+    ).value.trim();
 
 
-      if (!date) {
+    if (!date) {
 
-        alert(
-          "Please select the delivery date."
-        );
+      alert(
+        "Please select the delivery date."
+      );
 
-        return;
-      }
-
-
-      if (!customerName) {
-
-        alert(
-          "Please enter the customer name."
-        );
-
-        return;
-      }
+      return;
+    }
 
 
-      /*
-       * Recalculate stock immediately
-       * before saving.
-       */
-const latestStock =
+    if (!customerName) {
+
+      alert(
+        "Please enter the customer name."
+      );
+
+      return;
+    }
+
+
+    if (!deliveryPlace) {
+
+      alert(
+        "Please enter the delivery place / destination."
+      );
+
+      return;
+    }
+
+
+const deliveryRecords =
+afReadArray(
+      "afDeliveryRecords"
+    );
+
+
+const dateCode =
+date.replace(
+      /-/g,
+      ""
+    );
+
+
+consts ameDateCount =
+deliveryRecords
+      .filter(
+        record =>
+          String(
+record.date || ""
+          ) ===
+          String(date)
+      )
+      .length;
+
+
+const deliveryNumber =
+    "DLV-" +
+dateCode +
+    "-" +
+    String(
+sameDateCount + 1
+    ).padStart(
+      3,
+      "0"
+    );
+
+
+    /* =====================================================
+       POLE DELIVERY
+       ===================================================== */
+
+    if (
+      type === "poles"
+    ) {
+
+constlatestStock =
 getAFFactoryStock();
 
 
@@ -41896,14 +42491,14 @@ const items = [];
 
 
       for (
-const type of
+constpoleType of
         AF_POLE_TYPES
       ) {
 
 const input =
 modal.querySelector(
           "#afDeliveryQty_" +
-type.key
+poleType.key
         );
 
 
@@ -41921,7 +42516,7 @@ input?.value || 0
         ) {
 
           alert(
-type.name +
+poleType.name +
             " quantity must be a whole number."
           );
 
@@ -41929,7 +42524,9 @@ type.name +
         }
 
 
-        if (quantity <= 0) {
+        if (
+          quantity <= 0
+        ) {
           continue;
         }
 
@@ -41937,7 +42534,7 @@ type.name +
 const available =
         Number(
 latestStock.balances[
-type.key
+poleType.key
           ] || 0
         );
 
@@ -41949,7 +42546,7 @@ type.key
 
           alert(
             "Not enough stock for " +
-type.name +
+poleType.name +
             ".\n\nAvailable: " +
             available +
             "\nRequested: " +
@@ -41963,10 +42560,10 @@ type.name +
 items.push({
 
           key:
-type.key,
+poleType.key,
 
           name:
-type.name,
+poleType.name,
 
           quantity:
             quantity
@@ -41976,7 +42573,9 @@ type.name,
       }
 
 
-      if (!items.length) {
+      if (
+        !items.length
+      ) {
 
         alert(
           "Please enter at least one pole quantity for delivery."
@@ -41997,66 +42596,40 @@ item.quantity || 0
       );
 
 
-const deliveryRecords =
-afReadArray(
-        "afDeliveryRecords"
-      );
-
-
-const dateCode =
-date.replace(
-        /-/g,
-        ""
-      );
-
-
-const sameDateCount =
-deliveryRecords.filter(
-        record =>
-          String(
-record.date || ""
-          ) ===
-          String(date)
-      ).length;
-
-
-const deliveryNumber =
-      "DLV-" +
-dateCode +
-      "-" +
-      String(
-sameDateCount + 1
-      ).padStart(3, "0");
-
-
-const deliveryRecord = {
+deliveryRecords.push({
 
         id:
 Date.now(),
 
-deliveryNumber:
 deliveryNumber,
 
-        date:
-          date,
+deliveryType:
+          "poles",
 
-customerName:
+        date,
+
 customerName,
 
-customerPhone:
 customerPhone,
 
-        reference:
-          reference,
+deliveryPlace,
 
-        items:
-          items,
+        destination:
+deliveryPlace,
 
-totalPoles:
+        reference,
+
+        items,
+
 totalPoles,
 
-        notes:
-          notes,
+pelletType:
+          "",
+
+pelletKg:
+          0,
+
+        notes,
 
         status:
           "COMPLETED",
@@ -42078,12 +42651,7 @@ createdAt:
           new Date()
             .toISOString()
 
-      };
-
-
-deliveryRecords.push(
-deliveryRecord
-      );
+      });
 
 
 localStorage.setItem(
@@ -42102,7 +42670,7 @@ modal.remove();
 
 
       alert(
-        "Delivery saved successfully.\n\n" +
+        "Pole delivery saved successfully.\n\n" +
 
         "Delivery No: " +
 deliveryNumber +
@@ -42110,24 +42678,212 @@ deliveryNumber +
         "\nCustomer: " +
 customerName +
 
+        "\nDestination: " +
+deliveryPlace +
+
         "\nPoles Delivered: " +
 totalPoles.toLocaleString() +
 
-        "\nFactory Balance: " +
+        "\nPole Balance: " +
 updatedStock
           .totalBalance
           .toLocaleString()
       );
 
 
-      /*
-       * Immediately show updated stock.
-       */
 checkAFStockInventory();
 
-    };
+      return;
+    }
 
-  }
+
+    /* =====================================================
+       PELLET DELIVERY
+       ===================================================== */
+
+const selectedPelletType =
+pelletType?.value || "";
+
+
+constpelletKg =
+    Number(
+modal.querySelector(
+        "#afDeliveryPelletKg"
+      )?.value || 0
+    );
+
+
+    if (
+      !selectedPelletType
+    ) {
+
+      alert(
+        "There is no pellet stock available for delivery."
+      );
+
+      return;
+    }
+
+
+    if (
+pelletKg<= 0
+    ) {
+
+      alert(
+        "Please enter the pellet weight to deliver."
+      );
+
+      return;
+    }
+
+
+const latestPelletStock =
+getPelletStock();
+
+
+const availablePelletKg =
+    Number(
+latestPelletStock
+        .balances[
+selectedPelletType
+        ] || 0
+    );
+
+
+    if (
+pelletKg>
+availablePelletKg
+    ) {
+
+      alert(
+        "Not enough " +
+selectedPelletType +
+        " pellet stock.\n\n" +
+
+        "Available: " +
+availablePelletKg
+          .toLocaleString() +
+        " kg\n" +
+
+        "Requested: " +
+pelletKg
+          .toLocaleString() +
+        " kg"
+      );
+
+      return;
+    }
+
+
+deliveryRecords.push({
+
+      id:
+Date.now(),
+
+deliveryNumber,
+
+deliveryType:
+        "pellets",
+
+      date,
+
+customerName,
+
+customerPhone,
+
+deliveryPlace,
+
+      destination:
+deliveryPlace,
+
+      reference,
+
+      items: [],
+
+totalPoles:
+        0,
+
+pelletType:
+selectedPelletType,
+
+pelletKg:
+pelletKg,
+
+      notes,
+
+      status:
+        "COMPLETED",
+
+recordedByEmployeeId:
+currentUser?.employeeId ||
+        "",
+
+recordedByName:
+currentUser?.fullName ||
+currentUser?.employeeName ||
+        "",
+
+recordedByRole:
+currentUser?.role ||
+        "",
+
+createdAt:
+        new Date()
+          .toISOString()
+
+    });
+
+
+localStorage.setItem(
+      "afDeliveryRecords",
+JSON.stringify(
+deliveryRecords
+      )
+    );
+
+
+const afterPelletStock =
+getPelletStock();
+
+
+modal.remove();
+
+
+    alert(
+      "Pellet delivery saved successfully.\n\n" +
+
+      "Delivery No: " +
+deliveryNumber +
+
+      "\nCustomer: " +
+customerName +
+
+      "\nDestination: " +
+deliveryPlace +
+
+      "\nPellet Type: " +
+selectedPelletType +
+
+      "\nDelivered: " +
+pelletKg.toLocaleString() +
+      " kg\n" +
+
+      "Remaining Pellet Stock: " +
+      Number(
+afterPelletStock
+          .balances[
+selectedPelletType
+          ] || 0
+      ).toLocaleString() +
+      " kg"
+    );
+
+
+checkAFStockInventory();
+
+  };
+
+}
 
 
   /* =======================================================
