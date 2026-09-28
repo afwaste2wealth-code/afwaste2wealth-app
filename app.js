@@ -46328,3 +46328,1883 @@ checkAFStockInventory();
 
 })();
 
+/* =========================================================
+   A&F MONTHLY PURCHASE & SALES PERFORMANCE CHARTS
+   Director Dashboard
+   ========================================================= */
+
+(function connectAFMonthlyBusinessCharts() {
+
+const TARGET_KEY =
+  "afMonthlyBusinessTargets";
+
+
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec"
+];
+
+
+const METRICS = [
+
+  {
+    key: "purchaseValue",
+    title: "Purchase Value",
+    unit: "UGX",
+    type: "money"
+  },
+
+  {
+    key: "salesValue",
+    title: "Sales Value",
+    unit: "UGX",
+    type: "money"
+  },
+
+  {
+    key: "purchaseQty",
+    title: "Purchase Quantity",
+    unit: "kg",
+    type: "kg"
+  },
+
+  {
+    key: "salesQty",
+    title: "Pole Sales Quantity",
+    unit: "poles",
+    type: "number"
+  }
+
+];
+
+
+function afMonthlyChartsCurrentUser() {
+
+  if (
+typeof getAFCurrentUser ===
+    "function"
+  ) {
+
+    return getAFCurrentUser();
+
+  }
+
+
+  try {
+
+    return JSON.parse(
+localStorage.getItem(
+        "currentUser"
+      ) || "null"
+    );
+
+  } catch (error) {
+
+    return null;
+
+  }
+
+}
+
+
+function afMonthlyChartsRead(
+  key,
+  fallback
+) {
+
+  try {
+
+const value =
+JSON.parse(
+localStorage.getItem(
+    key
+  ) || "null"
+);
+
+
+    return value ??
+    fallback;
+
+  } catch (error) {
+
+    return fallback;
+
+  }
+
+}
+
+
+function afMonthlyChartsNumber(
+  value
+) {
+
+  return Number(
+    value || 0
+  );
+
+}
+
+
+function afMonthlyChartsMonthKey(
+  year,
+monthIndex
+) {
+
+  return (
+    String(year) +
+    "-" +
+    String(
+monthIndex + 1
+    ).padStart(
+      2,
+      "0"
+    )
+  );
+
+}
+
+
+function afMonthlyChartsDateMonth(
+  value
+) {
+
+const text =
+String(
+  value || ""
+);
+
+
+const match =
+text.match(
+  /^(\d{4})-(\d{2})/
+);
+
+
+  if (!match) {
+
+    return null;
+
+  }
+
+
+  return {
+
+    year:
+    Number(
+      match[1]
+    ),
+
+    month:
+    Number(
+      match[2]
+    ) - 1
+
+  };
+
+}
+
+
+function afMonthlyChartsFormatFull(
+  value,
+  metric
+) {
+
+const number =
+afMonthlyChartsNumber(
+  value
+);
+
+
+  if (
+metric.type ===
+    "money"
+  ) {
+
+    return (
+      "UGX " +
+Math.round(
+        number
+      ).toLocaleString()
+    );
+
+  }
+
+
+  if (
+metric.type ===
+    "kg"
+  ) {
+
+    return (
+number.toLocaleString(
+        undefined,
+        {
+maximumFractionDigits: 1
+        }
+      ) +
+      " kg"
+    );
+
+  }
+
+
+  return (
+Math.round(
+      number
+    ).toLocaleString() +
+    " poles"
+  );
+
+}
+
+
+function afMonthlyChartsFormatShort(
+  value,
+  metric
+) {
+
+const number =
+afMonthlyChartsNumber(
+  value
+);
+
+
+const compact =
+new Intl.NumberFormat(
+  "en",
+  {
+    notation: "compact",
+maximumFractionDigits: 1
+  }
+).format(
+  number
+);
+
+
+  if (
+metric.type ===
+    "money"
+  ) {
+
+    return (
+      "UGX " +
+      compact
+    );
+
+  }
+
+
+  if (
+metric.type ===
+    "kg"
+  ) {
+
+    return (
+      compact +
+      " kg"
+    );
+
+  }
+
+
+  return (
+    compact +
+    " poles"
+  );
+
+}
+
+
+function afMonthlyChartsPerformance(
+  actual,
+  target
+) {
+
+const targetNumber =
+afMonthlyChartsNumber(
+  target
+);
+
+
+  if (
+targetNumber<= 0
+  ) {
+
+    return null;
+
+  }
+
+
+  return (
+afMonthlyChartsNumber(
+      actual
+    ) /
+targetNumber
+  ) * 100;
+
+}
+
+
+/* =========================================================
+   ACTUAL MONTHLY DATA
+   ========================================================= */
+
+function getAFMonthlyBusinessActuals(
+  year
+) {
+
+const materialRecords =
+afMonthlyChartsRead(
+  "materialRecords",
+  []
+);
+
+
+const deliveryRecords =
+afMonthlyChartsRead(
+  "afDeliveryRecords",
+  []
+);
+
+
+const result = {
+
+purchaseValue:
+  Array(12).fill(0),
+
+salesValue:
+  Array(12).fill(0),
+
+purchaseQty:
+  Array(12).fill(0),
+
+salesQty:
+  Array(12).fill(0)
+
+};
+
+
+/*
+ * PURCHASES
+ * Company-owned material only.
+ */
+
+materialRecords.forEach(
+  record => {
+
+const source =
+String(
+record.materialSource ||
+  ""
+).toLowerCase();
+
+
+const status =
+String(
+record.status ||
+  ""
+).toUpperCase();
+
+
+    if (
+      source === "client" ||
+      status === "CANCELLED"
+    ) {
+
+      return;
+
+    }
+
+
+const date =
+afMonthlyChartsDateMonth(
+record.date ||
+record.recordedAt
+);
+
+
+    if (
+      !date ||
+date.year !==
+      Number(year)
+    ) {
+
+      return;
+
+    }
+
+
+result.purchaseValue[
+date.month
+] +=
+afMonthlyChartsNumber(
+record.totalCost
+);
+
+
+result.purchaseQty[
+date.month
+] +=
+afMonthlyChartsNumber(
+record.grossWeight
+);
+
+  }
+);
+
+
+/*
+ * SALES
+ * Cancelled deliveries are excluded.
+ *
+ * Sale value uses the actual final amount
+ * after any Director-approved discount.
+ */
+
+deliveryRecords.forEach(
+  record => {
+
+const status =
+String(
+record.status ||
+  ""
+).toUpperCase();
+
+
+    if (
+      status ===
+      "CANCELLED"
+    ) {
+
+      return;
+
+    }
+
+
+const date =
+afMonthlyChartsDateMonth(
+record.date ||
+record.createdAt
+);
+
+
+    if (
+      !date ||
+date.year !==
+      Number(year)
+    ) {
+
+      return;
+
+    }
+
+
+const saleValue =
+afMonthlyChartsNumber(
+record.finalSaleTotal ??
+record.saleAmount ??
+record.netSaleTotal ??
+  0
+);
+
+
+result.salesValue[
+date.month
+] +=
+saleValue;
+
+
+    if (
+      String(
+record.deliveryType ||
+        ""
+      ).toLowerCase() ===
+      "poles"
+    ) {
+
+result.salesQty[
+date.month
+] +=
+afMonthlyChartsNumber(
+record.totalPoles
+);
+
+    }
+
+  }
+);
+
+
+  return result;
+
+}
+
+
+/* =========================================================
+   DIRECTOR TARGETS
+   ========================================================= */
+
+function getAFMonthlyBusinessTargets() {
+
+const targets =
+afMonthlyChartsRead(
+  TARGET_KEY,
+  {}
+);
+
+
+  return (
+    targets &&
+typeof targets ===
+    "object"
+  )
+    ? targets
+    : {};
+
+}
+
+
+function getAFMonthlyTargetSeries(
+  year,
+metricKey
+) {
+
+const targets =
+getAFMonthlyBusinessTargets();
+
+
+  return MONTHS.map(
+    (month, index) => {
+
+const key =
+afMonthlyChartsMonthKey(
+  year,
+  index
+);
+
+
+      return afMonthlyChartsNumber(
+        targets[key]?.[
+metricKey
+        ]
+      );
+
+    }
+  );
+
+}
+
+
+/* =========================================================
+   YEARS AVAILABLE
+   ========================================================= */
+
+function getAFMonthlyBusinessYears() {
+
+const years =
+new Set();
+
+
+years.add(
+  new Date()
+    .getFullYear()
+);
+
+
+const materialRecords =
+afMonthlyChartsRead(
+  "materialRecords",
+  []
+);
+
+
+const deliveryRecords =
+afMonthlyChartsRead(
+  "afDeliveryRecords",
+  []
+);
+
+
+function addYear(
+  value
+) {
+
+const date =
+afMonthlyChartsDateMonth(
+  value
+);
+
+
+  if (
+    date &&
+date.year>= 2000
+  ) {
+
+years.add(
+date.year
+);
+
+  }
+
+}
+
+
+materialRecords.forEach(
+  record => {
+
+addYear(
+record.date ||
+record.recordedAt
+);
+
+  }
+);
+
+
+deliveryRecords.forEach(
+  record => {
+
+addYear(
+record.date ||
+record.createdAt
+);
+
+  }
+);
+
+
+const targets =
+getAFMonthlyBusinessTargets();
+
+
+Object.keys(
+  targets
+).forEach(
+  key => {
+
+const match =
+String(
+  key
+).match(
+  /^(\d{4})-\d{2}$/
+);
+
+
+    if (match) {
+
+years.add(
+  Number(
+    match[1]
+  )
+);
+
+    }
+
+  }
+);
+
+
+  return Array.from(
+    years
+  ).sort(
+    (a, b) =>
+      b - a
+  );
+
+}
+
+
+/* =========================================================
+   BUILD ONE DOUBLE VERTICAL BAR CHART
+   ========================================================= */
+
+function buildAFMonthlyBusinessChart(
+  metric,
+  actual,
+  target
+) {
+
+const maximum =
+Math.max(
+  1,
+  ...actual,
+  ...target
+);
+
+
+const yearlyActual =
+actual.reduce(
+  (sum, value) =>
+    sum +
+afMonthlyChartsNumber(
+      value
+    ),
+  0
+);
+
+
+const yearlyTarget =
+target.reduce(
+  (sum, value) =>
+    sum +
+afMonthlyChartsNumber(
+      value
+    ),
+  0
+);
+
+
+const yearlyPerformance =
+afMonthlyChartsPerformance(
+yearlyActual,
+yearlyTarget
+);
+
+
+const monthBars =
+MONTHS.map(
+  (month, index) => {
+
+const actualValue =
+afMonthlyChartsNumber(
+  actual[index]
+);
+
+
+const targetValue =
+afMonthlyChartsNumber(
+  target[index]
+);
+
+
+const actualHeight =
+actualValue> 0
+  ? Math.max(
+      3,
+      (
+actualValue /
+        maximum
+      ) * 100
+    )
+  : 0;
+
+
+const targetHeight =
+targetValue> 0
+  ? Math.max(
+      3,
+      (
+targetValue /
+        maximum
+      ) * 100
+    )
+  : 0;
+
+
+const performance =
+afMonthlyChartsPerformance(
+actualValue,
+targetValue
+);
+
+
+const performanceText =
+performance === null
+  ? "—"
+  : (
+Math.round(
+        performance
+      ) +
+      "%"
+    );
+
+
+const tooltip =
+month +
+"\nActual: " +
+afMonthlyChartsFormatFull(
+actualValue,
+  metric
+) +
+"\nTarget: " +
+afMonthlyChartsFormatFull(
+targetValue,
+  metric
+) +
+"\nPerformance: " +
+performanceText;
+
+
+    return `
+
+<div
+  title="${tooltip}"
+  style="
+    min-width:0;
+display:flex;
+flex-direction:column;
+align-items:center;
+justify-content:flex-end;
+  "
+>
+
+<div style="
+  font-size:9px;
+  color:#555;
+  margin-bottom:3px;
+white-space:nowrap;
+">
+${performanceText}
+</div>
+
+
+<div style="
+  height:105px;
+  width:100%;
+display:flex;
+justify-content:center;
+align-items:flex-end;
+  gap:3px;
+  border-bottom:1px solid #bbb;
+">
+
+
+<div style="
+  width:8px;
+  height:${targetHeight}%;
+  min-height:${targetValue> 0 ? "2px" : "0"};
+  background:#b8c2c8;
+  border-radius:3px 3px 0 0;
+"></div>
+
+
+<div style="
+  width:8px;
+  height:${actualHeight}%;
+  min-height:${actualValue> 0 ? "2px" : "0"};
+  background:#0b5d3b;
+  border-radius:3px 3px 0 0;
+"></div>
+
+
+</div>
+
+
+<div style="
+  font-size:9px;
+font-weight:bold;
+  margin-top:4px;
+  color:#555;
+">
+${month}
+</div>
+
+</div>
+
+    `;
+
+  }
+).join("");
+
+
+return `
+
+<div style="
+  border:1px solid #e1e5e3;
+  border-radius:10px;
+  padding:12px;
+background:white;
+  min-width:0;
+">
+
+<div style="
+  font-size:14px;
+font-weight:bold;
+  color:#222;
+  margin-bottom:4px;
+">
+${metric.title}
+</div>
+
+
+<div style="
+  font-size:10px;
+  color:#666;
+  margin-bottom:8px;
+  line-height:1.45;
+">
+
+Actual:
+<b>
+${afMonthlyChartsFormatShort(
+yearlyActual,
+  metric
+)}
+</b>
+
+&nbsp; • &nbsp;
+
+Target:
+<b>
+${afMonthlyChartsFormatShort(
+yearlyTarget,
+  metric
+)}
+</b>
+
+&nbsp; • &nbsp;
+
+Performance:
+<b style="
+  color:#0b5d3b;
+">
+${
+yearlyPerformance === null
+    ? "—"
+    : (
+yearlyPerformance
+          .toFixed(1) +
+        "%"
+      )
+}
+</b>
+
+</div>
+
+
+<div style="
+display:grid;
+  grid-template-columns:
+    repeat(12,minmax(18px,1fr));
+  gap:2px;
+align-items:end;
+overflow:hidden;
+">
+
+${monthBars}
+
+</div>
+
+
+<div style="
+display:flex;
+justify-content:flex-end;
+  gap:12px;
+  margin-top:8px;
+  font-size:9px;
+  color:#666;
+">
+
+<span>
+<span style="
+display:inline-block;
+  width:8px;
+  height:8px;
+  background:#b8c2c8;
+  margin-right:3px;
+"></span>
+Target
+</span>
+
+<span>
+<span style="
+display:inline-block;
+  width:8px;
+  height:8px;
+  background:#0b5d3b;
+  margin-right:3px;
+"></span>
+Actual
+</span>
+
+</div>
+
+</div>
+
+`;
+
+}
+
+
+/* =========================================================
+   RENDER FOUR CHARTS
+   ========================================================= */
+
+function renderAFMonthlyBusinessCharts() {
+
+constcurrentUser =
+afMonthlyChartsCurrentUser();
+
+
+const existing =
+document.getElementById(
+  "afMonthlyBusinessChartsCard"
+);
+
+
+  if (
+    !currentUser ||
+    String(
+currentUser.role ||
+      ""
+    ).toLowerCase() !==
+    "director"
+  ) {
+
+    if (existing) {
+existing.remove();
+    }
+
+    return;
+
+  }
+
+
+const dashboardGrid =
+document.getElementById(
+  "factoryDashboardGrid"
+);
+
+
+  if (!dashboardGrid) {
+    return;
+  }
+
+
+let card =
+existing;
+
+
+  if (!card) {
+
+card =
+document.createElement(
+  "section"
+);
+
+
+card.id =
+  "afMonthlyBusinessChartsCard";
+
+
+card.className =
+  "card";
+
+
+card.style.cssText =
+  "margin-top:16px;";
+
+
+dashboardGrid
+  .insertAdjacentElement(
+    "afterend",
+    card
+  );
+
+  }
+
+
+const years =
+getAFMonthlyBusinessYears();
+
+
+constcurrentYear =
+new Date()
+  .getFullYear();
+
+
+let selectedYear =
+Number(
+card.dataset.year ||
+currentYear
+);
+
+
+  if (
+    !years.includes(
+selectedYear
+    )
+  ) {
+
+selectedYear =
+years[0] ||
+currentYear;
+
+  }
+
+
+card.dataset.year =
+String(
+selectedYear
+);
+
+
+const actual =
+getAFMonthlyBusinessActuals(
+selectedYear
+);
+
+
+const charts =
+METRICS.map(
+  metric => {
+
+const target =
+getAFMonthlyTargetSeries(
+selectedYear,
+metric.key
+);
+
+
+    return buildAFMonthlyBusinessChart(
+      metric,
+      actual[
+metric.key
+      ],
+      target
+    );
+
+  }
+).join("");
+
+
+card.innerHTML = `
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:flex-start;
+  gap:12px;
+flex-wrap:wrap;
+  margin-bottom:14px;
+">
+
+<div>
+
+<div class="title"
+     style="margin-bottom:3px;">
+📊 Monthly Purchase & Sales Performance
+</div>
+
+<div class="sub">
+Actual vs Director target • monthly % performance
+</div>
+
+</div>
+
+
+<div style="
+display:flex;
+  gap:7px;
+align-items:center;
+flex-wrap:wrap;
+">
+
+<select
+  id="afMonthlyChartsYear"
+  style="
+    padding:7px 9px;
+    border:1px solid #ccc;
+    border-radius:7px;
+background:white;
+  "
+>
+
+${years
+  .map(
+    year => `
+
+<option
+  value="${year}"
+  ${
+    year ===
+selectedYear
+      ? "selected"
+      : ""
+  }
+>
+${year}
+</option>
+
+    `
+  )
+  .join("")}
+
+</select>
+
+
+<button
+  id="afMonthlyChartsRefresh"
+  type="button"
+  style="
+    padding:7px 10px;
+    border:1px solid #bbb;
+    border-radius:7px;
+background:white;
+cursor:pointer;
+  "
+>
+↻ Refresh
+</button>
+
+
+<button
+  id="afMonthlyChartsTargets"
+  type="button"
+  style="
+    padding:7px 10px;
+    border:0;
+    border-radius:7px;
+    background:#0b5d3b;
+color:white;
+font-weight:bold;
+cursor:pointer;
+  "
+>
+🎯 Set Monthly Targets
+</button>
+
+</div>
+
+</div>
+
+
+<div style="
+display:grid;
+  grid-template-columns:
+    repeat(
+      auto-fit,
+minmax(330px,1fr)
+    );
+  gap:12px;
+">
+
+${charts}
+
+</div>
+
+`;
+
+
+card.querySelector(
+  "#afMonthlyChartsYear"
+).onchange =
+function() {
+
+card.dataset.year =
+this.value;
+
+
+renderAFMonthlyBusinessCharts();
+
+};
+
+
+card.querySelector(
+  "#afMonthlyChartsRefresh"
+).onclick =
+function() {
+
+renderAFMonthlyBusinessCharts();
+
+};
+
+
+card.querySelector(
+  "#afMonthlyChartsTargets"
+).onclick =
+function() {
+
+openAFMonthlyBusinessTargets(
+selectedYear
+);
+
+};
+
+}
+
+
+/* =========================================================
+   DIRECTOR MONTHLY TARGET SETTING
+   ========================================================= */
+
+function openAFMonthlyBusinessTargets(
+  year
+) {
+
+const currentUser =
+afMonthlyChartsCurrentUser();
+
+
+  if (
+    !currentUser ||
+    String(
+currentUser.role ||
+      ""
+    ).toLowerCase() !==
+    "director"
+  ) {
+
+    alert(
+      "Only the Director can set monthly business targets."
+    );
+
+    return;
+
+  }
+
+
+const selectedYear =
+Number(
+  year ||
+  new Date()
+    .getFullYear()
+);
+
+
+const targets =
+getAFMonthlyBusinessTargets();
+
+
+const old =
+document.getElementById(
+  "afMonthlyBusinessTargetsModal"
+);
+
+
+  if (old) {
+old.remove();
+  }
+
+
+const modal =
+document.createElement(
+  "div"
+);
+
+
+modal.id =
+  "afMonthlyBusinessTargetsModal";
+
+
+modal.style.cssText = `
+position:fixed;
+inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+align-items:center;
+justify-content:center;
+z-index:100000;
+padding:10px;
+box-sizing:border-box;
+font-family:Arial,sans-serif;
+`;
+
+
+const rows =
+MONTHS.map(
+  (month, index) => {
+
+const key =
+afMonthlyChartsMonthKey(
+selectedYear,
+  index
+);
+
+
+const values =
+targets[key] ||
+{};
+
+
+    return `
+
+<tr>
+
+<td style="
+  padding:8px;
+  border-bottom:1px solid #eee;
+font-weight:bold;
+">
+${month}
+</td>
+
+
+<td style="
+  padding:6px;
+  border-bottom:1px solid #eee;
+">
+
+<input
+  id="afTarget_purchaseValue_${index}"
+  type="number"
+  min="0"
+  step="1000"
+  value="${
+afMonthlyChartsNumber(
+values.purchaseValue
+    )
+  }"
+  style="
+    width:125px;
+    padding:7px;
+box-sizing:border-box;
+  "
+>
+
+</td>
+
+
+<td style="
+  padding:6px;
+  border-bottom:1px solid #eee;
+">
+
+<input
+  id="afTarget_salesValue_${index}"
+  type="number"
+  min="0"
+  step="1000"
+  value="${
+afMonthlyChartsNumber(
+values.salesValue
+    )
+  }"
+  style="
+    width:125px;
+    padding:7px;
+box-sizing:border-box;
+  "
+>
+
+</td>
+
+
+<td style="
+  padding:6px;
+  border-bottom:1px solid #eee;
+">
+
+<input
+  id="afTarget_purchaseQty_${index}"
+  type="number"
+  min="0"
+  step="0.01"
+  value="${
+afMonthlyChartsNumber(
+values.purchaseQty
+    )
+  }"
+  style="
+    width:115px;
+    padding:7px;
+box-sizing:border-box;
+  "
+>
+
+</td>
+
+
+<td style="
+  padding:6px;
+  border-bottom:1px solid #eee;
+">
+
+<input
+  id="afTarget_salesQty_${index}"
+  type="number"
+  min="0"
+  step="1"
+  value="${
+afMonthlyChartsNumber(
+values.salesQty
+    )
+  }"
+  style="
+    width:105px;
+    padding:7px;
+box-sizing:border-box;
+  "
+>
+
+</td>
+
+</tr>
+
+    `;
+
+  }
+).join("");
+
+
+modal.innerHTML = `
+
+<div style="
+background:white;
+  width:96%;
+  max-width:850px;
+  max-height:92vh;
+overflow:auto;
+  border-radius:14px;
+  padding:22px;
+box-sizing:border-box;
+">
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:center;
+  gap:10px;
+  margin-bottom:15px;
+">
+
+<div>
+
+<h2 style="
+  margin:0;
+  color:#0b5d3b;
+">
+🎯 Monthly Business Targets
+</h2>
+
+<div style="
+  font-size:12px;
+  color:#666;
+  margin-top:4px;
+">
+${selectedYear} • Director settings
+</div>
+
+</div>
+
+
+<button
+  id="afCloseMonthlyTargets"
+  type="button"
+  style="
+    padding:8px 12px;
+    border:0;
+    border-radius:7px;
+    background:#333;
+color:white;
+cursor:pointer;
+  "
+>
+✕ Close
+</button>
+
+</div>
+
+
+<div style="
+overflow:auto;
+  border:1px solid #ddd;
+  border-radius:8px;
+">
+
+<table style="
+  width:100%;
+  min-width:700px;
+border-collapse:collapse;
+">
+
+<thead>
+
+<tr style="
+  background:#eaf5ee;
+">
+
+<th style="padding:9px;">
+Month
+</th>
+
+<th style="padding:9px;">
+Purchase Value<br>
+<span style="font-size:10px;">
+UGX
+</span>
+</th>
+
+<th style="padding:9px;">
+Sales Value<br>
+<span style="font-size:10px;">
+UGX
+</span>
+</th>
+
+<th style="padding:9px;">
+Purchase Qty<br>
+<span style="font-size:10px;">
+kg
+</span>
+</th>
+
+<th style="padding:9px;">
+Sales Qty<br>
+<span style="font-size:10px;">
+poles
+</span>
+</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+
+${rows}
+
+</tbody>
+
+</table>
+
+</div>
+
+
+<div style="
+  margin-top:14px;
+  padding:10px;
+  background:#f7fbf9;
+  border-radius:7px;
+  color:#666;
+  font-size:12px;
+  line-height:1.5;
+">
+
+Purchase Value uses saved company material cost,
+including recorded transport.
+
+<br>
+
+Purchase Quantity uses gross company kavera purchased.
+
+<br>
+
+Sales Value uses the final pole sale value after
+Director-approved discounts.
+
+<br>
+
+Sales Quantity uses poles sold.
+
+</div>
+
+
+<button
+  id="afSaveMonthlyTargets"
+  type="button"
+  style="
+    margin-top:14px;
+    width:100%;
+    padding:11px;
+    border:0;
+    border-radius:8px;
+    background:#0b5d3b;
+color:white;
+font-weight:bold;
+cursor:pointer;
+  "
+>
+💾 Save Monthly Targets
+</button>
+
+</div>
+
+`;
+
+
+document.body.appendChild(
+  modal
+);
+
+
+modal.querySelector(
+  "#afCloseMonthlyTargets"
+).onclick =
+function() {
+
+modal.remove();
+
+};
+
+
+modal.querySelector(
+  "#afSaveMonthlyTargets"
+).onclick =
+function() {
+
+const latestTargets =
+getAFMonthlyBusinessTargets();
+
+
+MONTHS.forEach(
+  (month, index) => {
+
+const key =
+afMonthlyChartsMonthKey(
+selectedYear,
+  index
+);
+
+
+latestTargets[key] = {
+
+purchaseValue:
+Math.max(
+    0,
+afMonthlyChartsNumber(
+modal.querySelector(
+        "#afTarget_purchaseValue_" +
+        index
+      )?.value
+    )
+  ),
+
+salesValue:
+Math.max(
+    0,
+afMonthlyChartsNumber(
+modal.querySelector(
+        "#afTarget_salesValue_" +
+        index
+      )?.value
+    )
+  ),
+
+purchaseQty:
+Math.max(
+    0,
+afMonthlyChartsNumber(
+modal.querySelector(
+        "#afTarget_purchaseQty_" +
+        index
+      )?.value
+    )
+  ),
+
+salesQty:
+Math.max(
+    0,
+afMonthlyChartsNumber(
+modal.querySelector(
+        "#afTarget_salesQty_" +
+        index
+      )?.value
+    )
+  )
+
+};
+
+  }
+);
+
+
+localStorage.setItem(
+  TARGET_KEY,
+JSON.stringify(
+latestTargets
+  )
+);
+
+
+modal.remove();
+
+
+const chartCard =
+document.getElementById(
+  "afMonthlyBusinessChartsCard"
+);
+
+
+  if (chartCard) {
+
+chartCard.dataset.year =
+String(
+selectedYear
+);
+
+  }
+
+
+renderAFMonthlyBusinessCharts();
+
+
+alert(
+  "Monthly targets saved successfully for " +
+selectedYear +
+  "."
+);
+
+};
+
+}
+
+
+/* =========================================================
+   EXPOSE
+   ========================================================= */
+
+window.renderAFMonthlyBusinessCharts =
+renderAFMonthlyBusinessCharts;
+
+window.openAFMonthlyBusinessTargets =
+openAFMonthlyBusinessTargets;
+
+
+/* =========================================================
+   CONNECT TO DIRECTOR DASHBOARD
+   ========================================================= */
+
+if (
+typeof applyAFRoleDashboard ===
+  "function"
+) {
+
+const previousApplyAFRoleDashboard =
+applyAFRoleDashboard;
+
+
+applyAFRoleDashboard =
+function() {
+
+const result =
+previousApplyAFRoleDashboard.apply(
+  this,
+  arguments
+);
+
+
+setTimeout(
+renderAFMonthlyBusinessCharts,
+  0
+);
+
+
+  return result;
+
+};
+
+}
+
+
+/*
+ * Existing logged-in session.
+ */
+
+setTimeout(
+renderAFMonthlyBusinessCharts,
+  0
+);
+
+})();
