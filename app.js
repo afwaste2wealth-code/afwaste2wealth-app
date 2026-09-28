@@ -42451,7 +42451,7 @@ date.replace(
     );
 
 
-consts sameDateCount =
+const sameDateCount =
 deliveryRecords
       .filter(
         record =>
