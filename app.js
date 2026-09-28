@@ -4984,7 +4984,7 @@ if (typeof applyStaffHRRoleVisibility === "function") {
 applyStaffHRRoleVisibility(modal);
 }
 
-modal.querySelector("#closeStaffHR").onclick = () => {
+modal.querySelector("#closeSystemSettings").onclick = () => {
 modal.remove();
   };
 
