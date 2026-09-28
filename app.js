@@ -47583,8 +47583,8 @@ cursor:pointer;
 display:grid;
   grid-template-columns:
     repeat(
-      auto-fit,
-minmax(330px,1fr)
+      2,
+minmax(0,1fr)
     );
   gap:12px;
 ">
