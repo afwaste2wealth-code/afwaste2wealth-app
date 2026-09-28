@@ -41664,6 +41664,28 @@ font-weight:bold;
 record.cancellationReason ||
     "Not stated"
   )}
+
+<br>
+
+  Cancelled by:
+  ${afEscape(
+record.cancelledByName ||
+record.cancelledByRole ||
+    "Unknown"
+  )}
+
+<br>
+
+  Date:
+  ${
+record.cancelledAt
+      ? new Date(
+record.cancelledAt
+        ).toLocaleString(
+          "en-GB"
+        )
+      : "Not recorded"
+  }
 </div>
       `
       : `
