@@ -16917,6 +16917,328 @@ modal.remove();
 renderPriceTable();
 
 }
+ /* =========================================================
+   VIEW APPROVED POLE SELLING PRICES
+   Read only — Director / Secretary
+   ========================================================= */
+
+function viewPoleStandardPrices() {
+
+const currentUser =
+JSON.parse(
+localStorage.getItem(
+    "currentUser"
+  ) || "{}"
+);
+
+
+const role =
+String(
+currentUser.role || ""
+);
+
+
+if (
+  role !== "Director" &&
+  role !== "Secretary"
+) {
+
+  alert(
+    "Only the Director or Secretary can view standard selling prices."
+  );
+
+  return;
+
+}
+
+
+const poleCategories = [
+
+  {
+    key: "pole3X3X6Square",
+    name: '3"x3"x6ft Square'
+  },
+
+  {
+    key: "pole3X3X6_5Square",
+    name: '3"x3"x6.5ft Square'
+  },
+
+  {
+    key: "pole4X4X6Square",
+    name: '4"x4"x6ft Square'
+  },
+
+  {
+    key: "pole4X4X7Square",
+    name: '4"x4"x7ft Square'
+  },
+
+  {
+    key: "pole3x6Round",
+    name: '3" Round x 6ft'
+  },
+
+  {
+    key: "pole4x7Round",
+    name: '4" Round x 7ft'
+  },
+
+  {
+    key: "pole3X3X2Square",
+    name: '3"x3"x2ft Square'
+  },
+
+  {
+    key: "pole4x4X2Square",
+    name: '4"x4"x2ft Square'
+  },
+
+  {
+    key: "pole4x2Round",
+    name: '4" Round x 2ft'
+  }
+
+];
+
+
+let prices = {};
+
+try {
+
+  prices =
+JSON.parse(
+localStorage.getItem(
+      "poleSellingPrices"
+    ) || "{}"
+  );
+
+} catch (error) {
+
+  prices = {};
+
+}
+
+
+const modal =
+document.createElement(
+  "div"
+);
+
+
+modal.style.cssText = `
+position:fixed;
+inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+align-items:center;
+justify-content:center;
+z-index:10000;
+padding:10px;
+font-family:Arial,sans-serif;
+`;
+
+
+modal.innerHTML = `
+
+<div style="
+background:white;
+  width:94%;
+  max-width:800px;
+  max-height:92vh;
+overflow:auto;
+  padding:24px;
+  border-radius:14px;
+">
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:center;
+  gap:12px;
+  margin-bottom:18px;
+">
+
+<div>
+
+<h2 style="
+  margin:0;
+  color:#0b5d3b;
+">
+👁 Approved Pole Selling Prices
+</h2>
+
+<div style="
+  margin-top:5px;
+  font-size:12px;
+  color:#666;
+">
+Read-only Director-approved price list
+</div>
+
+</div>
+
+
+<button
+  id="closeStandardPricesView"
+  type="button"
+  style="
+    border:0;
+    background:#333;
+color:white;
+    padding:8px 12px;
+    border-radius:7px;
+cursor:pointer;
+  "
+>
+✕ Close
+</button>
+
+</div>
+
+
+<div style="
+overflow:auto;
+  border:1px solid #ddd;
+  border-radius:9px;
+">
+
+<table style="
+  width:100%;
+  min-width:600px;
+border-collapse:collapse;
+">
+
+<thead>
+
+<tr style="
+  background:#eaf5ee;
+">
+
+<th style="
+  padding:10px;
+text-align:left;
+">
+Pole Category
+</th>
+
+<th style="
+  padding:10px;
+text-align:right;
+">
+Standard Unit Price
+</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+
+${poleCategories
+  .map(category => {
+
+const price =
+Number(
+  prices[
+category.key
+  ] || 0
+);
+
+return `
+
+<tr>
+
+<td style="
+  padding:10px;
+  border-bottom:1px solid #eee;
+font-weight:bold;
+">
+${category.name}
+</td>
+
+<td style="
+  padding:10px;
+  border-bottom:1px solid #eee;
+text-align:right;
+  color:#0b5d3b;
+font-weight:bold;
+">
+
+${
+  price > 0
+    ? "UGX " +
+price.toLocaleString()
+    : "Not Set"
+}
+
+</td>
+
+</tr>
+
+`;
+
+  })
+  .join("")}
+
+</tbody>
+
+</table>
+
+</div>
+
+
+<div style="
+  margin-top:15px;
+  padding:11px;
+  background:#f7fbf9;
+  border-radius:8px;
+  font-size:12px;
+  color:#666;
+">
+
+<b>Last updated:</b>
+${
+prices.updatedAt
+    ? new Date(
+prices.updatedAt
+      ).toLocaleString(
+        "en-GB"
+      )
+    : "Not recorded"
+}
+
+<br>
+
+<b>Updated by:</b>
+${
+prices.updatedByName ||
+prices.updatedByRole ||
+  "Not recorded"
+}
+
+</div>
+
+</div>
+
+`;
+
+
+document.body.appendChild(
+  modal
+);
+
+
+modal.querySelector(
+  "#closeStandardPricesView"
+).onclick = () => {
+
+modal.remove();
+
+};
+
+}
 
 
 /* =========================================================
