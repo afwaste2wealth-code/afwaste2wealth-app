@@ -41366,6 +41366,22 @@ cursor:pointer;
 🚚 Record Delivery
 </button>
 
+<button
+  id="afStockDeliveryHistory"
+  type="button"
+  style="
+    border:1px solid #0b5d3b;
+background:white;
+    color:#0b5d3b;
+    padding:10px 16px;
+    border-radius:8px;
+font-weight:bold;
+cursor:pointer;
+  "
+>
+📋 Delivery History
+</button>
+
 </div>
 
 </div>
@@ -41373,26 +41389,26 @@ cursor:pointer;
 
 
 document.body.appendChild(
-      modal
-    );
+  modal
+);
 
 
 modal.querySelector(
-      "#afCloseFactoryStock"
-    ).onclick = () => {
+  "#afCloseFactoryStock"
+).onclick = () => {
 
 modal.remove();
 
-    };
+};
 
 
 const deliveryButton =
 modal.querySelector(
-      "#afStockRecordDelivery"
-    );
+  "#afStockRecordDelivery"
+);
 
 
-    if (deliveryButton) {
+if (deliveryButton) {
 
 deliveryButton.onclick = () => {
 
@@ -41400,11 +41416,809 @@ modal.remove();
 
 recordAFDelivery();
 
-      };
+  };
 
-    }
+}
+
+
+const historyButton =
+modal.querySelector(
+  "#afStockDeliveryHistory"
+);
+
+
+if (historyButton) {
+
+historyButton.onclick = () => {
+
+modal.remove();
+
+viewAFDeliveryHistory();
+
+  };
+
+}
+
+}
+
+
+/* =========================================================
+   DELIVERY HISTORY
+   ========================================================= */
+
+function afDeliveryType(record) {
+
+const saved =
+  String(
+record.deliveryType || ""
+  ).toLowerCase();
+
+  if (saved) {
+    return saved;
+  }
+
+  return Number(
+record.pelletKg || 0
+  ) > 0
+    ? "pellets"
+    : "poles";
+
+}
+
+
+function afDeliveryDetails(record) {
+
+const type =
+afDeliveryType(record);
+
+
+  if (
+    type === "pellets"
+  ) {
+
+const owner =
+    String(
+record.pelletOwnership || ""
+    ).toLowerCase() === "client"
+      ? "Client-Owned"
+      : "A&F / Company";
+
+
+    return (
+      (record.pelletType || "Pellets") +
+      " — " +
+      Number(
+record.pelletKg || 0
+      ).toLocaleString() +
+      " kg — " +
+      owner
+    );
 
   }
+
+
+const items =
+Array.isArray(
+record.items
+  )
+    ? record.items
+    : [];
+
+
+  if (items.length) {
+
+    return items
+      .map(
+        item =>
+          (
+item.name ||
+item.key ||
+            "Poles"
+          ) +
+          " × " +
+          Number(
+item.quantity || 0
+          ).toLocaleString()
+      )
+      .join(", ");
+
+  }
+
+
+  return (
+    Number(
+record.totalPoles || 0
+    ).toLocaleString() +
+    " poles"
+  );
+
+}
+
+
+function viewAFDeliveryHistory() {
+
+const records =
+afReadArray(
+    "afDeliveryRecords"
+  )
+    .slice()
+    .reverse();
+
+
+const old =
+document.getElementById(
+    "afDeliveryHistoryModal"
+  );
+
+
+  if (old) {
+old.remove();
+  }
+
+
+const modal =
+document.createElement(
+    "div"
+  );
+
+
+modal.id =
+  "afDeliveryHistoryModal";
+
+
+modal.style.cssText = `
+position:fixed;
+    inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+align-items:center;
+justify-content:center;
+    z-index:99999;
+    padding:10px;
+font-family:Arial,sans-serif;
+  `;
+
+
+const rows =
+records.length
+
+    ? records
+        .map(record => `
+
+<tr>
+
+<td>
+  ${afEscape(
+record.date || "-"
+  )}
+</td>
+
+<td>
+<b>
+    ${afEscape(
+record.deliveryNumber || "-"
+    )}
+</b>
+</td>
+
+<td>
+  ${afEscape(
+afDeliveryType(record) ===
+    "pellets"
+      ? "Pellets"
+      : "Poles"
+  )}
+</td>
+
+<td>
+  ${afEscape(
+record.customerName || "-"
+  )}
+</td>
+
+<td>
+  ${afEscape(
+record.deliveryPlace ||
+record.destination ||
+    "-"
+  )}
+</td>
+
+<td>
+  ${afEscape(
+afDeliveryDetails(record)
+  )}
+</td>
+
+<td>
+
+<button
+  type="button"
+  data-print-delivery="${afEscape(
+record.id
+  )}"
+  style="
+    border:0;
+    background:#0b5d3b;
+color:white;
+    padding:7px 10px;
+    border-radius:6px;
+cursor:pointer;
+  "
+>
+  Print Note
+</button>
+
+</td>
+
+</tr>
+
+        `)
+        .join("")
+
+    : `
+
+<tr>
+<td
+colspan="7"
+  style="
+text-align:center;
+    padding:20px;
+  "
+>
+  No delivery records found.
+</td>
+</tr>
+
+      `;
+
+
+modal.innerHTML = `
+
+<div style="
+background:white;
+  width:96%;
+  max-width:1100px;
+  max-height:92vh;
+overflow:auto;
+  border-radius:12px;
+  padding:20px;
+">
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:center;
+  margin-bottom:15px;
+">
+
+<div>
+
+<h2 style="
+  margin:0;
+  color:#0b5d3b;
+">
+📋 Delivery History
+</h2>
+
+<small>
+  ${records.length.toLocaleString()}
+  saved delivery record(s)
+</small>
+
+</div>
+
+
+<button
+  id="afCloseDeliveryHistory"
+  type="button"
+  style="
+    border:0;
+    background:#333;
+color:white;
+    padding:8px 12px;
+    border-radius:7px;
+cursor:pointer;
+  "
+>
+✕ Close
+</button>
+
+</div>
+
+
+<div style="
+overflow:auto;
+">
+
+<table style="
+  width:100%;
+  min-width:900px;
+border-collapse:collapse;
+">
+
+<thead>
+
+<tr style="
+  background:#eaf5ee;
+text-align:left;
+">
+
+<th>Date</th>
+
+<th>Delivery No.</th>
+
+<th>Type</th>
+
+<th>Customer / Client</th>
+
+<th>Destination</th>
+
+<th>Details</th>
+
+<th>Action</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+  ${rows}
+</tbody>
+
+</table>
+
+</div>
+
+</div>
+  `;
+
+
+  modal
+    .querySelectorAll(
+      "th,td"
+    )
+    .forEach(cell => {
+
+cell.style.padding =
+      "9px";
+
+cell.style.borderBottom =
+      "1px solid #eee";
+
+    });
+
+
+document.body.appendChild(
+    modal
+  );
+
+
+modal.querySelector(
+    "#afCloseDeliveryHistory"
+  ).onclick = () => {
+
+modal.remove();
+
+  };
+
+
+modal.querySelectorAll(
+    "[data-print-delivery]"
+  )
+    .forEach(button => {
+
+button.onclick = () => {
+
+printAFDeliveryNote(
+button.dataset
+            .printDelivery
+        );
+
+      };
+
+    });
+
+}
+
+
+/* =========================================================
+   PRINT DELIVERY NOTE
+   ========================================================= */
+
+function printAFDeliveryNote(
+deliveryId
+) {
+
+const record =
+afReadArray(
+    "afDeliveryRecords"
+  )
+    .find(
+      item =>
+        String(item.id) ===
+        String(deliveryId)
+    );
+
+
+  if (!record) {
+
+    alert(
+      "Delivery record not found."
+    );
+
+    return;
+
+  }
+
+
+const type =
+afDeliveryType(record);
+
+
+  let productRows = "";
+
+
+  if (
+    type === "pellets"
+  ) {
+
+const owner =
+    String(
+record.pelletOwnership || ""
+    ).toLowerCase() === "client"
+      ? "Client-Owned"
+      : "A&F / Company";
+
+
+productRows = `
+
+<tr>
+
+<td>
+  ${afEscape(
+record.pelletType ||
+    "Pellets"
+  )}
+</td>
+
+<td>
+  ${Number(
+record.pelletKg || 0
+  ).toLocaleString()} kg
+</td>
+
+<td>
+  ${afEscape(owner)}
+</td>
+
+</tr>
+
+    `;
+
+  } else {
+
+const items =
+Array.isArray(
+record.items
+    )
+      ? record.items
+      : [];
+
+
+productRows =
+items.length
+
+      ? items
+          .map(item => `
+
+<tr>
+
+<td>
+  ${afEscape(
+item.name ||
+item.key ||
+    "Poles"
+  )}
+</td>
+
+<td>
+  ${Number(
+item.quantity || 0
+  ).toLocaleString()}
+  poles
+</td>
+
+<td>-</td>
+
+</tr>
+
+          `)
+          .join("")
+
+      : `
+
+<tr>
+
+<td>
+  Poles
+</td>
+
+<td>
+  ${Number(
+record.totalPoles || 0
+  ).toLocaleString()}
+  poles
+</td>
+
+<td>-</td>
+
+</tr>
+
+        `;
+
+  }
+
+
+const w =
+window.open(
+    "",
+    "_blank",
+    "width=900,height=700"
+  );
+
+
+  if (!w) {
+
+    alert(
+      "Please allow pop-ups so the delivery note can open."
+    );
+
+    return;
+
+  }
+
+
+w.document.write(`
+
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="UTF-8">
+
+<title>
+  Delivery Note
+  ${afEscape(
+record.deliveryNumber || ""
+  )}
+</title>
+
+<style>
+
+body {
+font-family:Arial,sans-serif;
+  padding:30px;
+  color:#222;
+}
+
+h1,
+h2 {
+text-align:center;
+  margin:4px;
+}
+
+.meta {
+display:grid;
+  grid-template-columns:
+    1fr 1fr;
+  gap:8px 20px;
+  margin:22px 0;
+}
+
+.meta div {
+  border-bottom:
+    1px solid #ddd;
+  padding:6px;
+}
+
+table {
+  width:100%;
+border-collapse:collapse;
+}
+
+th,
+td {
+  border:1px solid #ccc;
+  padding:9px;
+text-align:left;
+}
+
+.sign {
+display:grid;
+  grid-template-columns:
+    1fr 1fr;
+  gap:50px;
+  margin-top:55px;
+}
+
+.line {
+  border-top:
+    1px solid #333;
+text-align:center;
+  padding-top:6px;
+}
+
+.print {
+  margin-top:25px;
+text-align:center;
+}
+
+@media print {
+
+  .print {
+display:none;
+  }
+
+  body {
+    padding:0;
+  }
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+
+<h1>
+  A&F Wekavera Ltd
+</h1>
+
+<h2>
+  Waste2Wealth Solutions
+</h2>
+
+<h2>
+  DELIVERY NOTE
+</h2>
+
+
+<div class="meta">
+
+<div>
+<b>Delivery No:</b>
+  ${afEscape(
+record.deliveryNumber || "-"
+  )}
+</div>
+
+<div>
+<b>Date:</b>
+  ${afEscape(
+record.date || "-"
+  )}
+</div>
+
+<div>
+<b>Customer / Client:</b>
+  ${afEscape(
+record.customerName || "-"
+  )}
+</div>
+
+<div>
+<b>Phone:</b>
+  ${afEscape(
+record.customerPhone || "-"
+  )}
+</div>
+
+<div>
+<b>Destination:</b>
+  ${afEscape(
+record.deliveryPlace ||
+record.destination ||
+    "-"
+  )}
+</div>
+
+<div>
+<b>Reference:</b>
+  ${afEscape(
+record.reference || "-"
+  )}
+</div>
+
+</div>
+
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>
+  Product
+</th>
+
+<th>
+  Quantity / Weight
+</th>
+
+<th>
+  Ownership
+</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+
+${productRows}
+
+</tbody>
+
+</table>
+
+
+<p>
+
+<b>
+  Notes:
+</b>
+
+${afEscape(
+record.notes || "-"
+)}
+
+</p>
+
+
+<div class="sign">
+
+<div class="line">
+  Dispatched By
+</div>
+
+<div class="line">
+  Received By / Signature
+</div>
+
+</div>
+
+
+<div class="print">
+
+<button
+onclick="window.print()"
+>
+  Print Delivery Note
+</button>
+
+</div>
+
+
+</body>
+
+</html>
+
+  `);
+
+
+w.document.close();
+
+w.focus();
+
+}
 
 
   /* =======================================================
