@@ -48636,7 +48636,7 @@ record.amount || 0
 
 
 const canRecord =
-typeofcanAFRecord ===
+typeof canAFRecord ===
   "function"
     ? canAFRecord(
         "expenses"
