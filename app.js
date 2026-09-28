@@ -47342,7 +47342,7 @@ Actual
 
 function renderAFMonthlyBusinessCharts() {
 
-constcurrentUser =
+const currentUser =
 afMonthlyChartsCurrentUser();
 
 
