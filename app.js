@@ -47418,7 +47418,7 @@ const years =
 getAFMonthlyBusinessYears();
 
 
-constcurrentYear =
+const currentYear =
 new Date()
   .getFullYear();
 
