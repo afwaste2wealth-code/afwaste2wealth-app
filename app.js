@@ -43506,6 +43506,23 @@ const companyPelletRecords =
 afReadArray(
     "afCompanyPelletRecords"
   );
+   let poleSellingPrices = {};
+
+try {
+
+poleSellingPrices =
+JSON.parse(
+localStorage.getItem(
+      "poleSellingPrices"
+    ) || "{}"
+  );
+
+} catch (error) {
+
+poleSellingPrices = {};
+
+}
+
 
 
   /* =====================================================
@@ -44190,7 +44207,15 @@ text-align:left;
 </th>
 
 <th style="padding:10px;">
+  Unit Price
+</th>
+
+<th style="padding:10px;">
   Deliver
+</th>
+
+<th style="padding:10px;">
+  Subtotal
 </th>
 
 </tr>
@@ -44209,6 +44234,12 @@ poleStock.balances[
 type.key
       ] || 0
     );
+const unitPrice =
+Number(
+poleSellingPrices[
+type.key
+  ] || 0
+);
 
     return `
 
@@ -44228,6 +44259,18 @@ font-weight:bold;
 ">
   ${balance.toLocaleString()}
 </td>
+<td style="
+  padding:10px;
+  border-bottom:1px solid #eee;
+font-weight:bold;
+">
+  ${
+unitPrice> 0
+      ? "UGX " +
+unitPrice.toLocaleString()
+      : "Not Set"
+  }
+</td>
 
 <td style="
   padding:10px;
@@ -44241,6 +44284,17 @@ font-weight:bold;
   max="${balance}"
   step="1"
   value="0"
+  oninput="
+document.getElementById(
+    'afDeliverySubtotal_${type.key}'
+  ).textContent =
+    'UGX ' +
+    (
+      Number(this.value || 0) *
+      ${unitPrice}
+    ).toLocaleString();
+"
+
   ${balance <= 0
     ? "disabled"
     : ""}
@@ -44253,17 +44307,250 @@ font-weight:bold;
 >
 
 </td>
+<td
+  id="afDeliverySubtotal_${type.key}"
+  style="
+    padding:10px;
+    border-bottom:1px solid #eee;
+font-weight:bold;
+    color:#0b5d3b;
+  "
+>
+  UGX 0
+</td>
 
 </tr>
 
     `;
 
   })
-  .join("")}
+   .join("")}
 
 </tbody>
 
 </table>
+
+</div>
+
+</div>
+<div
+  id="afPoleSaleSummary"
+  style="
+    margin-top:14px;
+    padding:14px;
+    background:#eef8f2;
+    border:1px solid #cfe6d8;
+    border-radius:8px;
+display:flex;
+justify-content:space-between;
+align-items:center;
+    gap:12px;
+  "
+>
+
+<div style="
+font-weight:bold;
+  color:#333;
+">
+  Gross Sale Total
+</div>
+
+<div
+  id="afPoleGrossSaleTotal"
+  style="
+    font-size:20px;
+font-weight:bold;
+    color:#0b5d3b;
+  "
+>
+  UGX 0
+</div>
+
+</div>
+<div
+  id="afPoleDiscountSection"
+  style="
+    margin-top:12px;
+    padding:14px;
+    border:1px solid #ddd;
+    border-radius:8px;
+    background:#fafafa;
+  "
+>
+
+<div style="
+font-weight:bold;
+  color:#0b5d3b;
+  margin-bottom:12px;
+">
+  Director Discount
+</div>
+
+${
+  String(
+currentUser?.role || ""
+  ).toLowerCase() === "director"
+
+  ? `
+
+<div style="
+display:grid;
+  grid-template-columns:
+    repeat(auto-fit,minmax(180px,1fr));
+  gap:10px;
+">
+
+<div>
+
+<label style="
+  font-size:12px;
+font-weight:bold;
+">
+Discount Type
+</label>
+
+<select
+  id="afPoleDiscountType"
+  style="
+    width:100%;
+    padding:9px;
+    margin-top:5px;
+  "
+>
+<option value="none">No Discount</option>
+<option value="percent">Percentage (%)</option>
+<option value="fixed">Fixed Amount (UGX)</option>
+</select>
+
+</div>
+
+
+<div>
+
+<label style="
+  font-size:12px;
+font-weight:bold;
+">
+Discount Value
+</label>
+
+<input
+  id="afPoleDiscountValue"
+  type="number"
+  min="0"
+  step="0.01"
+  value="0"
+  style="
+    width:100%;
+box-sizing:border-box;
+    padding:9px;
+    margin-top:5px;
+  "
+>
+
+</div>
+
+</div>
+
+
+<div style="margin-top:10px;">
+
+<label style="
+  font-size:12px;
+font-weight:bold;
+">
+Discount Reason
+</label>
+
+<input
+  id="afPoleDiscountReason"
+  type="text"
+  placeholder="Required when a discount is given"
+  style="
+    width:100%;
+box-sizing:border-box;
+    padding:9px;
+    margin-top:5px;
+  "
+>
+
+</div>
+
+  `
+
+  : `
+
+<div style="
+  color:#666;
+  font-size:13px;
+">
+Only the Director can approve a discount.
+</div>
+
+  `
+}
+
+
+<div style="
+display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+  margin-top:14px;
+">
+
+<div style="
+  padding:10px;
+background:white;
+  border-radius:7px;
+">
+
+<div style="
+  font-size:12px;
+  color:#666;
+">
+Discount Amount
+</div>
+
+<div
+  id="afPoleDiscountAmount"
+  style="
+font-weight:bold;
+    color:#b42318;
+    margin-top:4px;
+  "
+>
+UGX 0
+</div>
+
+</div>
+
+
+<div style="
+  padding:10px;
+  background:#eef8f2;
+  border-radius:7px;
+">
+
+<div style="
+  font-size:12px;
+  color:#666;
+">
+Final Sale Total
+</div>
+
+<div
+  id="afPoleFinalSaleTotal"
+  style="
+    font-size:20px;
+font-weight:bold;
+    color:#0b5d3b;
+    margin-top:4px;
+  "
+>
+UGX 0
+</div>
+
+</div>
 
 </div>
 
@@ -44535,6 +44822,315 @@ modal.querySelector(
     "#afDeliveryCustomer"
   );
 
+const poleGrossSaleTotal =
+modal.querySelector(
+  "#afPoleGrossSaleTotal"
+);
+
+
+function updatePoleSaleTotals() {
+
+  let grossTotal = 0;
+
+
+AF_POLE_TYPES.forEach(type => {
+
+const quantityInput =
+modal.querySelector(
+      "#afDeliveryQty_" +
+type.key
+    );
+
+
+const subtotalCell =
+modal.querySelector(
+      "#afDeliverySubtotal_" +
+type.key
+    );
+
+
+const quantity =
+Number(
+quantityInput?.value || 0
+    );
+
+
+const unitPrice =
+Number(
+poleSellingPrices[
+type.key
+      ] || 0
+    );
+
+
+const subtotal =
+quantity *
+unitPrice;
+
+
+    if (subtotalCell) {
+
+subtotalCell.textContent =
+        "UGX " +
+subtotal.toLocaleString();
+
+    }
+
+
+grossTotal +=
+subtotal;
+
+  });
+
+
+  if (poleGrossSaleTotal) {
+
+poleGrossSaleTotal.textContent =
+      "UGX " +
+grossTotal.toLocaleString();
+
+  }
+
+
+  return grossTotal;
+
+}
+
+
+AF_POLE_TYPES.forEach(type => {
+
+const quantityInput =
+modal.querySelector(
+    "#afDeliveryQty_" +
+type.key
+  );
+
+
+  if (quantityInput) {
+
+quantityInput.addEventListener(
+      "input",
+updatePoleSaleTotals
+    );
+
+  }
+
+});
+
+
+updatePoleSaleTotals();
+const poleDiscountType =
+modal.querySelector(
+  "#afPoleDiscountType"
+);
+
+const poleDiscountValue =
+modal.querySelector(
+  "#afPoleDiscountValue"
+);
+
+const poleDiscountReason =
+modal.querySelector(
+  "#afPoleDiscountReason"
+);
+
+const poleDiscountAmount =
+modal.querySelector(
+  "#afPoleDiscountAmount"
+);
+
+const poleFinalSaleTotal =
+modal.querySelector(
+  "#afPoleFinalSaleTotal"
+);
+
+
+function getPoleSaleFinancials() {
+
+const grossSaleTotal =
+updatePoleSaleTotals();
+
+
+let discountType =
+  "none";
+
+let discountValue =
+  0;
+
+let discountAmount =
+  0;
+
+
+const isDirector =
+String(
+currentUser?.role || ""
+).toLowerCase() ===
+"director";
+
+
+if (
+isDirector&&
+poleDiscountType
+) {
+
+discountType =
+poleDiscountType.value ||
+  "none";
+
+
+discountValue =
+Math.max(
+  Number(
+poleDiscountValue?.value || 0
+  ),
+  0
+);
+
+
+if (
+discountType ===
+  "percent"
+) {
+
+discountAmount =
+grossSaleTotal *
+discountValue /
+100;
+
+}
+
+
+if (
+discountType ===
+  "fixed"
+) {
+
+discountAmount =
+discountValue;
+
+}
+
+}
+
+
+discountAmount =
+Math.min(
+Math.max(
+discountAmount,
+    0
+  ),
+grossSaleTotal
+);
+
+
+const finalSaleTotal =
+Math.max(
+grossSaleTotal -
+discountAmount,
+  0
+);
+
+
+if (
+poleDiscountAmount
+) {
+
+poleDiscountAmount.textContent =
+  "UGX " +
+Math.round(
+discountAmount
+).toLocaleString();
+
+}
+
+
+if (
+poleFinalSaleTotal
+) {
+
+poleFinalSaleTotal.textContent =
+  "UGX " +
+Math.round(
+finalSaleTotal
+).toLocaleString();
+
+}
+
+
+return {
+
+grossSaleTotal,
+
+discountType,
+
+discountValue,
+
+discountAmount:
+Math.round(
+discountAmount
+  ),
+
+discountReason:
+poleDiscountReason
+    ?.value
+    ?.trim() || "",
+
+finalSaleTotal:
+Math.round(
+finalSaleTotal
+  )
+
+};
+
+}
+
+
+AF_POLE_TYPES.forEach(
+  type => {
+
+const quantityInput =
+modal.querySelector(
+    "#afDeliveryQty_" +
+type.key
+  );
+
+
+if (quantityInput) {
+
+quantityInput.addEventListener(
+      "input",
+getPoleSaleFinancials
+    );
+
+}
+
+  }
+);
+
+
+if (poleDiscountType) {
+
+poleDiscountType
+  .addEventListener(
+    "change",
+getPoleSaleFinancials
+  );
+
+}
+
+
+if (poleDiscountValue) {
+
+poleDiscountValue
+  .addEventListener(
+    "input",
+getPoleSaleFinancials
+  );
+
+}
+
+
+getPoleSaleFinancials();
 
   function fillClientOptions() {
 
@@ -44919,119 +45515,247 @@ getAFFactoryStock();
 const items = [];
 
 
-      for (
+for (
 const poleType of
-        AF_POLE_TYPES
-      ) {
+  AF_POLE_TYPES
+) {
 
 const quantity =
-        Number(
+Number(
 modal.querySelector(
-            "#afDeliveryQty_" +
+    "#afDeliveryQty_" +
 poleType.key
-          )?.value || 0
-        );
+  )?.value || 0
+);
 
 
-        if (
-          quantity < 0 ||
-          !Number.isInteger(
-            quantity
-          )
-        ) {
+if (
+  quantity < 0 ||
+  !Number.isInteger(
+    quantity
+  )
+) {
 
-          alert(
+  alert(
 poleType.name +
-            " quantity must be a whole number."
-          );
+    " quantity must be a whole number."
+  );
 
-          return;
-        }
+  return;
+
+}
 
 
-        if (
-          quantity <= 0
-        ) {
-          continue;
-        }
+if (
+  quantity <= 0
+) {
+  continue;
+}
 
 
 const available =
-        Number(
+Number(
 latestStock
-            .balances[
+    .balances[
 poleType.key
-            ] || 0
-        );
+    ] || 0
+);
 
 
-        if (
-          quantity >
-          available
-        ) {
+if (
+  quantity >
+  available
+) {
 
-          alert(
-            "Not enough stock for " +
+  alert(
+    "Not enough stock for " +
 poleType.name +
-            ".\n\nAvailable: " +
-            available +
-            "\nRequested: " +
-            quantity
-          );
+    ".\n\nAvailable: " +
+    available +
+    "\nRequested: " +
+    quantity
+  );
 
-          return;
-        }
+  return;
+
+}
+
+
+const standardUnitPrice =
+Number(
+poleSellingPrices[
+poleType.key
+  ] || 0
+);
+
+
+if (
+standardUnitPrice<= 0
+) {
+
+  alert(
+    "No Director-approved selling price has been set for:\n\n" +
+poleType.name +
+    "\n\nPlease set the standard price before recording this sale."
+  );
+
+  return;
+
+}
+
+
+const lineSubtotal =
+quantity *
+standardUnitPrice;
 
 
 items.push({
 
-          key:
+  key:
 poleType.key,
 
-          name:
+  name:
 poleType.name,
 
-          quantity
+  quantity,
 
-        });
+standardUnitPrice,
 
-      }
+unitPrice:
+standardUnitPrice,
+
+  subtotal:
+lineSubtotal
+
+});
+
+}
 
 
-      if (
-        !items.length
-      ) {
+if (
+  !items.length
+) {
 
-        alert(
-          "Please enter at least one pole quantity for delivery."
-        );
+  alert(
+    "Please enter at least one pole quantity for delivery."
+  );
 
-        return;
-      }
+  return;
+
+}
 
 
 const totalPoles =
 items.reduce(
-        (sum, item) =>
-          sum +
-          Number(
+  (sum, item) =>
+    sum +
+    Number(
 item.quantity || 0
-          ),
-        0
-      );
+    ),
+  0
+);
+
+
+const grossSaleTotal =
+items.reduce(
+  (sum, item) =>
+    sum +
+    Number(
+item.subtotal || 0
+    ),
+  0
+);
+
+
+const financials =
+getPoleSaleFinancials();
+
+
+const isDirector =
+String(
+currentUser?.role || ""
+).toLowerCase() ===
+"director";
+
+
+if (
+financials.discountType ===
+    "percent" &&
+financials.discountValue> 100
+) {
+
+  alert(
+    "Percentage discount cannot exceed 100%."
+  );
+
+  return;
+
+}
+
+
+if (
+financials.discountType ===
+    "fixed" &&
+financials.discountValue>
+grossSaleTotal
+) {
+
+  alert(
+    "Fixed discount cannot be greater than the gross sale total."
+  );
+
+  return;
+
+}
+
+
+if (
+financials.discountAmount> 0 &&
+  !isDirector
+) {
+
+  alert(
+    "Only the Director can approve a discount."
+  );
+
+  return;
+
+}
+
+
+if (
+financials.discountAmount> 0 &&
+  !financials.discountReason
+) {
+
+  alert(
+    "Please enter the reason for the discount."
+  );
+
+  return;
+
+}
+
+
+const finalSaleTotal =
+Math.max(
+grossSaleTotal -
+financials.discountAmount,
+  0
+);
 
 
 records.push({
 
-        id:
+  id:
 Date.now(),
 
 deliveryNumber,
 
 deliveryType:
-          "poles",
+    "poles",
 
-        date,
+  date,
 
 customerName,
 
@@ -45039,51 +45763,115 @@ customerPhone,
 
 deliveryPlace,
 
-        destination:
+  destination:
 deliveryPlace,
 
-        reference,
+  reference,
 
-        items,
+  items,
 
 totalPoles,
 
+  currency:
+    "UGX",
+
+grossSaleTotal,
+
+standardSaleTotal:
+grossSaleTotal,
+
+discountType:
+financials.discountAmount> 0
+    ? financials.discountType
+    : "none",
+
+discountValue:
+financials.discountAmount> 0
+    ? financials.discountValue
+    : 0,
+
+discountAmount:
+financials.discountAmount,
+
+discountReason:
+financials.discountAmount> 0
+    ? financials.discountReason
+    : "",
+
+discountApprovedByEmployeeId:
+financials.discountAmount> 0
+    ? (
+currentUser?.employeeId ||
+        ""
+      )
+    : "",
+
+discountApprovedByName:
+financials.discountAmount> 0
+    ? (
+currentUser?.fullName ||
+currentUser?.employeeName ||
+        ""
+      )
+    : "",
+
+discountApprovedByRole:
+financials.discountAmount> 0
+    ? (
+currentUser?.role ||
+        ""
+      )
+    : "",
+
+discountApprovedAt:
+financials.discountAmount> 0
+    ? new Date()
+        .toISOString()
+    : "",
+
+finalSaleTotal,
+
+saleAmount:
+finalSaleTotal,
+
+netSaleTotal:
+finalSaleTotal,
+
 pelletOwnership:
-          "",
+    "",
 
 pelletClientName:
-          "",
+    "",
 
 pelletType:
-          "",
+    "",
 
 pelletKg:
-          0,
+    0,
 
-        notes,
+  notes,
 
-        status:
-          "COMPLETED",
+  status:
+    "COMPLETED",
 
 recordedByEmployeeId:
 currentUser?.employeeId ||
-          "",
+    "",
 
 recordedByName:
 currentUser?.fullName ||
 currentUser?.employeeName ||
-          "",
+    "",
 
 recordedByRole:
 currentUser?.role ||
-          "",
+    "",
 
 createdAt:
-          new Date()
-            .toISOString()
+  new Date()
+    .toISOString()
 
-      });
-
+});
 
 localStorage.setItem(
         "afDeliveryRecords",
