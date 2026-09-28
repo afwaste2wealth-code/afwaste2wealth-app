@@ -2606,7 +2606,7 @@ washingRecords.filter(
 record.targetStatus ===
         "COMPLETED" &&
 record.status !==
-        "CANCELLED"
+        ""
     );
 
 
@@ -41583,9 +41583,22 @@ const rows =
 records.length
 
     ? records
-        .map(record => `
+        .map(record => {
 
-<tr>
+const cancelled =
+          String(
+record.status || ""
+          ).toUpperCase() ===
+          "CANCELLED";
+
+
+          return `
+
+<tr style="
+  ${cancelled
+    ? "background:#fff1f1;"
+    : ""}
+">
 
 <td>
   ${afEscape(
@@ -41631,6 +41644,46 @@ afDeliveryDetails(record)
 </td>
 
 <td>
+  ${
+    cancelled
+      ? `
+<div style="
+  color:#b42318;
+font-weight:bold;
+">
+  CANCELLED
+</div>
+
+<div style="
+  font-size:12px;
+  color:#666;
+  margin-top:4px;
+">
+  Reason:
+  ${afEscape(
+record.cancellationReason ||
+    "Not stated"
+  )}
+</div>
+      `
+      : `
+<span style="
+          color:#0b5d3b;
+font-weight:bold;
+        ">
+          COMPLETED
+</span>
+      `
+  }
+</td>
+
+<td>
+
+<div style="
+display:flex;
+  gap:6px;
+flex-wrap:wrap;
+">
 
 <button
   type="button"
@@ -41649,18 +41702,48 @@ cursor:pointer;
   Print Note
 </button>
 
+${
+  cancelled
+    ? ""
+    : `
+
+<button
+  type="button"
+  data-cancel-delivery="${afEscape(
+record.id
+  )}"
+  style="
+    border:0;
+    background:#b42318;
+color:white;
+    padding:7px 10px;
+    border-radius:6px;
+cursor:pointer;
+  "
+>
+  Cancel / Reverse
+</button>
+
+    `
+}
+
+</div>
+
 </td>
 
 </tr>
 
-        `)
+          `;
+
+        })
         .join("")
 
     : `
 
 <tr>
+
 <td
-colspan="7"
+colspan="8"
   style="
 text-align:center;
     padding:20px;
@@ -41668,6 +41751,7 @@ text-align:center;
 >
   No delivery records found.
 </td>
+
 </tr>
 
       `;
@@ -41678,7 +41762,7 @@ modal.innerHTML = `
 <div style="
 background:white;
   width:96%;
-  max-width:1100px;
+  max-width:1200px;
   max-height:92vh;
 overflow:auto;
   border-radius:12px;
@@ -41733,7 +41817,7 @@ overflow:auto;
 
 <table style="
   width:100%;
-  min-width:900px;
+  min-width:1000px;
 border-collapse:collapse;
 ">
 
@@ -41755,6 +41839,8 @@ text-align:left;
 <th>Destination</th>
 
 <th>Details</th>
+
+<th>Status</th>
 
 <th>Action</th>
 
@@ -41820,9 +41906,181 @@ button.dataset
 
     });
 
+
+modal.querySelectorAll(
+    "[data-cancel-delivery]"
+  )
+    .forEach(button => {
+
+button.onclick = () => {
+
+cancelAFDelivery(
+button.dataset
+            .cancelDelivery
+        );
+
+      };
+
+    });
+
 }
 
 
+/* =========================================================
+   CANCEL / REVERSE DELIVERY
+   Director only
+   ========================================================= */
+
+function cancelAFDelivery(
+deliveryId
+) {
+
+  if (
+typeof requireAFDeleteAuthority ===
+      "function" &&
+    !requireAFDeleteAuthority()
+  ) {
+
+    return;
+
+  }
+
+
+const records =
+afReadArray(
+    "afDeliveryRecords"
+  );
+
+
+const record =
+records.find(
+    item =>
+      String(item.id) ===
+      String(deliveryId)
+  );
+
+
+  if (!record) {
+
+    alert(
+      "Delivery record not found."
+    );
+
+    return;
+
+  }
+
+
+  if (
+    String(
+record.status || ""
+    ).toUpperCase() ===
+    "CANCELLED"
+  ) {
+
+    alert(
+      "This delivery has already been cancelled."
+    );
+
+    return;
+
+  }
+
+
+const confirmed =
+  confirm(
+    "Cancel and reverse this delivery?\n\n" +
+
+    "Delivery No: " +
+    (
+record.deliveryNumber ||
+      "-"
+    ) +
+
+    "\nCustomer: " +
+    (
+record.customerName ||
+      "-"
+    ) +
+
+    "\n\nThe delivered stock will automatically be returned to inventory."
+  );
+
+
+  if (!confirmed) {
+    return;
+  }
+const cancellationReason =
+prompt(
+  "Please enter the reason for cancelling / reversing this delivery:"
+);
+
+if (
+  !cancellationReason ||
+  !cancellationReason.trim()
+) {
+
+  alert(
+    "A cancellation reason is required."
+  );
+
+  return;
+}
+
+
+const currentUser =
+typeof getAFCurrentUser ===
+    "function"
+
+      ? getAFCurrentUser()
+
+      : null;
+
+
+record.status =
+  "CANCELLED";
+record.cancellationReason = 
+   cancellationReason.trim();
+
+record.cancelledAt =
+  new Date()
+    .toISOString();
+
+
+record.cancelledByEmployeeId =
+currentUser?.employeeId ||
+  "";
+
+
+record.cancelledByName =
+currentUser?.fullName ||
+currentUser?.employeeName ||
+  "";
+
+
+record.cancelledByRole =
+currentUser?.role ||
+  "";
+
+
+localStorage.setItem(
+    "afDeliveryRecords",
+JSON.stringify(
+      records
+    )
+  );
+
+
+  alert(
+    "Delivery cancelled successfully.\n\n" +
+
+    "The stock has been returned automatically."
+  );
+
+
+viewAFDeliveryHistory();
+
+}
 /* =========================================================
    PRINT DELIVERY NOTE
    ========================================================= */
