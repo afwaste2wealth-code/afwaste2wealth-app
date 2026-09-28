@@ -41413,79 +41413,66 @@ recordAFDelivery();
 
 function recordAFDelivery() {
 
-const stock =
+const poleStock =
 getAFFactoryStock();
-
-
-  /* =====================================================
-     PELLET STOCK
-     Actual pellets recorded from pelletizing jobs
-     minus pellets already delivered.
-     ===================================================== */
-
-  function getPelletStock() {
-
-const materialRecords =
-afReadArray(
-      "materialRecords"
-    );
 
 const deliveryRecords =
 afReadArray(
-      "afDeliveryRecords"
-    );
+    "afDeliveryRecords"
+  );
 
+const materialRecords =
+afReadArray(
+    "materialRecords"
+  );
+
+const companyPelletRecords =
+afReadArray(
+    "afCompanyPelletRecords"
+  );
+
+
+  /* =====================================================
+     BUILD PELLET STOCK
+     ===================================================== */
+
+  function buildPelletStock(
+    records,
+deliveredFilter,
+clientName = ""
+  ) {
 
 const produced = {};
+const delivered = {};
 
 
-materialRecords
-      .filter(record => {
-
-const service =
-        String(
-record.clientService ||
-record.service ||
-          ""
-        ).toLowerCase();
-
-const status =
-        String(
-record.status || ""
-        ).toUpperCase();
-
-        return (
-service.includes(
-            "pellet"
-          ) &&
-          status !== "CANCELLED"
-        );
-
-      })
-      .forEach(record => {
+records.forEach(record => {
 
 const type =
-        String(
+      String(
 record.materialType ||
-          "Mixed Plastic"
-        );
+record.pelletType ||
+record.type ||
+        "Mixed Plastic"
+      );
+
 
 const kg =
-        Number(
+      Number(
 record.actualPelletWeight ??
 record.pelletWeight ??
-          0
-        );
-
-        produced[type] =
-        Number(
-          produced[type] || 0
-        ) + kg;
-
-      });
+record.pelletKg ??
+record.kg ??
+        0
+      );
 
 
-const delivered = {};
+      produced[type] =
+      Number(
+        produced[type] || 0
+      ) + kg;
+
+    });
 
 
 deliveryRecords
@@ -41498,10 +41485,11 @@ record.status || ""
             "CANCELLED" &&
 
           String(
-record.deliveryType ||
-            ""
+record.deliveryType || ""
           ).toLowerCase() ===
-            "pellets"
+            "pellets" &&
+
+deliveredFilter(record)
         );
 
       })
@@ -41512,6 +41500,7 @@ const type =
 record.pelletType ||
           "Mixed Plastic"
         );
+
 
         delivered[type] =
         Number(
@@ -41556,32 +41545,6 @@ Math.max(
     });
 
 
-const totalProduced =
-Object.values(
-      produced
-    ).reduce(
-      (sum, value) =>
-        sum +
-        Number(
-          value || 0
-        ),
-      0
-    );
-
-
-const totalDelivered =
-Object.values(
-      delivered
-    ).reduce(
-      (sum, value) =>
-        sum +
-        Number(
-          value || 0
-        ),
-      0
-    );
-
-
     return {
 
       produced,
@@ -41592,33 +41555,193 @@ Object.values(
 
       types,
 
-totalProduced,
-
-totalDelivered,
-
 totalBalance:
-Math.max(
-totalProduced -
-totalDelivered,
+types.reduce(
+          (sum, type) =>
+            sum +
+            Number(
+              balances[type] || 0
+            ),
           0
-        )
+        ),
+
+clientName
 
     };
 
   }
 
 
-const pelletStock =
-getPelletStock();
+  /* =====================================================
+     A&F / COMPANY PELLETS
+     ===================================================== */
+
+  function getCompanyPelletStock() {
+
+    return buildPelletStock(
+
+companyPelletRecords
+        .filter(record => {
+
+          return (
+            String(
+record.status || ""
+            ).toUpperCase() !==
+            "CANCELLED"
+          );
+
+        }),
+
+      record =>
+        String(
+record.pelletOwnership || ""
+        ).toLowerCase() ===
+        "company"
+
+    );
+
+  }
+
+
+  /* =====================================================
+     CLIENT-OWNED PELLETS
+     ===================================================== */
+
+  function getClientPelletStocks() {
+
+const clientProduction =
+materialRecords
+      .filter(record => {
+
+const service =
+        String(
+record.clientService ||
+record.service ||
+          ""
+        ).toLowerCase();
+
+
+        return (
+
+          String(
+record.materialSource || ""
+          ).toLowerCase() ===
+            "client" &&
+
+service.includes(
+            "pellet"
+          ) &&
+
+          String(
+record.status || ""
+          ).toUpperCase() !==
+            "CANCELLED" &&
+
+          String(
+record.clientName || ""
+          ).trim()
+
+        );
+
+      });
+
+
+const names =
+Array.from(
+      new Set(
+clientProduction
+          .map(
+            record =>
+              String(
+record.clientName || ""
+              ).trim()
+          )
+          .filter(Boolean)
+      )
+    );
+
+
+const result = {};
+
+
+names.forEach(name => {
+
+      result[name] =
+buildPelletStock(
+
+clientProduction
+          .filter(record => {
+
+            return (
+              String(
+record.clientName || ""
+              ).trim() ===
+              name
+            );
+
+          }),
+
+        record =>
+
+          String(
+record.pelletOwnership ||
+            ""
+          ).toLowerCase() ===
+            "client" &&
+
+          String(
+record.pelletClientName ||
+record.customerName ||
+            ""
+          ).trim() ===
+            name,
+
+        name
+
+      );
+
+    });
+
+
+    return result;
+
+  }
+
+
+const companyPelletStock =
+getCompanyPelletStock();
+
+
+const clientPelletStocks =
+getClientPelletStocks();
+
+
+const clientPelletTotal =
+Object.values(
+clientPelletStocks
+  ).reduce(
+    (sum, stock) =>
+      sum +
+      Number(
+stock.totalBalance || 0
+      ),
+    0
+  );
 
 
   if (
+
     Number(
-stock.totalBalance || 0
+poleStock.totalBalance || 0
     ) <= 0 &&
+
     Number(
-pelletStock.totalBalance || 0
-    ) <= 0
+companyPelletStock
+        .totalBalance || 0
+    ) <= 0 &&
+
+clientPelletTotal<= 0
+
   ) {
 
     alert(
@@ -41626,6 +41749,7 @@ pelletStock.totalBalance || 0
     );
 
     return;
+
   }
 
 
@@ -41633,6 +41757,7 @@ const existing =
 document.getElementById(
     "afRecordDeliveryModal"
   );
+
 
   if (existing) {
 existing.remove();
@@ -41653,46 +41778,20 @@ localStorage.getItem(
       );
 
 
-const pelletTypesAvailable =
-pelletStock.types
-    .filter(
-      type =>
-        Number(
-pelletStock.balances[
-            type
-          ] || 0
-        ) > 0
+const clientNames =
+Object.keys(
+clientPelletStocks
+  ).filter(name => {
+
+    return (
+      Number(
+clientPelletStocks[
+          name
+        ].totalBalance || 0
+      ) > 0
     );
 
-
-const pelletOptions =
-pelletTypesAvailable.length
-
-    ? pelletTypesAvailable
-        .map(type => {
-
-const balance =
-          Number(
-pelletStock.balances[
-              type
-            ] || 0
-          );
-
-          return `
-<option value="${afEscape(type)}">
-  ${afEscape(type)}
-  - ${balance.toLocaleString()} kg available
-</option>
-          `;
-
-        })
-        .join("")
-
-    : `
-<option value="">
-  No pellet stock available
-</option>
-      `;
+  });
 
 
 const modal =
@@ -41700,8 +41799,10 @@ document.createElement(
     "div"
   );
 
+
 modal.id =
   "afRecordDeliveryModal";
+
 
 modal.style.cssText = `
 position:fixed;
@@ -41747,27 +41848,34 @@ align-items:center;
 🚚 Record Delivery
 </h2>
 
-<div
-  id="afDeliveryAvailability"
-  style="
-    font-size:12px;
-    color:#666;
-    margin-top:4px;
-  "
->
+<div style="
+  font-size:12px;
+  color:#666;
+  margin-top:4px;
+">
+
   Pole stock:
 <b>
     ${Number(
-stock.totalBalance || 0
+poleStock.totalBalance || 0
     ).toLocaleString()} poles
 </b>
 
-  • Pellet stock:
+  • A&F pellets:
 <b>
     ${Number(
-pelletStock.totalBalance || 0
+companyPelletStock
+        .totalBalance || 0
     ).toLocaleString()} kg
 </b>
+
+  • Client pellets:
+<b>
+    ${Number(
+clientPelletTotal || 0
+    ).toLocaleString()} kg
+</b>
+
 </div>
 
 </div>
@@ -41968,10 +42076,6 @@ box-sizing:border-box;
 </div>
 
 
-<!-- ============================================
-     POLES
-     ============================================ -->
-
 <div id="afPoleDeliverySection">
 
 <h3 style="
@@ -42025,7 +42129,7 @@ ${AF_POLE_TYPES
 
 const balance =
     Number(
-stock.balances[
+poleStock.balances[
 type.key
       ] || 0
     );
@@ -42090,10 +42194,6 @@ font-weight:bold;
 </div>
 
 
-<!-- ============================================
-     PELLETS
-     ============================================ -->
-
 <div
   id="afPelletDeliverySection"
   style="
@@ -42127,6 +42227,65 @@ minmax(220px,1fr)
   font-size:12px;
 font-weight:bold;
 ">
+  Pellet Ownership *
+</label>
+
+<select
+  id="afPelletOwnership"
+  style="
+    width:100%;
+box-sizing:border-box;
+    padding:10px;
+    margin-top:5px;
+    border:1px solid #ccc;
+    border-radius:7px;
+  "
+>
+
+<option value="client">
+  Client-Owned Pellets
+</option>
+
+<option value="company">
+  A&F / Company Pellets
+</option>
+
+</select>
+
+</div>
+
+
+<div id="afPelletClientWrap">
+
+<label style="
+  font-size:12px;
+font-weight:bold;
+">
+  Pellet Client *
+</label>
+
+<select
+  id="afPelletClient"
+  style="
+    width:100%;
+box-sizing:border-box;
+    padding:10px;
+    margin-top:5px;
+    border:1px solid #ccc;
+    border-radius:7px;
+  "
+>
+</select>
+
+</div>
+
+
+<div>
+
+<label style="
+  font-size:12px;
+font-weight:bold;
+">
   Pellet Type *
 </label>
 
@@ -42141,7 +42300,6 @@ box-sizing:border-box;
     border-radius:7px;
   "
 >
-  ${pelletOptions}
 </select>
 
 </div>
@@ -42266,74 +42424,249 @@ modal.querySelector(
   );
 
 
+const ownership =
+modal.querySelector(
+    "#afPelletOwnership"
+  );
+
+
+const clientWrap =
+modal.querySelector(
+    "#afPelletClientWrap"
+  );
+
+
+const clientSelect =
+modal.querySelector(
+    "#afPelletClient"
+  );
+
+
 const pelletType =
 modal.querySelector(
     "#afDeliveryPelletType"
   );
 
 
-const pelletAvailableMessage =
+const pelletMessage =
 modal.querySelector(
     "#afPelletAvailableMessage"
   );
 
 
-  function updatePelletAvailability() {
+const customerNameInput =
+modal.querySelector(
+    "#afDeliveryCustomer"
+  );
+
+
+  function fillClientOptions() {
+
+clientSelect.innerHTML =
+clientNames.length
+
+      ? clientNames
+          .map(name => {
+
+            return `
+
+<option value="${afEscape(name)}">
+  ${afEscape(name)}
+  —
+  ${Number(
+clientPelletStocks[
+      name
+    ].totalBalance || 0
+  ).toLocaleString()} kg
+</option>
+
+            `;
+
+          })
+          .join("")
+
+      : `
+<option value="">
+  No client pellet stock available
+</option>
+        `;
+
+  }
+
+
+  function currentPelletStock() {
+
+    if (
+ownership.value ===
+      "company"
+    ) {
+
+      return companyPelletStock;
+
+    }
+
+
+    return (
+clientPelletStocks[
+clientSelect.value
+      ] || {
+
+        balances: {},
+
+        types: [],
+
+totalBalance: 0
+
+      }
+    );
+
+  }
+
+
+  function fillPelletTypes() {
+
+const selectedStock =
+currentPelletStock();
+
+
+const types =
+selectedStock.types
+      .filter(type => {
+
+        return (
+          Number(
+selectedStock
+              .balances[type] || 0
+          ) > 0
+        );
+
+      });
+
+
+pelletType.innerHTML =
+types.length
+
+      ? types
+          .map(type => {
+
+            return `
+
+<option value="${afEscape(type)}">
+  ${afEscape(type)}
+  —
+  ${Number(
+selectedStock
+      .balances[type] || 0
+  ).toLocaleString()}
+  kg available
+</option>
+
+            `;
+
+          })
+          .join("")
+
+      : `
+<option value="">
+  No pellet stock available
+</option>
+        `;
+
+
+updatePelletMessage();
+
+  }
+
+
+  function updatePelletMessage() {
+
+const selectedStock =
+currentPelletStock();
+
 
 const type =
-pelletType?.value || "";
+pelletType.value || "";
+
 
 const available =
     Number(
-pelletStock.balances[
-        type
-      ] || 0
+selectedStock
+        .balances[type] || 0
     );
 
 
+pelletMessage.textContent =
+    type
+
+      ? (
+          "Available " +
+          type +
+          " pellets: " +
+available.toLocaleString() +
+          " kg"
+        )
+
+      : "No pellet stock available.";
+
+  }
+
+
+  function updateOwnership() {
+
+const clientOwned =
+ownership.value ===
+    "client";
+
+
+clientWrap.style.display =
+clientOwned
+      ? "block"
+      : "none";
+
+
     if (
-pelletAvailableMessage
+clientOwned&&
+clientSelect.value
     ) {
 
-pelletAvailableMessage
-        .textContent =
-        type
-          ? (
-              "Available " +
-              type +
-              " pellets: " +
-available.toLocaleString() +
-              " kg"
-            )
-          : "No pellet stock available.";
+customerNameInput.value =
+clientSelect.value;
 
     }
+
+
+fillPelletTypes();
 
   }
 
 
   function updateDeliveryType() {
 
-const isPellets =
+const pellets =
 deliveryType.value ===
     "pellets";
 
 
 poleSection.style.display =
-isPellets
+    pellets
       ? "none"
       : "block";
 
 
 pelletSection.style.display =
-isPellets
+    pellets
       ? "block"
       : "none";
 
 
-updatePelletAvailability();
+    if (pellets) {
+updateOwnership();
+    }
 
   }
+
+
+fillClientOptions();
 
 
 deliveryType.addEventListener(
@@ -42342,14 +42675,36 @@ updateDeliveryType
   );
 
 
-  if (pelletType) {
+ownership.addEventListener(
+    "change",
+updateOwnership
+  );
+
+
+clientSelect.addEventListener(
+    "change",
+    () => {
+
+      if (
+ownership.value ===
+        "client"
+      ) {
+
+customerNameInput.value =
+clientSelect.value;
+
+      }
+
+fillPelletTypes();
+
+    }
+  );
+
 
 pelletType.addEventListener(
-      "change",
-updatePelletAvailability
-    );
-
-  }
+    "change",
+updatePelletMessage
+  );
 
 
 updateDeliveryType();
@@ -42378,10 +42733,10 @@ const type =
 deliveryType.value;
 
 
-const customerName =
-modal.querySelector(
-      "#afDeliveryCustomer"
-    ).value.trim();
+    let customerName =
+customerNameInput
+      .value
+      .trim();
 
 
 const customerPhone =
@@ -42418,16 +42773,6 @@ modal.querySelector(
     }
 
 
-    if (!customerName) {
-
-      alert(
-        "Please enter the customer name."
-      );
-
-      return;
-    }
-
-
     if (!deliveryPlace) {
 
       alert(
@@ -42438,7 +42783,7 @@ modal.querySelector(
     }
 
 
-const deliveryRecords =
+const records =
 afReadArray(
       "afDeliveryRecords"
     );
@@ -42452,15 +42797,13 @@ date.replace(
 
 
 const sameDateCount =
-deliveryRecords
-      .filter(
-        record =>
-          String(
+records.filter(
+      record =>
+        String(
 record.date || ""
-          ) ===
-          String(date)
-      )
-      .length;
+        ) ===
+        String(date)
+    ).length;
 
 
 const deliveryNumber =
@@ -42476,14 +42819,24 @@ sameDateCount + 1
 
 
     /* =====================================================
-       POLE DELIVERY
+       POLES
        ===================================================== */
 
     if (
       type === "poles"
     ) {
 
-constlatestStock =
+      if (!customerName) {
+
+        alert(
+          "Please enter the customer name."
+        );
+
+        return;
+      }
+
+
+const latestStock =
 getAFFactoryStock();
 
 
@@ -42491,20 +42844,16 @@ const items = [];
 
 
       for (
-constpoleType of
+const poleType of
         AF_POLE_TYPES
       ) {
 
-const input =
-modal.querySelector(
-          "#afDeliveryQty_" +
-poleType.key
-        );
-
-
 const quantity =
         Number(
-input?.value || 0
+modal.querySelector(
+            "#afDeliveryQty_" +
+poleType.key
+          )?.value || 0
         );
 
 
@@ -42533,9 +42882,10 @@ poleType.name +
 
 const available =
         Number(
-latestStock.balances[
+latestStock
+            .balances[
 poleType.key
-          ] || 0
+            ] || 0
         );
 
 
@@ -42565,8 +42915,7 @@ poleType.key,
           name:
 poleType.name,
 
-          quantity:
-            quantity
+          quantity
 
         });
 
@@ -42587,8 +42936,8 @@ poleType.name,
 
 const totalPoles =
 items.reduce(
-        (total, item) =>
-          total +
+        (sum, item) =>
+          sum +
           Number(
 item.quantity || 0
           ),
@@ -42596,7 +42945,7 @@ item.quantity || 0
       );
 
 
-deliveryRecords.push({
+records.push({
 
         id:
 Date.now(),
@@ -42622,6 +42971,12 @@ deliveryPlace,
         items,
 
 totalPoles,
+
+pelletOwnership:
+          "",
+
+pelletClientName:
+          "",
 
 pelletType:
           "",
@@ -42657,16 +43012,16 @@ createdAt:
 localStorage.setItem(
         "afDeliveryRecords",
 JSON.stringify(
-deliveryRecords
+          records
         )
       );
 
 
+modal.remove();
+
+
 const updatedStock =
 getAFFactoryStock();
-
-
-modal.remove();
 
 
       alert(
@@ -42694,18 +43049,62 @@ updatedStock
 checkAFStockInventory();
 
       return;
+
     }
 
 
     /* =====================================================
-       PELLET DELIVERY
+       PELLETS
        ===================================================== */
 
+const pelletOwnership =
+ownership.value;
+
+
+const pelletClientName =
+pelletOwnership ===
+    "client"
+
+      ? clientSelect.value
+
+      : "";
+
+
+    if (
+pelletOwnership ===
+      "client"
+    ) {
+
+      if (!pelletClientName) {
+
+        alert(
+          "Please select the client whose pellets are being delivered."
+        );
+
+        return;
+      }
+
+
+customerName =
+pelletClientName;
+
+    } else if (
+      !customerName
+    ) {
+
+      alert(
+        "Please enter the customer name."
+      );
+
+      return;
+    }
+
+
 const selectedPelletType =
-pelletType?.value || "";
+pelletType.value || "";
 
 
-constpelletKg =
+const pelletKg =
     Number(
 modal.querySelector(
         "#afDeliveryPelletKg"
@@ -42718,7 +43117,7 @@ modal.querySelector(
     ) {
 
       alert(
-        "There is no pellet stock available for delivery."
+        "There is no pellet stock available for this selection."
       );
 
       return;
@@ -42737,16 +43136,34 @@ pelletKg<= 0
     }
 
 
-const latestPelletStock =
-getPelletStock();
+const liveCompany =
+getCompanyPelletStock();
+
+
+const liveClients =
+getClientPelletStocks();
+
+
+const liveStock =
+pelletOwnership ===
+    "company"
+
+      ? liveCompany
+
+      : (
+liveClients[
+pelletClientName
+          ] || {
+            balances: {}
+          }
+        );
 
 
 const availablePelletKg =
     Number(
-latestPelletStock
-        .balances[
+liveStock.balances[
 selectedPelletType
-        ] || 0
+      ] || 0
     );
 
 
@@ -42775,7 +43192,7 @@ pelletKg
     }
 
 
-deliveryRecords.push({
+records.push({
 
       id:
 Date.now(),
@@ -42803,10 +43220,13 @@ deliveryPlace,
 totalPoles:
         0,
 
+pelletOwnership,
+
+pelletClientName,
+
 pelletType:
 selectedPelletType,
 
-pelletKg:
 pelletKg,
 
       notes,
@@ -42837,13 +43257,9 @@ createdAt:
 localStorage.setItem(
       "afDeliveryRecords",
 JSON.stringify(
-deliveryRecords
+        records
       )
     );
-
-
-const afterPelletStock =
-getPelletStock();
 
 
 modal.remove();
@@ -42855,8 +43271,26 @@ modal.remove();
       "Delivery No: " +
 deliveryNumber +
 
-      "\nCustomer: " +
-customerName +
+      "\nOwnership: " +
+      (
+pelletOwnership ===
+        "client"
+
+          ? "Client-Owned"
+
+          : "A&F / Company"
+      ) +
+
+      (
+pelletClientName
+
+          ? (
+              "\nClient: " +
+pelletClientName
+            )
+
+          : ""
+      ) +
 
       "\nDestination: " +
 deliveryPlace +
@@ -42866,15 +43300,6 @@ selectedPelletType +
 
       "\nDelivered: " +
 pelletKg.toLocaleString() +
-      " kg\n" +
-
-      "Remaining Pellet Stock: " +
-      Number(
-afterPelletStock
-          .balances[
-selectedPelletType
-          ] || 0
-      ).toLocaleString() +
       " kg"
     );
 
