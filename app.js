@@ -41930,7 +41930,7 @@ item.quantity || 0
   poles
 </td>
 
-<td>-</td>
+<td>A&F / Company</td>
 
 </tr>
 
@@ -41952,7 +41952,7 @@ record.totalPoles || 0
   poles
 </td>
 
-<td>-</td>
+<td>A&F / Company</td>
 
 </tr>
 
