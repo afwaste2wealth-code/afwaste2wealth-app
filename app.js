@@ -3036,6 +3036,14 @@ onclick="openRoleModule('salesCustomers')"
 >
 ▱ Sales & Customers
 </button>
+<button
+            class="action"
+            type="button"
+onclick="viewPoleStandardPrices()"
+>
+👁 View Standard Prices
+</button>
+
 
 <button
             class="action"
