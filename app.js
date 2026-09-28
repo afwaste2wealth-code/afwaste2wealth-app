@@ -42135,6 +42135,11 @@ afReadArray(
 
 const type =
 afDeliveryType(record);
+const isCancelled =
+String(
+record.status || ""
+).toUpperCase() ===
+"CANCELLED";
 
 
   let productRows = "";
@@ -42368,6 +42373,45 @@ display:none;
   DELIVERY NOTE
 </h2>
 
+${
+isCancelled
+    ? `
+<div style="
+        margin:14px 0;
+        padding:12px;
+        border:2px solid #b42318;
+        color:#b42318;
+text-align:center;
+font-weight:bold;
+        font-size:18px;
+      ">
+        CANCELLED / REVERSED
+
+<div style="
+          font-size:13px;
+          margin-top:6px;
+          color:#555;
+font-weight:normal;
+        ">
+          Reason:
+          ${afEscape(
+record.cancellationReason ||
+            "Not stated"
+          )}
+
+<br>
+
+          Cancelled by:
+          ${afEscape(
+record.cancelledByName ||
+record.cancelledByRole ||
+            "Unknown"
+          )}
+</div>
+</div>
+    `
+    : ""
+}
 
 <div class="meta">
 
