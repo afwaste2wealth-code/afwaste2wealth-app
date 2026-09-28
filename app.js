@@ -48208,3 +48208,1992 @@ renderAFMonthlyBusinessCharts,
 );
 
 })();
+/* =========================================================
+   A&F EXPENSE MANAGEMENT
+   Director + Secretary recording
+   Director controls editing / cancellation
+   ========================================================= */
+
+(function connectAFExpensesModule() {
+
+const EXPENSE_KEY =
+  "expenses";
+
+
+const EXPENSE_CATEGORIES = [
+  "Electricity & Utilities",
+  "Fuel & Transport",
+  "Repairs & Maintenance",
+  "Salaries & Wages",
+  "Staff Welfare",
+  "Factory Consumables",
+  "Office & Administration",
+  "Marketing & Sales",
+  "Rent & Premises",
+  "Taxes &Licences",
+  "Bank Charges & Finance",
+  "Security",
+  "Other"
+];
+
+
+const PAYMENT_METHODS = [
+  "Cash",
+  "Mobile Money",
+  "Bank Transfer",
+  "Cheque",
+  "Credit",
+  "Other"
+];
+
+
+function afExpenseEscape(value) {
+
+  return String(
+    value ?? ""
+  )
+    .replaceAll(
+      "&",
+      "&amp;"
+    )
+    .replaceAll(
+      "<",
+      "&lt;"
+    )
+    .replaceAll(
+      ">",
+      "&gt;"
+    )
+    .replaceAll(
+      '"',
+      "&quot;"
+    );
+
+}
+
+
+function getAFExpenseUser() {
+
+  if (
+typeof getAFCurrentUser ===
+    "function"
+  ) {
+
+    return getAFCurrentUser();
+
+  }
+
+
+  try {
+
+    return JSON.parse(
+localStorage.getItem(
+        "currentUser"
+      ) || "null"
+    );
+
+  } catch (error) {
+
+    return null;
+
+  }
+
+}
+
+
+function getAFExpenseRecords() {
+
+  try {
+
+const primary =
+JSON.parse(
+localStorage.getItem(
+    EXPENSE_KEY
+  ) || "[]"
+);
+
+
+const legacy =
+JSON.parse(
+localStorage.getItem(
+    "expenseRecords"
+  ) || "[]"
+);
+
+
+    if (
+Array.isArray(
+        primary
+      ) &&
+primary.length
+    ) {
+
+      return primary;
+
+    }
+
+
+    return Array.isArray(
+      legacy
+    )
+      ? legacy
+      : [];
+
+  } catch (error) {
+
+    return [];
+
+  }
+
+}
+
+
+function saveAFExpenseRecords(
+  records
+) {
+
+const clean =
+Array.isArray(
+  records
+)
+  ? records
+  : [];
+
+
+localStorage.setItem(
+  EXPENSE_KEY,
+JSON.stringify(
+    clean
+  )
+);
+
+
+/*
+ * Keep the older key synchronized because
+ * some existing dashboard checks already read it.
+ */
+
+localStorage.setItem(
+  "expenseRecords",
+JSON.stringify(
+    clean
+  )
+);
+
+}
+
+
+function afExpenseToday() {
+
+const now =
+new Date();
+
+
+const year =
+now.getFullYear();
+
+
+const month =
+String(
+now.getMonth() + 1
+).padStart(
+  2,
+  "0"
+);
+
+
+const day =
+String(
+now.getDate()
+).padStart(
+  2,
+  "0"
+);
+
+
+  return (
+    year +
+    "-" +
+    month +
+    "-" +
+    day
+  );
+
+}
+
+
+function afExpenseMonthKey(
+  value
+) {
+
+  return String(
+    value || ""
+  ).slice(
+    0,
+    7
+  );
+
+}
+
+
+function afExpenseYearKey(
+  value
+) {
+
+  return String(
+    value || ""
+  ).slice(
+    0,
+    4
+  );
+
+}
+
+
+function afExpenseNumber(
+  date,
+  records
+) {
+
+const cleanDate =
+String(
+  date || afExpenseToday()
+).replaceAll(
+  "-",
+  ""
+);
+
+
+const sameDateCount =
+records.filter(
+  record =>
+    String(
+record.date || ""
+    ) ===
+    String(date || "")
+).length;
+
+
+  return (
+    "EXP-" +
+cleanDate +
+    "-" +
+    String(
+sameDateCount + 1
+    ).padStart(
+      3,
+      "0"
+    )
+  );
+
+}
+
+
+function afExpenseIsCancelled(
+  record
+) {
+
+  return (
+    String(
+record.status || ""
+    ).toUpperCase() ===
+    "CANCELLED"
+  );
+
+}
+
+
+/* =========================================================
+   MAIN EXPENSE MODULE
+   ========================================================= */
+
+function openAFExpenses() {
+
+const currentUser =
+getAFExpenseUser();
+
+
+  if (!currentUser) {
+
+    alert(
+      "Please log in first."
+    );
+
+    return;
+
+  }
+
+
+  if (
+typeof canAFRoleAccessModule ===
+      "function" &&
+    !canAFRoleAccessModule(
+      "expenses"
+    )
+  ) {
+
+    alert(
+      "Access Denied"
+    );
+
+    return;
+
+  }
+
+
+const oldModal =
+document.getElementById(
+  "afExpensesModal"
+);
+
+
+  if (oldModal) {
+oldModal.remove();
+  }
+
+
+const records =
+getAFExpenseRecords();
+
+
+const activeRecords =
+records.filter(
+  record =>
+    !afExpenseIsCancelled(
+      record
+    )
+);
+
+
+const now =
+new Date();
+
+
+const currentMonthKey =
+now.getFullYear() +
+"-" +
+String(
+now.getMonth() + 1
+).padStart(
+  2,
+  "0"
+);
+
+
+const currentYearKey =
+String(
+now.getFullYear()
+);
+
+
+const monthTotal =
+activeRecords
+  .filter(
+    record =>
+afExpenseMonthKey(
+record.date
+      ) ===
+currentMonthKey
+  )
+  .reduce(
+    (sum, record) =>
+      sum +
+      Number(
+record.amount || 0
+      ),
+    0
+  );
+
+
+const yearTotal =
+activeRecords
+  .filter(
+    record =>
+afExpenseYearKey(
+record.date
+      ) ===
+currentYearKey
+  )
+  .reduce(
+    (sum, record) =>
+      sum +
+      Number(
+record.amount || 0
+      ),
+    0
+  );
+
+
+const allTotal =
+activeRecords.reduce(
+  (sum, record) =>
+    sum +
+    Number(
+record.amount || 0
+    ),
+  0
+);
+
+
+const canRecord =
+typeofcanAFRecord ===
+  "function"
+    ? canAFRecord(
+        "expenses"
+      )
+    : true;
+
+
+const isDirector =
+String(
+currentUser.role || ""
+).toLowerCase() ===
+"director";
+
+
+const categoryOptions =
+EXPENSE_CATEGORIES
+  .map(
+    category => `
+<option value="${afExpenseEscape(category)}">
+${afExpenseEscape(category)}
+</option>
+    `
+  )
+  .join("");
+
+
+const paymentOptions =
+PAYMENT_METHODS
+  .map(
+    method => `
+<option value="${afExpenseEscape(method)}">
+${afExpenseEscape(method)}
+</option>
+    `
+  )
+  .join("");
+
+
+const sortedRecords =
+records
+  .slice()
+  .sort(
+    (a, b) =>
+      String(
+b.date || ""
+      ).localeCompare(
+        String(
+a.date || ""
+        )
+      ) ||
+      Number(
+b.id || 0
+      ) -
+      Number(
+a.id || 0
+      )
+  );
+
+
+const rows =
+sortedRecords.length
+  ? sortedRecords
+      .map(
+        record => {
+
+const cancelled =
+afExpenseIsCancelled(
+  record
+);
+
+
+const actionButtons =
+isDirector&&
+!cancelled
+
+  ? `
+<button
+  type="button"
+  data-expense-edit="${record.id}"
+  style="
+    padding:6px 9px;
+    border:0;
+    border-radius:6px;
+    background:#0b5d3b;
+color:white;
+cursor:pointer;
+    margin-right:4px;
+  "
+>
+Edit
+</button>
+
+<button
+  type="button"
+  data-expense-cancel="${record.id}"
+  style="
+    padding:6px 9px;
+    border:0;
+    border-radius:6px;
+    background:#b42318;
+color:white;
+cursor:pointer;
+  "
+>
+Cancel
+</button>
+  `
+
+  : cancelled
+    ? `
+<span style="
+  color:#b42318;
+  font-size:11px;
+font-weight:bold;
+">
+Reversed
+</span>
+    `
+    : `
+<span style="
+  color:#666;
+  font-size:11px;
+">
+Director control
+</span>
+    `;
+
+
+          return `
+
+<tr>
+
+<td>
+${afExpenseEscape(
+record.date || "-"
+)}
+</td>
+
+<td>
+${afExpenseEscape(
+record.expenseNumber || "-"
+)}
+</td>
+
+<td>
+${afExpenseEscape(
+record.category || "-"
+)}
+</td>
+
+<td>
+${afExpenseEscape(
+record.payee || "-"
+)}
+</td>
+
+<td>
+${afExpenseEscape(
+record.description || "-"
+)}
+</td>
+
+<td style="
+text-align:right;
+font-weight:bold;
+">
+UGX ${Number(
+record.amount || 0
+).toLocaleString()}
+</td>
+
+<td>
+${afExpenseEscape(
+record.paymentMethod || "-"
+)}
+</td>
+
+<td>
+${
+  cancelled
+    ? `
+<span style="
+  color:#b42318;
+font-weight:bold;
+">
+CANCELLED
+</span>
+
+<div style="
+  font-size:10px;
+  color:#666;
+  margin-top:3px;
+">
+${afExpenseEscape(
+record.cancellationReason ||
+  ""
+)}
+</div>
+    `
+    : `
+<span style="
+  color:#0b5d3b;
+font-weight:bold;
+">
+COMPLETED
+</span>
+    `
+}
+</td>
+
+<td style="
+white-space:nowrap;
+">
+${actionButtons}
+</td>
+
+</tr>
+
+          `;
+
+        }
+      )
+      .join("")
+
+  : `
+
+<tr>
+
+<td
+colspan="9"
+  style="
+text-align:center;
+    padding:25px;
+    color:#666;
+  "
+>
+No expense records yet.
+</td>
+
+</tr>
+
+  `;
+
+
+const modal =
+document.createElement(
+  "div"
+);
+
+
+modal.id =
+  "afExpensesModal";
+
+
+modal.style.cssText = `
+position:fixed;
+inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+align-items:center;
+justify-content:center;
+z-index:100000;
+padding:12px;
+box-sizing:border-box;
+font-family:Arial,sans-serif;
+`;
+
+
+modal.innerHTML = `
+
+<div style="
+  width:96%;
+  max-width:1150px;
+  max-height:94vh;
+overflow:auto;
+  background:#fff;
+  border-radius:14px;
+  padding:22px;
+box-sizing:border-box;
+">
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:flex-start;
+  gap:12px;
+  margin-bottom:16px;
+">
+
+<div>
+
+<h2 style="
+  margin:0;
+  color:#0b5d3b;
+">
+💰 Expenses
+</h2>
+
+<div style="
+  color:#666;
+  font-size:12px;
+  margin-top:4px;
+">
+Factory operating expenses and financial control
+</div>
+
+</div>
+
+
+<button
+  id="afCloseExpenses"
+  type="button"
+  style="
+    border:0;
+    background:#333;
+color:white;
+    border-radius:7px;
+    padding:8px 12px;
+cursor:pointer;
+  "
+>
+✕ Close
+</button>
+
+</div>
+
+
+<div style="
+display:grid;
+  grid-template-columns:
+    repeat(auto-fit,minmax(180px,1fr));
+  gap:10px;
+  margin-bottom:16px;
+">
+
+<div style="
+  padding:14px;
+  background:#eef8f2;
+  border-radius:9px;
+">
+
+<div style="
+  font-size:11px;
+  color:#666;
+">
+This Month
+</div>
+
+<div style="
+  font-size:20px;
+font-weight:bold;
+  color:#0b5d3b;
+  margin-top:5px;
+">
+UGX ${monthTotal.toLocaleString()}
+</div>
+
+</div>
+
+
+<div style="
+  padding:14px;
+  background:#f7f7f7;
+  border-radius:9px;
+">
+
+<div style="
+  font-size:11px;
+  color:#666;
+">
+This Year
+</div>
+
+<div style="
+  font-size:20px;
+font-weight:bold;
+  margin-top:5px;
+">
+UGX ${yearTotal.toLocaleString()}
+</div>
+
+</div>
+
+
+<div style="
+  padding:14px;
+  background:#f7f7f7;
+  border-radius:9px;
+">
+
+<div style="
+  font-size:11px;
+  color:#666;
+">
+All Active Expenses
+</div>
+
+<div style="
+  font-size:20px;
+font-weight:bold;
+  margin-top:5px;
+">
+UGX ${allTotal.toLocaleString()}
+</div>
+
+</div>
+
+
+<div style="
+  padding:14px;
+  background:#f7f7f7;
+  border-radius:9px;
+">
+
+<div style="
+  font-size:11px;
+  color:#666;
+">
+Active Records
+</div>
+
+<div style="
+  font-size:20px;
+font-weight:bold;
+  margin-top:5px;
+">
+${activeRecords.length.toLocaleString()}
+</div>
+
+</div>
+
+</div>
+
+
+<div
+  id="afExpenseFormCard"
+  style="
+    border:1px solid #dde5e1;
+    border-radius:10px;
+    padding:16px;
+    margin-bottom:18px;
+  "
+>
+
+<div style="
+font-weight:bold;
+  color:#0b5d3b;
+  margin-bottom:12px;
+">
+Record Expense
+</div>
+
+
+<input
+  id="afExpenseEditId"
+  type="hidden"
+  value=""
+>
+
+
+<div style="
+display:grid;
+  grid-template-columns:
+    repeat(auto-fit,minmax(210px,1fr));
+  gap:12px;
+">
+
+<div>
+
+<label>
+Expense Date *
+</label>
+
+<input
+  id="afExpenseDate"
+  type="date"
+  value="${afExpenseToday()}"
+  style="
+    width:100%;
+box-sizing:border-box;
+    padding:9px;
+    margin-top:5px;
+  "
+>
+
+</div>
+
+
+<div>
+
+<label>
+Category *
+</label>
+
+<select
+  id="afExpenseCategory"
+  style="
+    width:100%;
+box-sizing:border-box;
+    padding:9px;
+    margin-top:5px;
+  "
+>
+
+<option value="">
+Select category
+</option>
+
+${categoryOptions}
+
+</select>
+
+</div>
+
+
+<div>
+
+<label>
+Payee / Paid To *
+</label>
+
+<input
+  id="afExpensePayee"
+  type="text"
+  placeholder="Person or company paid"
+  style="
+    width:100%;
+box-sizing:border-box;
+    padding:9px;
+    margin-top:5px;
+  "
+>
+
+</div>
+
+
+<div>
+
+<label>
+Amount (UGX) *
+</label>
+
+<input
+  id="afExpenseAmount"
+  type="number"
+  min="0"
+  step="1"
+  placeholder="0"
+  style="
+    width:100%;
+box-sizing:border-box;
+    padding:9px;
+    margin-top:5px;
+  "
+>
+
+</div>
+
+
+<div>
+
+<label>
+Payment Method *
+</label>
+
+<select
+  id="afExpensePaymentMethod"
+  style="
+    width:100%;
+box-sizing:border-box;
+    padding:9px;
+    margin-top:5px;
+  "
+>
+
+<option value="">
+Select payment method
+</option>
+
+${paymentOptions}
+
+</select>
+
+</div>
+
+
+<div>
+
+<label>
+Receipt / Reference No.
+</label>
+
+<input
+  id="afExpenseReference"
+  type="text"
+  placeholder="Optional"
+  style="
+    width:100%;
+box-sizing:border-box;
+    padding:9px;
+    margin-top:5px;
+  "
+>
+
+</div>
+
+</div>
+
+
+<div style="
+  margin-top:12px;
+">
+
+<label>
+Description *
+</label>
+
+<input
+  id="afExpenseDescription"
+  type="text"
+  placeholder="What was this expense for?"
+  style="
+    width:100%;
+box-sizing:border-box;
+    padding:9px;
+    margin-top:5px;
+  "
+>
+
+</div>
+
+
+<div style="
+  margin-top:12px;
+">
+
+<label>
+Notes
+</label>
+
+<textarea
+  id="afExpenseNotes"
+  placeholder="Optional additional information"
+  style="
+    width:100%;
+box-sizing:border-box;
+    min-height:70px;
+    padding:9px;
+    margin-top:5px;
+  "
+></textarea>
+
+</div>
+
+
+<div style="
+  margin-top:12px;
+  padding:10px;
+  background:#fff7e6;
+  border-radius:7px;
+  font-size:12px;
+  color:#765400;
+">
+
+<b>Important:</b>
+Do not record raw kavera purchases here.
+Material purchase costs are already recorded under
+Material & Production and will be counted separately
+when calculating profit.
+
+</div>
+
+
+<div style="
+display:flex;
+  gap:10px;
+  margin-top:14px;
+flex-wrap:wrap;
+">
+
+<button
+  id="afSaveExpense"
+  type="button"
+  ${canRecord ? "" : "disabled"}
+  style="
+    flex:1;
+    min-width:180px;
+    padding:11px;
+    border:0;
+    border-radius:8px;
+    background:#0b5d3b;
+color:white;
+font-weight:bold;
+cursor:pointer;
+  "
+>
+💾 Save Expense
+</button>
+
+
+<button
+  id="afClearExpense"
+  type="button"
+  style="
+    padding:11px 18px;
+    border:1px solid #ccc;
+    border-radius:8px;
+background:white;
+cursor:pointer;
+  "
+>
+Clear
+</button>
+
+</div>
+
+
+<div
+  id="afExpenseFormMessage"
+  style="
+    margin-top:10px;
+    font-size:12px;
+    color:#666;
+  "
+>
+
+${
+isDirector
+    ? "Director: record, edit and reverse control."
+    : "Secretary: record expenses. Saved records can only be changed by the Director."
+}
+
+</div>
+
+</div>
+
+
+<div style="
+font-weight:bold;
+  color:#0b5d3b;
+  margin-bottom:10px;
+">
+Expense History
+</div>
+
+
+<div style="
+overflow:auto;
+  border:1px solid #ddd;
+  border-radius:8px;
+">
+
+<table style="
+  width:100%;
+  min-width:1000px;
+border-collapse:collapse;
+  font-size:12px;
+">
+
+<thead>
+
+<tr style="
+  background:#eaf5ee;
+text-align:left;
+">
+
+<th style="padding:9px;">
+Date
+</th>
+
+<th style="padding:9px;">
+Expense No.
+</th>
+
+<th style="padding:9px;">
+Category
+</th>
+
+<th style="padding:9px;">
+Payee
+</th>
+
+<th style="padding:9px;">
+Description
+</th>
+
+<th style="
+  padding:9px;
+text-align:right;
+">
+Amount
+</th>
+
+<th style="padding:9px;">
+Payment
+</th>
+
+<th style="padding:9px;">
+Status
+</th>
+
+<th style="padding:9px;">
+Action
+</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+
+${rows}
+
+</tbody>
+
+</table>
+
+</div>
+
+</div>
+
+`;
+
+
+document.body.appendChild(
+  modal
+);
+
+
+/* =========================================================
+   CLOSE
+   ========================================================= */
+
+modal.querySelector(
+  "#afCloseExpenses"
+).onclick =
+function() {
+
+modal.remove();
+
+};
+
+
+/* =========================================================
+   CLEAR FORM
+   ========================================================= */
+
+function clearExpenseForm() {
+
+modal.querySelector(
+  "#afExpenseEditId"
+).value = "";
+
+
+modal.querySelector(
+  "#afExpenseDate"
+).value =
+afExpenseToday();
+
+
+modal.querySelector(
+  "#afExpenseCategory"
+).value = "";
+
+
+modal.querySelector(
+  "#afExpensePayee"
+).value = "";
+
+
+modal.querySelector(
+  "#afExpenseAmount"
+).value = "";
+
+
+modal.querySelector(
+  "#afExpensePaymentMethod"
+).value = "";
+
+
+modal.querySelector(
+  "#afExpenseReference"
+).value = "";
+
+
+modal.querySelector(
+  "#afExpenseDescription"
+).value = "";
+
+
+modal.querySelector(
+  "#afExpenseNotes"
+).value = "";
+
+
+modal.querySelector(
+  "#afSaveExpense"
+).textContent =
+"💾 Save Expense";
+
+}
+
+
+modal.querySelector(
+  "#afClearExpense"
+).onclick =
+clearExpenseForm;
+
+
+/* =========================================================
+   SAVE / UPDATE
+   ========================================================= */
+
+modal.querySelector(
+  "#afSaveExpense"
+).onclick =
+function() {
+
+  if (!canRecord) {
+
+    alert(
+      "You do not have permission to record expenses."
+    );
+
+    return;
+
+  }
+
+
+const editId =
+modal.querySelector(
+  "#afExpenseEditId"
+).value;
+
+
+const date =
+modal.querySelector(
+  "#afExpenseDate"
+).value;
+
+
+const category =
+modal.querySelector(
+  "#afExpenseCategory"
+).value;
+
+
+const payee =
+modal.querySelector(
+  "#afExpensePayee"
+).value.trim();
+
+
+const amount =
+Number(
+modal.querySelector(
+    "#afExpenseAmount"
+  ).value || 0
+);
+
+
+const paymentMethod =
+modal.querySelector(
+  "#afExpensePaymentMethod"
+).value;
+
+
+const reference =
+modal.querySelector(
+  "#afExpenseReference"
+).value.trim();
+
+
+const description =
+modal.querySelector(
+  "#afExpenseDescription"
+).value.trim();
+
+
+const notes =
+modal.querySelector(
+  "#afExpenseNotes"
+).value.trim();
+
+
+  if (!date) {
+
+    alert(
+      "Please select the expense date."
+    );
+
+    return;
+
+  }
+
+
+  if (!category) {
+
+    alert(
+      "Please select the expense category."
+    );
+
+    return;
+
+  }
+
+
+  if (!payee) {
+
+    alert(
+      "Please enter who was paid."
+    );
+
+    return;
+
+  }
+
+
+  if (
+    !Number.isFinite(
+      amount
+    ) ||
+    amount <= 0
+  ) {
+
+    alert(
+      "Please enter a valid expense amount."
+    );
+
+    return;
+
+  }
+
+
+  if (!paymentMethod) {
+
+    alert(
+      "Please select the payment method."
+    );
+
+    return;
+
+  }
+
+
+  if (!description) {
+
+    alert(
+      "Please enter the expense description."
+    );
+
+    return;
+
+  }
+
+
+const latestRecords =
+getAFExpenseRecords();
+
+
+  if (editId) {
+
+    if (!isDirector) {
+
+      alert(
+        "Only the Director can edit saved expenses."
+      );
+
+      return;
+
+    }
+
+
+const record =
+latestRecords.find(
+  item =>
+    String(
+item.id
+    ) ===
+    String(
+editId
+    )
+);
+
+
+    if (!record) {
+
+      alert(
+        "Expense record could not be found."
+      );
+
+      return;
+
+    }
+
+
+record.date =
+date;
+
+record.category =
+category;
+
+record.payee =
+payee;
+
+record.amount =
+amount;
+
+record.paymentMethod =
+paymentMethod;
+
+record.reference =
+reference;
+
+record.description =
+description;
+
+record.notes =
+notes;
+
+record.editedAt =
+new Date()
+  .toISOString();
+
+record.editedByEmployeeId =
+currentUser.employeeId ||
+"";
+
+record.editedByName =
+currentUser.fullName ||
+currentUser.employeeName ||
+"";
+
+record.editedByRole =
+currentUser.role ||
+"";
+
+
+saveAFExpenseRecords(
+latestRecords
+);
+
+
+alert(
+  "Expense updated successfully."
+);
+
+
+openAFExpenses();
+
+    return;
+
+  }
+
+
+const expenseNumber =
+afExpenseNumber(
+  date,
+latestRecords
+);
+
+
+latestRecords.push({
+
+  id:
+Date.now(),
+
+expenseNumber,
+
+  date,
+
+  category,
+
+  payee,
+
+  description,
+
+  amount,
+
+paymentMethod,
+
+  reference,
+
+  notes,
+
+  status:
+  "COMPLETED",
+
+recordedByEmployeeId:
+currentUser.employeeId ||
+  "",
+
+recordedByName:
+currentUser.fullName ||
+currentUser.employeeName ||
+  "",
+
+recordedByRole:
+currentUser.role ||
+  "",
+
+createdAt:
+  new Date()
+    .toISOString()
+
+});
+
+
+saveAFExpenseRecords(
+latestRecords
+);
+
+
+if (
+typeof window
+    .refreshAFTodaysChecklist ===
+  "function"
+) {
+
+window
+  .refreshAFTodaysChecklist();
+
+}
+
+
+alert(
+  "Expense saved successfully.\n\n" +
+  "Expense No: " +
+expenseNumber +
+  "\nAmount: UGX " +
+amount.toLocaleString()
+);
+
+
+openAFExpenses();
+
+};
+
+
+/* =========================================================
+   DIRECTOR EDIT
+   ========================================================= */
+
+modal.querySelectorAll(
+  "[data-expense-edit]"
+).forEach(
+  button => {
+
+button.onclick =
+function() {
+
+  if (!isDirector) {
+
+    alert(
+      "Only the Director can edit saved expenses."
+    );
+
+    return;
+
+  }
+
+
+const id =
+this.getAttribute(
+  "data-expense-edit"
+);
+
+
+const record =
+getAFExpenseRecords()
+  .find(
+    item =>
+      String(
+item.id
+      ) ===
+      String(id)
+  );
+
+
+  if (!record) {
+
+    alert(
+      "Expense record could not be found."
+    );
+
+    return;
+
+  }
+
+
+modal.querySelector(
+  "#afExpenseEditId"
+).value =
+record.id;
+
+
+modal.querySelector(
+  "#afExpenseDate"
+).value =
+record.date || "";
+
+
+modal.querySelector(
+  "#afExpenseCategory"
+).value =
+record.category || "";
+
+
+modal.querySelector(
+  "#afExpensePayee"
+).value =
+record.payee || "";
+
+
+modal.querySelector(
+  "#afExpenseAmount"
+).value =
+Number(
+record.amount || 0
+);
+
+
+modal.querySelector(
+  "#afExpensePaymentMethod"
+).value =
+record.paymentMethod || "";
+
+
+modal.querySelector(
+  "#afExpenseReference"
+).value =
+record.reference || "";
+
+
+modal.querySelector(
+  "#afExpenseDescription"
+).value =
+record.description || "";
+
+
+modal.querySelector(
+  "#afExpenseNotes"
+).value =
+record.notes || "";
+
+
+modal.querySelector(
+  "#afSaveExpense"
+).textContent =
+"💾 Update Expense";
+
+
+modal.querySelector(
+  "#afExpenseFormCard"
+).scrollIntoView({
+  behavior:
+  "smooth",
+
+  block:
+  "start"
+});
+
+};
+
+  }
+);
+
+
+/* =========================================================
+   DIRECTOR CANCEL / REVERSE
+   ========================================================= */
+
+modal.querySelectorAll(
+  "[data-expense-cancel]"
+).forEach(
+  button => {
+
+button.onclick =
+function() {
+
+  if (!isDirector) {
+
+    alert(
+      "Only the Director can cancel or reverse an expense."
+    );
+
+    return;
+
+  }
+
+
+const id =
+this.getAttribute(
+  "data-expense-cancel"
+);
+
+
+const latestRecords =
+getAFExpenseRecords();
+
+
+const record =
+latestRecords.find(
+  item =>
+    String(
+item.id
+    ) ===
+    String(id)
+);
+
+
+  if (!record) {
+
+    alert(
+      "Expense record could not be found."
+    );
+
+    return;
+
+  }
+
+
+const confirmed =
+confirm(
+  "Cancel and reverse this expense?\n\n" +
+  "Expense No: " +
+  (
+record.expenseNumber ||
+    "-"
+  ) +
+  "\nAmount: UGX " +
+  Number(
+record.amount || 0
+  ).toLocaleString()
+);
+
+
+  if (!confirmed) {
+    return;
+  }
+
+
+const reason =
+prompt(
+  "Please enter the reason for cancelling / reversing this expense:"
+);
+
+
+  if (
+    !reason ||
+    !reason.trim()
+  ) {
+
+    alert(
+      "A cancellation reason is required."
+    );
+
+    return;
+
+  }
+
+
+record.status =
+"CANCELLED";
+
+record.cancellationReason =
+reason.trim();
+
+record.cancelledAt =
+new Date()
+  .toISOString();
+
+record.cancelledByEmployeeId =
+currentUser.employeeId ||
+"";
+
+record.cancelledByName =
+currentUser.fullName ||
+currentUser.employeeName ||
+"";
+
+record.cancelledByRole =
+currentUser.role ||
+"";
+
+
+saveAFExpenseRecords(
+latestRecords
+);
+
+
+alert(
+  "Expense cancelled successfully.\n\n" +
+  "It will no longer be included in expense totals."
+);
+
+
+openAFExpenses();
+
+};
+
+  }
+);
+
+}
+
+
+/* =========================================================
+   EXPOSE
+   ========================================================= */
+
+window.openAFExpenses =
+openAFExpenses;
+
+window.getAFExpenseRecords =
+getAFExpenseRecords;
+
+
+/* =========================================================
+   CONNECT EXISTING EXPENSE SIDEBAR BUTTON
+   ========================================================= */
+
+if (
+typeof openRoleModule ===
+  "function"
+) {
+
+const previousOpenRoleModule =
+openRoleModule;
+
+
+openRoleModule =
+function(
+moduleName
+) {
+
+  if (
+moduleName ===
+    "expenses"
+  ) {
+
+openAFExpenses();
+
+    return;
+
+  }
+
+
+  return previousOpenRoleModule
+    .apply(
+      this,
+      arguments
+    );
+
+};
+
+}
+
+})();
