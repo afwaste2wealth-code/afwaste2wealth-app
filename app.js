@@ -4957,6 +4957,13 @@ ${getShiftSettingsSummary()}
 <strong>Pole Standard Weights</strong>
 <span>Configure standard pole weights</span>
 </button>
+<button id="poleSellingPricesBtn"
+          style="${systemSettingsButtonStyle()}">
+💰
+<strong>Pole Selling Prices</strong>
+<span>Director-approved prices and discounts</span>
+</button>
+
 
 <button id="teamPerformanceBtn"
           style="${systemSettingsButtonStyle()}">
@@ -4995,7 +5002,30 @@ managePoleStandardWeights();
       alert("Pole Standard Weights module could not be found.");
     }
   };
+modal.querySelector(
+  "#poleSellingPricesBtn"
+).onclick = () => {
 
+modal.remove();
+
+  if (
+typeof managePoleSellingPrices ===
+    "function"
+  ) {
+
+managePoleSellingPrices();
+
+  } else {
+
+    alert(
+      "Pole Selling Prices module could not be found."
+    );
+
+  }
+
+};
+
+   
 modal.querySelector("#teamPerformanceBtn").onclick = () => {
 modal.remove();
 manageTeamPerformanceSettings();
@@ -16311,6 +16341,584 @@ modal.remove();
 
 renderStandardsTable();
 }
+
+/* =========================================================
+   DIRECTOR POLE SELLING PRICES
+   ========================================================= */
+
+function managePoleSellingPrices() {
+
+const currentUser =
+JSON.parse(
+localStorage.getItem(
+    "currentUser"
+  ) || "{}"
+);
+
+if (
+  String(
+currentUser.role || ""
+  ).toLowerCase() !==
+  "director"
+) {
+
+  alert(
+    "Only the Director can set or change pole selling prices."
+  );
+
+  return;
+}
+
+
+const poleCategories = [
+
+  {
+    key: "pole3X3X6Square",
+    name: '3"x3"x6ft Square'
+  },
+
+  {
+    key: "pole3X3X6_5Square",
+    name: '3"x3"x6.5ft Square'
+  },
+
+  {
+    key: "pole4X4X6Square",
+    name: '4"x4"x6ft Square'
+  },
+
+  {
+    key: "pole4X4X7Square",
+    name: '4"x4"x7ft Square'
+  },
+
+  {
+    key: "pole3x6Round",
+    name: '3" Round x 6ft'
+  },
+
+  {
+    key: "pole4x7Round",
+    name: '4" Round x 7ft'
+  },
+
+  {
+    key: "pole3X3X2Square",
+    name: '3"x3"x2ft Square'
+  },
+
+  {
+    key: "pole4x4X2Square",
+    name: '4"x4"x2ft Square'
+  },
+
+  {
+    key: "pole4x2Round",
+    name: '4" Round x 2ft'
+  }
+
+];
+
+
+function getSavedPrices() {
+
+  try {
+
+const saved =
+JSON.parse(
+localStorage.getItem(
+    "poleSellingPrices"
+  ) || "{}"
+);
+
+    return (
+      saved &&
+typeof saved === "object"
+    )
+      ? saved
+      : {};
+
+  } catch (error) {
+
+    return {};
+
+  }
+
+}
+
+
+const modal =
+document.createElement(
+  "div"
+);
+
+
+modal.style.cssText = `
+position:fixed;
+inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+align-items:center;
+justify-content:center;
+z-index:10000;
+font-family:Arial,sans-serif;
+padding:10px;
+`;
+
+
+modal.innerHTML = `
+
+<div style="
+background:white;
+  width:94%;
+  max-width:800px;
+  max-height:92vh;
+overflow:auto;
+  padding:26px;
+  border-radius:16px;
+  box-shadow:0 12px 35px rgba(0,0,0,.25);
+">
+
+<h2 style="
+  margin-top:0;
+  color:#0b5d3b;
+">
+💰 Director Pole Selling Prices
+</h2>
+
+
+<div style="
+  background:#eef8f2;
+  border:1px solid #cfe6d8;
+  padding:12px;
+  border-radius:8px;
+  margin-bottom:20px;
+  line-height:1.5;
+">
+  Set the Director-approved standard selling
+  price for each pole category.
+
+<br><br>
+
+  Discounts are not included in these prices.
+  Any discount will be applied separately and
+  can only be approved by the Director.
+</div>
+
+
+<label>
+<b>Pole Category</b>
+</label>
+
+<select
+  id="sellingPricePoleCategory"
+  style="
+    width:100%;
+    padding:11px;
+    margin:6px 0 16px;
+  "
+>
+
+<option value="">
+  Select Pole Category
+</option>
+
+${poleCategories
+  .map(category => `
+
+<option value="${category.key}">
+  ${category.name}
+</option>
+
+  `)
+  .join("")}
+
+</select>
+
+
+<label>
+<b>Standard Unit Selling Price — UGX</b>
+</label>
+
+<input
+  id="sellingPriceAmount"
+  type="number"
+  min="0"
+  step="100"
+  placeholder="Example: 35000"
+  style="
+    width:100%;
+box-sizing:border-box;
+    padding:11px;
+    margin:6px 0 10px;
+  "
+>
+
+
+<div
+  id="sellingPriceStatus"
+  style="
+    min-height:24px;
+    margin-bottom:16px;
+    color:#666;
+    font-size:13px;
+  "
+></div>
+
+
+<button
+  id="savePoleSellingPrice"
+  type="button"
+  style="
+    padding:11px 18px;
+    background:#0b5d3b;
+color:white;
+    border:0;
+    border-radius:8px;
+font-weight:bold;
+cursor:pointer;
+  "
+>
+💾 Save / Update Price
+</button>
+
+
+<hr style="
+  margin:24px 0 18px;
+  border:0;
+  border-top:1px solid #ddd;
+">
+
+
+<h3>
+Current Director-Approved Prices
+</h3>
+
+
+<div style="overflow-x:auto;">
+
+<table style="
+  width:100%;
+border-collapse:collapse;
+  min-width:550px;
+">
+
+<thead>
+
+<tr>
+
+<th style="
+  border:1px solid #ddd;
+  padding:9px;
+text-align:left;
+">
+Pole Category
+</th>
+
+<th style="
+  border:1px solid #ddd;
+  padding:9px;
+text-align:right;
+">
+Unit Price
+</th>
+
+</tr>
+
+</thead>
+
+
+<tbody
+  id="poleSellingPricesTable"
+></tbody>
+
+</table>
+
+</div>
+
+
+<div style="
+text-align:right;
+  margin-top:22px;
+">
+
+<button
+  id="closePoleSellingPrices"
+  type="button"
+  style="
+    padding:10px 18px;
+background:white;
+    border:1px solid #ccc;
+    border-radius:8px;
+cursor:pointer;
+  "
+>
+Close
+</button>
+
+</div>
+
+</div>
+
+`;
+
+
+document.body.appendChild(
+  modal
+);
+
+
+const categorySelect =
+modal.querySelector(
+  "#sellingPricePoleCategory"
+);
+
+
+const priceInput =
+modal.querySelector(
+  "#sellingPriceAmount"
+);
+
+
+const status =
+modal.querySelector(
+  "#sellingPriceStatus"
+);
+
+
+const tableBody =
+modal.querySelector(
+  "#poleSellingPricesTable"
+);
+
+
+function renderPriceTable() {
+
+const savedPrices =
+getSavedPrices();
+
+
+tableBody.innerHTML =
+poleCategories
+  .map(category => {
+
+const price =
+Number(
+savedPrices[
+category.key
+  ] || 0
+);
+
+
+return `
+
+<tr>
+
+<td style="
+  border:1px solid #ddd;
+  padding:9px;
+">
+${category.name}
+</td>
+
+<td style="
+  border:1px solid #ddd;
+  padding:9px;
+text-align:right;
+font-weight:bold;
+  color:#0b5d3b;
+">
+
+${
+  price > 0
+    ? "UGX " +
+price.toLocaleString()
+    : "Not Set"
+}
+
+</td>
+
+</tr>
+
+`;
+
+  })
+  .join("");
+
+}
+
+
+function loadSelectedPrice() {
+
+const key =
+categorySelect.value;
+
+
+if (!key) {
+
+priceInput.value = "";
+
+status.textContent =
+    "Select a pole category.";
+
+  return;
+
+}
+
+
+const savedPrices =
+getSavedPrices();
+
+
+const currentPrice =
+Number(
+savedPrices[key] || 0
+);
+
+
+if (currentPrice> 0) {
+
+priceInput.value =
+currentPrice;
+
+status.textContent =
+    "Current approved price: UGX " +
+currentPrice.toLocaleString() +
+    " per pole.";
+
+} else {
+
+priceInput.value = "";
+
+status.textContent =
+    "No selling price has been set for this pole category.";
+
+}
+
+}
+
+
+categorySelect.onchange =
+loadSelectedPrice;
+
+
+modal.querySelector(
+  "#savePoleSellingPrice"
+).onclick = function () {
+
+const key =
+categorySelect.value;
+
+
+const category =
+poleCategories.find(
+  item =>
+item.key === key
+);
+
+
+const price =
+Math.round(
+  Number(
+priceInput.value
+  ) || 0
+);
+
+
+if (!category) {
+
+  alert(
+    "Please select a pole category."
+  );
+
+  return;
+
+}
+
+
+if (price <= 0) {
+
+  alert(
+    "Please enter a valid selling price greater than zero."
+  );
+
+  return;
+
+}
+
+
+const savedPrices =
+getSavedPrices();
+
+
+savedPrices[key] =
+price;
+
+
+savedPrices.updatedAt =
+new Date()
+  .toISOString();
+
+
+savedPrices.updatedByEmployeeId =
+currentUser.employeeId ||
+"";
+
+
+savedPrices.updatedByName =
+currentUser.fullName ||
+currentUser.employeeName ||
+"";
+
+
+savedPrices.updatedByRole =
+currentUser.role ||
+"";
+
+
+localStorage.setItem(
+  "poleSellingPrices",
+JSON.stringify(
+savedPrices
+  )
+);
+
+
+status.textContent =
+category.name +
+" saved at UGX " +
+price.toLocaleString() +
+" per pole.";
+
+
+renderPriceTable();
+
+
+alert(
+  "Pole selling price saved successfully.\n\n" +
+category.name +
+  "\nUGX " +
+price.toLocaleString() +
+  " per pole"
+);
+
+};
+
+
+modal.querySelector(
+  "#closePoleSellingPrices"
+).onclick = function () {
+
+modal.remove();
+
+};
+
+
+renderPriceTable();
+
+}
+
+
 /* =========================================================
    WASHING DEPARTMENT - SOURCE BATCH + WASHING SUB-BATCH
 
