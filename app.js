@@ -50298,7 +50298,7 @@ afPLReadArray(
 );
 
 
-constdeliveryRecords =
+const deliveryRecords =
 afPLReadArray(
   "afDeliveryRecords"
 );
