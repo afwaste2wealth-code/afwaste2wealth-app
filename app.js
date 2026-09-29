@@ -54146,7 +54146,7 @@ const uid = prefix =>
 Math.random().toString(36).slice(2, 6).toUpperCase();
 
 const currentUser = () => {
-    if (typeofgetAFCurrentUser === "function") {
+    if (typeof getAFCurrentUser === "function") {
       return getAFCurrentUser() || {};
     }
     return read("currentUser", {});
