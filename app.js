@@ -54843,7 +54843,7 @@ openFollowups;
 box.querySelector(
       "#afSCDeliveryHistory"
     ).onclick =
-openDeliveryHistory;
+;
 
 box.querySelector(
       "#afSCPrices"
@@ -55560,9 +55560,59 @@ box.querySelector(
 
   function openDeliveryHistory() {
 
-openSalesHistory();
+  if (!requireAccess()) {
+    return;
+  }
+
+  /* Close Sales & Customers so history appears in front */
+  close("afSalesCustomersMain");
+
+  if (
+typeof checkAFStockInventory ===
+    "function"
+  ) {
+
+    /*
+     * Open the existing stock system,
+     * then automatically press its
+     * Delivery History button.
+     *
+     * This reuses the ORIGINAL working
+     * Delivery History and Cancel/Reverse
+     * system instead of duplicating it.
+     */
+checkAFStockInventory();
+
+setTimeout(() => {
+
+const historyButton =
+document.getElementById(
+          "afStockDeliveryHistory"
+        );
+
+      if (historyButton) {
+
+historyButton.click();
+
+      } else {
+
+        alert(
+          "Delivery History button could not be found."
+        );
+
+      }
+
+    }, 100);
+
+  } else {
+
+    alert(
+      "The existing Stock & Delivery system could not be found."
+    );
 
   }
+
+}
 
   /* =======================================================
      ORDERS & QUOTATIONS
