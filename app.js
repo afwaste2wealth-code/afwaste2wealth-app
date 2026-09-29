@@ -54099,3 +54099,3088 @@ renderAFProfitLossDashboardCard,
 );
 
 })();
+
+/* =========================================================
+   A&F SALES & CUSTOMERS — SINGLE COMPLETE BLOCK
+   Paste ONCE at the very bottom of app.js
+   ========================================================= */
+
+(function () {
+  "use strict";
+
+const K = {
+    customers: "afCustomers",
+    orders: "afSalesOrders",
+    payments: "afCustomerPayments",
+followups: "afCustomerFollowups",
+    deliveries: "afDeliveryRecords"
+  };
+
+const read = (key, fallback = []) => {
+    try {
+const v = JSON.parse(localStorage.getItem(key) || "null");
+      return v ?? fallback;
+    } catch (e) {
+console.error("Storage read failed:", key, e);
+      return fallback;
+    }
+  };
+
+const save = (key, value) =>
+localStorage.setItem(key, JSON.stringify(value));
+
+const esc = v => String(v ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
+const money = v =>
+    "UGX " + Math.round(Number(v || 0)).toLocaleString();
+
+const today = () => new Date().toISOString().slice(0, 10);
+
+const uid = prefix =>
+    prefix + "-" + Date.now() + "-" +
+Math.random().toString(36).slice(2, 6).toUpperCase();
+
+const currentUser = () => {
+    if (typeofgetAFCurrentUser === "function") {
+      return getAFCurrentUser() || {};
+    }
+    return read("currentUser", {});
+  };
+
+const currentRole = () =>
+    String(currentUser().role || "").toLowerCase();
+
+const allowed = () =>
+currentRole() === "director" ||
+currentRole() === "secretary";
+
+const requireAccess = () => {
+    if (!allowed()) {
+      alert("Access Denied\n\nOnly the Director or Secretary can use Sales & Customers.");
+      return false;
+    }
+    return true;
+  };
+
+  function close(id) {
+const e = document.getElementById(id);
+    if (e) e.remove();
+  }
+
+  function modal(id, width = 1100) {
+    close(id);
+
+const wrap = document.createElement("div");
+
+wrap.id = id;
+
+wrap.style.cssText = `
+position:fixed;
+      inset:0;
+      z-index:999999;
+background:rgba(0,0,0,.58);
+display:flex;
+align-items:center;
+justify-content:center;
+      padding:10px;
+box-sizing:border-box;
+font-family:Arial,sans-serif;
+    `;
+
+const box = document.createElement("div");
+
+box.style.cssText = `
+      width:100%;
+      max-width:${width}px;
+      max-height:94vh;
+overflow:auto;
+      background:#fff;
+      border-radius:14px;
+      padding:22px;
+box-sizing:border-box;
+      box-shadow:0 16px 50px rgba(0,0,0,.28);
+    `;
+
+wrap.appendChild(box);
+
+document.body.appendChild(wrap);
+
+    return { wrap, box };
+  }
+
+const btn = (bg = "#0b5d3b") => `
+    border:0;
+    background:${bg};
+color:white;
+    padding:10px 14px;
+    border-radius:8px;
+font-weight:bold;
+cursor:pointer;
+  `;
+
+const input = () => `
+    width:100%;
+box-sizing:border-box;
+    padding:10px;
+    border:1px solid #ccd5d0;
+    border-radius:7px;
+background:white;
+  `;
+
+  function title(text, sub, closeId) {
+    return `
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:flex-start;
+        gap:12px;
+        margin-bottom:18px;
+      ">
+<div>
+<h2 style="
+            margin:0;
+            color:#0b5d3b;
+          ">
+            ${esc(text)}
+</h2>
+
+<div style="
+            font-size:12px;
+            color:#66736d;
+            margin-top:5px;
+          ">
+            ${esc(sub || "")}
+</div>
+</div>
+
+<button
+          id="${closeId}"
+          type="button"
+          style="${btn("#333")}"
+>
+✕ Close
+</button>
+</div>
+    `;
+  }
+
+  function customerList() {
+const v = read(K.customers, []);
+
+    return Array.isArray(v)
+      ? v.filter(x =>x.status !== "DELETED")
+      : [];
+  }
+
+  function deliveryList() {
+const v = read(K.deliveries, []);
+
+    return Array.isArray(v)
+      ? v
+      : [];
+  }
+
+  function paymentList() {
+const v = read(K.payments, []);
+
+    return Array.isArray(v)
+      ? v
+      : [];
+  }
+
+  function orderList() {
+const v = read(K.orders, []);
+
+    return Array.isArray(v)
+      ? v
+      : [];
+  }
+
+  function followupList() {
+const v = read(K.followups, []);
+
+    return Array.isArray(v)
+      ? v
+      : [];
+  }
+
+  function saleValue(r) {
+    return Number(
+r.finalSaleTotal ??
+r.netSaleTotal ??
+r.saleAmount ??
+r.grossSaleTotal ??
+      0
+    );
+  }
+
+  function isCancelled(r) {
+    return (
+      String(
+r.status || ""
+      ).toUpperCase() ===
+      "CANCELLED"
+    );
+  }
+
+  function sameCustomer(
+    customer,
+    record
+  ) {
+
+const aName =
+      String(
+customer.name || ""
+      )
+        .trim()
+        .toLowerCase();
+
+const bName =
+      String(
+record.customerName ||
+record.clientName ||
+        ""
+      )
+        .trim()
+        .toLowerCase();
+
+const aPhone =
+      String(
+customer.phone || ""
+      )
+        .replace(/\s+/g, "");
+
+const bPhone =
+      String(
+record.customerPhone ||
+record.clientPhone ||
+        ""
+      )
+        .replace(/\s+/g, "");
+
+    return (
+      (
+aPhone&&
+bPhone&&
+aPhone === bPhone
+      ) ||
+      (
+aName&&
+bName&&
+aName === bName
+      )
+    );
+  }
+
+  function customerTotals(customer) {
+
+const sales =
+deliveryList()
+        .filter(
+          r =>
+            !isCancelled(r) &&
+sameCustomer(
+              customer,
+              r
+            )
+        )
+        .reduce(
+          (s, r) =>
+            s + saleValue(r),
+          0
+        );
+
+const paid =
+paymentList()
+        .filter(
+          p =>
+            String(p.customerId) ===
+            String(customer.id)
+        )
+        .reduce(
+          (s, p) =>
+            s +
+            Number(
+p.amount || 0
+            ),
+          0
+        );
+
+    return {
+      sales,
+      paid,
+      balance:
+Math.max(
+          sales - paid,
+          0
+        )
+    };
+  }
+
+  function syncExistingCustomers() {
+
+const customers =
+customerList();
+
+    let changed = false;
+
+deliveryList()
+      .forEach(r => {
+
+const name =
+          String(
+r.customerName || ""
+          ).trim();
+
+        if (!name) {
+          return;
+        }
+
+const exists =
+customers.some(
+            c =>
+sameCustomer(
+                c,
+                r
+              )
+          );
+
+        if (exists) {
+          return;
+        }
+
+customers.push({
+
+          id:
+uid("CUS"),
+
+customerNo:
+            "CUS-" +
+            String(
+customers.length + 1
+            ).padStart(
+              4,
+              "0"
+            ),
+
+          name,
+
+          phone:
+            String(
+r.customerPhone || ""
+            ).trim(),
+
+          email:
+            "",
+
+          location:
+            String(
+r.deliveryPlace ||
+r.destination ||
+              ""
+            ).trim(),
+
+contactPerson:
+            "",
+
+          notes:
+            "Imported from an existing delivery record.",
+
+          status:
+            "ACTIVE",
+
+createdAt:
+            new Date()
+              .toISOString(),
+
+createdBy:
+            "SYSTEM IMPORT"
+
+        });
+
+        changed = true;
+
+      });
+
+    if (changed) {
+      save(
+K.customers,
+        customers
+      );
+    }
+
+    return customers;
+  }
+
+  /* =======================================================
+     MAIN SALES & CUSTOMERS SCREEN
+     ======================================================= */
+
+  function clientRegistration() {
+
+    if (!requireAccess()) {
+      return;
+    }
+
+syncExistingCustomers();
+
+const customers =
+customerList();
+
+const deliveries =
+deliveryList()
+        .filter(
+          r =>
+            !isCancelled(r)
+        );
+
+const totalSales =
+deliveries.reduce(
+        (s, r) =>
+          s +
+saleValue(r),
+        0
+      );
+
+const totalPaid =
+paymentList()
+        .reduce(
+          (s, r) =>
+            s +
+            Number(
+r.amount || 0
+            ),
+          0
+        );
+
+const balance =
+Math.max(
+totalSales -
+totalPaid,
+        0
+      );
+
+const {
+      wrap,
+      box
+    } =
+      modal(
+        "afSalesCustomersMain",
+        1120
+      );
+
+box.innerHTML = `
+
+      ${title(
+        "▱ Sales & Customers",
+        "Customers, sales, orders, payments and follow-ups",
+        "afSCMainClose"
+      )}
+
+<div style="
+display:grid;
+        grid-template-columns:
+          repeat(
+            auto-fit,
+minmax(170px,1fr)
+          );
+        gap:10px;
+        margin-bottom:18px;
+      ">
+
+<div style="
+          border:1px solid #e3e9e6;
+          border-radius:10px;
+          padding:14px;
+        ">
+<div style="
+            font-size:12px;
+            color:#666;
+          ">
+            Customers
+</div>
+
+<div style="
+            font-size:23px;
+font-weight:bold;
+          ">
+            ${customers.length.toLocaleString()}
+</div>
+</div>
+
+<div style="
+          border:1px solid #e3e9e6;
+          border-radius:10px;
+          padding:14px;
+        ">
+<div style="
+            font-size:12px;
+            color:#666;
+          ">
+            Completed Sales
+</div>
+
+<div style="
+            font-size:23px;
+font-weight:bold;
+          ">
+            ${deliveries.length.toLocaleString()}
+</div>
+</div>
+
+<div style="
+          border:1px solid #e3e9e6;
+          border-radius:10px;
+          padding:14px;
+        ">
+<div style="
+            font-size:12px;
+            color:#666;
+          ">
+            Sales Value
+</div>
+
+<div style="
+            font-size:20px;
+font-weight:bold;
+            color:#0b5d3b;
+          ">
+            ${money(totalSales)}
+</div>
+</div>
+
+<div style="
+          border:1px solid #e3e9e6;
+          border-radius:10px;
+          padding:14px;
+        ">
+<div style="
+            font-size:12px;
+            color:#666;
+          ">
+            Recorded Customer Balance
+</div>
+
+<div style="
+            font-size:20px;
+font-weight:bold;
+            color:#b42318;
+          ">
+            ${money(balance)}
+</div>
+</div>
+
+</div>
+
+<div style="
+display:grid;
+        grid-template-columns:
+          repeat(
+            auto-fit,
+minmax(210px,1fr)
+          );
+        gap:12px;
+      ">
+
+<button
+          id="afSCRegister"
+          style="${btn()}"
+>
+➕ Register Customer
+</button>
+
+<button
+          id="afSCList"
+          style="${btn()}"
+>
+👥 Customer List
+</button>
+
+<button
+          id="afSCNewSale"
+          style="${btn()}"
+>
+🧾 New Sale / Delivery
+</button>
+
+<button
+          id="afSCSalesHistory"
+          style="${btn()}"
+>
+📊 Sales History
+</button>
+
+<button
+          id="afSCOrders"
+          style="${btn()}"
+>
+📑 Orders & Quotations
+</button>
+
+<button
+          id="afSCPayments"
+          style="${btn()}"
+>
+💵 Customer Payments
+</button>
+
+<button
+          id="afSCBalances"
+          style="${btn()}"
+>
+📒 Customer Balances
+</button>
+
+<button
+          id="afSCFollowups"
+          style="${btn()}"
+>
+📞 Customer Follow-ups
+</button>
+
+<button
+          id="afSCDeliveryHistory"
+          style="${btn()}"
+>
+🚚 Delivery History
+</button>
+
+<button
+          id="afSCPrices"
+          style="${btn()}"
+>
+💰 Approved Pole Prices
+</button>
+
+</div>
+
+<div style="
+        margin-top:18px;
+        padding:12px;
+        background:#eef8f2;
+        border:1px solid #cfe6d8;
+        border-radius:8px;
+        font-size:12px;
+        color:#0b5d3b;
+        line-height:1.6;
+      ">
+        New Sale / Delivery uses your existing
+        stock and delivery system. It does not
+        create a second stock deduction system.
+</div>
+
+    `;
+
+box.querySelector(
+      "#afSCMainClose"
+    ).onclick =
+      () =>wrap.remove();
+
+box.querySelector(
+      "#afSCRegister"
+    ).onclick =
+openRegisterCustomer;
+
+box.querySelector(
+      "#afSCList"
+    ).onclick =
+openCustomerList;
+
+box.querySelector(
+      "#afSCNewSale"
+    ).onclick =
+      () => {
+
+wrap.remove();
+
+        if (
+typeof recordAFDelivery ===
+          "function"
+        ) {
+
+recordAFDelivery();
+
+        } else {
+
+          alert(
+            "The existing Record Delivery function could not be found."
+          );
+
+        }
+
+      };
+
+box.querySelector(
+      "#afSCSalesHistory"
+    ).onclick =
+openSalesHistory;
+
+box.querySelector(
+      "#afSCOrders"
+    ).onclick =
+openOrders;
+
+box.querySelector(
+      "#afSCPayments"
+    ).onclick =
+openPayments;
+
+box.querySelector(
+      "#afSCBalances"
+    ).onclick =
+openBalances;
+
+box.querySelector(
+      "#afSCFollowups"
+    ).onclick =
+openFollowups;
+
+box.querySelector(
+      "#afSCDeliveryHistory"
+    ).onclick =
+openDeliveryHistory;
+
+box.querySelector(
+      "#afSCPrices"
+    ).onclick =
+      () => {
+
+        if (
+typeof viewPoleStandardPrices ===
+          "function"
+        ) {
+
+viewPoleStandardPrices();
+
+        } else {
+
+          alert(
+            "Approved Pole Selling Prices could not be found."
+          );
+
+        }
+
+      };
+  }
+
+  /* =======================================================
+     REGISTER CUSTOMER
+     ======================================================= */
+
+  function openRegisterCustomer() {
+
+    if (!requireAccess()) {
+      return;
+    }
+
+const {
+      wrap,
+      box
+    } =
+      modal(
+        "afRegisterCustomer",
+        720
+      );
+
+box.innerHTML = `
+
+      ${title(
+        "➕ Register Customer",
+        "Create a customer record once and reuse it",
+        "afRegCustomerClose"
+      )}
+
+<div style="
+display:grid;
+        grid-template-columns:
+          1fr 1fr;
+        gap:12px;
+      ">
+
+<div>
+<label>
+<b>
+              Customer / Company Name *
+</b>
+</label>
+
+<input
+            id="afCustName"
+            style="${input()}margin-top:5px;"
+>
+</div>
+
+<div>
+<label>
+<b>
+              Phone Number *
+</b>
+</label>
+
+<input
+            id="afCustPhone"
+            style="${input()}margin-top:5px;"
+>
+</div>
+
+<div>
+<label>
+<b>Email</b>
+</label>
+
+<input
+            id="afCustEmail"
+            type="email"
+            style="${input()}margin-top:5px;"
+>
+</div>
+
+<div>
+<label>
+<b>
+              Location / Address
+</b>
+</label>
+
+<input
+            id="afCustLocation"
+            style="${input()}margin-top:5px;"
+>
+</div>
+
+<div>
+<label>
+<b>
+              Contact Person
+</b>
+</label>
+
+<input
+            id="afCustContact"
+            style="${input()}margin-top:5px;"
+>
+</div>
+
+<div>
+<label>
+<b>
+              Customer Type
+</b>
+</label>
+
+<select
+            id="afCustType"
+            style="${input()}margin-top:5px;"
+>
+<option>Individual</option>
+<option>Company</option>
+<option>Dealer</option>
+<option>Contractor</option>
+<option>Institution</option>
+<option>Government</option>
+<option>Other</option>
+</select>
+</div>
+
+</div>
+
+<div style="
+        margin-top:12px;
+      ">
+
+<label>
+<b>Notes</b>
+</label>
+
+<textarea
+          id="afCustNotes"
+          rows="3"
+          style="${input()}margin-top:5px;"
+></textarea>
+
+</div>
+
+<button
+        id="afCustSave"
+        style="${btn()}width:100%;margin-top:16px;"
+>
+💾 Save Customer
+</button>
+
+    `;
+
+box.querySelector(
+      "#afRegCustomerClose"
+    ).onclick =
+      () =>wrap.remove();
+
+box.querySelector(
+      "#afCustSave"
+    ).onclick =
+      () => {
+
+const name =
+box.querySelector(
+            "#afCustName"
+          ).value.trim();
+
+const phone =
+box.querySelector(
+            "#afCustPhone"
+          ).value.trim();
+
+        if (!name) {
+
+          return alert(
+            "Please enter the customer name."
+          );
+
+        }
+
+        if (!phone) {
+
+          return alert(
+            "Please enter the phone number."
+          );
+
+        }
+
+const customers =
+customerList();
+
+const duplicate =
+customers.some(
+            c =>
+              String(
+c.phone || ""
+              )
+                .replace(
+                  /\s+/g,
+                  ""
+                ) ===
+phone.replace(
+                /\s+/g,
+                ""
+              ) ||
+
+              String(
+c.name || ""
+              )
+                .trim()
+                .toLowerCase() ===
+name.toLowerCase()
+          );
+
+        if (duplicate) {
+
+          return alert(
+            "A customer with the same name or phone number already exists."
+          );
+
+        }
+
+const user =
+currentUser();
+
+customers.push({
+
+          id:
+uid("CUS"),
+
+customerNo:
+            "CUS-" +
+            String(
+customers.length + 1
+            ).padStart(
+              4,
+              "0"
+            ),
+
+          name,
+
+          phone,
+
+          email:
+box.querySelector(
+              "#afCustEmail"
+            ).value.trim(),
+
+          location:
+box.querySelector(
+              "#afCustLocation"
+            ).value.trim(),
+
+contactPerson:
+box.querySelector(
+              "#afCustContact"
+            ).value.trim(),
+
+customerType:
+box.querySelector(
+              "#afCustType"
+            ).value,
+
+          notes:
+box.querySelector(
+              "#afCustNotes"
+            ).value.trim(),
+
+          status:
+            "ACTIVE",
+
+createdAt:
+            new Date()
+              .toISOString(),
+
+createdBy:
+user.fullName ||
+user.employeeName ||
+user.employeeId ||
+            ""
+
+        });
+
+        save(
+K.customers,
+          customers
+        );
+
+wrap.remove();
+
+        alert(
+          "Customer registered successfully."
+        );
+
+      };
+  }
+
+  /* =======================================================
+     CUSTOMER LIST
+     ======================================================= */
+
+  function openCustomerList() {
+
+    if (!requireAccess()) {
+      return;
+    }
+
+syncExistingCustomers();
+
+const {
+      wrap,
+      box
+    } =
+      modal(
+        "afCustomerList",
+        1150
+      );
+
+box.innerHTML = `
+
+      ${title(
+        "👥 Customer List",
+        "Registered customers and live balances",
+        "afCustomerListClose"
+      )}
+
+<div style="
+overflow:auto;
+      ">
+
+<table style="
+          width:100%;
+          min-width:950px;
+border-collapse:collapse;
+        ">
+
+<thead>
+
+<tr style="
+              background:#eaf5ee;
+text-align:left;
+            ">
+
+<th>No.</th>
+<th>Name</th>
+<th>Phone</th>
+<th>Location</th>
+<th>Sales</th>
+<th>Paid</th>
+<th>Balance</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+          ${
+customerList()
+              .map(c => {
+
+const t =
+customerTotals(c);
+
+                return `
+
+<tr>
+
+<td>
+                      ${esc(
+c.customerNo ||
+                        "-"
+                      )}
+</td>
+
+<td>
+<b>
+                        ${esc(c.name)}
+</b>
+</td>
+
+<td>
+                      ${esc(
+c.phone ||
+                        "-"
+                      )}
+</td>
+
+<td>
+                      ${esc(
+c.location ||
+                        "-"
+                      )}
+</td>
+
+<td>
+                      ${money(
+t.sales
+                      )}
+</td>
+
+<td>
+                      ${money(
+t.paid
+                      )}
+</td>
+
+<td>
+<b>
+                        ${money(
+t.balance
+                        )}
+</b>
+</td>
+
+</tr>
+
+                `;
+
+              })
+              .join("") ||
+
+            `
+<tr>
+<td
+colspan="7"
+                  style="
+text-align:center;
+                    padding:20px;
+                  "
+>
+                  No customers registered yet.
+</td>
+</tr>
+            `
+          }
+
+</tbody>
+
+</table>
+
+</div>
+
+    `;
+
+box.querySelectorAll(
+      "th,td"
+    ).forEach(
+      x => {
+
+x.style.padding =
+          "9px";
+
+x.style.borderBottom =
+          "1px solid #eee";
+
+      }
+    );
+
+box.querySelector(
+      "#afCustomerListClose"
+    ).onclick =
+      () =>wrap.remove();
+  }
+
+  /* =======================================================
+     SALES / DELIVERY HISTORY
+     ======================================================= */
+
+  function deliveryDetails(r) {
+
+    if (
+      String(
+r.deliveryType || ""
+      ).toLowerCase() ===
+      "pellets"
+    ) {
+
+      return (
+        (
+r.pelletType ||
+          "Pellets"
+        ) +
+        " — " +
+        Number(
+r.pelletKg || 0
+        ).toLocaleString() +
+        " kg"
+      );
+
+    }
+
+const items =
+Array.isArray(
+r.items
+      )
+        ? r.items
+        : [];
+
+    return items.length
+
+      ? items
+          .map(
+i =>
+              (
+i.name ||
+i.key ||
+                "Poles"
+              ) +
+              " × " +
+              Number(
+i.quantity || 0
+              ).toLocaleString()
+          )
+          .join(", ")
+
+      : Number(
+r.totalPoles || 0
+        ).toLocaleString() +
+        " poles";
+  }
+
+  function openSalesHistory() {
+
+    if (!requireAccess()) {
+      return;
+    }
+
+const {
+      wrap,
+      box
+    } =
+      modal(
+        "afSalesHistory",
+        1200
+      );
+
+const records =
+deliveryList()
+        .slice()
+        .reverse();
+
+box.innerHTML = `
+
+      ${title(
+        "📊 Sales History",
+        "Sales value is read from the existing completed delivery records",
+        "afSalesHistoryClose"
+      )}
+
+<div style="
+overflow:auto;
+      ">
+
+<table style="
+          width:100%;
+          min-width:1050px;
+border-collapse:collapse;
+        ">
+
+<thead>
+
+<tr style="
+              background:#eaf5ee;
+text-align:left;
+            ">
+
+<th>Date</th>
+<th>Delivery No.</th>
+<th>Customer</th>
+<th>Details</th>
+<th>Destination</th>
+<th>Sale Value</th>
+<th>Status</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+          ${
+            records
+              .map(
+                r => `
+
+<tr style="
+                  ${
+isCancelled(r)
+                      ? "background:#fff3f3;"
+                      : ""
+                  }
+                ">
+
+<td>
+                    ${esc(
+r.date ||
+                      "-"
+                    )}
+</td>
+
+<td>
+<b>
+                      ${esc(
+r.deliveryNumber ||
+                        "-"
+                      )}
+</b>
+</td>
+
+<td>
+                    ${esc(
+r.customerName ||
+                      "-"
+                    )}
+</td>
+
+<td>
+                    ${esc(
+deliveryDetails(r)
+                    )}
+</td>
+
+<td>
+                    ${esc(
+r.deliveryPlace ||
+r.destination ||
+                      "-"
+                    )}
+</td>
+
+<td>
+                    ${money(
+saleValue(r)
+                    )}
+</td>
+
+<td>
+<b>
+                      ${
+isCancelled(r)
+                          ? "CANCELLED"
+                          : "COMPLETED"
+                      }
+</b>
+</td>
+
+</tr>
+
+              `
+              )
+              .join("") ||
+
+            `
+<tr>
+<td
+colspan="7"
+                  style="
+text-align:center;
+                    padding:20px;
+                  "
+>
+                  No sales records yet.
+</td>
+</tr>
+            `
+          }
+
+</tbody>
+
+</table>
+
+</div>
+
+    `;
+
+box.querySelectorAll(
+      "th,td"
+    ).forEach(
+      x => {
+
+x.style.padding =
+          "9px";
+
+x.style.borderBottom =
+          "1px solid #eee";
+
+      }
+    );
+
+box.querySelector(
+      "#afSalesHistoryClose"
+    ).onclick =
+      () =>wrap.remove();
+  }
+
+  function openDeliveryHistory() {
+
+openSalesHistory();
+
+  }
+
+  /* =======================================================
+     ORDERS & QUOTATIONS
+     ======================================================= */
+
+  function openOrders() {
+
+    if (!requireAccess()) {
+      return;
+    }
+
+const {
+      wrap,
+      box
+    } =
+      modal(
+        "afOrders",
+        1150
+      );
+
+    function render() {
+
+const records =
+orderList()
+          .slice()
+          .reverse();
+
+box.innerHTML = `
+
+        ${title(
+          "📑 Orders & Quotations",
+          "Track customer enquiries, quotations and confirmed orders",
+          "afOrdersClose"
+        )}
+
+<button
+          id="afNewOrder"
+          style="${btn()}margin-bottom:14px;"
+>
+          + New Order / Quotation
+</button>
+
+<div style="
+overflow:auto;
+        ">
+
+<table style="
+            width:100%;
+            min-width:1000px;
+border-collapse:collapse;
+          ">
+
+<thead>
+
+<tr style="
+                background:#eaf5ee;
+text-align:left;
+              ">
+
+<th>Date</th>
+<th>Reference</th>
+<th>Customer</th>
+<th>Type</th>
+<th>Description</th>
+<th>Value</th>
+<th>Status</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+            ${
+              records
+                .map(
+                  r => `
+
+<tr>
+
+<td>
+                      ${esc(r.date)}
+</td>
+
+<td>
+<b>
+                        ${esc(
+r.reference
+                        )}
+</b>
+</td>
+
+<td>
+                      ${esc(
+r.customerName
+                      )}
+</td>
+
+<td>
+                      ${esc(r.type)}
+</td>
+
+<td>
+                      ${esc(
+r.description
+                      )}
+</td>
+
+<td>
+                      ${money(
+r.value
+                      )}
+</td>
+
+<td>
+                      ${esc(
+r.status
+                      )}
+</td>
+
+</tr>
+
+                `
+                )
+                .join("") ||
+
+              `
+<tr>
+<td
+colspan="7"
+                    style="
+text-align:center;
+                      padding:20px;
+                    "
+>
+                    No orders or quotations saved.
+</td>
+</tr>
+              `
+            }
+
+</tbody>
+
+</table>
+
+</div>
+
+      `;
+
+box.querySelectorAll(
+        "th,td"
+      ).forEach(
+        x => {
+
+x.style.padding =
+            "9px";
+
+x.style.borderBottom =
+            "1px solid #eee";
+
+        }
+      );
+
+box.querySelector(
+        "#afOrdersClose"
+      ).onclick =
+        () =>wrap.remove();
+
+box.querySelector(
+        "#afNewOrder"
+      ).onclick =
+        () =>
+openOrderForm(
+            render
+          );
+    }
+
+    render();
+  }
+
+  function openOrderForm(
+afterSave
+  ) {
+
+const customers =
+customerList();
+
+const {
+      wrap,
+      box
+    } =
+      modal(
+        "afOrderForm",
+        720
+      );
+
+box.innerHTML = `
+
+      ${title(
+        "New Order / Quotation",
+        "Save the customer's commercial request before delivery",
+        "afOrderFormClose"
+      )}
+
+<div style="
+display:grid;
+        grid-template-columns:
+          1fr 1fr;
+        gap:12px;
+      ">
+
+<div>
+
+<label>
+<b>Date *</b>
+</label>
+
+<input
+            id="afOrderDate"
+            type="date"
+            value="${today()}"
+            style="${input()}margin-top:5px;"
+>
+
+</div>
+
+<div>
+
+<label>
+<b>Type</b>
+</label>
+
+<select
+            id="afOrderType"
+            style="${input()}margin-top:5px;"
+>
+
+<option>
+              Quotation
+</option>
+
+<option>
+              Order
+</option>
+
+</select>
+
+</div>
+
+<div>
+
+<label>
+<b>Customer *</b>
+</label>
+
+<select
+            id="afOrderCustomer"
+            style="${input()}margin-top:5px;"
+>
+
+<option value="">
+              Select customer
+</option>
+
+            ${
+              customers
+                .map(
+                  c => `
+
+<option
+                      value="${esc(c.id)}"
+>
+                      ${esc(c.name)}
+</option>
+
+                  `
+                )
+                .join("")
+            }
+
+</select>
+
+</div>
+
+<div>
+
+<label>
+<b>
+              Estimated Value
+</b>
+</label>
+
+<input
+            id="afOrderValue"
+            type="number"
+            min="0"
+            value="0"
+            style="${input()}margin-top:5px;"
+>
+
+</div>
+
+<div>
+
+<label>
+<b>Status</b>
+</label>
+
+<select
+            id="afOrderStatus"
+            style="${input()}margin-top:5px;"
+>
+
+<option>PENDING</option>
+<option>QUOTED</option>
+<option>CONFIRMED</option>
+<option>COMPLETED</option>
+<option>CANCELLED</option>
+
+</select>
+
+</div>
+
+</div>
+
+<div style="
+        margin-top:12px;
+      ">
+
+<label>
+<b>
+            Description *
+</b>
+</label>
+
+<textarea
+          id="afOrderDescription"
+          rows="4"
+          style="${input()}margin-top:5px;"
+></textarea>
+
+</div>
+
+<button
+        id="afOrderSave"
+        style="${btn()}width:100%;margin-top:15px;"
+>
+💾 Save
+</button>
+
+    `;
+
+box.querySelector(
+      "#afOrderFormClose"
+    ).onclick =
+      () =>wrap.remove();
+
+box.querySelector(
+      "#afOrderSave"
+    ).onclick =
+      () => {
+
+const customer =
+customers.find(
+            c =>
+              String(c.id) ===
+              String(
+box.querySelector(
+                  "#afOrderCustomer"
+                ).value
+              )
+          );
+
+const date =
+box.querySelector(
+            "#afOrderDate"
+          ).value;
+
+const description =
+box.querySelector(
+            "#afOrderDescription"
+          ).value.trim();
+
+        if (!customer) {
+
+          return alert(
+            "Please select a customer."
+          );
+
+        }
+
+        if (!date) {
+
+          return alert(
+            "Please select a date."
+          );
+
+        }
+
+        if (!description) {
+
+          return alert(
+            "Please enter the order / quotation description."
+          );
+
+        }
+
+const records =
+orderList();
+
+records.push({
+
+          id:
+uid("ORD"),
+
+          reference:
+            "ORD-" +
+date.replace(
+              /-/g,
+              ""
+            ) +
+            "-" +
+            String(
+records.length + 1
+            ).padStart(
+              3,
+              "0"
+            ),
+
+          date,
+
+          type:
+box.querySelector(
+              "#afOrderType"
+            ).value,
+
+customerId:
+customer.id,
+
+customerName:
+customer.name,
+
+          description,
+
+          value:
+            Number(
+box.querySelector(
+                "#afOrderValue"
+              ).value || 0
+            ),
+
+          status:
+box.querySelector(
+              "#afOrderStatus"
+            ).value,
+
+createdAt:
+            new Date()
+              .toISOString(),
+
+createdBy:
+currentUser()
+              .fullName ||
+currentUser()
+              .employeeId ||
+            ""
+
+        });
+
+        save(
+K.orders,
+          records
+        );
+
+wrap.remove();
+
+        alert(
+          "Order / quotation saved successfully."
+        );
+
+        if (afterSave) {
+afterSave();
+        }
+
+      };
+  }
+
+  /* =======================================================
+     PAYMENTS
+     ======================================================= */
+
+  function openPayments() {
+
+    if (!requireAccess()) {
+      return;
+    }
+
+const {
+      wrap,
+      box
+    } =
+      modal(
+        "afPayments",
+        1100
+      );
+
+    function render() {
+
+const records =
+paymentList()
+          .slice()
+          .reverse();
+
+box.innerHTML = `
+
+        ${title(
+          "💵 Customer Payments",
+          "Record money received from customers",
+          "afPaymentsClose"
+        )}
+
+<button
+          id="afNewPayment"
+          style="${btn()}margin-bottom:14px;"
+>
+          + Record Payment
+</button>
+
+<div style="
+overflow:auto;
+        ">
+
+<table style="
+            width:100%;
+            min-width:900px;
+border-collapse:collapse;
+          ">
+
+<thead>
+
+<tr style="
+                background:#eaf5ee;
+text-align:left;
+              ">
+
+<th>Date</th>
+<th>Payment No.</th>
+<th>Customer</th>
+<th>Method</th>
+<th>Reference</th>
+<th>Amount</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+            ${
+              records
+                .map(
+                  r => `
+
+<tr>
+
+<td>
+                        ${esc(r.date)}
+</td>
+
+<td>
+<b>
+                          ${esc(
+r.paymentNo
+                          )}
+</b>
+</td>
+
+<td>
+                        ${esc(
+r.customerName
+                        )}
+</td>
+
+<td>
+                        ${esc(
+r.method
+                        )}
+</td>
+
+<td>
+                        ${esc(
+r.reference ||
+                          "-"
+                        )}
+</td>
+
+<td>
+<b>
+                          ${money(
+r.amount
+                          )}
+</b>
+</td>
+
+</tr>
+
+                  `
+                )
+                .join("") ||
+
+              `
+<tr>
+<td
+colspan="6"
+                    style="
+text-align:center;
+                      padding:20px;
+                    "
+>
+                    No payments recorded.
+</td>
+</tr>
+              `
+            }
+
+</tbody>
+
+</table>
+
+</div>
+
+      `;
+
+box.querySelectorAll(
+        "th,td"
+      ).forEach(
+        x => {
+
+x.style.padding =
+            "9px";
+
+x.style.borderBottom =
+            "1px solid #eee";
+
+        }
+      );
+
+box.querySelector(
+        "#afPaymentsClose"
+      ).onclick =
+        () =>wrap.remove();
+
+box.querySelector(
+        "#afNewPayment"
+      ).onclick =
+        () =>
+openPaymentForm(
+            render
+          );
+    }
+
+    render();
+  }
+
+  function openPaymentForm(
+afterSave
+  ) {
+
+const customers =
+customerList();
+
+const {
+      wrap,
+      box
+    } =
+      modal(
+        "afPaymentForm",
+        700
+      );
+
+box.innerHTML = `
+
+      ${title(
+        "Record Customer Payment",
+        "This updates the customer's recorded balance",
+        "afPaymentFormClose"
+      )}
+
+<div style="
+display:grid;
+        grid-template-columns:
+          1fr 1fr;
+        gap:12px;
+      ">
+
+<div>
+
+<label>
+<b>Date *</b>
+</label>
+
+<input
+            id="afPayDate"
+            type="date"
+            value="${today()}"
+            style="${input()}margin-top:5px;"
+>
+
+</div>
+
+<div>
+
+<label>
+<b>Customer *</b>
+</label>
+
+<select
+            id="afPayCustomer"
+            style="${input()}margin-top:5px;"
+>
+
+<option value="">
+              Select customer
+</option>
+
+            ${
+              customers
+                .map(
+                  c => `
+
+<option
+                      value="${esc(c.id)}"
+>
+                      ${esc(c.name)}
+</option>
+
+                  `
+                )
+                .join("")
+            }
+
+</select>
+
+</div>
+
+<div>
+
+<label>
+<b>Amount *</b>
+</label>
+
+<input
+            id="afPayAmount"
+            type="number"
+            min="0"
+            style="${input()}margin-top:5px;"
+>
+
+</div>
+
+<div>
+
+<label>
+<b>Method</b>
+</label>
+
+<select
+            id="afPayMethod"
+            style="${input()}margin-top:5px;"
+>
+
+<option>Cash</option>
+<option>Mobile Money</option>
+<option>Bank Transfer</option>
+<option>Cheque</option>
+<option>Other</option>
+
+</select>
+
+</div>
+
+<div>
+
+<label>
+<b>Reference</b>
+</label>
+
+<input
+            id="afPayReference"
+            style="${input()}margin-top:5px;"
+>
+
+</div>
+
+</div>
+
+<button
+        id="afPaySave"
+        style="${btn()}width:100%;margin-top:15px;"
+>
+💾 Save Payment
+</button>
+
+    `;
+
+box.querySelector(
+      "#afPaymentFormClose"
+    ).onclick =
+      () =>wrap.remove();
+
+box.querySelector(
+      "#afPaySave"
+    ).onclick =
+      () => {
+
+const customer =
+customers.find(
+            c =>
+              String(c.id) ===
+              String(
+box.querySelector(
+                  "#afPayCustomer"
+                ).value
+              )
+          );
+
+const amount =
+          Number(
+box.querySelector(
+              "#afPayAmount"
+            ).value || 0
+          );
+
+const date =
+box.querySelector(
+            "#afPayDate"
+          ).value;
+
+        if (!customer) {
+
+          return alert(
+            "Please select a customer."
+          );
+
+        }
+
+        if (!date) {
+
+          return alert(
+            "Please select a date."
+          );
+
+        }
+
+        if (amount <= 0) {
+
+          return alert(
+            "Please enter a valid payment amount."
+          );
+
+        }
+
+const records =
+paymentList();
+
+records.push({
+
+          id:
+uid("PAY"),
+
+paymentNo:
+            "PAY-" +
+date.replace(
+              /-/g,
+              ""
+            ) +
+            "-" +
+            String(
+records.length + 1
+            ).padStart(
+              3,
+              "0"
+            ),
+
+          date,
+
+customerId:
+customer.id,
+
+customerName:
+customer.name,
+
+          amount,
+
+          method:
+box.querySelector(
+              "#afPayMethod"
+            ).value,
+
+          reference:
+box.querySelector(
+              "#afPayReference"
+            ).value.trim(),
+
+recordedAt:
+            new Date()
+              .toISOString(),
+
+recordedBy:
+currentUser()
+              .fullName ||
+currentUser()
+              .employeeId ||
+            ""
+
+        });
+
+        save(
+K.payments,
+          records
+        );
+
+wrap.remove();
+
+        alert(
+          "Customer payment saved successfully."
+        );
+
+        if (afterSave) {
+afterSave();
+        }
+
+      };
+  }
+
+  /* =======================================================
+     BALANCES
+     ======================================================= */
+
+  function openBalances() {
+
+    if (!requireAccess()) {
+      return;
+    }
+
+const {
+      wrap,
+      box
+    } =
+      modal(
+        "afBalances",
+        1050
+      );
+
+const customers =
+customerList();
+
+box.innerHTML = `
+
+      ${title(
+        "📒 Customer Balances",
+        "Sales less recorded customer payments",
+        "afBalancesClose"
+      )}
+
+<div style="
+overflow:auto;
+      ">
+
+<table style="
+          width:100%;
+          min-width:850px;
+border-collapse:collapse;
+        ">
+
+<thead>
+
+<tr style="
+              background:#eaf5ee;
+text-align:left;
+            ">
+
+<th>Customer</th>
+<th>Phone</th>
+<th>Total Sales</th>
+<th>Total Paid</th>
+<th>Balance</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+          ${
+            customers
+              .map(
+                c => {
+
+const t =
+customerTotals(c);
+
+                  return `
+
+<tr>
+
+<td>
+<b>
+                          ${esc(c.name)}
+</b>
+</td>
+
+<td>
+                        ${esc(
+c.phone ||
+                          "-"
+                        )}
+</td>
+
+<td>
+                        ${money(
+t.sales
+                        )}
+</td>
+
+<td>
+                        ${money(
+t.paid
+                        )}
+</td>
+
+<td>
+<b style="
+                          color:
+                          ${
+t.balance> 0
+                              ? "#b42318"
+                              : "#0b5d3b"
+                          };
+                        ">
+                          ${money(
+t.balance
+                          )}
+</b>
+</td>
+
+</tr>
+
+                  `;
+
+                }
+              )
+              .join("") ||
+
+            `
+<tr>
+<td
+colspan="5"
+                  style="
+text-align:center;
+                    padding:20px;
+                  "
+>
+                  No customers available.
+</td>
+</tr>
+            `
+          }
+
+</tbody>
+
+</table>
+
+</div>
+
+    `;
+
+box.querySelectorAll(
+      "th,td"
+    ).forEach(
+      x => {
+
+x.style.padding =
+          "9px";
+
+x.style.borderBottom =
+          "1px solid #eee";
+
+      }
+    );
+
+box.querySelector(
+      "#afBalancesClose"
+    ).onclick =
+      () =>wrap.remove();
+  }
+
+  /* =======================================================
+     FOLLOW-UPS
+     ======================================================= */
+
+  function openFollowups() {
+
+    if (!requireAccess()) {
+      return;
+    }
+
+const {
+      wrap,
+      box
+    } =
+      modal(
+        "afFollowups",
+        1100
+      );
+
+    function render() {
+
+const records =
+followupList()
+          .slice()
+          .sort(
+            (a, b) =>
+              String(
+a.dueDate
+              ).localeCompare(
+                String(
+b.dueDate
+                )
+              )
+          );
+
+box.innerHTML = `
+
+        ${title(
+          "📞 Customer Follow-ups",
+          "Calls, visits, quotations, payments and delivery follow-up",
+          "afFollowupsClose"
+        )}
+
+<button
+          id="afNewFollowup"
+          style="${btn()}margin-bottom:14px;"
+>
+          + Add Follow-up
+</button>
+
+<div style="
+overflow:auto;
+        ">
+
+<table style="
+            width:100%;
+            min-width:950px;
+border-collapse:collapse;
+          ">
+
+<thead>
+
+<tr style="
+                background:#eaf5ee;
+text-align:left;
+              ">
+
+<th>Due Date</th>
+<th>Customer</th>
+<th>Type</th>
+<th>Details</th>
+<th>Status</th>
+<th>Action</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+            ${
+              records
+                .map(
+                  r => `
+
+<tr style="
+                      ${
+r.status ===
+                          "PENDING" &&
+r.dueDate<
+                          today()
+
+                          ? "background:#fff4e5;"
+                          : ""
+                      }
+                    ">
+
+<td>
+                        ${esc(
+r.dueDate
+                        )}
+</td>
+
+<td>
+<b>
+                          ${esc(
+r.customerName
+                          )}
+</b>
+</td>
+
+<td>
+                        ${esc(
+r.type
+                        )}
+</td>
+
+<td>
+                        ${esc(
+r.note
+                        )}
+</td>
+
+<td>
+<b>
+                          ${esc(
+r.status
+                          )}
+</b>
+</td>
+
+<td>
+
+                        ${
+r.status ===
+                          "PENDING"
+
+                            ? `
+<button
+                                data-done="${esc(
+r.id
+                                )}"
+>
+                                Mark Done
+</button>
+                            `
+
+                            : "-"
+                        }
+
+</td>
+
+</tr>
+
+                  `
+                )
+                .join("") ||
+
+              `
+<tr>
+<td
+colspan="6"
+                    style="
+text-align:center;
+                      padding:20px;
+                    "
+>
+                    No follow-ups saved.
+</td>
+</tr>
+              `
+            }
+
+</tbody>
+
+</table>
+
+</div>
+
+      `;
+
+box.querySelectorAll(
+        "th,td"
+      ).forEach(
+        x => {
+
+x.style.padding =
+            "9px";
+
+x.style.borderBottom =
+            "1px solid #eee";
+
+        }
+      );
+
+box.querySelector(
+        "#afFollowupsClose"
+      ).onclick =
+        () =>wrap.remove();
+
+box.querySelector(
+        "#afNewFollowup"
+      ).onclick =
+        () =>
+openFollowupForm(
+            render
+          );
+
+box.querySelectorAll(
+        "[data-done]"
+      ).forEach(
+        b =>
+b.onclick =
+            () => {
+
+const records2 =
+followupList();
+
+const r =
+                records2.find(
+                  x =>
+                    String(x.id) ===
+                    String(
+b.dataset.done
+                    )
+                );
+
+              if (!r) {
+                return;
+              }
+
+r.status =
+                "COMPLETED";
+
+r.completedAt =
+                new Date()
+                  .toISOString();
+
+r.completedBy =
+currentUser()
+                  .fullName ||
+currentUser()
+                  .employeeId ||
+                "";
+
+              save(
+K.followups,
+                records2
+              );
+
+              render();
+
+            }
+      );
+
+    }
+
+    render();
+  }
+
+  function openFollowupForm(
+afterSave
+  ) {
+
+const customers =
+customerList();
+
+const {
+      wrap,
+      box
+    } =
+      modal(
+        "afFollowupForm",
+        700
+      );
+
+box.innerHTML = `
+
+      ${title(
+        "Add Customer Follow-up",
+        "Set the next action and due date",
+        "afFollowupFormClose"
+      )}
+
+<div>
+
+<label>
+<b>Customer *</b>
+</label>
+
+<select
+          id="afFUCustomer"
+          style="${input()}margin-top:5px;"
+>
+
+<option value="">
+            Select customer
+</option>
+
+          ${
+            customers
+              .map(
+                c => `
+
+<option
+                    value="${esc(c.id)}"
+>
+                    ${esc(c.name)}
+</option>
+
+                `
+              )
+              .join("")
+          }
+
+</select>
+
+</div>
+
+<div style="
+display:grid;
+        grid-template-columns:
+          1fr 1fr;
+        gap:12px;
+        margin-top:12px;
+      ">
+
+<div>
+
+<label>
+<b>Due Date *</b>
+</label>
+
+<input
+            id="afFUDate"
+            type="date"
+            value="${today()}"
+            style="${input()}margin-top:5px;"
+>
+
+</div>
+
+<div>
+
+<label>
+<b>Type</b>
+</label>
+
+<select
+            id="afFUType"
+            style="${input()}margin-top:5px;"
+>
+
+<option>Call</option>
+<option>WhatsApp</option>
+<option>Visit</option>
+<option>Quotation</option>
+<option>Payment</option>
+<option>Delivery</option>
+<option>Other</option>
+
+</select>
+
+</div>
+
+</div>
+
+<div style="
+        margin-top:12px;
+      ">
+
+<label>
+<b>
+            Follow-up Details *
+</b>
+</label>
+
+<textarea
+          id="afFUNote"
+          rows="4"
+          style="${input()}margin-top:5px;"
+></textarea>
+
+</div>
+
+<button
+        id="afFUSave"
+        style="${btn()}width:100%;margin-top:15px;"
+>
+💾 Save Follow-up
+</button>
+
+    `;
+
+box.querySelector(
+      "#afFollowupFormClose"
+    ).onclick =
+      () =>wrap.remove();
+
+box.querySelector(
+      "#afFUSave"
+    ).onclick =
+      () => {
+
+const customer =
+customers.find(
+            c =>
+              String(c.id) ===
+              String(
+box.querySelector(
+                  "#afFUCustomer"
+                ).value
+              )
+          );
+
+const dueDate =
+box.querySelector(
+            "#afFUDate"
+          ).value;
+
+const note =
+box.querySelector(
+            "#afFUNote"
+          ).value.trim();
+
+        if (!customer) {
+
+          return alert(
+            "Please select a customer."
+          );
+
+        }
+
+        if (!dueDate) {
+
+          return alert(
+            "Please select the due date."
+          );
+
+        }
+
+        if (!note) {
+
+          return alert(
+            "Please enter follow-up details."
+          );
+
+        }
+
+const records =
+followupList();
+
+records.push({
+
+          id:
+uid("FUP"),
+
+customerId:
+customer.id,
+
+customerName:
+customer.name,
+
+customerPhone:
+customer.phone,
+
+dueDate,
+
+          type:
+box.querySelector(
+              "#afFUType"
+            ).value,
+
+          note,
+
+          status:
+            "PENDING",
+
+createdAt:
+            new Date()
+              .toISOString(),
+
+createdBy:
+currentUser()
+              .fullName ||
+currentUser()
+              .employeeId ||
+            ""
+
+        });
+
+        save(
+K.followups,
+          records
+        );
+
+wrap.remove();
+
+        alert(
+          "Follow-up saved successfully."
+        );
+
+        if (afterSave) {
+afterSave();
+        }
+
+      };
+  }
+
+  /* =======================================================
+     EXPOSE TO EXISTING SIDEBAR
+     ======================================================= */
+
+window.clientRegistration =
+clientRegistration;
+
+window.openAFSalesCustomers =
+clientRegistration;
+
+console.log(
+    "A&F Sales & Customers module connected successfully."
+  );
+
+})();
