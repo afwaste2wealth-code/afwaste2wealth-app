@@ -54422,100 +54422,194 @@ Math.max(
     };
   }
 
-  function syncExistingCustomers() {
+ function syncExistingCustomers() {
 
-const customers =
-customerList();
+const savedCustomers =
+    read(
+K.customers,
+      []
+    );
 
-    let changed = false;
+  let customers =
+Array.isArray(savedCustomers)
+      ? savedCustomers.filter(
+          customer =>
+customer.status !==
+            "DELETED"
+        )
+      : [];
 
+
+  /*
+   * ONLY active deliveries may create
+   * automatic customer records.
+   * Cancelled / reversed deliveries
+   * are ignored completely.
+   */
+const activeDeliveries =
 deliveryList()
-      .forEach(r => {
+      .filter(record => {
 
-const name =
+        return (
+          !isCancelled(record) &&
           String(
-r.customerName || ""
-          ).trim();
-
-        if (!name) {
-          return;
-        }
-
-const exists =
-customers.some(
-            c =>
-sameCustomer(
-                c,
-                r
-              )
-          );
-
-        if (exists) {
-          return;
-        }
-
-customers.push({
-
-          id:
-uid("CUS"),
-
-customerNo:
-            "CUS-" +
-            String(
-customers.length + 1
-            ).padStart(
-              4,
-              "0"
-            ),
-
-          name,
-
-          phone:
-            String(
-r.customerPhone || ""
-            ).trim(),
-
-          email:
-            "",
-
-          location:
-            String(
-r.deliveryPlace ||
-r.destination ||
-              ""
-            ).trim(),
-
-contactPerson:
-            "",
-
-          notes:
-            "Imported from an existing delivery record.",
-
-          status:
-            "ACTIVE",
-
-createdAt:
-            new Date()
-              .toISOString(),
-
-createdBy:
-            "SYSTEM IMPORT"
-
-        });
-
-        changed = true;
+record.customerName ||
+            ""
+          ).trim()
+        );
 
       });
 
-    if (changed) {
-      save(
-K.customers,
-        customers
-      );
-    }
 
-    return customers;
+  /*
+   * Remove automatically imported
+   * customers when they no longer have
+   * any active delivery.
+   *
+   * Manually registered customers are
+   * NEVER removed here.
+   */
+const beforeCount =
+customers.length;
+
+  customers =
+customers.filter(
+      customer => {
+
+const wasSystemImported =
+          String(
+customer.createdBy ||
+            ""
+          )
+            .trim()
+            .toUpperCase() ===
+          "SYSTEM IMPORT";
+
+
+        if (!wasSystemImported) {
+
+          return true;
+
+        }
+
+
+        return activeDeliveries.some(
+          record =>
+sameCustomer(
+              customer,
+              record
+            )
+        );
+
+      }
+    );
+
+
+  let changed =
+customers.length !==
+beforeCount;
+
+
+  /*
+   * Import customers only from
+   * ACTIVE deliveries.
+   */
+activeDeliveries
+    .forEach(record => {
+
+const name =
+        String(
+record.customerName ||
+          ""
+        ).trim();
+
+
+const exists =
+customers.some(
+          customer =>
+sameCustomer(
+              customer,
+              record
+            )
+        );
+
+
+      if (exists) {
+
+        return;
+
+      }
+
+
+customers.push({
+
+        id:
+uid("CUS"),
+
+customerNo:
+          "CUS-" +
+          String(
+customers.length + 1
+          ).padStart(
+            4,
+            "0"
+          ),
+
+        name,
+
+        phone:
+          String(
+record.customerPhone ||
+            ""
+          ).trim(),
+
+        email:
+          "",
+
+        location:
+          String(
+record.deliveryPlace ||
+record.destination ||
+            ""
+          ).trim(),
+
+contactPerson:
+          "",
+
+        notes:
+          "Imported from an existing active delivery record.",
+
+        status:
+          "ACTIVE",
+
+createdAt:
+          new Date()
+            .toISOString(),
+
+createdBy:
+          "SYSTEM IMPORT"
+
+      });
+
+
+      changed = true;
+
+    });
+
+
+  if (changed) {
+
+    save(
+K.customers,
+      customers
+    );
+
   }
+
+
+  return customers;
+
+}
 
   /* =======================================================
      MAIN SALES & CUSTOMERS SCREEN
