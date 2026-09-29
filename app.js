@@ -54849,7 +54849,7 @@ box.querySelector(
       "#afSCPrices"
     ).onclick =
       () => {
-
+wrap.remove();
         if (
 typeof viewPoleStandardPrices ===
           "function"
