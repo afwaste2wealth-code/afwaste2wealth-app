@@ -50398,7 +50398,11 @@ netProfitLoss:
     0,
 
 profitMargin:
-    null
+    null,
+productionAudit:
+   [],
+cogsAudit:
+   []
 
   })
 );
@@ -51304,6 +51308,238 @@ breakdown.totalPoles ||
   0
 );
 
+/* -------------------------
+   COGS AUDIT - PRODUCTION
+   ------------------------- */
+
+if (
+date.year ===
+selectedYear
+) {
+
+const productionSources =
+Array.isArray(
+record.washedSources
+)
+  ? record.washedSources
+  : [];
+
+
+const sourceAudit =
+productionSources.map(
+  source => {
+
+const kgUsed =
+Number(
+source.kgUsed ||
+  0
+);
+
+
+const unitCost =
+getBatchUnitCost(
+source.sourceBatchNumber
+);
+
+
+    return {
+
+batchNumber:
+      String(
+source.sourceBatchNumber ||
+        ""
+      ),
+
+washingSubBatch:
+      String(
+source.washingSubBatchNumber ||
+        ""
+      ),
+
+kgUsed,
+
+unitCost,
+
+materialCost:
+kgUsed *
+unitCost
+
+    };
+
+  }
+);
+
+
+const auditInputKg =
+Number(
+record.productionInputKg ||
+productionSources.reduce(
+  (sum, source) =>
+    sum +
+    Number(
+source.kgUsed ||
+      0
+    ),
+  0
+)
+);
+
+
+const auditLossKg =
+Number(
+record.productionProcessLossKg ??
+Math.max(
+auditInputKg -
+finishedKg,
+  0
+)
+);
+
+
+const poleAudit =
+breakdown.entries.map(
+  entry => {
+
+const qty =
+Number(
+entry.quantity ||
+  0
+);
+
+
+const entryFinishedKg =
+Number(
+entry.finishedKg ||
+  0
+);
+
+
+let allocatedCost = 0;
+
+
+if (
+finishedKg> 0
+) {
+
+allocatedCost =
+Number(
+breakdown.inputMaterialCost ||
+  0
+) *
+(
+entryFinishedKg /
+finishedKg
+);
+
+} else if (
+totalQty> 0
+) {
+
+allocatedCost =
+Number(
+breakdown.inputMaterialCost ||
+  0
+) *
+(
+qty /
+totalQty
+);
+
+}
+
+
+    return {
+
+      key:
+      String(
+entry.key ||
+        ""
+      ),
+
+      quantity:
+qty,
+
+finishedKg:
+entryFinishedKg,
+
+allocatedCost,
+
+costPerPole:
+qty> 0
+        ? allocatedCost / qty
+        : 0
+
+    };
+
+  }
+);
+
+
+months[
+date.month
+].productionAudit.push({
+
+  date:
+  String(
+record.date ||
+record.createdAt ||
+    ""
+  ).slice(
+    0,
+    10
+  ),
+
+productionId:
+record.id ||
+  "",
+
+sourceAudit,
+
+inputKg:
+auditInputKg,
+
+inputMaterialCost:
+  Number(
+breakdown.inputMaterialCost ||
+    0
+  ),
+
+finishedKg,
+
+processLossKg:
+auditLossKg,
+
+totalPoles:
+totalQty,
+
+averageCostPerPole:
+totalQty> 0
+    ? (
+        Number(
+breakdown.inputMaterialCost ||
+          0
+        ) /
+totalQty
+      )
+    : 0,
+
+averageCostPerFinishedKg:
+finishedKg> 0
+    ? (
+        Number(
+breakdown.inputMaterialCost ||
+          0
+        ) /
+finishedKg
+      )
+    : 0,
+
+  poles:
+poleAudit
+
+});
+
+}
 
 breakdown.entries.forEach(
   entry => {
@@ -51363,16 +51599,229 @@ totalQty
 
 const bucket =
 getInventoryBucket(
-entry.key
+item.key ||
+item.name
 );
 
 
-bucket.quantity +=
-quantity;
+const fallbackCost =
+getFallbackPoleCost(
+  item
+);
 
 
-bucket.value +=
-costShare;
+const inventoryQtyBefore =
+Number(
+bucket.quantity ||
+  0
+);
+
+
+const inventoryValueBefore =
+Number(
+bucket.value ||
+  0
+);
+
+
+const averageCostBefore =
+inventoryQtyBefore> 0
+  ? (
+inventoryValueBefore /
+inventoryQtyBefore
+    )
+  : fallbackCost;
+
+
+let itemCOGS = 0;
+
+let costingMethod =
+"Fallback";
+
+
+if (
+bucket.quantity> 0
+) {
+
+constaverageCost =
+bucket.value /
+bucket.quantity;
+
+
+constquantityFromInventory =
+Math.min(
+  quantity,
+bucket.quantity
+);
+
+
+constinventoryCost =
+quantityFromInventory *
+averageCost;
+
+
+constshortageQty =
+Math.max(
+  quantity -
+quantityFromInventory,
+  0
+);
+
+
+constshortageCost =
+shortageQty *
+fallbackCost;
+
+
+itemCOGS =
+inventoryCost +
+shortageCost;
+
+
+costingMethod =
+shortageQty> 0
+  ? "Weighted Average + Fallback"
+  : "Weighted Average";
+
+
+bucket.quantity -=
+quantityFromInventory;
+
+
+bucket.value =
+Math.max(
+bucket.value -
+inventoryCost,
+  0
+);
+
+
+} else {
+
+itemCOGS =
+quantity *
+fallbackCost;
+
+}
+
+
+deliveryCOGS +=
+itemCOGS;
+
+
+/* -------------------------
+   COGS AUDIT - SALE
+   ------------------------- */
+
+if (
+inSelectedYear
+) {
+
+const grossDeliverySale =
+Number(
+record.grossSaleTotal ??
+record.standardSaleTotal ??
+  0
+);
+
+
+const finalDeliverySale =
+Number(
+record.finalSaleTotal ??
+record.saleAmount ??
+record.netSaleTotal ??
+  0
+);
+
+
+const itemGrossSale =
+Number(
+item.subtotal ??
+(
+  quantity *
+  Number(
+item.unitPrice ??
+item.standardUnitPrice ??
+    0
+  )
+)
+);
+
+
+const lineSaleValue =
+grossDeliverySale> 0
+
+  ? (
+finalDeliverySale *
+      (
+itemGrossSale /
+grossDeliverySale
+      )
+    )
+
+  : 0;
+
+
+months[
+date.month
+].cogsAudit.push({
+
+  date:
+  String(
+record.date ||
+record.createdAt ||
+    ""
+  ).slice(
+    0,
+    10
+  ),
+
+deliveryNumber:
+  String(
+record.deliveryNumber ||
+    ""
+  ),
+
+  customer:
+  String(
+record.customerName ||
+    ""
+  ),
+
+poleType:
+  String(
+item.name ||
+item.key ||
+    "Poles"
+  ),
+
+quantitySold:
+  quantity,
+
+inventoryQtyBefore,
+
+inventoryValueBefore,
+
+averageCostPerPole:
+averageCostBefore,
+
+fallbackCostPerPole:
+fallbackCost,
+
+costingMethod,
+
+  cogs:
+itemCOGS,
+
+saleValue:
+lineSaleValue,
+
+missingRevenue:
+lineSaleValue<= 0
+
+});
+
+}
 
 });
 
