@@ -51599,232 +51599,18 @@ totalQty
 
 const bucket =
 getInventoryBucket(
-item.key ||
-item.name
+entry.key
 );
 
 
-const fallbackCost =
-getFallbackPoleCost(
-  item
-);
+bucket.quantity +=
+quantity;
 
 
-const inventoryQtyBefore =
-Number(
-bucket.quantity ||
-  0
-);
-
-
-const inventoryValueBefore =
-Number(
-bucket.value ||
-  0
-);
-
-
-const averageCostBefore =
-inventoryQtyBefore> 0
-  ? (
-inventoryValueBefore /
-inventoryQtyBefore
-    )
-  : fallbackCost;
-
-
-let itemCOGS = 0;
-
-let costingMethod =
-"Fallback";
-
-
-if (
-bucket.quantity> 0
-) {
-
-constaverageCost =
-bucket.value /
-bucket.quantity;
-
-
-constquantityFromInventory =
-Math.min(
-  quantity,
-bucket.quantity
-);
-
-
-constinventoryCost =
-quantityFromInventory *
-averageCost;
-
-
-constshortageQty =
-Math.max(
-  quantity -
-quantityFromInventory,
-  0
-);
-
-
-constshortageCost =
-shortageQty *
-fallbackCost;
-
-
-itemCOGS =
-inventoryCost +
-shortageCost;
-
-
-costingMethod =
-shortageQty> 0
-  ? "Weighted Average + Fallback"
-  : "Weighted Average";
-
-
-bucket.quantity -=
-quantityFromInventory;
-
-
-bucket.value =
-Math.max(
-bucket.value -
-inventoryCost,
-  0
-);
-
-
-} else {
-
-itemCOGS =
-quantity *
-fallbackCost;
-
-}
-
-
-deliveryCOGS +=
-itemCOGS;
-
-
-/* -------------------------
-   COGS AUDIT - SALE
-   ------------------------- */
-
-if (
-inSelectedYear
-) {
-
-const grossDeliverySale =
-Number(
-record.grossSaleTotal ??
-record.standardSaleTotal ??
-  0
-);
-
-
-const finalDeliverySale =
-Number(
-record.finalSaleTotal ??
-record.saleAmount ??
-record.netSaleTotal ??
-  0
-);
-
-
-const itemGrossSale =
-Number(
-item.subtotal ??
-(
-  quantity *
-  Number(
-item.unitPrice ??
-item.standardUnitPrice ??
-    0
-  )
-)
-);
-
-
-const lineSaleValue =
-grossDeliverySale> 0
-
-  ? (
-finalDeliverySale *
-      (
-itemGrossSale /
-grossDeliverySale
-      )
-    )
-
-  : 0;
-
-
-months[
-date.month
-].cogsAudit.push({
-
-  date:
-  String(
-record.date ||
-record.createdAt ||
-    ""
-  ).slice(
-    0,
-    10
-  ),
-
-deliveryNumber:
-  String(
-record.deliveryNumber ||
-    ""
-  ),
-
-  customer:
-  String(
-record.customerName ||
-    ""
-  ),
-
-poleType:
-  String(
-item.name ||
-item.key ||
-    "Poles"
-  ),
-
-quantitySold:
-  quantity,
-
-inventoryQtyBefore,
-
-inventoryValueBefore,
-
-averageCostPerPole:
-averageCostBefore,
-
-fallbackCostPerPole:
-fallbackCost,
-
-costingMethod,
-
-  cogs:
-itemCOGS,
-
-saleValue:
-lineSaleValue,
-
-missingRevenue:
-lineSaleValue<= 0
+bucket.value +=
+costShare;
 
 });
-
-}
-
-});
-
 
 }
 
@@ -51909,9 +51695,40 @@ getFallbackPoleCost(
 );
 
 
-if (
-bucket.quantity>
+const inventoryQtyBefore =
+Number(
+bucket.quantity ||
   0
+);
+
+
+const inventoryValueBefore =
+Number(
+bucket.value ||
+  0
+);
+
+
+const averageCostBefore =
+inventoryQtyBefore> 0
+
+  ? (
+inventoryValueBefore /
+inventoryQtyBefore
+    )
+
+  : fallbackCost;
+
+
+let itemCOGS = 0;
+
+
+let costingMethod =
+"Fallback";
+
+
+if (
+bucket.quantity> 0
 ) {
 
 const averageCost =
@@ -51944,9 +51761,17 @@ shortageQty *
 fallbackCost;
 
 
-deliveryCOGS +=
+itemCOGS =
 inventoryCost +
 shortageCost;
+
+
+costingMethod =
+shortageQty> 0
+
+  ? "Weighted Average + Fallback"
+
+  : "Weighted Average";
 
 
 bucket.quantity -=
@@ -51963,14 +51788,132 @@ inventoryCost,
 
 } else {
 
-deliveryCOGS +=
+itemCOGS =
 quantity *
 fallbackCost;
 
 }
 
+
+deliveryCOGS +=
+itemCOGS;
+
+
+/* -------------------------
+   COGS AUDIT - SALE
+   ------------------------- */
+
+if (
+inSelectedYear
+) {
+
+const grossDeliverySale =
+Number(
+record.grossSaleTotal ??
+record.standardSaleTotal ??
+  0
+);
+
+
+const finalDeliverySale =
+Number(
+record.finalSaleTotal ??
+record.saleAmount ??
+record.netSaleTotal ??
+  0
+);
+
+
+const itemGrossSale =
+Number(
+item.subtotal ??
+  (
+    quantity *
+    Number(
+item.unitPrice ??
+item.standardUnitPrice ??
+      0
+    )
+  )
+);
+
+
+const lineSaleValue =
+grossDeliverySale> 0
+
+  ? (
+finalDeliverySale *
+      (
+itemGrossSale /
+grossDeliverySale
+      )
+    )
+
+  : 0;
+
+
+months[
+date.month
+].cogsAudit.push({
+
+  date:
+  String(
+record.date ||
+record.createdAt ||
+    ""
+  ).slice(
+    0,
+    10
+  ),
+
+deliveryNumber:
+  String(
+record.deliveryNumber ||
+    ""
+  ),
+
+  customer:
+  String(
+record.customerName ||
+    ""
+  ),
+
+poleType:
+  String(
+item.name ||
+item.key ||
+    "Poles"
+  ),
+
+quantitySold:
+  quantity,
+
+inventoryQtyBefore,
+
+inventoryValueBefore,
+
+averageCostPerPole:
+averageCostBefore,
+
+fallbackCostPerPole:
+fallbackCost,
+
+costingMethod,
+
+  cogs:
+itemCOGS,
+
+saleValue:
+lineSaleValue,
+
+missingRevenue:
+lineSaleValue<= 0
+
 });
 
+}
+
+});
 
 if (
 inSelectedYear
