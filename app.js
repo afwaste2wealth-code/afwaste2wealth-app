@@ -57328,3 +57328,390 @@ console.log(
   );
 
 })();
+
+/* =========================================================
+   A&F REGISTERED CUSTOMERS → RECORD DELIVERY
+   Paste ONCE at the very bottom of app.js
+   ========================================================= */
+
+(function connectAFRegisteredCustomersToDelivery() {
+
+  function readAFCustomers() {
+
+    try {
+
+const records =
+JSON.parse(
+localStorage.getItem(
+            "afCustomers"
+          ) || "[]"
+        );
+
+      return Array.isArray(records)
+        ? records.filter(
+            customer =>
+              String(
+customer.status || "ACTIVE"
+              ).toUpperCase() !==
+              "DELETED"
+          )
+        : [];
+
+    } catch (error) {
+
+console.error(
+        "Unable to read registered customers:",
+        error
+      );
+
+      return [];
+
+    }
+
+  }
+
+
+  function enhanceAFDeliveryCustomer() {
+
+const modal =
+document.getElementById(
+        "afRecordDeliveryModal"
+      );
+
+    if (!modal) {
+      return;
+    }
+
+
+    /* Prevent duplicate selector */
+    if (
+modal.querySelector(
+        "#afRegisteredCustomerSelect"
+      )
+    ) {
+      return;
+    }
+
+
+const customerInput =
+modal.querySelector(
+        "#afDeliveryCustomer"
+      );
+
+const phoneInput =
+modal.querySelector(
+        "#afDeliveryPhone"
+      );
+
+const placeInput =
+modal.querySelector(
+        "#afDeliveryPlace"
+      );
+
+
+    if (!customerInput) {
+      return;
+    }
+
+
+const customers =
+readAFCustomers();
+
+
+const panel =
+document.createElement(
+        "div"
+      );
+
+
+panel.style.cssText = `
+      margin-bottom:8px;
+    `;
+
+
+const label =
+document.createElement(
+        "div"
+      );
+
+
+label.textContent =
+      "Registered Customer";
+
+
+label.style.cssText = `
+      font-size:12px;
+font-weight:bold;
+      color:#0b5d3b;
+      margin-bottom:5px;
+    `;
+
+
+const select =
+document.createElement(
+        "select"
+      );
+
+
+select.id =
+      "afRegisteredCustomerSelect";
+
+
+select.style.cssText = `
+      width:100%;
+box-sizing:border-box;
+      padding:10px;
+      border:1px solid #0b5d3b;
+      border-radius:7px;
+      background:#eef8f2;
+      margin-bottom:5px;
+    `;
+
+
+const defaultOption =
+document.createElement(
+        "option"
+      );
+
+
+defaultOption.value = "";
+
+defaultOption.textContent =
+customers.length
+        ? "Select registered customer"
+        : "No registered customers available";
+
+
+select.appendChild(
+defaultOption
+    );
+
+
+customers.forEach(
+      customer => {
+
+const option =
+document.createElement(
+            "option"
+          );
+
+
+option.value =
+          String(
+customer.id || ""
+          );
+
+
+option.textContent =
+customer.name +
+          (
+customer.phone
+              ? " — " +
+customer.phone
+              : ""
+          );
+
+
+select.appendChild(
+          option
+        );
+
+      }
+    );
+
+
+const note =
+document.createElement(
+        "div"
+      );
+
+
+note.textContent =
+      "Select a saved customer, or leave this blank and enter a walk-in customer manually.";
+
+
+note.style.cssText = `
+      font-size:11px;
+      color:#666;
+      line-height:1.4;
+    `;
+
+
+panel.appendChild(
+      label
+    );
+
+panel.appendChild(
+      select
+    );
+
+panel.appendChild(
+      note
+    );
+
+
+customerInput.parentElement
+      .insertBefore(
+        panel,
+customerInput
+      );
+
+
+    function fillCustomer(
+      customer
+    ) {
+
+      if (!customer) {
+        return;
+      }
+
+
+customerInput.value =
+customer.name || "";
+
+
+      if (phoneInput) {
+
+phoneInput.value =
+customer.phone || "";
+
+      }
+
+
+      if (placeInput) {
+
+placeInput.value =
+customer.location || "";
+
+      }
+
+
+customerInput.dispatchEvent(
+        new Event(
+          "input",
+          {
+            bubbles: true
+          }
+        )
+      );
+
+
+customerInput.dispatchEvent(
+        new Event(
+          "change",
+          {
+            bubbles: true
+          }
+        )
+      );
+
+    }
+
+
+select.addEventListener(
+      "change",
+      function() {
+
+const customer =
+customers.find(
+            item =>
+              String(
+item.id || ""
+              ) ===
+              String(
+select.value || ""
+              )
+          );
+
+
+        if (customer) {
+
+fillCustomer(
+            customer
+          );
+
+        }
+
+      }
+    );
+
+
+    /*
+     * Also recognise a registered customer
+     * if the name is typed manually.
+     */
+customerInput.addEventListener(
+      "change",
+      function() {
+
+const typedName =
+          String(
+customerInput.value || ""
+          )
+            .trim()
+            .toLowerCase();
+
+
+const customer =
+customers.find(
+            item =>
+              String(
+item.name || ""
+              )
+                .trim()
+                .toLowerCase() ===
+typedName
+          );
+
+
+        if (customer) {
+
+select.value =
+customer.id || "";
+
+
+fillCustomer(
+            customer
+          );
+
+        }
+
+      }
+    );
+
+  }
+
+
+  /*
+   * Watch for Record Delivery opening.
+   * This works whether delivery is opened
+   * from Sales & Customers or elsewhere.
+   */
+const observer =
+    new MutationObserver(
+      function() {
+
+enhanceAFDeliveryCustomer();
+
+      }
+    );
+
+
+observer.observe(
+document.body,
+    {
+childList: true,
+      subtree: true
+    }
+  );
+
+
+  /* Also check immediately */
+enhanceAFDeliveryCustomer();
+
+
+console.log(
+    "Registered customers connected to Record Delivery."
+  );
+
+})();
