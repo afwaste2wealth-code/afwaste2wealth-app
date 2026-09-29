@@ -50197,3 +50197,2013 @@ openAFExpenses();
 }
 
 })();
+
+/* =========================================================
+   A&F MANAGEMENT PROFIT & LOSS
+   Sales - Material Purchases - Operating Expenses
+   ========================================================= */
+
+(function connectAFProfitLoss() {
+
+const AF_PL_MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December"
+];
+
+
+function afPLReadArray(key) {
+
+  try {
+
+const value =
+JSON.parse(
+localStorage.getItem(key) ||
+  "[]"
+);
+
+    return Array.isArray(value)
+      ? value
+      : [];
+
+  } catch (error) {
+
+    return [];
+
+  }
+
+}
+
+
+function afPLMoney(value) {
+
+  return (
+    "UGX " +
+Math.round(
+      Number(value || 0)
+    ).toLocaleString()
+  );
+
+}
+
+
+function afPLGetDateParts(value) {
+
+const text =
+String(value || "");
+
+
+const match =
+text.match(
+  /^(\d{4})-(\d{2})/
+);
+
+
+  if (!match) {
+    return null;
+  }
+
+
+  return {
+
+    year:
+    Number(match[1]),
+
+    month:
+    Number(match[2]) - 1
+
+  };
+
+}
+
+
+function getAFProfitLossData(year) {
+
+const selectedYear =
+Number(year);
+
+
+const materialRecords =
+afPLReadArray(
+  "materialRecords"
+);
+
+
+constdeliveryRecords =
+afPLReadArray(
+  "afDeliveryRecords"
+);
+
+
+let expenseRecords =
+afPLReadArray(
+  "expenses"
+);
+
+
+  if (!expenseRecords.length) {
+
+expenseRecords =
+afPLReadArray(
+  "expenseRecords"
+);
+
+  }
+
+
+const months =
+AF_PL_MONTHS.map(
+  (name, index) => ({
+
+    month:
+    index,
+
+    name,
+
+salesRevenue:
+    0,
+
+materialPurchases:
+    0,
+
+operatingExpenses:
+    0,
+
+netProfitLoss:
+    0,
+
+profitMargin:
+    null
+
+  })
+);
+
+
+/* =========================
+   MATERIAL PURCHASES
+   ========================= */
+
+materialRecords.forEach(
+  record => {
+
+const source =
+String(
+record.materialSource ||
+  ""
+).toLowerCase();
+
+
+const status =
+String(
+record.status ||
+  ""
+).toUpperCase();
+
+
+    if (
+      source === "client" ||
+      status === "CANCELLED"
+    ) {
+
+      return;
+
+    }
+
+
+const date =
+afPLGetDateParts(
+record.date ||
+record.purchaseDate ||
+record.recordedAt
+);
+
+
+    if (
+      !date ||
+date.year !==
+selectedYear
+    ) {
+
+      return;
+
+    }
+
+
+months[
+date.month
+].materialPurchases +=
+Number(
+record.totalCost || 0
+);
+
+  }
+);
+
+
+/* =========================
+   SALES REVENUE
+   ========================= */
+
+deliveryRecords.forEach(
+  record => {
+
+const status =
+String(
+record.status ||
+  ""
+).toUpperCase();
+
+
+    if (
+      status === "CANCELLED"
+    ) {
+
+      return;
+
+    }
+
+
+const date =
+afPLGetDateParts(
+record.date ||
+record.createdAt
+);
+
+
+    if (
+      !date ||
+date.year !==
+selectedYear
+    ) {
+
+      return;
+
+    }
+
+
+const revenue =
+Number(
+record.finalSaleTotal ??
+record.saleAmount ??
+record.netSaleTotal ??
+  0
+);
+
+
+months[
+date.month
+].salesRevenue +=
+revenue;
+
+  }
+);
+
+
+/* =========================
+   OPERATING EXPENSES
+   ========================= */
+
+expenseRecords.forEach(
+  record => {
+
+const status =
+String(
+record.status ||
+  ""
+).toUpperCase();
+
+
+    if (
+      status === "CANCELLED"
+    ) {
+
+      return;
+
+    }
+
+
+const date =
+afPLGetDateParts(
+record.date ||
+record.expenseDate ||
+record.createdAt
+);
+
+
+    if (
+      !date ||
+date.year !==
+selectedYear
+    ) {
+
+      return;
+
+    }
+
+
+months[
+date.month
+].operatingExpenses +=
+Number(
+record.amount || 0
+);
+
+  }
+);
+
+
+/* =========================
+   CALCULATE PROFIT
+   ========================= */
+
+months.forEach(
+  month => {
+
+month.netProfitLoss =
+month.salesRevenue -
+month.materialPurchases -
+month.operatingExpenses;
+
+
+month.profitMargin =
+month.salesRevenue> 0
+  ? (
+month.netProfitLoss /
+month.salesRevenue
+    ) * 100
+  : null;
+
+  }
+);
+
+
+const totals = {
+
+salesRevenue:
+months.reduce(
+    (sum, month) =>
+      sum +
+month.salesRevenue,
+    0
+  ),
+
+materialPurchases:
+months.reduce(
+    (sum, month) =>
+      sum +
+month.materialPurchases,
+    0
+  ),
+
+operatingExpenses:
+months.reduce(
+    (sum, month) =>
+      sum +
+month.operatingExpenses,
+    0
+  ),
+
+netProfitLoss:
+  0,
+
+profitMargin:
+  null
+
+};
+
+
+totals.netProfitLoss =
+totals.salesRevenue -
+totals.materialPurchases -
+totals.operatingExpenses;
+
+
+totals.profitMargin =
+totals.salesRevenue> 0
+  ? (
+totals.netProfitLoss /
+totals.salesRevenue
+    ) * 100
+  : null;
+
+
+  return {
+
+    year:
+selectedYear,
+
+    months,
+
+    totals
+
+  };
+
+}
+
+
+function getAFProfitLossYears() {
+
+const years =
+new Set([
+  new Date()
+    .getFullYear()
+]);
+
+
+const keys = [
+  "materialRecords",
+  "afDeliveryRecords",
+  "expenses",
+  "expenseRecords"
+];
+
+
+keys.forEach(
+  key => {
+
+afPLReadArray(
+  key
+).forEach(
+  record => {
+
+const date =
+afPLGetDateParts(
+record.date ||
+record.purchaseDate ||
+record.expenseDate ||
+record.createdAt ||
+record.recordedAt
+);
+
+
+    if (
+      date &&
+date.year>= 2000
+    ) {
+
+years.add(
+date.year
+);
+
+    }
+
+  }
+);
+
+  }
+);
+
+
+  return Array.from(
+    years
+  ).sort(
+    (a, b) =>
+      b - a
+  );
+
+}
+
+
+/* =========================================================
+   FULL PROFIT & LOSS REPORT
+   ========================================================= */
+
+function openAFProfitLossReport() {
+
+const currentUser =
+typeof getAFCurrentUser ===
+"function"
+  ? getAFCurrentUser()
+  : null;
+
+
+const role =
+String(
+currentUser?.role || ""
+);
+
+
+  if (
+    role !== "Director" &&
+    role !== "Secretary"
+  ) {
+
+    alert(
+      "Access Denied\n\n" +
+      "Only the Director and Secretary can view financial Profit & Loss reports."
+    );
+
+    return;
+
+  }
+
+
+const old =
+document.getElementById(
+  "afProfitLossModal"
+);
+
+
+  if (old) {
+old.remove();
+  }
+
+
+const years =
+getAFProfitLossYears();
+
+
+const currentYear =
+new Date()
+  .getFullYear();
+
+
+const modal =
+document.createElement(
+  "div"
+);
+
+
+modal.id =
+"afProfitLossModal";
+
+
+modal.style.cssText = `
+position:fixed;
+inset:0;
+background:rgba(0,0,0,.58);
+z-index:100000;
+display:flex;
+align-items:center;
+justify-content:center;
+padding:12px;
+box-sizing:border-box;
+font-family:Arial,sans-serif;
+`;
+
+
+modal.innerHTML = `
+
+<div style="
+  width:96%;
+  max-width:1100px;
+  max-height:94vh;
+overflow:auto;
+background:white;
+  border-radius:14px;
+  padding:22px;
+box-sizing:border-box;
+">
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:flex-start;
+  gap:12px;
+  margin-bottom:15px;
+">
+
+<div>
+
+<h2 style="
+  margin:0;
+  color:#0b5d3b;
+">
+📈 Management Profit & Loss
+</h2>
+
+<div style="
+  color:#666;
+  font-size:12px;
+  margin-top:4px;
+">
+Sales Revenue − Material Purchases − Operating Expenses
+</div>
+
+</div>
+
+
+<button
+  id="afClosePL"
+  type="button"
+  style="
+    border:0;
+    border-radius:7px;
+    background:#333;
+color:white;
+    padding:8px 12px;
+cursor:pointer;
+  "
+>
+✕ Close
+</button>
+
+</div>
+
+
+<div style="
+display:flex;
+  gap:10px;
+flex-wrap:wrap;
+align-items:end;
+  padding:12px;
+  background:#f5f8f6;
+  border-radius:9px;
+  margin-bottom:15px;
+">
+
+<div>
+
+<label style="
+  font-size:12px;
+font-weight:bold;
+">
+Year
+</label>
+
+<select
+  id="afPLYear"
+  style="
+display:block;
+    margin-top:5px;
+    padding:8px 10px;
+    border:1px solid #ccc;
+    border-radius:7px;
+  "
+>
+
+${years
+  .map(
+    year => `
+<option
+  value="${year}"
+  ${
+    year === currentYear
+      ? "selected"
+      : ""
+  }
+>
+${year}
+</option>
+    `
+  )
+  .join("")}
+
+</select>
+
+</div>
+
+
+<div>
+
+<label style="
+  font-size:12px;
+font-weight:bold;
+">
+Period
+</label>
+
+<select
+  id="afPLPeriod"
+  style="
+display:block;
+    margin-top:5px;
+    padding:8px 10px;
+    border:1px solid #ccc;
+    border-radius:7px;
+  "
+>
+
+<option value="all">
+Full Year
+</option>
+
+${AF_PL_MONTHS
+  .map(
+    (month, index) => `
+<option value="${index}">
+${month}
+</option>
+    `
+  )
+  .join("")}
+
+</select>
+
+</div>
+
+
+<button
+  id="afPLPrint"
+  type="button"
+  style="
+    padding:9px 13px;
+    border:0;
+    border-radius:7px;
+    background:#0b5d3b;
+color:white;
+font-weight:bold;
+cursor:pointer;
+  "
+>
+🖨 Print
+</button>
+
+
+<button
+  id="afPLCSV"
+  type="button"
+  style="
+    padding:9px 13px;
+    border:0;
+    border-radius:7px;
+    background:#1976d2;
+color:white;
+font-weight:bold;
+cursor:pointer;
+  "
+>
+⬇ CSV
+</button>
+
+</div>
+
+
+<div
+  id="afPLContent"
+>
+</div>
+
+</div>
+
+`;
+
+
+document.body.appendChild(
+  modal
+);
+
+
+const content =
+modal.querySelector(
+  "#afPLContent"
+);
+
+
+function renderProfitLoss() {
+
+const year =
+Number(
+modal.querySelector(
+    "#afPLYear"
+  ).value
+);
+
+
+const period =
+modal.querySelector(
+  "#afPLPeriod"
+).value;
+
+
+const data =
+getAFProfitLossData(
+  year
+);
+
+
+const selectedMonths =
+period === "all"
+  ? data.months
+  : [
+data.months[
+        Number(period)
+      ]
+    ];
+
+
+const totals =
+period === "all"
+  ? data.totals
+  : {
+
+salesRevenue:
+selectedMonths[0]
+        .salesRevenue,
+
+materialPurchases:
+selectedMonths[0]
+        .materialPurchases,
+
+operatingExpenses:
+selectedMonths[0]
+        .operatingExpenses,
+
+netProfitLoss:
+selectedMonths[0]
+        .netProfitLoss,
+
+profitMargin:
+selectedMonths[0]
+        .profitMargin
+
+    };
+
+
+const rows =
+selectedMonths
+  .map(
+    month => `
+
+<tr>
+
+<td style="padding:9px;">
+${month.name}
+</td>
+
+<td style="
+  padding:9px;
+text-align:right;
+">
+${afPLMoney(
+month.salesRevenue
+)}
+</td>
+
+<td style="
+  padding:9px;
+text-align:right;
+">
+${afPLMoney(
+month.materialPurchases
+)}
+</td>
+
+<td style="
+  padding:9px;
+text-align:right;
+">
+${afPLMoney(
+month.operatingExpenses
+)}
+</td>
+
+<td style="
+  padding:9px;
+text-align:right;
+font-weight:bold;
+  color:${
+month.netProfitLoss>= 0
+      ? "#0b5d3b"
+      : "#b42318"
+  };
+">
+${afPLMoney(
+month.netProfitLoss
+)}
+</td>
+
+<td style="
+  padding:9px;
+text-align:right;
+">
+${
+month.profitMargin === null
+    ? "—"
+    : (
+month.profitMargin
+          .toFixed(1) +
+        "%"
+      )
+}
+</td>
+
+</tr>
+
+    `
+  )
+  .join("");
+
+
+content.innerHTML = `
+
+<div style="
+display:grid;
+  grid-template-columns:
+    repeat(auto-fit,minmax(180px,1fr));
+  gap:10px;
+  margin-bottom:16px;
+">
+
+<div style="
+  padding:14px;
+  background:#eef8f2;
+  border-radius:9px;
+">
+
+<div style="
+  font-size:11px;
+  color:#666;
+">
+Sales Revenue
+</div>
+
+<div style="
+  font-size:20px;
+font-weight:bold;
+  margin-top:5px;
+">
+${afPLMoney(
+totals.salesRevenue
+)}
+</div>
+
+</div>
+
+
+<div style="
+  padding:14px;
+  background:#f7f7f7;
+  border-radius:9px;
+">
+
+<div style="
+  font-size:11px;
+  color:#666;
+">
+Material Purchases
+</div>
+
+<div style="
+  font-size:20px;
+font-weight:bold;
+  margin-top:5px;
+">
+${afPLMoney(
+totals.materialPurchases
+)}
+</div>
+
+</div>
+
+
+<div style="
+  padding:14px;
+  background:#f7f7f7;
+  border-radius:9px;
+">
+
+<div style="
+  font-size:11px;
+  color:#666;
+">
+Operating Expenses
+</div>
+
+<div style="
+  font-size:20px;
+font-weight:bold;
+  margin-top:5px;
+">
+${afPLMoney(
+totals.operatingExpenses
+)}
+</div>
+
+</div>
+
+
+<div style="
+  padding:14px;
+  background:${
+totals.netProfitLoss>= 0
+      ? "#eaf7ef"
+      : "#fff0f0"
+  };
+  border-radius:9px;
+">
+
+<div style="
+  font-size:11px;
+  color:#666;
+">
+Net Profit / Loss
+</div>
+
+<div style="
+  font-size:20px;
+font-weight:bold;
+  margin-top:5px;
+  color:${
+totals.netProfitLoss>= 0
+      ? "#0b5d3b"
+      : "#b42318"
+  };
+">
+${afPLMoney(
+totals.netProfitLoss
+)}
+</div>
+
+<div style="
+  font-size:11px;
+  margin-top:4px;
+">
+Margin:
+${
+totals.profitMargin === null
+    ? "—"
+    : (
+totals.profitMargin
+          .toFixed(1) +
+        "%"
+      )
+}
+</div>
+
+</div>
+
+</div>
+
+
+<div style="
+overflow:auto;
+  border:1px solid #ddd;
+  border-radius:8px;
+">
+
+<table style="
+  width:100%;
+  min-width:800px;
+border-collapse:collapse;
+  font-size:12px;
+">
+
+<thead>
+
+<tr style="
+  background:#eaf5ee;
+">
+
+<th style="padding:9px;">
+Month
+</th>
+
+<th style="
+  padding:9px;
+text-align:right;
+">
+Sales Revenue
+</th>
+
+<th style="
+  padding:9px;
+text-align:right;
+">
+Material Purchases
+</th>
+
+<th style="
+  padding:9px;
+text-align:right;
+">
+Operating Expenses
+</th>
+
+<th style="
+  padding:9px;
+text-align:right;
+">
+Net Profit / Loss
+</th>
+
+<th style="
+  padding:9px;
+text-align:right;
+">
+Margin %
+</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+
+${rows}
+
+</tbody>
+
+</table>
+
+</div>
+
+
+<div style="
+  margin-top:14px;
+  padding:11px;
+  background:#fff7e6;
+  border-radius:8px;
+  font-size:12px;
+  color:#765400;
+  line-height:1.5;
+">
+
+<b>Management accounting note:</b>
+Material purchases are currently charged in the month purchased.
+This is a purchase-basis management P&L, not yet an
+inventory-adjusted COGS statement.
+
+<br><br>
+
+Sales revenue currently includes delivery records that contain
+a saved monetary sale value. Older deliveries without a saved
+sale value and client washing/pelletizing service income are not
+included until those billing records are connected.
+
+</div>
+
+`;
+
+}
+
+
+modal.querySelector(
+  "#afPLYear"
+).onchange =
+renderProfitLoss;
+
+
+modal.querySelector(
+  "#afPLPeriod"
+).onchange =
+renderProfitLoss;
+
+
+modal.querySelector(
+  "#afClosePL"
+).onclick =
+function() {
+
+modal.remove();
+
+};
+
+
+modal.querySelector(
+  "#afPLPrint"
+).onclick =
+function() {
+
+const year =
+modal.querySelector(
+  "#afPLYear"
+).value;
+
+
+const reportHTML =
+content.innerHTML;
+
+
+const printWindow =
+window.open(
+  "",
+  "_blank"
+);
+
+
+  if (!printWindow) {
+
+    alert(
+      "Please allow pop-ups to print this report."
+    );
+
+    return;
+
+  }
+
+
+printWindow.document.write(`
+
+<html>
+
+<head>
+
+<title>
+A&F Profit and Loss ${year}
+</title>
+
+<style>
+
+body {
+font-family:Arial,sans-serif;
+  padding:30px;
+  color:#222;
+}
+
+table {
+  width:100%;
+border-collapse:collapse;
+}
+
+th,
+td {
+  border:1px solid #bbb;
+  padding:9px;
+}
+
+th {
+  background:#eaf5ee;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<h1>
+A&F Wekavera Ltd
+</h1>
+
+<h2>
+Management Profit & Loss
+</h2>
+
+${reportHTML}
+
+</body>
+
+</html>
+
+`);
+
+
+printWindow.document.close();
+
+printWindow.focus();
+
+
+setTimeout(
+  function() {
+
+printWindow.print();
+
+  },
+  300
+);
+
+};
+
+
+modal.querySelector(
+  "#afPLCSV"
+).onclick =
+function() {
+
+const year =
+Number(
+modal.querySelector(
+    "#afPLYear"
+  ).value
+);
+
+
+const period =
+modal.querySelector(
+  "#afPLPeriod"
+).value;
+
+
+const data =
+getAFProfitLossData(
+  year
+);
+
+
+const rows =
+period === "all"
+  ? data.months
+  : [
+data.months[
+        Number(period)
+      ]
+    ];
+
+
+let csv =
+"Month,SalesRevenue,MaterialPurchases,OperatingExpenses,Net Profit Loss,Profit Margin %\n";
+
+
+rows.forEach(
+  month => {
+
+csv +=
+`"${month.name}",${month.salesRevenue},${month.materialPurchases},${month.operatingExpenses},${month.netProfitLoss},${month.profitMargin ?? ""}\n`;
+
+  }
+);
+
+
+const blob =
+new Blob(
+  [csv],
+  {
+    type:
+    "text/csv;charset=utf-8;"
+  }
+);
+
+
+const url =
+URL.createObjectURL(
+  blob
+);
+
+
+const link =
+document.createElement(
+  "a"
+);
+
+
+link.href =
+url;
+
+
+link.download =
+"A&F_Profit_Loss_" +
+year +
+".csv";
+
+
+document.body.appendChild(
+  link
+);
+
+
+link.click();
+
+
+document.body.removeChild(
+  link
+);
+
+
+URL.revokeObjectURL(
+url
+);
+
+};
+
+
+renderProfitLoss();
+
+}
+
+
+/* =========================================================
+   REPORTS HUB
+   ========================================================= */
+
+function openAFReportsHub() {
+
+const currentUser =
+typeof getAFCurrentUser ===
+"function"
+  ? getAFCurrentUser()
+  : null;
+
+
+const role =
+String(
+currentUser?.role || ""
+);
+
+
+const old =
+document.getElementById(
+  "afReportsHub"
+);
+
+
+  if (old) {
+old.remove();
+  }
+
+
+const modal =
+document.createElement(
+  "div"
+);
+
+
+modal.id =
+"afReportsHub";
+
+
+modal.style.cssText = `
+position:fixed;
+inset:0;
+background:rgba(0,0,0,.55);
+z-index:100000;
+display:flex;
+align-items:center;
+justify-content:center;
+padding:12px;
+box-sizing:border-box;
+font-family:Arial,sans-serif;
+`;
+
+
+const financialButton =
+(
+  role === "Director" ||
+  role === "Secretary"
+)
+
+  ? `
+
+<button
+  id="afOpenPLReport"
+  type="button"
+  style="
+    padding:22px;
+    border:1px solid #dbe4df;
+    border-radius:10px;
+    background:#eef8f2;
+text-align:left;
+cursor:pointer;
+  "
+>
+
+<div style="
+  font-size:18px;
+font-weight:bold;
+  color:#0b5d3b;
+">
+📈 Profit & Loss
+</div>
+
+<div style="
+  font-size:12px;
+  color:#666;
+  margin-top:6px;
+">
+Revenue, purchases, expenses, margin and net result
+</div>
+
+</button>
+
+  `
+
+  : "";
+
+
+modal.innerHTML = `
+
+<div style="
+background:white;
+  width:92%;
+  max-width:650px;
+  border-radius:14px;
+  padding:22px;
+">
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:center;
+  margin-bottom:16px;
+">
+
+<h2 style="
+  margin:0;
+  color:#0b5d3b;
+">
+📊 Reports
+</h2>
+
+
+<button
+  id="afCloseReportsHub"
+  type="button"
+  style="
+    border:0;
+    background:#333;
+color:white;
+    border-radius:7px;
+    padding:8px 12px;
+cursor:pointer;
+  "
+>
+✕ Close
+</button>
+
+</div>
+
+
+<div style="
+display:grid;
+  grid-template-columns:
+    repeat(auto-fit,minmax(230px,1fr));
+  gap:12px;
+">
+
+<button
+  id="afOpenOperationsReports"
+  type="button"
+  style="
+    padding:22px;
+    border:1px solid #dbe4df;
+    border-radius:10px;
+background:white;
+text-align:left;
+cursor:pointer;
+  "
+>
+
+<div style="
+  font-size:18px;
+font-weight:bold;
+  color:#0b5d3b;
+">
+📋 Operational Reports
+</div>
+
+<div style="
+  font-size:12px;
+  color:#666;
+  margin-top:6px;
+">
+Material, client services and production reports
+</div>
+
+</button>
+
+
+${financialButton}
+
+</div>
+
+</div>
+
+`;
+
+
+document.body.appendChild(
+  modal
+);
+
+
+modal.querySelector(
+  "#afCloseReportsHub"
+).onclick =
+function() {
+
+modal.remove();
+
+};
+
+
+modal.querySelector(
+  "#afOpenOperationsReports"
+).onclick =
+function() {
+
+modal.remove();
+
+
+  if (
+typeof monthlyClientSummary ===
+    "function"
+  ) {
+
+monthlyClientSummary();
+
+  } else {
+
+alert(
+  "Operational reports could not be opened."
+);
+
+  }
+
+};
+
+
+const plButton =
+modal.querySelector(
+  "#afOpenPLReport"
+);
+
+
+  if (plButton) {
+
+plButton.onclick =
+function() {
+
+modal.remove();
+
+openAFProfitLossReport();
+
+};
+
+  }
+
+}
+
+
+/* =========================================================
+   COMPACT DIRECTOR DASHBOARD P&L
+   ========================================================= */
+
+function renderAFProfitLossDashboardCard() {
+
+const currentUser =
+typeof getAFCurrentUser ===
+"function"
+  ? getAFCurrentUser()
+  : null;
+
+
+const existing =
+document.getElementById(
+  "afProfitLossDashboardCard"
+);
+
+
+  if (
+    !currentUser ||
+    String(
+currentUser.role || ""
+    ) !==
+    "Director"
+  ) {
+
+    if (existing) {
+existing.remove();
+    }
+
+    return;
+
+  }
+
+
+const now =
+new Date();
+
+
+const data =
+getAFProfitLossData(
+now.getFullYear()
+);
+
+
+const month =
+data.months[
+now.getMonth()
+];
+
+
+let card =
+existing;
+
+
+  if (!card) {
+
+card =
+document.createElement(
+  "section"
+);
+
+
+card.id =
+"afProfitLossDashboardCard";
+
+
+card.className =
+"card";
+
+
+card.style.cssText =
+"margin-top:16px;";
+
+
+const chartsCard =
+document.getElementById(
+  "afMonthlyBusinessChartsCard"
+);
+
+
+const dashboardGrid =
+document.getElementById(
+  "factoryDashboardGrid"
+);
+
+
+  if (chartsCard) {
+
+chartsCard.insertAdjacentElement(
+  "afterend",
+  card
+);
+
+  } else if (dashboardGrid) {
+
+dashboardGrid.insertAdjacentElement(
+  "afterend",
+  card
+);
+
+  } else {
+
+    return;
+
+  }
+
+}
+
+
+card.innerHTML = `
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:center;
+  gap:12px;
+flex-wrap:wrap;
+  margin-bottom:12px;
+">
+
+<div>
+
+<div class="title">
+💹 ${month.name} Management Profit & Loss
+</div>
+
+<div class="sub">
+Current month financial result
+</div>
+
+</div>
+
+
+<div style="
+display:flex;
+  gap:7px;
+">
+
+<button
+  id="afRefreshPLDashboard"
+  type="button"
+  style="
+    padding:7px 10px;
+    border:1px solid #ccc;
+    border-radius:7px;
+background:white;
+cursor:pointer;
+  "
+>
+↻ Refresh
+</button>
+
+
+<button
+  id="afOpenFullPL"
+  type="button"
+  style="
+    padding:7px 10px;
+    border:0;
+    border-radius:7px;
+    background:#0b5d3b;
+color:white;
+font-weight:bold;
+cursor:pointer;
+  "
+>
+View Full P&L
+</button>
+
+</div>
+
+</div>
+
+
+<div style="
+display:grid;
+  grid-template-columns:
+    repeat(auto-fit,minmax(170px,1fr));
+  gap:10px;
+">
+
+<div style="
+  padding:12px;
+  background:#eef8f2;
+  border-radius:8px;
+">
+<div class="kt">Sales Revenue</div>
+<div class="kv">
+${afPLMoney(
+month.salesRevenue
+)}
+</div>
+</div>
+
+
+<div style="
+  padding:12px;
+  background:#f7f7f7;
+  border-radius:8px;
+">
+<div class="kt">Material Purchases</div>
+<div class="kv">
+${afPLMoney(
+month.materialPurchases
+)}
+</div>
+</div>
+
+
+<div style="
+  padding:12px;
+  background:#f7f7f7;
+  border-radius:8px;
+">
+<div class="kt">Operating Expenses</div>
+<div class="kv">
+${afPLMoney(
+month.operatingExpenses
+)}
+</div>
+</div>
+
+
+<div style="
+  padding:12px;
+  background:${
+month.netProfitLoss>= 0
+      ? "#eaf7ef"
+      : "#fff0f0"
+  };
+  border-radius:8px;
+">
+<div class="kt">Net Profit / Loss</div>
+<div
+  class="kv"
+  style="
+    color:${
+month.netProfitLoss>= 0
+        ? "#0b5d3b"
+        : "#b42318"
+    };
+  "
+>
+${afPLMoney(
+month.netProfitLoss
+)}
+</div>
+
+<div class="note">
+Margin:
+${
+month.profitMargin === null
+    ? "—"
+    : (
+month.profitMargin
+          .toFixed(1) +
+        "%"
+      )
+}
+</div>
+
+</div>
+
+</div>
+
+`;
+
+
+card.querySelector(
+  "#afRefreshPLDashboard"
+).onclick =
+renderAFProfitLossDashboardCard;
+
+
+card.querySelector(
+  "#afOpenFullPL"
+).onclick =
+openAFProfitLossReport;
+
+}
+
+
+/* =========================================================
+   CONNECT REPORTS SIDEBAR
+   ========================================================= */
+
+if (
+typeof openRoleModule ===
+  "function"
+) {
+
+const previousOpenRoleModulePL =
+openRoleModule;
+
+
+openRoleModule =
+function(moduleName) {
+
+  if (
+moduleName ===
+    "reports"
+  ) {
+
+openAFReportsHub();
+
+    return;
+
+  }
+
+
+  return previousOpenRoleModulePL
+    .apply(
+      this,
+      arguments
+    );
+
+};
+
+}
+
+
+/* =========================================================
+   REFRESH WITH ROLE DASHBOARD
+   ========================================================= */
+
+if (
+typeof applyAFRoleDashboard ===
+  "function"
+) {
+
+const previousApplyRoleDashboardPL =
+applyAFRoleDashboard;
+
+
+applyAFRoleDashboard =
+function() {
+
+const result =
+previousApplyRoleDashboardPL
+  .apply(
+    this,
+    arguments
+  );
+
+
+setTimeout(
+renderAFProfitLossDashboardCard,
+  0
+);
+
+
+  return result;
+
+};
+
+}
+
+
+/* =========================================================
+   EXPOSE
+   ========================================================= */
+
+window.getAFProfitLossData =
+getAFProfitLossData;
+
+window.openAFProfitLossReport =
+openAFProfitLossReport;
+
+window.openAFReportsHub =
+openAFReportsHub;
+
+window.renderAFProfitLossDashboardCard =
+renderAFProfitLossDashboardCard;
+
+
+setTimeout(
+renderAFProfitLossDashboardCard,
+  0
+);
+
+})();
