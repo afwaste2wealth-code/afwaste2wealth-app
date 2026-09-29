@@ -50298,6 +50298,12 @@ afPLReadArray(
 );
 
 
+const productionRecords =
+afPLReadArray(
+  "productionRecords"
+);
+
+
 const deliveryRecords =
 afPLReadArray(
   "afDeliveryRecords"
@@ -50310,14 +50316,56 @@ afPLReadArray(
 );
 
 
-  if (!expenseRecords.length) {
+if (!expenseRecords.length) {
 
 expenseRecords =
 afPLReadArray(
   "expenseRecords"
 );
 
-  }
+}
+
+
+let poleStandardWeights = {};
+
+
+try {
+
+poleStandardWeights =
+JSON.parse(
+localStorage.getItem(
+    "poleStandardWeights"
+  ) || "{}"
+);
+
+} catch (error) {
+
+poleStandardWeights = {};
+
+}
+
+
+constpoleKeys = [
+
+  "pole3X3X6Square",
+
+  "pole3X3X6_5Square",
+
+  "pole4X4X6Square",
+
+  "pole4X4X7Square",
+
+  "pole3x6Round",
+
+  "pole4x7Round",
+
+  "pole3X3X2Square",
+
+  "pole4x4X2Square",
+
+  "pole4x2Round"
+
+];
 
 
 const months =
@@ -50332,10 +50380,18 @@ AF_PL_MONTHS.map(
 salesRevenue:
     0,
 
+    /*
+     * Existing property name retained
+     * for compatibility.
+     * It now stores COGS, NOT purchases.
+     */
 materialPurchases:
     0,
 
 operatingExpenses:
+    0,
+
+endingFinishedGoodsInventory:
     0,
 
 netProfitLoss:
@@ -50348,9 +50404,17 @@ profitMargin:
 );
 
 
-/* =========================
-   MATERIAL PURCHASES
-   ========================= */
+/* =====================================================
+   PURCHASE-BATCH UNIT COSTS
+   ===================================================== */
+
+const batchCosts = {};
+
+
+let totalCompanyPurchaseCost = 0;
+
+let totalCompanyNetKg = 0;
+
 
 materialRecords.forEach(
   record => {
@@ -50369,49 +50433,601 @@ record.status ||
 ).toUpperCase();
 
 
-    if (
-      source === "client" ||
-      status === "CANCELLED"
-    ) {
+if (
+  source === "client" ||
+  status === "CANCELLED"
+) {
 
-      return;
+  return;
 
-    }
+}
 
 
-const date =
-afPLGetDateParts(
-record.date ||
-record.purchaseDate ||
-record.recordedAt
+const batchNumber =
+String(
+record.batchNumber ||
+  ""
 );
 
 
-    if (
-      !date ||
-date.year !==
-selectedYear
-    ) {
+const netKg =
+Number(
+record.openingBatchKg ??
+record.netWeight ??
+  0
+);
 
-      return;
+
+const totalCost =
+Number(
+record.totalCost ||
+  0
+);
+
+
+if (
+netKg<= 0
+) {
+
+  return;
+
+}
+
+
+totalCompanyPurchaseCost +=
+totalCost;
+
+
+totalCompanyNetKg +=
+netKg;
+
+
+if (batchNumber) {
+
+  if (
+    !batchCosts[
+batchNumber
+    ]
+  ) {
+
+batchCosts[
+batchNumber
+] = {
+
+  cost:
+  0,
+
+  kg:
+  0
+
+};
+
+  }
+
+
+batchCosts[
+batchNumber
+].cost +=
+totalCost;
+
+
+batchCosts[
+batchNumber
+].kg +=
+netKg;
+
+}
+
+});
+
+
+const fallbackRawUnitCost =
+totalCompanyNetKg> 0
+
+  ? (
+totalCompanyPurchaseCost /
+totalCompanyNetKg
+    )
+
+  : 0;
+
+
+function getBatchUnitCost(
+batchNumber
+) {
+
+const batch =
+batchCosts[
+  String(
+batchNumber ||
+    ""
+  )
+];
+
+
+if (
+  batch &&
+  Number(
+batch.kg || 0
+  ) > 0
+) {
+
+  return (
+    Number(
+batch.cost || 0
+    ) /
+    Number(
+batch.kg || 0
+    )
+  );
+
+}
+
+
+return fallbackRawUnitCost;
+
+}
+
+
+/* =====================================================
+   NORMALISE PRODUCTION POLE ENTRIES
+   ===================================================== */
+
+function getProductionPoleEntries(
+  record
+) {
+
+const savedEntries =
+Array.isArray(
+record.poleEntries
+)
+
+  ? record.poleEntries
+
+  : [];
+
+
+if (savedEntries.length) {
+
+  return savedEntries
+    .map(
+      entry => {
+
+const quantity =
+Number(
+entry.quantity || 0
+);
+
+
+const standardWeight =
+Number(
+entry.standardWeight ??
+record.standardWeightsUsed?.[
+entry.key
+  ] ??
+poleStandardWeights[
+entry.key
+  ] ??
+  0
+);
+
+
+const finishedKg =
+Number(
+entry.finishedKg ||
+  (
+    quantity *
+standardWeight
+  )
+);
+
+
+        return {
+
+          key:
+          String(
+entry.key ||
+entry.name ||
+            ""
+          ),
+
+          quantity,
+
+standardWeight,
+
+finishedKg
+
+        };
+
+      }
+    )
+    .filter(
+      entry =>
+entry.quantity> 0
+    );
+
+}
+
+
+/*
+ * Legacy production records.
+ */
+
+return poleKeys
+  .map(
+    key => {
+
+const quantity =
+Number(
+  record[key] ||
+  0
+);
+
+
+const standardWeight =
+Number(
+record.standardWeightsUsed?.[
+    key
+  ] ??
+poleStandardWeights[
+    key
+  ] ??
+  0
+);
+
+
+      return {
+
+        key,
+
+        quantity,
+
+standardWeight,
+
+finishedKg:
+        quantity *
+standardWeight
+
+      };
 
     }
+  )
+  .filter(
+    entry =>
+entry.quantity> 0
+  );
+
+}
 
 
-months[
-date.month
-].materialPurchases +=
+/* =====================================================
+   COST ONE PRODUCTION RECORD
+   ===================================================== */
+
+function getProductionCostBreakdown(
+  record
+) {
+
+const sources =
+Array.isArray(
+record.washedSources
+)
+
+  ? record.washedSources
+
+  : [];
+
+
+let inputMaterialCost = 0;
+
+
+sources.forEach(
+  source => {
+
+const kgUsed =
 Number(
-record.totalCost || 0
+source.kgUsed ||
+  0
+);
+
+
+if (
+kgUsed<= 0
+) {
+
+  return;
+
+}
+
+
+const unitCost =
+getBatchUnitCost(
+source.sourceBatchNumber
+);
+
+
+inputMaterialCost +=
+kgUsed *
+unitCost;
+
+  }
+);
+
+
+/*
+ * Legacy fallback where exact KBW sources
+ * were not yet saved.
+ */
+
+if (
+inputMaterialCost<= 0
+) {
+
+inputMaterialCost =
+Number(
+record.productionInputKg ||
+  0
+) *
+fallbackRawUnitCost;
+
+}
+
+
+const entries =
+getProductionPoleEntries(
+  record
+);
+
+
+const totalFinishedKg =
+entries.reduce(
+  (sum, entry) =>
+    sum +
+    Number(
+entry.finishedKg ||
+      0
+    ),
+  0
+) ||
+Number(
+record.productionWeight ||
+  0
+);
+
+
+const totalPoles =
+entries.reduce(
+  (sum, entry) =>
+    sum +
+    Number(
+entry.quantity ||
+      0
+    ),
+  0
+);
+
+
+return {
+
+inputMaterialCost,
+
+  entries,
+
+totalFinishedKg,
+
+totalPoles
+
+};
+
+}
+
+
+/* =====================================================
+   PRE-CALCULATE FALLBACK FINISHED COST
+   ===================================================== */
+
+const productionBreakdowns =
+new Map();
+
+
+let allProductionMaterialCost = 0;
+
+let allFinishedPoleKg = 0;
+
+let allFinishedPoleQty = 0;
+
+
+productionRecords.forEach(
+  record => {
+
+const status =
+String(
+record.productionStatus ||
+record.status ||
+  ""
+).toUpperCase();
+
+
+if (
+  status === "CANCELLED"
+) {
+
+  return;
+
+}
+
+
+const breakdown =
+getProductionCostBreakdown(
+  record
+);
+
+
+productionBreakdowns.set(
+  String(
+record.id
+  ),
+  breakdown
+);
+
+
+allProductionMaterialCost +=
+Number(
+breakdown.inputMaterialCost ||
+  0
+);
+
+
+allFinishedPoleKg +=
+Number(
+breakdown.totalFinishedKg ||
+  0
+);
+
+
+allFinishedPoleQty +=
+Number(
+breakdown.totalPoles ||
+  0
 );
 
   }
 );
 
 
-/* =========================
-   SALES REVENUE
-   ========================= */
+const fallbackFinishedCostPerKg =
+allFinishedPoleKg> 0
+
+  ? (
+allProductionMaterialCost /
+allFinishedPoleKg
+    )
+
+  : fallbackRawUnitCost;
+
+
+const fallbackAveragePoleCost =
+allFinishedPoleQty> 0
+
+  ? (
+allProductionMaterialCost /
+allFinishedPoleQty
+    )
+
+  : 0;
+
+
+/* =====================================================
+   INVENTORY EVENTS
+   ===================================================== */
+
+function getEventSortKey(
+  record,
+  type
+) {
+
+const date =
+String(
+record.date ||
+record.createdAt ||
+  ""
+).slice(
+  0,
+  10
+);
+
+
+const createdAt =
+String(
+record.createdAt ||
+  ""
+);
+
+
+if (
+createdAt&&
+createdAt.slice(
+    0,
+    10
+  ) === date
+) {
+
+  return createdAt;
+
+}
+
+
+return (
+  date +
+  (
+    type === "production"
+      ? "T00:00:00"
+      : "T23:59:59"
+  )
+);
+
+}
+
+
+const events = [];
+
+
+productionRecords.forEach(
+  record => {
+
+const status =
+String(
+record.productionStatus ||
+record.status ||
+  ""
+).toUpperCase();
+
+
+if (
+  status === "CANCELLED"
+) {
+
+  return;
+
+}
+
+
+const date =
+record.date ||
+record.createdAt;
+
+
+if (
+  !afPLGetDateParts(
+    date
+  )
+) {
+
+  return;
+
+}
+
+
+events.push({
+
+  type:
+  "production",
+
+  date,
+
+sortKey:
+getEventSortKey(
+    record,
+    "production"
+  ),
+
+  record
+
+});
+
+  }
+);
+
 
 deliveryRecords.forEach(
   record => {
@@ -50423,34 +51039,372 @@ record.status ||
 ).toUpperCase();
 
 
-    if (
-      status === "CANCELLED"
-    ) {
+const type =
+String(
+record.deliveryType ||
+  ""
+).toLowerCase();
 
-      return;
 
-    }
+if (
+  status === "CANCELLED" ||
+  type !== "poles"
+) {
+
+  return;
+
+}
 
 
 const date =
-afPLGetDateParts(
 record.date ||
-record.createdAt
+record.createdAt;
+
+
+if (
+  !afPLGetDateParts(
+    date
+  )
+) {
+
+  return;
+
+}
+
+
+events.push({
+
+  type:
+  "delivery",
+
+  date,
+
+sortKey:
+getEventSortKey(
+    record,
+    "delivery"
+  ),
+
+  record
+
+});
+
+  }
 );
 
 
-    if (
-      !date ||
-date.year !==
+events.sort(
+  (a, b) =>
+    String(
+a.sortKey
+    ).localeCompare(
+      String(
+b.sortKey
+      )
+    ) ||
+    (
+a.type ===
+      "production"
+        ? -1
+        : 1
+    )
+);
+
+
+/* =====================================================
+   PERPETUAL WEIGHTED-AVERAGE FINISHED INVENTORY
+   ===================================================== */
+
+const inventory = {};
+
+
+function getInventoryBucket(
+  key
+) {
+
+const cleanKey =
+String(
+  key || ""
+);
+
+
+if (
+  !inventory[
+cleanKey
+  ]
+) {
+
+inventory[
+cleanKey
+] = {
+
+  quantity:
+  0,
+
+  value:
+  0
+
+};
+
+}
+
+
+return inventory[
+cleanKey
+];
+
+}
+
+
+function getFinishedInventoryValue() {
+
+return Object.values(
+  inventory
+).reduce(
+  (sum, bucket) =>
+    sum +
+    Number(
+bucket.value ||
+      0
+    ),
+  0
+);
+
+}
+
+
+function getFallbackPoleCost(
+  item
+) {
+
+const key =
+String(
+item?.key ||
+  ""
+);
+
+
+const weight =
+Number(
+  item?.standardWeight ??
+poleStandardWeights[
+    key
+  ] ??
+  0
+);
+
+
+if (
+  weight > 0 &&
+fallbackFinishedCostPerKg> 0
+) {
+
+  return (
+    weight *
+fallbackFinishedCostPerKg
+  );
+
+}
+
+
+return fallbackAveragePoleCost;
+
+}
+
+
+let nextSnapshotMonth = 0;
+
+
+events.forEach(
+  event => {
+
+const date =
+afPLGetDateParts(
+event.date
+);
+
+
+if (!date) {
+  return;
+}
+
+
+if (
+date.year>
 selectedYear
-    ) {
+) {
 
-      return;
+  return;
 
-    }
+}
 
 
-const revenue =
+/*
+ * Carry opening inventory through months
+ * before the next transaction.
+ */
+
+if (
+date.year ===
+selectedYear
+) {
+
+while (
+nextSnapshotMonth<
+date.month
+) {
+
+months[
+nextSnapshotMonth
+].endingFinishedGoodsInventory =
+getFinishedInventoryValue();
+
+
+nextSnapshotMonth++;
+
+}
+
+}
+
+
+/* =========================
+   PRODUCTION ADDS INVENTORY
+   ========================= */
+
+if (
+event.type ===
+  "production"
+) {
+
+const record =
+event.record;
+
+
+const breakdown =
+productionBreakdowns.get(
+  String(
+record.id
+  )
+) ||
+getProductionCostBreakdown(
+  record
+);
+
+
+const finishedKg =
+Number(
+breakdown.totalFinishedKg ||
+  0
+);
+
+
+const totalQty =
+Number(
+breakdown.totalPoles ||
+  0
+);
+
+
+breakdown.entries.forEach(
+  entry => {
+
+const quantity =
+Number(
+entry.quantity ||
+  0
+);
+
+
+if (
+  quantity <= 0
+) {
+
+  return;
+
+}
+
+
+let costShare = 0;
+
+
+if (
+finishedKg> 0
+) {
+
+costShare =
+Number(
+breakdown.inputMaterialCost ||
+  0
+) *
+(
+  Number(
+entry.finishedKg ||
+    0
+  ) /
+finishedKg
+);
+
+} else if (
+totalQty> 0
+) {
+
+costShare =
+Number(
+breakdown.inputMaterialCost ||
+  0
+) *
+(
+  quantity /
+totalQty
+);
+
+}
+
+
+const bucket =
+getInventoryBucket(
+entry.key
+);
+
+
+bucket.quantity +=
+quantity;
+
+
+bucket.value +=
+costShare;
+
+});
+
+
+}
+
+
+/* =========================
+   DELIVERY REMOVES INVENTORY
+   ========================= */
+
+if (
+event.type ===
+  "delivery"
+) {
+
+const record =
+event.record;
+
+
+const inSelectedYear =
+date.year ===
+selectedYear;
+
+
+if (
+inSelectedYear
+) {
+
+months[
+date.month
+].salesRevenue +=
 Number(
 record.finalSaleTotal ??
 record.saleAmount ??
@@ -50458,19 +51412,181 @@ record.netSaleTotal ??
   0
 );
 
+}
+
+
+const items =
+Array.isArray(
+record.items
+)
+
+  ? record.items
+
+  : [];
+
+
+let deliveryCOGS = 0;
+
+
+items.forEach(
+  item => {
+
+const quantity =
+Number(
+item.quantity ||
+  0
+);
+
+
+if (
+  quantity <= 0
+) {
+
+  return;
+
+}
+
+
+const bucket =
+getInventoryBucket(
+item.key ||
+item.name
+);
+
+
+const fallbackCost =
+getFallbackPoleCost(
+  item
+);
+
+
+if (
+bucket.quantity>
+  0
+) {
+
+const averageCost =
+bucket.value /
+bucket.quantity;
+
+
+const quantityFromInventory =
+Math.min(
+  quantity,
+bucket.quantity
+);
+
+
+const inventoryCost =
+quantityFromInventory *
+averageCost;
+
+
+const shortageQty =
+Math.max(
+  quantity -
+quantityFromInventory,
+  0
+);
+
+
+const shortageCost =
+shortageQty *
+fallbackCost;
+
+
+deliveryCOGS +=
+inventoryCost +
+shortageCost;
+
+
+bucket.quantity -=
+quantityFromInventory;
+
+
+bucket.value =
+Math.max(
+bucket.value -
+inventoryCost,
+  0
+);
+
+
+} else {
+
+deliveryCOGS +=
+quantity *
+fallbackCost;
+
+}
+
+});
+
+
+if (
+inSelectedYear
+) {
 
 months[
 date.month
-].salesRevenue +=
-revenue;
+].materialPurchases +=
+deliveryCOGS;
+
+}
+
+}
+
+
+/*
+ * Month-end finished goods inventory.
+ */
+
+if (
+date.year ===
+selectedYear
+) {
+
+months[
+date.month
+].endingFinishedGoodsInventory =
+getFinishedInventoryValue();
+
+
+nextSnapshotMonth =
+Math.max(
+nextSnapshotMonth,
+date.month + 1
+);
+
+}
 
   }
 );
 
 
-/* =========================
+/*
+ * Carry the final inventory balance
+ * through months without later activity.
+ */
+
+while (
+nextSnapshotMonth< 12
+) {
+
+months[
+nextSnapshotMonth
+].endingFinishedGoodsInventory =
+getFinishedInventoryValue();
+
+
+nextSnapshotMonth++;
+
+}
+
+
+/* =====================================================
    OPERATING EXPENSES
-   ========================= */
+   ===================================================== */
 
 expenseRecords.forEach(
   record => {
@@ -50482,13 +51598,13 @@ record.status ||
 ).toUpperCase();
 
 
-    if (
-      status === "CANCELLED"
-    ) {
+if (
+  status === "CANCELLED"
+) {
 
-      return;
+  return;
 
-    }
+}
 
 
 const date =
@@ -50499,31 +51615,32 @@ record.createdAt
 );
 
 
-    if (
-      !date ||
+if (
+  !date ||
 date.year !==
 selectedYear
-    ) {
+) {
 
-      return;
+  return;
 
-    }
+}
 
 
 months[
 date.month
 ].operatingExpenses +=
 Number(
-record.amount || 0
+record.amount ||
+  0
 );
 
   }
 );
 
 
-/* =========================
-   CALCULATE PROFIT
-   ========================= */
+/* =====================================================
+   FINAL MONTHLY P&L
+   ===================================================== */
 
 months.forEach(
   month => {
@@ -50536,10 +51653,12 @@ month.operatingExpenses;
 
 month.profitMargin =
 month.salesRevenue> 0
+
   ? (
 month.netProfitLoss /
 month.salesRevenue
     ) * 100
+
   : null;
 
   }
@@ -50556,6 +51675,9 @@ month.salesRevenue,
     0
   ),
 
+  /*
+   * materialPurchases now equals COGS.
+   */
 materialPurchases:
 months.reduce(
     (sum, month) =>
@@ -50571,6 +51693,10 @@ months.reduce(
 month.operatingExpenses,
     0
   ),
+
+endingFinishedGoodsInventory:
+  months[11]
+    .endingFinishedGoodsInventory,
 
 netProfitLoss:
   0,
@@ -50589,23 +51715,25 @@ totals.operatingExpenses;
 
 totals.profitMargin =
 totals.salesRevenue> 0
+
   ? (
 totals.netProfitLoss /
 totals.salesRevenue
     ) * 100
+
   : null;
 
 
-  return {
+return {
 
-    year:
+  year:
 selectedYear,
 
-    months,
+  months,
 
-    totals
+  totals
 
-  };
+};
 
 }
 
@@ -50786,7 +51914,7 @@ align-items:flex-start;
   font-size:12px;
   margin-top:4px;
 ">
-Sales Revenue − Material Purchases − Operating Expenses
+Sales Revenue − Cost of Goods Sold − Operating Expenses
 </div>
 
 </div>
@@ -51140,7 +52268,7 @@ totals.salesRevenue
   font-size:11px;
   color:#666;
 ">
-Material Purchases
+Cost of Goods Sold (COGS)
 </div>
 
 <div style="
@@ -51269,7 +52397,7 @@ Sales Revenue
   padding:9px;
 text-align:right;
 ">
-Material Purchases
+Cost of Goods Sold (COGS)
 </th>
 
 <th style="
@@ -51320,11 +52448,21 @@ ${rows}
 ">
 
 <b>Management accounting note:</b>
-Material purchases are currently charged in the month purchased.
-This is a purchase-basis management P&L, not yet an
-inventory-adjusted COGS statement.
+COGS uses weighted-average material cost traced from the
+original KB purchase batches through Production and into
+finished poles sold.
 
 <br><br>
+
+Unsold finished poles remain in inventory and are not charged
+against profit. Production process loss is absorbed into the
+cost of the finished poles produced.
+
+<br><br>
+
+Operating expenses remain separate from COGS.
+Client washing/pelletizing service income will be connected
+to revenue separately.
 
 Sales revenue currently includes delivery records that contain
 a saved monetary sale value. Older deliveries without a saved
@@ -52026,7 +53164,7 @@ month.salesRevenue
   background:#f7f7f7;
   border-radius:8px;
 ">
-<div class="kt">Material Purchases</div>
+<div class="kt">COGS</div>
 <div class="kv">
 ${afPLMoney(
 month.materialPurchases
