@@ -54843,7 +54843,7 @@ openFollowups;
 box.querySelector(
       "#afSCDeliveryHistory"
     ).onclick =
-;
+   openDeliveryHistory;
 
 box.querySelector(
       "#afSCPrices"
