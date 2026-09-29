@@ -52611,7 +52611,743 @@ month.profitMargin
 
     `
   )
+
+ breakdown.entries.forEach(
+  entry => {
+
+const quantity =
+Number(
+entry.quantity ||
+  0
+);
+
+
+if (
+  quantity <= 0
+) {
+
+  return;
+
+}
+
+
+let costShare = 0;
+
+
+if (
+finishedKg> 0
+) {
+
+costShare =
+Number(
+breakdown.inputMaterialCost ||
+  0
+) *
+(
+  Number(
+entry.finishedKg ||
+    0
+  ) /
+finishedKg
+);
+
+} else if (
+totalQty> 0
+) {
+
+costShare =
+Number(
+breakdown.inputMaterialCost ||
+  0
+) *
+(
+  quantity /
+totalQty
+);
+
+}
+
+
+const bucket =
+getInventoryBucket(
+entry.key
+);
+
+
+bucket.quantity +=
+quantity;
+
+
+bucket.value +=
+costShare;
+
+});
+
+}
+
+
+/* =========================
+   DELIVERY REMOVES INVENTORY
+   ========================= */
+
+if (
+event.type ===
+  "delivery"
+) {
+
+const record =
+event.record;
+
+
+const inSelectedYear =
+date.year ===
+selectedYear;
+
+
+if (
+inSelectedYear
+) {
+
+months[
+date.month
+].salesRevenue +=
+Number(
+record.finalSaleTotal ??
+record.saleAmount ??
+record.netSaleTotal ??
+  0
+);
+
+}
+
+
+const items =
+Array.isArray(
+record.items
+)
+
+  ? record.items
+
+  : [];
+
+
+let deliveryCOGS = 0;
+
+
+items.forEach(
+  item => {
+
+const quantity =
+Number(
+item.quantity ||
+  0
+);
+
+
+if (
+  quantity <= 0
+) {
+
+  return;
+
+}
+
+
+const bucket =
+getInventoryBucket(
+item.key ||
+item.name
+);
+
+
+const fallbackCost =
+getFallbackPoleCost(
+  item
+);
+
+
+const inventoryQtyBefore =
+Number(
+bucket.quantity ||
+  0
+);
+
+
+const inventoryValueBefore =
+Number(
+bucket.value ||
+  0
+);
+
+
+const averageCostBefore =
+inventoryQtyBefore> 0
+
+  ? (
+inventoryValueBefore /
+inventoryQtyBefore
+    )
+
+  : fallbackCost;
+
+
+let itemCOGS = 0;
+
+
+let costingMethod =
+"Fallback";
+
+
+if (
+bucket.quantity> 0
+) {
+
+const averageCost =
+bucket.value /
+bucket.quantity;
+
+
+const quantityFromInventory =
+Math.min(
+  quantity,
+bucket.quantity
+);
+
+
+const inventoryCost =
+quantityFromInventory *
+averageCost;
+
+
+const shortageQty =
+Math.max(
+  quantity -
+quantityFromInventory,
+  0
+);
+
+
+const shortageCost =
+shortageQty *
+fallbackCost;
+
+
+itemCOGS =
+inventoryCost +
+shortageCost;
+
+
+costingMethod =
+shortageQty> 0
+
+  ? "Weighted Average + Fallback"
+
+  : "Weighted Average";
+
+
+bucket.quantity -=
+quantityFromInventory;
+
+
+bucket.value =
+Math.max(
+bucket.value -
+inventoryCost,
+  0
+);
+
+
+} else {
+
+itemCOGS =
+quantity *
+fallbackCost;
+
+}
+
+
+deliveryCOGS +=
+itemCOGS;
+
+
+/* -------------------------
+   COGS AUDIT - SALE
+   ------------------------- */
+
+if (
+inSelectedYear
+) {
+
+const grossDeliverySale =
+Number(
+record.grossSaleTotal ??
+record.standardSaleTotal ??
+  0
+);
+
+
+const finalDeliverySale =
+Number(
+record.finalSaleTotal ??
+record.saleAmount ??
+record.netSaleTotal ??
+  0
+);
+
+
+const itemGrossSale =
+Number(
+item.subtotal ??
+  (
+    quantity *
+    Number(
+item.unitPrice ??
+item.standardUnitPrice ??
+      0
+    )
+  )
+);
+
+
+const lineSaleValue =
+grossDeliverySale> 0
+
+  ? (
+finalDeliverySale *
+      (
+itemGrossSale /
+grossDeliverySale
+      )
+    )
+
+  : 0;
+
+
+months[
+date.month
+].cogsAudit.push({
+
+  date:
+  String(
+record.date ||
+record.createdAt ||
+    ""
+  ).slice(
+    0,
+    10
+  ),
+
+deliveryNumber:
+  String(
+record.deliveryNumber ||
+    ""
+  ),
+
+  customer:
+  String(
+record.customerName ||
+    ""
+  ),
+
+poleType:
+  String(
+item.name ||
+item.key ||
+    "Poles"
+  ),
+
+quantitySold:
+  quantity,
+
+inventoryQtyBefore,
+
+inventoryValueBefore,
+
+averageCostPerPole:
+averageCostBefore,
+
+fallbackCostPerPole:
+fallbackCost,
+
+costingMethod,
+
+  cogs:
+itemCOGS,
+
+saleValue:
+lineSaleValue,
+
+missingRevenue:
+lineSaleValue<= 0
+
+});
+
+}
+
+});
+  
+   
   .join("");
+const productionAudit =
+selectedMonths.flatMap(
+  month =>
+Array.isArray(month.productionAudit)
+      ? month.productionAudit
+      : []
+);
+
+
+const salesCogsAudit =
+selectedMonths.flatMap(
+  month =>
+Array.isArray(month.cogsAudit)
+      ? month.cogsAudit
+      : []
+);
+
+
+const productionAuditRows =
+productionAudit.length
+
+  ? productionAudit.map(
+      audit => {
+
+const sources =
+Array.isArray(audit.sourceAudit)
+  ? audit.sourceAudit
+  : [];
+
+
+const sourceText =
+sources.length
+
+  ? sources.map(
+      source =>
+        `${source.batchNumber || "Unknown KB"}:
+        ${Number(source.kgUsed || 0).toLocaleString()} kg
+        @ ${afPLMoney(source.unitCost)}/kg`
+    ).join("<br>")
+
+  : "No source details";
+
+
+return `
+
+<tr>
+
+<td>${audit.date || "-"}</td>
+
+<td>
+${audit.productionId || "-"}
+</td>
+
+<td>
+${sourceText}
+</td>
+
+<td style="text-align:right;">
+${Number(
+audit.inputKg || 0
+).toLocaleString()} kg
+</td>
+
+<td style="text-align:right;">
+${afPLMoney(
+audit.inputMaterialCost
+)}
+</td>
+
+<td style="text-align:right;">
+${Number(
+audit.finishedKg || 0
+).toLocaleString()} kg
+</td>
+
+<td style="text-align:right;">
+${Number(
+audit.processLossKg || 0
+).toLocaleString()} kg
+</td>
+
+<td style="text-align:right;">
+${Number(
+audit.totalPoles || 0
+).toLocaleString()}
+</td>
+
+<td style="text-align:right;">
+${afPLMoney(
+audit.averageCostPerPole
+)}
+</td>
+
+</tr>
+
+`;
+
+      }
+    ).join("")
+
+  : `
+
+<tr>
+
+<td
+colspan="9"
+  style="
+    padding:15px;
+text-align:center;
+    color:#777;
+  "
+>
+No production costing records in this period.
+</td>
+
+</tr>
+
+`;
+
+
+const salesAuditRows =
+salesCogsAudit.length
+
+  ? salesCogsAudit.map(
+      audit => `
+
+<tr>
+
+<td>
+${audit.date || "-"}
+</td>
+
+<td>
+${audit.deliveryNumber || "-"}
+</td>
+
+<td>
+${audit.customer || "-"}
+</td>
+
+<td>
+${audit.poleType || "-"}
+</td>
+
+<td style="text-align:right;">
+${Number(
+audit.quantitySold || 0
+).toLocaleString()}
+</td>
+
+<td style="text-align:right;">
+${Number(
+audit.inventoryQtyBefore || 0
+).toLocaleString()}
+</td>
+
+<td style="text-align:right;">
+${afPLMoney(
+audit.averageCostPerPole
+)}
+</td>
+
+<td style="
+text-align:right;
+font-weight:bold;
+">
+${afPLMoney(
+audit.cogs
+)}
+</td>
+
+<td style="text-align:right;">
+
+${afPLMoney(
+audit.saleValue
+)}
+
+${
+audit.missingRevenue
+    ? `
+<div style="
+        color:#b42318;
+        font-size:10px;
+font-weight:bold;
+        margin-top:3px;
+      ">
+⚠ NO SAVED REVENUE
+</div>
+      `
+    : ""
+}
+
+</td>
+
+<td>
+${audit.costingMethod || "-"}
+</td>
+
+</tr>
+
+    `
+    ).join("")
+
+  : `
+
+<tr>
+
+<td
+colspan="10"
+  style="
+    padding:15px;
+text-align:center;
+    color:#777;
+  "
+>
+No pole-sale COGS records in this period.
+</td>
+
+</tr>
+
+`;
+
+
+const cogsAuditHTML = `
+
+<details style="
+  margin-top:16px;
+  border:1px solid #d8dfdb;
+  border-radius:9px;
+  padding:12px;
+  background:#fafcfb;
+">
+
+<summary style="
+cursor:pointer;
+font-weight:bold;
+  color:#0b5d3b;
+  font-size:14px;
+">
+🔎 COGS Audit — Trace Cost Calculation
+</summary>
+
+
+<h4 style="
+  margin-top:18px;
+  margin-bottom:8px;
+">
+1. Production Cost Build-Up
+</h4>
+
+
+<div style="overflow:auto;">
+
+<table style="
+  width:100%;
+  min-width:1000px;
+border-collapse:collapse;
+  font-size:11px;
+">
+
+<thead>
+
+<tr style="
+  background:#eef8f2;
+">
+
+<th>Date</th>
+<th>Production Ref</th>
+<th>KB Source / Cost</th>
+<th>Input KG</th>
+<th>Material Cost</th>
+<th>Finished KG</th>
+<th>Process Loss</th>
+<th>Poles Produced</th>
+<th>Average Cost / Pole</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+${productionAuditRows}
+
+</tbody>
+
+</table>
+
+</div>
+
+
+<h4 style="
+  margin-top:20px;
+  margin-bottom:8px;
+">
+2. Pole Sales COGS
+</h4>
+
+
+<div style="overflow:auto;">
+
+<table style="
+  width:100%;
+  min-width:1050px;
+border-collapse:collapse;
+  font-size:11px;
+">
+
+<thead>
+
+<tr style="
+  background:#eef8f2;
+">
+
+<th>Date</th>
+<th>Delivery No.</th>
+<th>Customer</th>
+<th>Pole Type</th>
+<th>Qty Sold</th>
+<th>Stock Before</th>
+<th>Average Cost / Pole</th>
+<th>COGS</th>
+<th>Saved Sale Revenue</th>
+<th>Costing Method</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+${salesAuditRows}
+
+</tbody>
+
+</table>
+
+</div>
+
+
+<div style="
+  margin-top:12px;
+  padding:10px;
+  background:#fff7e6;
+  border-radius:7px;
+  font-size:11px;
+">
+
+<b>Important:</b>
+A delivery marked
+<b>⚠ NO SAVED REVENUE</b>
+is contributing stock cost to COGS but no sales income.
+That can make the reported profit appear lower than the
+actual business result.
+
+</div>
+
+</details>
+
+`;
 
 
 content.innerHTML = `
@@ -52828,7 +53564,7 @@ ${rows}
 
 </div>
 
-
+${cogsAuditHTML}
 <div style="
   margin-top:14px;
   padding:11px;
