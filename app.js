@@ -56207,6 +56207,14 @@ typeof window.recordAFDelivery !==
 
 wrap.remove();
 
+const salesCustomersMain =
+document.getElementById(
+    "afSalesCustomersMain"
+  );
+
+if (salesCustomersMain) {
+salesCustomersMain.remove();
+}
 
 window.recordAFDelivery();
 
