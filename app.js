@@ -59020,3 +59020,1375 @@ console.log(
   );
 
 })();
+
+/* =========================================================
+   A&F ORDERS & QUOTATIONS — EDIT ADD-ON
+   Paste ONCE at the very bottom of app.js
+   ========================================================= */
+
+(function addAFOrderQuotationEdit() {
+  "use strict";
+
+const ORDER_KEY = "afSalesOrders";
+const CUSTOMER_KEY = "afCustomers";
+const PRICE_KEY = "poleSellingPrices";
+
+const POLE_TYPES = [
+    ["pole3X3X6Square", '3"x3"x6ft Square'],
+    ["pole3X3X6_5Square", '3"x3"x6.5ft Square'],
+    ["pole4X4X6Square", '4"x4"x6ft Square'],
+    ["pole4X4X7Square", '4"x4"x7ft Square'],
+    ["pole3x6Round", '3" Round x 6ft'],
+    ["pole4x7Round", '4" Round x 7ft'],
+    ["pole3X3X2Square", '3"x3"x2ft Square'],
+    ["pole4x4X2Square", '4"x4"x2ft Square'],
+    ["pole4x2Round", '4" Round x 2ft']
+  ].map(([key, name]) => ({ key, name }));
+
+  function read(key, fallback) {
+    try {
+const value =
+JSON.parse(
+localStorage.getItem(key) || "null"
+        );
+
+      return value ?? fallback;
+
+    } catch (error) {
+
+      return fallback;
+
+    }
+  }
+
+  function save(key, value) {
+
+localStorage.setItem(
+      key,
+JSON.stringify(value)
+    );
+
+  }
+
+  function esc(value) {
+
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+
+  }
+
+  function money(value) {
+
+    return (
+      "UGX " +
+      Number(
+        value || 0
+      ).toLocaleString()
+    );
+
+  }
+
+  function inputStyle() {
+
+    return `
+      width:100%;
+box-sizing:border-box;
+      padding:10px;
+      border:1px solid #ccd5d0;
+      border-radius:7px;
+background:white;
+    `;
+
+  }
+
+  function buttonStyle(background) {
+
+    return `
+      border:0;
+      background:${background || "#0b5d3b"};
+color:white;
+      padding:9px 13px;
+      border-radius:7px;
+font-weight:bold;
+cursor:pointer;
+    `;
+
+  }
+
+  function getOrders() {
+
+const records =
+      read(
+        ORDER_KEY,
+        []
+      );
+
+    return Array.isArray(records)
+      ? records
+      : [];
+
+  }
+
+  function getCustomers() {
+
+const records =
+      read(
+        CUSTOMER_KEY,
+        []
+      );
+
+    return Array.isArray(records)
+
+      ? records.filter(
+          record =>
+            String(
+record.status ||
+              "ACTIVE"
+            ).toUpperCase() !==
+            "DELETED"
+        )
+
+      : [];
+
+  }
+
+  function getPrices() {
+
+const prices =
+      read(
+        PRICE_KEY,
+        {}
+      );
+
+    return (
+      prices &&
+typeof prices === "object"
+    )
+      ? prices
+      : {};
+
+  }
+
+  /* =======================================================
+     OPEN EDIT SCREEN
+     ======================================================= */
+
+  function openEditOrder(orderId) {
+
+const records =
+getOrders();
+
+const index =
+records.findIndex(
+        record =>
+          String(record.id) ===
+          String(orderId)
+      );
+
+    if (index < 0) {
+
+      alert(
+        "Order / quotation not found."
+      );
+
+      return;
+
+    }
+
+const record =
+      records[index];
+
+const status =
+      String(
+record.status || ""
+      ).toUpperCase();
+
+
+    /*
+     * Once confirmed, completed or cancelled,
+     * record becomes locked.
+     */
+    if (
+      status === "CONFIRMED" ||
+      status === "COMPLETED" ||
+      status === "CANCELLED"
+    ) {
+
+      alert(
+        "Only PENDING or QUOTED records can be edited."
+      );
+
+      return;
+
+    }
+
+
+const customers =
+getCustomers();
+
+const prices =
+getPrices();
+
+const existingItems =
+Array.isArray(record.items)
+        ? record.items
+        : [];
+
+
+const old =
+document.getElementById(
+        "afEditOrderQuotationModal"
+      );
+
+    if (old) {
+old.remove();
+    }
+
+
+const modal =
+document.createElement(
+        "div"
+      );
+
+
+modal.id =
+      "afEditOrderQuotationModal";
+
+
+modal.style.cssText = `
+position:fixed;
+      inset:0;
+      z-index:1000000;
+background:rgba(0,0,0,.58);
+display:flex;
+align-items:center;
+justify-content:center;
+      padding:10px;
+box-sizing:border-box;
+font-family:Arial,sans-serif;
+    `;
+
+
+const itemRows =
+      POLE_TYPES
+        .map(type => {
+
+const oldItem =
+existingItems.find(
+              item =>
+                String(item.key) ===
+                String(type.key)
+            );
+
+
+const quantity =
+            Number(
+oldItem?.quantity ||
+              0
+            );
+
+
+const unitPrice =
+            Number(
+              prices[type.key] ||
+oldItem?.unitPrice ||
+oldItem?.standardUnitPrice ||
+              0
+            );
+
+
+          return `
+
+<tr>
+
+<td>
+  ${esc(type.name)}
+</td>
+
+
+<td style="
+text-align:right;
+">
+
+  ${
+unitPrice> 0
+      ? money(unitPrice)
+      : "Not Set"
+  }
+
+</td>
+
+
+<td>
+
+<input
+  id="afEditQty_${esc(type.key)}"
+  data-edit-order-qty="${esc(type.key)}"
+  type="number"
+  min="0"
+  step="1"
+  value="${quantity}"
+  ${
+unitPrice> 0
+      ? ""
+      : "disabled"
+  }
+  style="
+    ${inputStyle()}
+    max-width:120px;
+  "
+>
+
+</td>
+
+
+<td
+  id="afEditSub_${esc(type.key)}"
+  style="
+text-align:right;
+font-weight:bold;
+  "
+>
+
+  ${money(
+    quantity *
+unitPrice
+  )}
+
+</td>
+
+</tr>
+
+          `;
+
+        })
+        .join("");
+
+
+modal.innerHTML = `
+
+<div style="
+  width:100%;
+  max-width:980px;
+  max-height:94vh;
+overflow:auto;
+background:white;
+  border-radius:14px;
+  padding:22px;
+box-sizing:border-box;
+">
+
+
+<div style="
+display:flex;
+justify-content:space-between;
+  gap:12px;
+align-items:flex-start;
+  margin-bottom:18px;
+">
+
+<div>
+
+<h2 style="
+  margin:0;
+  color:#0b5d3b;
+">
+✏️ Edit Order / Quotation
+</h2>
+
+<div style="
+  font-size:12px;
+  color:#666;
+  margin-top:5px;
+">
+
+Reference:
+${esc(
+record.reference ||
+  "-"
+)}
+
+• Edit allowed before confirmation
+
+</div>
+
+</div>
+
+
+<button
+  id="afEditOrderClose"
+  type="button"
+  style="${buttonStyle("#333")}"
+>
+✕ Close
+</button>
+
+</div>
+
+
+<div style="
+display:grid;
+  grid-template-columns:
+    repeat(
+      auto-fit,
+minmax(220px,1fr)
+    );
+  gap:12px;
+">
+
+
+<div>
+
+<label>
+<b>Date *</b>
+</label>
+
+<input
+  id="afEditOrderDate"
+  type="date"
+  value="${esc(
+record.date || ""
+  )}"
+  style="
+    ${inputStyle()}
+    margin-top:5px;
+  "
+>
+
+</div>
+
+
+<div>
+
+<label>
+<b>Type *</b>
+</label>
+
+<select
+  id="afEditOrderType"
+  style="
+    ${inputStyle()}
+    margin-top:5px;
+  "
+>
+
+<option
+  value="Quotation"
+  ${
+    String(
+record.type || ""
+    ) === "Quotation"
+      ? "selected"
+      : ""
+  }
+>
+Quotation
+</option>
+
+<option
+  value="Order"
+  ${
+    String(
+record.type || ""
+    ) === "Order"
+      ? "selected"
+      : ""
+  }
+>
+Order
+</option>
+
+</select>
+
+</div>
+
+
+<div>
+
+<label>
+<b>Customer *</b>
+</label>
+
+<select
+  id="afEditOrderCustomer"
+  style="
+    ${inputStyle()}
+    margin-top:5px;
+  "
+>
+
+<option value="">
+Select customer
+</option>
+
+${
+customers
+  .map(
+    customer => `
+
+<option
+  value="${esc(
+customer.id
+  )}"
+  ${
+    String(customer.id) ===
+    String(record.customerId)
+      ? "selected"
+      : ""
+  }
+>
+
+${esc(
+customer.name
+)}
+
+${
+customer.phone
+    ? " — " +
+      esc(customer.phone)
+    : ""
+}
+
+</option>
+
+    `
+  )
+  .join("")
+}
+
+</select>
+
+</div>
+
+
+<div>
+
+<label>
+<b>Status</b>
+</label>
+
+<div
+  id="afEditOrderStatus"
+  style="
+    ${inputStyle()}
+    margin-top:5px;
+    background:#eef8f2;
+font-weight:bold;
+    color:#0b5d3b;
+  "
+>
+
+${esc(
+  status ||
+  "PENDING"
+)}
+
+</div>
+
+</div>
+
+</div>
+
+
+<h3 style="
+  margin:20px 0 8px;
+  color:#0b5d3b;
+">
+
+Pole Items
+
+</h3>
+
+
+<div style="
+overflow:auto;
+">
+
+<table style="
+  width:100%;
+  min-width:700px;
+border-collapse:collapse;
+">
+
+<thead>
+
+<tr style="
+  background:#eaf5ee;
+text-align:left;
+">
+
+<th>
+Pole Type
+</th>
+
+<th>
+Approved Unit Price
+</th>
+
+<th>
+Quantity
+</th>
+
+<th>
+Subtotal
+</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+
+${itemRows}
+
+</tbody>
+
+</table>
+
+</div>
+
+
+<div style="
+display:flex;
+justify-content:flex-end;
+  margin-top:14px;
+">
+
+<div style="
+  min-width:280px;
+  padding:14px;
+  background:#eef8f2;
+  border:1px solid #cfe6d8;
+  border-radius:9px;
+">
+
+<div style="
+  font-size:12px;
+  color:#666;
+">
+
+Updated Total
+
+</div>
+
+<div
+  id="afEditOrderTotal"
+  style="
+    font-size:24px;
+font-weight:bold;
+    color:#0b5d3b;
+  "
+>
+
+${money(
+record.value ||
+  0
+)}
+
+</div>
+
+</div>
+
+</div>
+
+
+<div style="
+  margin-top:14px;
+">
+
+<label>
+<b>Notes</b>
+</label>
+
+<textarea
+  id="afEditOrderNotes"
+  rows="3"
+  style="
+    ${inputStyle()}
+    margin-top:5px;
+  "
+>${esc(
+record.notes ||
+  ""
+)}</textarea>
+
+</div>
+
+
+<div style="
+  margin-top:12px;
+  padding:10px;
+  background:#fff8e1;
+  border:1px solid #ead59a;
+  border-radius:7px;
+  font-size:12px;
+">
+
+Editing this record does
+<b>not</b>
+reduce stock.
+
+Stock reduces only when
+delivery is saved.
+
+</div>
+
+
+<button
+  id="afEditOrderSave"
+  type="button"
+  style="
+    ${buttonStyle()}
+    width:100%;
+    margin-top:15px;
+  "
+>
+
+💾 Save Changes
+
+</button>
+
+</div>
+
+    `;
+
+
+    modal
+      .querySelectorAll(
+        "th,td"
+      )
+      .forEach(cell => {
+
+cell.style.padding =
+          "9px";
+
+cell.style.borderBottom =
+          "1px solid #eee";
+
+      });
+
+
+document.body.appendChild(
+      modal
+    );
+
+
+const totalEl =
+modal.querySelector(
+        "#afEditOrderTotal"
+      );
+
+
+const typeEl =
+modal.querySelector(
+        "#afEditOrderType"
+      );
+
+
+const statusEl =
+modal.querySelector(
+        "#afEditOrderStatus"
+      );
+
+
+    /* =====================================================
+       RECALCULATE TOTAL
+       ===================================================== */
+
+    function calculate() {
+
+      let total = 0;
+
+
+      POLE_TYPES
+        .forEach(type => {
+
+const oldItem =
+existingItems.find(
+              item =>
+                String(item.key) ===
+                String(type.key)
+            );
+
+
+const unitPrice =
+            Number(
+              prices[type.key] ||
+oldItem?.unitPrice ||
+oldItem?.standardUnitPrice ||
+              0
+            );
+
+
+const quantity =
+            Number(
+modal.querySelector(
+                "#afEditQty_" +
+type.key
+              )?.value ||
+              0
+            );
+
+
+const subtotal =
+            quantity *
+unitPrice;
+
+
+const cell =
+modal.querySelector(
+              "#afEditSub_" +
+type.key
+            );
+
+
+          if (cell) {
+
+cell.textContent =
+              money(subtotal);
+
+          }
+
+
+          total +=
+            subtotal;
+
+        });
+
+
+totalEl.textContent =
+        money(total);
+
+
+      return total;
+
+    }
+
+
+typeEl.addEventListener(
+      "change",
+      () => {
+
+statusEl.textContent =
+typeEl.value ===
+          "Quotation"
+
+            ? "QUOTED"
+
+            : "PENDING";
+
+      }
+    );
+
+
+    modal
+      .querySelectorAll(
+        "[data-edit-order-qty]"
+      )
+      .forEach(input => {
+
+input.addEventListener(
+          "input",
+          calculate
+        );
+
+      });
+
+
+modal.querySelector(
+      "#afEditOrderClose"
+    ).onclick =
+      () =>modal.remove();
+
+
+    /* =====================================================
+       SAVE CHANGES
+       ===================================================== */
+
+modal.querySelector(
+      "#afEditOrderSave"
+    ).onclick =
+      () => {
+
+
+const customer =
+customers.find(
+            customer =>
+              String(customer.id) ===
+              String(
+modal.querySelector(
+                  "#afEditOrderCustomer"
+                ).value
+              )
+          );
+
+
+const date =
+modal.querySelector(
+            "#afEditOrderDate"
+          ).value;
+
+
+const type =
+modal.querySelector(
+            "#afEditOrderType"
+          ).value;
+
+
+        if (!customer) {
+
+          alert(
+            "Please select a customer."
+          );
+
+          return;
+
+        }
+
+
+        if (!date) {
+
+          alert(
+            "Please select a date."
+          );
+
+          return;
+
+        }
+
+
+const items = [];
+
+
+        for (
+const poleType of
+          POLE_TYPES
+        ) {
+
+
+const quantity =
+            Number(
+modal.querySelector(
+                "#afEditQty_" +
+poleType.key
+              )?.value ||
+              0
+            );
+
+
+          if (
+            quantity < 0 ||
+            !Number.isInteger(
+              quantity
+            )
+          ) {
+
+            alert(
+poleType.name +
+              " quantity must be a whole number."
+            );
+
+            return;
+
+          }
+
+
+          if (
+            quantity <= 0
+          ) {
+
+            continue;
+
+          }
+
+
+const oldItem =
+existingItems.find(
+              item =>
+                String(item.key) ===
+                String(poleType.key)
+            );
+
+
+const unitPrice =
+            Number(
+              prices[
+poleType.key
+              ] ||
+oldItem?.unitPrice ||
+oldItem?.standardUnitPrice ||
+              0
+            );
+
+
+          if (
+unitPrice<= 0
+          ) {
+
+            alert(
+              "No Director-approved price has been set for:\n\n" +
+poleType.name
+            );
+
+            return;
+
+          }
+
+
+items.push({
+
+            key:
+poleType.key,
+
+            name:
+poleType.name,
+
+            quantity,
+
+unitPrice,
+
+standardUnitPrice:
+unitPrice,
+
+            subtotal:
+              quantity *
+unitPrice
+
+          });
+
+        }
+
+
+        if (
+          !items.length
+        ) {
+
+          alert(
+            "Please enter at least one pole quantity."
+          );
+
+          return;
+
+        }
+
+
+const value =
+items.reduce(
+            (
+              sum,
+              item
+            ) =>
+              sum +
+              Number(
+item.subtotal ||
+                0
+              ),
+            0
+          );
+
+
+        /*
+         * UPDATE EXISTING RECORD.
+         * Reference number stays the same.
+         */
+
+record.date =
+          date;
+
+record.type =
+          type;
+
+record.status =
+          type ===
+          "Quotation"
+
+            ? "QUOTED"
+
+            : "PENDING";
+
+
+record.customerId =
+customer.id;
+
+record.customerName =
+customer.name;
+
+record.customerPhone =
+customer.phone ||
+          "";
+
+record.customerLocation =
+customer.location ||
+          "";
+
+
+record.items =
+          items;
+
+
+record.description =
+          items
+            .map(
+              item =>
+item.name +
+                " × " +
+                Number(
+item.quantity
+                ).toLocaleString()
+            )
+            .join(", ");
+
+
+record.notes =
+modal.querySelector(
+            "#afEditOrderNotes"
+          ).value.trim();
+
+
+record.value =
+          value;
+
+record.totalValue =
+          value;
+
+
+record.updatedAt =
+          new Date()
+            .toISOString();
+
+
+        let user = {};
+
+        try {
+
+          user =
+JSON.parse(
+localStorage.getItem(
+                "currentUser"
+              ) ||
+              "{}"
+            );
+
+        } catch (error) {
+
+          user = {};
+
+        }
+
+
+record.updatedBy =
+user.fullName ||
+user.employeeName ||
+user.employeeId ||
+          "";
+
+
+        save(
+          ORDER_KEY,
+          records
+        );
+
+
+modal.remove();
+
+
+        alert(
+          "Order / quotation updated successfully.\n\n" +
+          "Reference: " +
+          (
+record.reference ||
+            "-"
+          ) +
+          "\nNew Total: " +
+          money(value)
+        );
+
+
+        /*
+         * Refresh Orders & Quotations screen.
+         */
+
+const ordersModal =
+document.getElementById(
+            "afOrders"
+          );
+
+
+        if (ordersModal) {
+
+ordersModal.remove();
+
+        }
+
+
+const ordersButton =
+document.getElementById(
+            "afSCOrders"
+          );
+
+
+        if (ordersButton) {
+
+ordersButton.click();
+
+        }
+
+      };
+
+
+    calculate();
+
+  }
+
+
+  /* =======================================================
+     ADD EDIT BUTTON BESIDE CONFIRM
+     ======================================================= */
+
+  function addEditButtons() {
+
+const ordersModal =
+document.getElementById(
+        "afOrders"
+      );
+
+
+    if (!ordersModal) {
+
+      return;
+
+    }
+
+
+    /*
+     * Confirm button only exists on records
+     * that are still editable.
+     */
+
+ordersModal
+      .querySelectorAll(
+        "[data-confirm]"
+      )
+      .forEach(
+confirmButton => {
+
+
+const row =
+confirmButton.closest(
+              "tr"
+            );
+
+
+          if (!row) {
+
+            return;
+
+          }
+
+
+          /*
+           * Prevent duplicate Edit buttons.
+           */
+
+          if (
+row.querySelector(
+              "[data-edit-order]"
+            )
+          ) {
+
+            return;
+
+          }
+
+
+const orderId =
+confirmButton
+              .dataset
+              .confirm;
+
+
+          if (!orderId) {
+
+            return;
+
+          }
+
+
+const editButton =
+document.createElement(
+              "button"
+            );
+
+
+editButton.type =
+            "button";
+
+
+editButton.textContent =
+            "Edit";
+
+
+editButton.dataset
+            .editOrder =
+orderId;
+
+
+editButton.style
+            .marginRight =
+            "6px";
+
+
+editButton.onclick =
+            () =>
+openEditOrder(
+orderId
+              );
+
+
+confirmButton
+            .parentElement
+            .insertBefore(
+editButton,
+confirmButton
+            );
+
+        }
+      );
+
+  }
+
+
+  /*
+   * Automatically add Edit whenever
+   * Orders & Quotations is rendered.
+   */
+
+const observer =
+    new MutationObserver(
+addEditButtons
+    );
+
+
+observer.observe(
+document.body,
+    {
+childList:true,
+subtree:true
+    }
+  );
+
+
+addEditButtons();
+
+
+console.log(
+    "Orders & Quotations Edit add-on connected."
+  );
+
+})();
+
