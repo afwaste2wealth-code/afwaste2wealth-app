@@ -55744,67 +55744,310 @@ historyButton.click();
      ORDERS & QUOTATIONS
      ======================================================= */
 
-  function openOrders() {
+function openOrders() {
+  if (!requireAccess()) return;
 
-    if (!requireAccess()) {
-      return;
+const { wrap, box } = modal("afOrders", 1180);
+
+const TYPES = [
+    ["pole3X3X6Square", '3"x3"x6ft Square'],
+    ["pole3X3X6_5Square", '3"x3"x6.5ft Square'],
+    ["pole4X4X6Square", '4"x4"x6ft Square'],
+    ["pole4X4X7Square", '4"x4"x7ft Square'],
+    ["pole3x6Round", '3" Round x 6ft'],
+    ["pole4x7Round", '4" Round x 7ft'],
+    ["pole3X3X2Square", '3"x3"x2ft Square'],
+    ["pole4x4X2Square", '4"x4"x2ft Square'],
+    ["pole4x2Round", '4" Round x 2ft']
+  ].map(([key, name]) => ({ key, name }));
+
+const prices = () => {
+    try {
+      return JSON.parse(
+localStorage.getItem("poleSellingPrices") || "{}"
+      ) || {};
+    } catch (e) {
+      return {};
     }
+  };
 
-const {
-      wrap,
-      box
-    } =
-      modal(
-        "afOrders",
-        1150
+const stock = () => {
+    try {
+      return typeof window.getAFFactoryStock === "function"
+        ? window.getAFFactoryStock()
+        : { balances: {} };
+    } catch (e) {
+      return { balances: {} };
+    }
+  };
+
+const itemText = r => {
+const items =
+Array.isArray(r.items)
+        ? r.items
+        : [];
+
+    return items.length
+      ? items
+          .map(
+i =>
+              (i.name || i.key) +
+              " × " +
+              Number(
+i.quantity || 0
+              ).toLocaleString()
+          )
+          .join(", ")
+      : (r.description || "-");
+  };
+
+  function printRecord(r) {
+
+    if (!r) return;
+
+const items =
+Array.isArray(r.items)
+        ? r.items
+        : [];
+
+const rows =
+items.length
+
+        ? items
+            .map(
+i => `
+
+<tr>
+<td>
+  ${esc(
+i.name ||
+i.key
+  )}
+</td>
+
+<td>
+  ${Number(
+i.quantity || 0
+  ).toLocaleString()}
+</td>
+
+<td>
+  ${money(
+i.unitPrice || 0
+  )}
+</td>
+
+<td>
+  ${money(
+i.subtotal || 0
+  )}
+</td>
+</tr>
+
+              `
+            )
+            .join("")
+
+        : `
+
+<tr>
+<td colspan="4">
+  ${esc(
+r.description ||
+    "No item details"
+  )}
+</td>
+</tr>
+
+          `;
+
+
+const w =
+window.open(
+        "",
+        "_blank",
+        "width=900,height=700"
       );
 
-    function render() {
 
-const records =
-orderList()
-          .slice()
-          .reverse();
+    if (!w) {
 
-box.innerHTML = `
+      return alert(
+        "Please allow pop-ups so the quotation can open."
+      );
 
-        ${title(
-          "📑 Orders & Quotations",
-          "Track customer enquiries, quotations and confirmed orders",
-          "afOrdersClose"
-        )}
+    }
 
-<button
-          id="afNewOrder"
-          style="${btn()}margin-bottom:14px;"
->
-          + New Order / Quotation
-</button>
 
-<div style="
-overflow:auto;
-        ">
+const heading =
+      String(
+r.type ||
+        "Quotation"
+      ).toUpperCase();
 
-<table style="
-            width:100%;
-            min-width:1000px;
+
+w.document.write(`
+
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="UTF-8">
+
+<title>
+${esc(heading)}
+${esc(
+r.reference || ""
+)}
+</title>
+
+<style>
+
+body {
+font-family:Arial,sans-serif;
+  padding:30px;
+  color:#222;
+}
+
+h1,
+h2 {
+text-align:center;
+  margin:4px;
+}
+
+.meta {
+display:grid;
+  grid-template-columns:
+    1fr 1fr;
+  gap:8px 20px;
+  margin:22px 0;
+}
+
+.meta div {
+  border-bottom:
+    1px solid #ddd;
+  padding:6px;
+}
+
+table {
+  width:100%;
 border-collapse:collapse;
-          ">
+}
+
+th,
+td {
+  border:
+    1px solid #ccc;
+  padding:9px;
+text-align:left;
+}
+
+th {
+  background:#eef8f2;
+}
+
+.total {
+text-align:right;
+  font-size:20px;
+font-weight:bold;
+  margin-top:18px;
+}
+
+.print {
+text-align:center;
+  margin-top:24px;
+}
+
+@media print {
+
+  .print {
+display:none;
+  }
+
+  body {
+    padding:0;
+  }
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<h1>
+A&F Wekavera Ltd
+</h1>
+
+<h2>
+Waste2Wealth Solutions
+</h2>
+
+<h2>
+${esc(heading)}
+</h2>
+
+
+<div class="meta">
+
+<div>
+<b>Reference:</b>
+${esc(
+r.reference || "-"
+)}
+</div>
+
+<div>
+<b>Date:</b>
+${esc(
+r.date || "-"
+)}
+</div>
+
+<div>
+<b>Customer:</b>
+${esc(
+r.customerName || "-"
+)}
+</div>
+
+<div>
+<b>Phone:</b>
+${esc(
+r.customerPhone || "-"
+)}
+</div>
+
+<div>
+<b>Location:</b>
+${esc(
+r.customerLocation || "-"
+)}
+</div>
+
+<div>
+<b>Status:</b>
+${esc(
+r.status || "-"
+)}
+</div>
+
+</div>
+
+
+<table>
 
 <thead>
 
-<tr style="
-                background:#eaf5ee;
-text-align:left;
-              ">
+<tr>
 
-<th>Date</th>
-<th>Reference</th>
-<th>Customer</th>
-<th>Type</th>
-<th>Description</th>
-<th>Value</th>
-<th>Status</th>
+<th>Product</th>
+<th>Qty</th>
+<th>Unit Price</th>
+<th>Subtotal</th>
 
 </tr>
 
@@ -55812,73 +56055,534 @@ text-align:left;
 
 <tbody>
 
-            ${
-              records
-                .map(
-                  r => `
+${rows}
+
+</tbody>
+
+</table>
+
+
+<div class="total">
+
+Total:
+${money(
+r.value || 0
+)}
+
+</div>
+
+
+<p>
+
+<b>Notes:</b>
+
+${esc(
+r.notes || "-"
+)}
+
+</p>
+
+
+<div class="print">
+
+<button
+onclick="window.print()"
+>
+Print
+</button>
+
+</div>
+
+</body>
+
+</html>
+
+    `);
+
+
+w.document.close();
+
+w.focus();
+
+  }
+
+
+  function confirmRecord(id) {
+
+const records =
+orderList();
+
+
+const r =
+records.find(
+        x =>
+          String(x.id) ===
+          String(id)
+      );
+
+
+    if (!r) {
+
+      return alert(
+        "Order / quotation not found."
+      );
+
+    }
+
+
+r.type =
+      "Order";
+
+r.status =
+      "CONFIRMED";
+
+r.confirmedAt =
+      new Date()
+        .toISOString();
+
+r.confirmedBy =
+currentUser()
+        .fullName ||
+currentUser()
+        .employeeId ||
+      "";
+
+
+    save(
+K.orders,
+      records
+    );
+
+
+    render();
+
+  }
+
+
+  function deliverRecord(id) {
+
+const r =
+orderList()
+        .find(
+          x =>
+            String(x.id) ===
+            String(id)
+        );
+
+
+    if (!r) {
+
+      return alert(
+        "Order not found."
+      );
+
+    }
+
+
+    if (
+      String(
+r.status || ""
+      ).toUpperCase() !==
+      "CONFIRMED"
+    ) {
+
+      return alert(
+        "Confirm the order first before converting it to a delivery."
+      );
+
+    }
+
+
+    if (
+typeof window.recordAFDelivery !==
+      "function"
+    ) {
+
+      return alert(
+        "Record Delivery could not be found."
+      );
+
+    }
+
+
+wrap.remove();
+
+
+window.recordAFDelivery();
+
+
+    let tries = 0;
+
+
+const fill = () => {
+
+      tries++;
+
+
+const m =
+document.getElementById(
+          "afRecordDeliveryModal"
+        );
+
+
+      if (!m) {
+
+        if (tries < 10) {
+
+setTimeout(
+            fill,
+            120
+          );
+
+        }
+
+        return;
+
+      }
+
+
+const customer =
+customerList()
+          .find(
+            c =>
+              String(c.id) ===
+              String(
+r.customerId
+              )
+          );
+
+
+const sel =
+m.querySelector(
+          "#afRegisteredCustomerSelect"
+        );
+
+
+      if (
+sel&&
+r.customerId
+      ) {
+
+sel.value =
+r.customerId;
+
+
+sel.dispatchEvent(
+          new Event(
+            "change",
+            {
+bubbles:true
+            }
+          )
+        );
+
+      }
+
+
+const set =
+        (id, value) => {
+
+const el =
+m.querySelector(id);
+
+          if (el) {
+
+el.value =
+              value || "";
+
+          }
+
+        };
+
+
+      set(
+        "#afDeliveryCustomer",
+r.customerName ||
+customer?.name
+      );
+
+
+      set(
+        "#afDeliveryPhone",
+r.customerPhone ||
+customer?.phone
+      );
+
+
+      set(
+        "#afDeliveryPlace",
+r.customerLocation ||
+customer?.location
+      );
+
+
+      set(
+        "#afDeliveryReference",
+r.reference
+      );
+
+
+      (
+Array.isArray(
+r.items
+        )
+          ? r.items
+          : []
+      )
+        .forEach(
+i => {
+
+const q =
+m.querySelector(
+                "#afDeliveryQty_" +
+i.key
+              );
+
+
+            if (q) {
+
+q.value =
+                Number(
+i.quantity || 0
+                );
+
+
+q.dispatchEvent(
+                new Event(
+                  "input",
+                  {
+bubbles:true
+                  }
+                )
+              );
+
+            }
+
+          }
+        );
+
+    };
+
+
+setTimeout(
+      fill,
+      120
+    );
+
+  }
+
+
+  function render() {
+
+const records =
+orderList()
+        .slice()
+        .reverse();
+
+
+box.innerHTML = `
+
+${title(
+  "📑 Orders & Quotations",
+  "Approved prices • stock reduces only when delivery is saved",
+  "afOrdersClose"
+)}
+
+
+<button
+  id="afNewOrder"
+  style="${btn()}margin-bottom:14px;"
+>
++ New Order / Quotation
+</button>
+
+
+<div style="
+overflow:auto;
+">
+
+<table style="
+  width:100%;
+  min-width:1150px;
+border-collapse:collapse;
+">
+
+<thead>
+
+<tr style="
+  background:#eaf5ee;
+text-align:left;
+">
+
+<th>Date</th>
+<th>Reference</th>
+<th>Customer</th>
+<th>Type</th>
+<th>Items</th>
+<th>Value</th>
+<th>Status</th>
+<th>Action</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+
+${
+records.length
+
+  ? records
+      .map(
+        r => {
+
+const st =
+String(
+r.status ||
+  "PENDING"
+).toUpperCase();
+
+
+return `
 
 <tr>
 
 <td>
-                      ${esc(r.date)}
+${esc(
+r.date || "-"
+)}
 </td>
 
 <td>
 <b>
-                        ${esc(
-r.reference
-                        )}
+${esc(
+r.reference || "-"
+)}
 </b>
 </td>
 
 <td>
-                      ${esc(
-r.customerName
-                      )}
+${esc(
+r.customerName ||
+  "-"
+)}
 </td>
 
 <td>
-                      ${esc(r.type)}
+${esc(
+r.type ||
+  "-"
+)}
 </td>
 
 <td>
-                      ${esc(
-r.description
-                      )}
+${esc(
+itemText(r)
+)}
 </td>
 
 <td>
-                      ${money(
-r.value
-                      )}
+<b>
+${money(
+r.value || 0
+)}
+</b>
 </td>
 
 <td>
-                      ${esc(
-r.status
-                      )}
+<b>
+${esc(st)}
+</b>
 </td>
 
-</tr>
+<td>
 
-                `
-                )
-                .join("") ||
+<div style="
+display:flex;
+gap:6px;
+flex-wrap:wrap;
+">
 
-              `
-<tr>
-<td
-colspan="7"
-                    style="
-text-align:center;
-                      padding:20px;
-                    "
+<button
+  data-print="${esc(
+r.id
+  )}"
 >
-                    No orders or quotations saved.
+Print
+</button>
+
+${
+st !== "CONFIRMED" &&
+st !== "COMPLETED" &&
+st !== "CANCELLED"
+
+  ? `
+
+<button
+  data-confirm="${esc(
+r.id
+  )}"
+>
+Confirm
+</button>
+
+    `
+
+  : ""
+}
+
+
+${
+st === "CONFIRMED"
+
+  ? `
+
+<button
+  data-deliver="${esc(
+r.id
+  )}"
+>
+Convert to Delivery
+</button>
+
+    `
+
+  : ""
+}
+
+</div>
+
 </td>
+
 </tr>
-              `
-            }
+
+`;
+
+        }
+      )
+      .join("")
+
+  : `
+
+<tr>
+
+<td
+colspan="8"
+style="
+text-align:center;
+padding:20px;
+"
+>
+
+No orders or quotations saved.
+
+</td>
+
+</tr>
+
+    `
+}
 
 </tbody>
 
@@ -55886,69 +56590,230 @@ text-align:center;
 
 </div>
 
-      `;
+    `;
 
-box.querySelectorAll(
+
+    box
+      .querySelectorAll(
         "th,td"
-      ).forEach(
-        x => {
+      )
+      .forEach(
+        c => {
 
-x.style.padding =
+c.style.padding =
             "9px";
 
-x.style.borderBottom =
+c.style.borderBottom =
             "1px solid #eee";
+
+c.style.verticalAlign =
+            "top";
 
         }
       );
 
-box.querySelector(
-        "#afOrdersClose"
-      ).onclick =
-        () =>wrap.remove();
 
 box.querySelector(
-        "#afNewOrder"
-      ).onclick =
-        () =>
-openOrderForm(
-            render
-          );
-    }
+      "#afOrdersClose"
+    ).onclick =
+      () =>wrap.remove();
 
-    render();
+
+box.querySelector(
+      "#afNewOrder"
+    ).onclick =
+      () =>openForm();
+
+
+box.querySelectorAll(
+      "[data-print]"
+    )
+      .forEach(
+        b =>
+b.onclick =
+            () =>
+printRecord(
+orderList()
+                  .find(
+                    r =>
+                      String(
+r.id
+                      ) ===
+                      String(
+b.dataset.print
+                      )
+                  )
+              )
+      );
+
+
+box.querySelectorAll(
+      "[data-confirm]"
+    )
+      .forEach(
+        b =>
+b.onclick =
+            () =>
+confirmRecord(
+b.dataset.confirm
+              )
+      );
+
+
+box.querySelectorAll(
+      "[data-deliver]"
+    )
+      .forEach(
+        b =>
+b.onclick =
+            () =>
+deliverRecord(
+b.dataset.deliver
+              )
+      );
+
   }
 
-  function openOrderForm(
-afterSave
-  ) {
+
+  function openForm() {
 
 const customers =
 customerList();
 
+
+const p =
+      prices();
+
+
+const s =
+      stock();
+
+
 const {
-      wrap,
-      box
+      wrap: fw,
+      box: fb
     } =
       modal(
         "afOrderForm",
-        720
+        980
       );
 
-box.innerHTML = `
 
-      ${title(
-        "New Order / Quotation",
-        "Save the customer's commercial request before delivery",
-        "afOrderFormClose"
-      )}
+const rows =
+      TYPES
+        .map(
+          t => {
+
+const price =
+Number(
+  p[t.key] || 0
+);
+
+
+const available =
+Number(
+s?.balances?.[
+t.key
+  ] || 0
+);
+
+
+return `
+
+<tr>
+
+<td>
+${esc(
+t.name
+)}
+</td>
+
+<td style="
+text-align:right;
+">
+${available.toLocaleString()}
+</td>
+
+<td style="
+text-align:right;
+">
+
+${
+price > 0
+  ? money(price)
+  : "Not Set"
+}
+
+</td>
+
+<td>
+
+<input
+  id="oq_${esc(
+t.key
+  )}"
+  data-oq="${esc(
+t.key
+  )}"
+  type="number"
+  min="0"
+  step="1"
+  value="0"
+  ${
+    price > 0
+      ? ""
+      : "disabled"
+  }
+  style="
+    ${input()}
+    max-width:120px;
+  "
+>
+
+</td>
+
+<td
+  id="oqsub_${esc(
+t.key
+  )}"
+  style="
+text-align:right;
+font-weight:bold;
+"
+>
+
+${money(0)}
+
+</td>
+
+</tr>
+
+`;
+
+          }
+        )
+        .join("");
+
+
+fb.innerHTML = `
+
+${title(
+  "New Order / Quotation",
+  "Select pole quantities; approved prices calculate automatically",
+  "afOrderFormClose"
+)}
+
 
 <div style="
 display:grid;
-        grid-template-columns:
-          1fr 1fr;
-        gap:12px;
-      ">
+grid-template-columns:
+repeat(
+  auto-fit,
+minmax(220px,1fr)
+);
+gap:12px;
+">
+
 
 <div>
 
@@ -55957,36 +56822,44 @@ display:grid;
 </label>
 
 <input
-            id="afOrderDate"
-            type="date"
-            value="${today()}"
-            style="${input()}margin-top:5px;"
+  id="afOrderDate"
+  type="date"
+  value="${today()}"
+  style="
+    ${input()}
+    margin-top:5px;
+  "
 >
 
 </div>
 
+
 <div>
 
 <label>
-<b>Type</b>
+<b>Type *</b>
 </label>
 
 <select
-            id="afOrderType"
-            style="${input()}margin-top:5px;"
+  id="afOrderType"
+  style="
+    ${input()}
+    margin-top:5px;
+  "
 >
 
-<option>
-              Quotation
+<option value="Quotation">
+Quotation
 </option>
 
-<option>
-              Order
+<option value="Order">
+Order
 </option>
 
 </select>
 
 </div>
+
 
 <div>
 
@@ -55995,132 +56868,366 @@ display:grid;
 </label>
 
 <select
-            id="afOrderCustomer"
-            style="${input()}margin-top:5px;"
+  id="afOrderCustomer"
+  style="
+    ${input()}
+    margin-top:5px;
+  "
 >
 
 <option value="">
-              Select customer
+Select customer
 </option>
 
-            ${
-              customers
-                .map(
-                  c => `
+${
+customers
+  .map(
+    c => `
 
 <option
-                      value="${esc(c.id)}"
+value="${esc(
+c.id
+)}"
 >
-                      ${esc(c.name)}
+
+${esc(
+c.name
+)}
+
+${
+c.phone
+  ? " — " +
+    esc(c.phone)
+  : ""
+}
+
 </option>
 
-                  `
-                )
-                .join("")
-            }
+    `
+  )
+  .join("")
+}
 
 </select>
 
 </div>
 
-<div>
-
-<label>
-<b>
-              Estimated Value
-</b>
-</label>
-
-<input
-            id="afOrderValue"
-            type="number"
-            min="0"
-            value="0"
-            style="${input()}margin-top:5px;"
->
-
-</div>
 
 <div>
 
 <label>
-<b>Status</b>
+<b>Automatic Status</b>
 </label>
 
-<select
-            id="afOrderStatus"
-            style="${input()}margin-top:5px;"
+<div
+  id="afOrderStatusView"
+  style="
+    ${input()}
+    margin-top:5px;
+    background:#eef8f2;
+font-weight:bold;
+    color:#0b5d3b;
+  "
 >
 
-<option>PENDING</option>
-<option>QUOTED</option>
-<option>CONFIRMED</option>
-<option>COMPLETED</option>
-<option>CANCELLED</option>
-
-</select>
+QUOTED
 
 </div>
 
 </div>
+
+</div>
+
+
+<h3 style="
+margin:20px 0 8px;
+color:#0b5d3b;
+">
+
+Pole Items
+
+</h3>
+
 
 <div style="
-        margin-top:12px;
-      ">
+overflow:auto;
+">
+
+<table style="
+width:100%;
+min-width:760px;
+border-collapse:collapse;
+">
+
+<thead>
+
+<tr style="
+background:#eaf5ee;
+text-align:left;
+">
+
+<th>Pole Type</th>
+<th>Current Stock</th>
+<th>Approved Unit Price</th>
+<th>Quantity</th>
+<th>Subtotal</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+
+${rows}
+
+</tbody>
+
+</table>
+
+</div>
+
+
+<div style="
+display:flex;
+justify-content:flex-end;
+margin-top:14px;
+">
+
+<div style="
+min-width:280px;
+padding:14px;
+background:#eef8f2;
+border:1px solid #cfe6d8;
+border-radius:9px;
+">
+
+<div style="
+font-size:12px;
+color:#666;
+">
+Total
+</div>
+
+<div
+  id="afOrderTotal"
+  style="
+font-size:24px;
+font-weight:bold;
+color:#0b5d3b;
+"
+>
+
+${money(0)}
+
+</div>
+
+</div>
+
+</div>
+
+
+<div style="
+margin-top:14px;
+">
 
 <label>
-<b>
-            Description *
-</b>
+<b>Notes</b>
 </label>
 
 <textarea
-          id="afOrderDescription"
-          rows="4"
-          style="${input()}margin-top:5px;"
+  id="afOrderNotes"
+  rows="3"
+  style="
+    ${input()}
+    margin-top:5px;
+  "
 ></textarea>
 
 </div>
 
+
+<div style="
+margin-top:12px;
+padding:10px;
+background:#fff8e1;
+border:1px solid #ead59a;
+border-radius:7px;
+font-size:12px;
+">
+
+Saving this does <b>not</b>
+reduce stock.
+
+Stock reduces only when
+delivery is saved.
+
+</div>
+
+
 <button
-        id="afOrderSave"
-        style="${btn()}width:100%;margin-top:15px;"
+  id="afOrderSave"
+  style="
+    ${btn()}
+    width:100%;
+    margin-top:15px;
+  "
 >
-💾 Save
+
+💾 Save Order / Quotation
+
 </button>
 
     `;
 
-box.querySelector(
+
+    fb
+      .querySelectorAll(
+        "th,td"
+      )
+      .forEach(
+        c => {
+
+c.style.padding =
+            "9px";
+
+c.style.borderBottom =
+            "1px solid #eee";
+
+        }
+      );
+
+
+const typeEl =
+fb.querySelector(
+        "#afOrderType"
+      );
+
+
+const statusEl =
+fb.querySelector(
+        "#afOrderStatusView"
+      );
+
+
+const totalEl =
+fb.querySelector(
+        "#afOrderTotal"
+      );
+
+
+const calc = () => {
+
+      let total = 0;
+
+
+TYPES.forEach(
+        t => {
+
+const qty =
+            Number(
+fb.querySelector(
+                "#oq_" +
+t.key
+              )?.value ||
+              0
+            );
+
+
+const sub =
+qty *
+            Number(
+              p[t.key] ||
+              0
+            );
+
+
+const cell =
+fb.querySelector(
+              "#oqsub_" +
+t.key
+            );
+
+
+          if (cell) {
+
+cell.textContent =
+              money(sub);
+
+          }
+
+
+          total +=
+            sub;
+
+        }
+      );
+
+
+totalEl.textContent =
+        money(total);
+
+
+      return total;
+
+    };
+
+
+typeEl.onchange =
+      () => {
+
+statusEl.textContent =
+typeEl.value ===
+          "Quotation"
+
+            ? "QUOTED"
+
+            : "PENDING";
+
+      };
+
+
+fb.querySelectorAll(
+      "[data-oq]"
+    )
+      .forEach(
+        el =>
+el.addEventListener(
+            "input",
+calc
+          )
+      );
+
+
+fb.querySelector(
       "#afOrderFormClose"
     ).onclick =
-      () =>wrap.remove();
+      () =>fw.remove();
 
-box.querySelector(
+
+fb.querySelector(
       "#afOrderSave"
     ).onclick =
       () => {
+
 
 const customer =
 customers.find(
             c =>
               String(c.id) ===
               String(
-box.querySelector(
+fb.querySelector(
                   "#afOrderCustomer"
                 ).value
               )
           );
 
+
 const date =
-box.querySelector(
+fb.querySelector(
             "#afOrderDate"
           ).value;
 
-const description =
-box.querySelector(
-            "#afOrderDescription"
-          ).value.trim();
 
         if (!customer) {
 
@@ -56130,6 +57237,7 @@ box.querySelector(
 
         }
 
+
         if (!date) {
 
           return alert(
@@ -56138,42 +57246,180 @@ box.querySelector(
 
         }
 
-        if (!description) {
+
+const items = [];
+
+
+        for (
+const t of
+          TYPES
+        ) {
+
+
+const qty =
+            Number(
+fb.querySelector(
+                "#oq_" +
+t.key
+              )?.value ||
+              0
+            );
+
+
+          if (
+qty< 0 ||
+            !Number.isInteger(
+qty
+            )
+          ) {
+
+            return alert(
+t.name +
+              " quantity must be a whole number."
+            );
+
+          }
+
+
+          if (
+qty<= 0
+          ) {
+
+            continue;
+
+          }
+
+
+const unitPrice =
+            Number(
+              p[t.key] ||
+              0
+            );
+
+
+          if (
+unitPrice<= 0
+          ) {
+
+            return alert(
+              "No Director-approved price has been set for:\n\n" +
+t.name
+            );
+
+          }
+
+
+items.push({
+
+            key:
+t.key,
+
+            name:
+t.name,
+
+            quantity:
+qty,
+
+unitPrice,
+
+standardUnitPrice:
+unitPrice,
+
+            subtotal:
+qty *
+unitPrice
+
+          });
+
+        }
+
+
+        if (
+          !items.length
+        ) {
 
           return alert(
-            "Please enter the order / quotation description."
+            "Please enter at least one pole quantity."
           );
 
         }
 
+
+const type =
+typeEl.value;
+
+
+const status =
+          type ===
+          "Quotation"
+
+            ? "QUOTED"
+
+            : "PENDING";
+
+
+const value =
+items.reduce(
+            (
+              sum,
+i
+            ) =>
+              sum +
+i.subtotal,
+            0
+          );
+
+
 const records =
 orderList();
+
+
+const count =
+records.filter(
+            r =>
+              String(
+r.date ||
+                ""
+              ) ===
+              String(date)
+          ).length;
+
+
+const reference =
+          (
+            type ===
+            "Quotation"
+
+              ? "QT"
+
+              : "ORD"
+          ) +
+          "-" +
+date.replace(
+            /-/g,
+            ""
+          ) +
+          "-" +
+          String(
+            count + 1
+          ).padStart(
+            3,
+            "0"
+          );
+
 
 records.push({
 
           id:
 uid("ORD"),
 
-          reference:
-            "ORD-" +
-date.replace(
-              /-/g,
-              ""
-            ) +
-            "-" +
-            String(
-records.length + 1
-            ).padStart(
-              3,
-              "0"
-            ),
+          reference,
 
           date,
 
-          type:
-box.querySelector(
-              "#afOrderType"
-            ).value,
+          type,
+
+          status,
 
 customerId:
 customer.id,
@@ -56181,19 +57427,30 @@ customer.id,
 customerName:
 customer.name,
 
-          description,
+customerPhone:
+customer.phone ||
+            "",
 
-          value:
-            Number(
-box.querySelector(
-                "#afOrderValue"
-              ).value || 0
-            ),
+customerLocation:
+customer.location ||
+            "",
 
-          status:
-box.querySelector(
-              "#afOrderStatus"
-            ).value,
+          items,
+
+          description:
+itemText({
+              items
+            }),
+
+          notes:
+fb.querySelector(
+              "#afOrderNotes"
+            ).value.trim(),
+
+          value,
+
+totalValue:
+            value,
 
 createdAt:
             new Date()
@@ -56208,23 +57465,39 @@ currentUser()
 
         });
 
+
         save(
 K.orders,
           records
         );
 
-wrap.remove();
+
+fw.remove();
+
 
         alert(
-          "Order / quotation saved successfully."
+          type +
+          " saved successfully.\n\n" +
+          "Reference: " +
+          reference +
+          "\nTotal: " +
+          money(value)
         );
 
-        if (afterSave) {
-afterSave();
-        }
+
+        render();
 
       };
+
+
+calc();
+
   }
+
+
+  render();
+
+}
 
   /* =======================================================
      PAYMENTS
