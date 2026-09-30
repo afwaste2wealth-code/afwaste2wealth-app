@@ -60400,3 +60400,2140 @@ console.log(
 
 })();
 
+/* =========================================================
+   A&F ORDER PROCESSING + PARTIAL DELIVERY CONTROL
+   Paste ONCE at the very bottom of app.js
+   ========================================================= */
+
+(function connectAFOrderProcessingDelivery() {
+  "use strict";
+
+const ORDER_KEY = "afSalesOrders";
+const DELIVERY_KEY = "afDeliveryRecords";
+
+  function read(key, fallback) {
+    try {
+const value =
+JSON.parse(
+localStorage.getItem(key) ||
+          "null"
+        );
+
+      return value ?? fallback;
+
+    } catch (error) {
+
+      return fallback;
+
+    }
+  }
+
+
+  function save(key, value) {
+
+localStorage.setItem(
+      key,
+JSON.stringify(value)
+    );
+
+  }
+
+
+  function esc(value) {
+
+    return String(
+      value ?? ""
+    )
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+
+  }
+
+
+  function orders() {
+
+const list =
+      read(
+        ORDER_KEY,
+        []
+      );
+
+    return Array.isArray(list)
+      ? list
+      : [];
+
+  }
+
+
+  function deliveries() {
+
+const list =
+      read(
+        DELIVERY_KEY,
+        []
+      );
+
+    return Array.isArray(list)
+      ? list
+      : [];
+
+  }
+
+
+  function findOrderByReference(
+    reference
+  ) {
+
+    return orders()
+      .find(
+        record =>
+
+          String(
+record.reference ||
+            ""
+          ).trim() ===
+
+          String(
+            reference ||
+            ""
+          ).trim()
+      );
+
+  }
+
+
+  function activePoleDeliveries(
+    reference
+  ) {
+
+    return deliveries()
+      .filter(
+        record =>
+
+          String(
+record.status ||
+            ""
+          ).toUpperCase() !==
+          "CANCELLED" &&
+
+          String(
+record.deliveryType ||
+            ""
+          ).toLowerCase() ===
+          "poles" &&
+
+          String(
+record.reference ||
+            ""
+          ).trim() ===
+
+          String(
+            reference ||
+            ""
+          ).trim()
+      );
+
+  }
+
+
+  function deliveredByPole(
+    reference
+  ) {
+
+const result = {};
+
+
+activePoleDeliveries(
+      reference
+    )
+      .forEach(
+        record => {
+
+const items =
+Array.isArray(
+record.items
+            )
+              ? record.items
+              : [];
+
+
+items.forEach(
+            item => {
+
+const key =
+                String(
+item.key ||
+                  ""
+                );
+
+
+              if (!key) {
+                return;
+              }
+
+
+              result[key] =
+                Number(
+                  result[key] ||
+                  0
+                ) +
+
+                Number(
+item.quantity ||
+                  0
+                );
+
+            }
+          );
+
+        }
+      );
+
+
+    return result;
+
+  }
+
+
+  function getProgress(
+    order
+  ) {
+
+const delivered =
+deliveredByPole(
+order.reference
+      );
+
+
+const items =
+Array.isArray(
+order.items
+      )
+        ? order.items
+        : [];
+
+
+    let orderedTotal = 0;
+    let deliveredTotal = 0;
+    let remainingTotal = 0;
+
+
+const progressItems =
+items.map(
+        item => {
+
+const ordered =
+            Number(
+item.quantity ||
+              0
+            );
+
+
+const alreadyDelivered =
+Math.min(
+              Number(
+                delivered[
+item.key
+                ] || 0
+              ),
+              ordered
+            );
+
+
+const remaining =
+Math.max(
+              ordered -
+alreadyDelivered,
+              0
+            );
+
+
+orderedTotal +=
+            ordered;
+
+
+deliveredTotal +=
+alreadyDelivered;
+
+
+remainingTotal +=
+            remaining;
+
+
+          return {
+
+            key:
+item.key,
+
+            name:
+item.name,
+
+            ordered,
+
+            delivered:
+alreadyDelivered,
+
+            remaining
+
+          };
+
+        }
+      );
+
+
+    return {
+
+progressItems,
+
+orderedTotal,
+
+deliveredTotal,
+
+remainingTotal
+
+    };
+
+  }
+
+
+  /* =====================================================
+     UPDATE ORDER STATUS
+     ===================================================== */
+
+  function updateOrderStatus(
+    reference,
+forceProcessing
+  ) {
+
+const list =
+      orders();
+
+
+const index =
+list.findIndex(
+        record =>
+
+          String(
+record.reference ||
+            ""
+          ).trim() ===
+
+          String(
+            reference ||
+            ""
+          ).trim()
+      );
+
+
+    if (index < 0) {
+      return null;
+    }
+
+
+const order =
+      list[index];
+
+
+const currentStatus =
+      String(
+order.status ||
+        ""
+      ).toUpperCase();
+
+
+    if (
+currentStatus ===
+      "CANCELLED"
+    ) {
+
+      return order;
+
+    }
+
+
+const progress =
+getProgress(
+        order
+      );
+
+
+order.deliveryProgressItems =
+progress.progressItems;
+
+
+order.orderedPoles =
+progress.orderedTotal;
+
+
+order.deliveredPoles =
+progress.deliveredTotal;
+
+
+order.remainingPoles =
+progress.remainingTotal;
+
+
+order.lastDeliveryProgressAt =
+      new Date()
+        .toISOString();
+
+
+    /*
+     * FULL ORDER DELIVERED
+     */
+    if (
+progress.orderedTotal> 0 &&
+progress.remainingTotal<= 0
+    ) {
+
+order.status =
+        "COMPLETED";
+
+
+order.deliveryProgress =
+        "COMPLETED";
+
+
+order.completedAt =
+order.completedAt ||
+        new Date()
+          .toISOString();
+
+    }
+
+    /*
+     * PARTLY DELIVERED
+     * OR WAITING FOR PRODUCTION/STOCK
+     */
+    else if (
+progress.deliveredTotal> 0 ||
+forceProcessing ||
+currentStatus ===
+        "PROCESSING"
+    ) {
+
+order.status =
+        "PROCESSING";
+
+
+order.deliveryProgress =
+progress.deliveredTotal> 0
+
+          ? "PARTIAL"
+
+          : "PROCESSING";
+
+
+order.processingStartedAt =
+order.processingStartedAt ||
+        new Date()
+          .toISOString();
+
+    }
+
+    else if (
+currentStatus ===
+      "COMPLETED"
+    ) {
+
+order.status =
+        "CONFIRMED";
+
+
+order.deliveryProgress =
+        "";
+
+
+order.completedAt =
+        "";
+
+    }
+
+
+    list[index] =
+      order;
+
+
+    save(
+      ORDER_KEY,
+      list
+    );
+
+
+    return order;
+
+  }
+
+
+  function liveStock() {
+
+    try {
+
+      return typeof
+window.getAFFactoryStock ===
+        "function"
+
+        ? window
+            .getAFFactoryStock()
+
+        : {
+            balances: {},
+totalBalance: 0
+          };
+
+    } catch (error) {
+
+      return {
+        balances: {},
+totalBalance: 0
+      };
+
+    }
+
+  }
+
+
+  function orderHasStockShortage(
+    order
+  ) {
+
+const stock =
+liveStock();
+
+
+const progress =
+getProgress(
+        order
+      );
+
+
+    return progress
+      .progressItems
+      .some(
+        item => {
+
+const available =
+            Number(
+              stock
+                ?.balances
+                ?.[
+item.key
+                ] ||
+              0
+            );
+
+
+          return (
+item.remaining>
+            available
+          );
+
+        }
+      );
+
+  }
+
+
+  function closeSalesWindows() {
+
+const ordersModal =
+document.getElementById(
+        "afOrders"
+      );
+
+
+    if (ordersModal) {
+ordersModal.remove();
+    }
+
+
+const salesMain =
+document.getElementById(
+        "afSalesCustomersMain"
+      );
+
+
+    if (salesMain) {
+salesMain.remove();
+    }
+
+  }
+
+
+  function fillOrderCustomer(
+    modal,
+    order
+  ) {
+
+const registeredCustomer =
+modal.querySelector(
+        "#afRegisteredCustomerSelect"
+      );
+
+
+    if (
+registeredCustomer&&
+order.customerId
+    ) {
+
+registeredCustomer.value =
+order.customerId;
+
+
+registeredCustomer
+        .dispatchEvent(
+          new Event(
+            "change",
+            {
+bubbles:true
+            }
+          )
+        );
+
+    }
+
+
+const setValue =
+      (
+        selector,
+        value
+      ) => {
+
+const el =
+modal.querySelector(
+            selector
+          );
+
+
+        if (!el) {
+          return;
+        }
+
+
+el.value =
+          value ||
+          "";
+
+
+el.dispatchEvent(
+          new Event(
+            "input",
+            {
+bubbles:true
+            }
+          )
+        );
+
+
+el.dispatchEvent(
+          new Event(
+            "change",
+            {
+bubbles:true
+            }
+          )
+        );
+
+      };
+
+
+setValue(
+      "#afDeliveryCustomer",
+order.customerName
+    );
+
+
+setValue(
+      "#afDeliveryPhone",
+order.customerPhone
+    );
+
+
+setValue(
+      "#afDeliveryPlace",
+order.customerLocation
+    );
+
+
+setValue(
+      "#afDeliveryReference",
+order.reference
+    );
+
+  }
+
+
+  /* =====================================================
+     OPEN CONFIRMED / PROCESSING ORDER FOR DELIVERY
+     ===================================================== */
+
+  function openOrderDelivery(
+    order
+  ) {
+
+    if (!order) {
+      return;
+    }
+
+
+    if (
+typeof
+window.recordAFDelivery !==
+        "function"
+    ) {
+
+      alert(
+        "Record Delivery could not be found."
+      );
+
+      return;
+
+    }
+
+
+const status =
+      String(
+order.status ||
+        ""
+      ).toUpperCase();
+
+
+    if (
+      status !==
+        "CONFIRMED" &&
+
+      status !==
+        "PROCESSING"
+    ) {
+
+      alert(
+        "Only CONFIRMED or PROCESSING orders can be converted to delivery."
+      );
+
+      return;
+
+    }
+
+
+    /*
+     * If stock cannot complete the
+     * order, move it to PROCESSING.
+     */
+    if (
+orderHasStockShortage(
+        order
+      )
+    ) {
+
+updateOrderStatus(
+order.reference,
+        true
+      );
+
+    }
+
+
+closeSalesWindows();
+
+
+window.recordAFDelivery();
+
+
+    let attempts = 0;
+
+
+const timer =
+setInterval(
+        () => {
+
+          attempts += 1;
+
+
+const modal =
+document.getElementById(
+              "afRecordDeliveryModal"
+            );
+
+
+          if (modal) {
+
+clearInterval(
+              timer
+            );
+
+
+setTimeout(
+              () => {
+
+fillOrderCustomer(
+                  modal,
+                  order
+                );
+
+
+enhanceOrderDeliveryModal(
+                  modal,
+order.reference
+                );
+
+              },
+              120
+            );
+
+
+            return;
+
+          }
+
+
+          if (
+            attempts >= 30
+          ) {
+
+clearInterval(
+              timer
+            );
+
+          }
+
+        },
+        100
+      );
+
+  }
+
+
+  /* =====================================================
+     DELIVERY SCREEN CONTROL
+     ===================================================== */
+
+  function enhanceOrderDeliveryModal(
+    modal,
+    reference
+  ) {
+
+    if (
+      !modal ||
+      !reference
+    ) {
+
+      return;
+
+    }
+
+
+const order =
+findOrderByReference(
+        reference
+      );
+
+
+    if (!order) {
+      return;
+    }
+
+
+const currentMarker =
+modal.dataset
+        .afOrderProcessingReference ||
+      "";
+
+
+    if (
+currentMarker ===
+      reference
+    ) {
+
+      return;
+
+    }
+
+
+modal.dataset
+      .afOrderProcessingReference =
+      reference;
+
+
+const stock =
+liveStock();
+
+
+const progress =
+getProgress(
+        order
+      );
+
+
+const orderItems =
+Array.isArray(
+order.items
+      )
+        ? order.items
+        : [];
+
+
+const orderKeys =
+      new Set(
+orderItems
+          .map(
+            item =>
+              String(
+item.key ||
+                ""
+              )
+          )
+      );
+
+
+const deliveryType =
+modal.querySelector(
+        "#afDeliveryType"
+      );
+
+
+const referenceInput =
+modal.querySelector(
+        "#afDeliveryReference"
+      );
+
+
+const customerInput =
+modal.querySelector(
+        "#afDeliveryCustomer"
+      );
+
+
+const registeredCustomer =
+modal.querySelector(
+        "#afRegisteredCustomerSelect"
+      );
+
+
+    /*
+     * Order delivery must be POLES.
+     */
+    if (deliveryType) {
+
+deliveryType.value =
+        "poles";
+
+
+deliveryType
+        .dispatchEvent(
+          new Event(
+            "change",
+            {
+bubbles:true
+            }
+          )
+        );
+
+
+deliveryType.disabled =
+        true;
+
+    }
+
+
+    /*
+     * Lock order reference.
+     */
+    if (referenceInput) {
+
+referenceInput.value =
+        reference;
+
+
+referenceInput.readOnly =
+        true;
+
+    }
+
+
+    /*
+     * Lock customer name.
+     */
+    if (customerInput) {
+
+customerInput.value =
+order.customerName ||
+customerInput.value ||
+        "";
+
+
+customerInput.readOnly =
+        true;
+
+    }
+
+
+    if (
+registeredCustomer
+    ) {
+
+registeredCustomer.disabled =
+        true;
+
+    }
+
+
+    /*
+     * Disable pole sizes that were
+     * NOT ordered.
+     */
+    modal
+      .querySelectorAll(
+        '[id^="afDeliveryQty_"]'
+      )
+      .forEach(
+        input => {
+
+const key =
+            String(
+input.id ||
+              ""
+            )
+              .replace(
+                "afDeliveryQty_",
+                ""
+              );
+
+
+          if (
+            !orderKeys.has(
+              key
+            )
+          ) {
+
+input.value =
+              0;
+
+
+input.disabled =
+              true;
+
+          }
+
+        }
+      );
+
+
+    let shortageExists =
+      false;
+
+
+    let anythingDeliverable =
+      false;
+
+
+const progressRows =
+orderItems
+        .map(
+          item => {
+
+const key =
+              String(
+item.key ||
+                ""
+              );
+
+
+const progressItem =
+              progress
+                .progressItems
+                .find(
+                  p =>
+                    String(
+p.key ||
+                      ""
+                    ) ===
+                    key
+                ) ||
+
+              {
+                ordered:
+                  Number(
+item.quantity ||
+                    0
+                  ),
+
+                delivered:
+                  0,
+
+                remaining:
+                  Number(
+item.quantity ||
+                    0
+                  )
+              };
+
+
+const available =
+              Number(
+                stock
+                  ?.balances
+                  ?.[key] ||
+                0
+              );
+
+
+            /*
+             * Deliver the smaller of:
+             * remaining order or stock.
+             */
+const maximumNow =
+Math.min(
+progressItem.remaining,
+                available
+              );
+
+
+const deliverNow =
+Math.max(
+maximumNow,
+                0
+              );
+
+
+const balancePending =
+Math.max(
+progressItem.remaining -
+deliverNow,
+                0
+              );
+
+
+            if (
+balancePending> 0
+            ) {
+
+shortageExists =
+                true;
+
+            }
+
+
+            if (
+deliverNow> 0
+            ) {
+
+anythingDeliverable =
+                true;
+
+            }
+
+
+const input =
+modal.querySelector(
+                "#afDeliveryQty_" +
+                key
+              );
+
+
+            if (input) {
+
+input.max =
+                String(
+maximumNow
+                );
+
+
+input.value =
+                String(
+deliverNow
+                );
+
+
+input.disabled =
+maximumNow<= 0;
+
+
+input.dataset
+                .orderRemaining =
+                String(
+progressItem.remaining
+                );
+
+
+input.dataset
+                .orderAvailable =
+                String(
+                  available
+                );
+
+
+input.dispatchEvent(
+                new Event(
+                  "input",
+                  {
+bubbles:true
+                  }
+                )
+              );
+
+            }
+
+
+            return `
+
+<tr>
+
+<td>
+${esc(
+item.name ||
+  key
+)}
+</td>
+
+<td style="
+text-align:right;
+">
+${Number(
+progressItem.ordered ||
+  0
+).toLocaleString()}
+</td>
+
+<td style="
+text-align:right;
+">
+${Number(
+progressItem.delivered ||
+  0
+).toLocaleString()}
+</td>
+
+<td style="
+text-align:right;
+">
+${available.toLocaleString()}
+</td>
+
+<td
+  id="afOrderDeliverNow_${esc(
+    key
+  )}"
+  style="
+text-align:right;
+font-weight:bold;
+"
+>
+${deliverNow.toLocaleString()}
+</td>
+
+<td
+  id="afOrderPending_${esc(
+    key
+  )}"
+  style="
+text-align:right;
+font-weight:bold;
+color:${
+balancePending> 0
+    ? "#b26a00"
+    : "#0b5d3b"
+};
+"
+>
+${balancePending.toLocaleString()}
+</td>
+
+</tr>
+
+            `;
+
+          }
+        )
+        .join("");
+
+
+    /*
+     * If the full order cannot
+     * currently be supplied,
+     * mark PROCESSING.
+     */
+    if (
+shortageExists
+    ) {
+
+updateOrderStatus(
+        reference,
+        true
+      );
+
+    }
+
+
+const saleSummary =
+modal.querySelector(
+        "#afPoleSaleSummary"
+      );
+
+
+    if (
+saleSummary&&
+      !modal.querySelector(
+        "#afOrderProcessingPanel"
+      )
+    ) {
+
+const panel =
+document.createElement(
+          "div"
+        );
+
+
+panel.id =
+        "afOrderProcessingPanel";
+
+
+panel.style.cssText = `
+
+margin-top:14px;
+padding:12px;
+border:1px solid #e3c16f;
+background:#fffaf0;
+border-radius:9px;
+overflow:auto;
+
+      `;
+
+
+panel.innerHTML = `
+
+<div style="
+font-weight:bold;
+color:#7a5200;
+margin-bottom:6px;
+">
+
+Order Processing —
+${esc(reference)}
+
+</div>
+
+
+<div style="
+font-size:12px;
+color:#666;
+margin-bottom:10px;
+line-height:1.5;
+">
+
+The system can deliver only
+what is available now.
+Any undelivered quantity stays
+as a pending balance and the
+order remains PROCESSING.
+
+</div>
+
+
+<table style="
+width:100%;
+min-width:760px;
+border-collapse:collapse;
+">
+
+<thead>
+
+<tr style="
+background:#f7edcf;
+text-align:left;
+">
+
+<th>
+Pole Type
+</th>
+
+<th>
+Ordered
+</th>
+
+<th>
+Already Delivered
+</th>
+
+<th>
+Available
+</th>
+
+<th>
+Deliver Now
+</th>
+
+<th>
+Balance Pending
+</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+
+${progressRows}
+
+</tbody>
+
+</table>
+
+      `;
+
+
+      panel
+        .querySelectorAll(
+          "th,td"
+        )
+        .forEach(
+          cell => {
+
+cell.style.padding =
+              "8px";
+
+
+cell.style.borderBottom =
+              "1px solid #ead9a5";
+
+          }
+        );
+
+
+saleSummary
+        .parentElement
+        .insertBefore(
+          panel,
+saleSummary
+        );
+
+    }
+
+
+    /* ===================================================
+       LIVE BALANCE UPDATE
+       =================================================== */
+
+    function refreshRow(
+      key
+    ) {
+
+const input =
+modal.querySelector(
+          "#afDeliveryQty_" +
+          key
+        );
+
+
+      if (!input) {
+        return;
+      }
+
+
+const remaining =
+        Number(
+input.dataset
+            .orderRemaining ||
+          0
+        );
+
+
+const available =
+        Number(
+input.dataset
+            .orderAvailable ||
+          0
+        );
+
+
+const maximum =
+Math.min(
+          remaining,
+          available
+        );
+
+
+      let value =
+        Number(
+input.value ||
+          0
+        );
+
+
+      if (
+        !Number.isFinite(
+          value
+        ) ||
+        value < 0
+      ) {
+
+        value = 0;
+
+      }
+
+
+      /*
+       * Never exceed live stock
+       * or remaining order.
+       */
+      if (
+        value > maximum
+      ) {
+
+        value =
+          maximum;
+
+
+input.value =
+          String(
+            maximum
+          );
+
+      }
+
+
+const pending =
+Math.max(
+          remaining -
+          value,
+          0
+        );
+
+
+const deliverCell =
+modal.querySelector(
+          "#afOrderDeliverNow_" +
+          key
+        );
+
+
+const pendingCell =
+modal.querySelector(
+          "#afOrderPending_" +
+          key
+        );
+
+
+      if (deliverCell) {
+
+deliverCell.textContent =
+value.toLocaleString();
+
+      }
+
+
+      if (pendingCell) {
+
+pendingCell.textContent =
+pending.toLocaleString();
+
+
+pendingCell.style.color =
+          pending > 0
+
+            ? "#b26a00"
+
+            : "#0b5d3b";
+
+      }
+
+    }
+
+
+orderItems
+      .forEach(
+        item => {
+
+const input =
+modal.querySelector(
+              "#afDeliveryQty_" +
+item.key
+            );
+
+
+          if (!input) {
+            return;
+          }
+
+
+input.addEventListener(
+            "input",
+            () => {
+
+refreshRow(
+item.key
+              );
+
+            }
+          );
+
+
+refreshRow(
+item.key
+          );
+
+        }
+      );
+
+
+    /* ===================================================
+       SAVE DELIVERY / UPDATE ORDER
+       =================================================== */
+
+const saveButton =
+modal.querySelector(
+        "#afSaveDelivery"
+      );
+
+
+    if (saveButton) {
+
+
+      /*
+       * Nothing from this order
+       * is currently available.
+       */
+      if (
+        !anythingDeliverable
+      ) {
+
+saveButton.disabled =
+          true;
+
+
+saveButton.style.opacity =
+          "0.55";
+
+
+saveButton.style.cursor =
+          "not-allowed";
+
+
+saveButton.textContent =
+          "No Ordered Pole Stock Available — Order Processing";
+
+      }
+
+
+      if (
+        !saveButton.dataset
+          .afOrderProcessingHooked
+      ) {
+
+saveButton.dataset
+          .afOrderProcessingHooked =
+          "1";
+
+
+saveButton.addEventListener(
+          "click",
+          () => {
+
+const beforeCount =
+activePoleDeliveries(
+                reference
+              ).length;
+
+
+setTimeout(
+              () => {
+
+const afterCount =
+activePoleDeliveries(
+                    reference
+                  ).length;
+
+
+                /*
+                 * Delivery successfully saved.
+                 */
+                if (
+afterCount>
+beforeCount
+                ) {
+
+updateOrderStatus(
+                    reference,
+                    false
+                  );
+
+
+enhanceOrdersTable();
+
+                }
+
+              },
+              300
+            );
+
+          }
+        );
+
+      }
+
+    }
+
+  }
+
+
+  /* =====================================================
+     ORDERS & QUOTATIONS SCREEN
+     ===================================================== */
+
+  function enhanceOrdersTable() {
+
+const modal =
+document.getElementById(
+        "afOrders"
+      );
+
+
+    if (!modal) {
+      return;
+    }
+
+
+const list =
+      orders();
+
+
+    modal
+      .querySelectorAll(
+        "tbodytr"
+      )
+      .forEach(
+        row => {
+
+const cells =
+row.querySelectorAll(
+              "td"
+            );
+
+
+          if (
+cells.length< 8
+          ) {
+
+            return;
+
+          }
+
+
+const reference =
+            String(
+              cells[1]
+                ?.textContent ||
+              ""
+            ).trim();
+
+
+          let order =
+list.find(
+              record =>
+
+                String(
+record.reference ||
+                  ""
+                ).trim() ===
+                reference
+            );
+
+
+          if (!order) {
+            return;
+          }
+
+
+          order =
+updateOrderStatus(
+              reference,
+              false
+            ) ||
+            order;
+
+
+const status =
+            String(
+order.status ||
+              ""
+            ).toUpperCase();
+
+
+const statusCell =
+            cells[6];
+
+
+const actionCell =
+            cells[7];
+
+
+          /* =============================================
+             CONFIRMED
+             ============================================= */
+
+          if (
+            status ===
+            "CONFIRMED"
+          ) {
+
+const existingConvert =
+actionCell
+                ?.querySelector(
+                  "[data-deliver]"
+                );
+
+
+            /*
+             * Override original Convert button
+             * so this complete controller handles it.
+             */
+            if (
+existingConvert
+            ) {
+
+existingConvert.onclick =
+                () => {
+
+const freshOrder =
+findOrderByReference(
+                      reference
+                    );
+
+
+openOrderDelivery(
+freshOrder
+                  );
+
+                };
+
+            }
+
+          }
+
+
+          /* =============================================
+             PROCESSING
+             ============================================= */
+
+          if (
+            status ===
+            "PROCESSING"
+          ) {
+
+            /*
+             * Once processing,
+             * no more editing or confirming.
+             */
+actionCell
+              ?.querySelectorAll(
+                "[data-confirm], [data-edit-order]"
+              )
+              .forEach(
+                button =>
+button.remove()
+              );
+
+
+statusCell.innerHTML = `
+
+<b style="
+color:#b26a00;
+">
+PROCESSING
+</b>
+
+<br>
+
+<span style="
+font-size:11px;
+color:#666;
+">
+
+${Number(
+order.deliveredPoles ||
+  0
+).toLocaleString()}
+delivered
+
+•
+
+${Number(
+order.remainingPoles ||
+  0
+).toLocaleString()}
+pending
+
+</span>
+
+            `;
+
+
+            /*
+             * Original code does not
+             * show Convert button for
+             * PROCESSING, so add
+             * Continue Delivery.
+             */
+            if (
+actionCell&&
+              !actionCell
+                .querySelector(
+                  "[data-af-continue-delivery]"
+                )
+            ) {
+
+const actionWrap =
+actionCell
+                  .querySelector(
+                    "div"
+                  ) ||
+actionCell;
+
+
+const button =
+document.createElement(
+                  "button"
+                );
+
+
+button.type =
+                "button";
+
+
+button.textContent =
+                "Continue Delivery";
+
+
+button.dataset
+                .afContinueDelivery =
+order.id;
+
+
+button.style.marginLeft =
+                "6px";
+
+
+button.onclick =
+                () => {
+
+const freshOrder =
+findOrderByReference(
+                      reference
+                    );
+
+
+openOrderDelivery(
+freshOrder
+                  );
+
+                };
+
+
+actionWrap
+                .appendChild(
+                  button
+                );
+
+            }
+
+          }
+
+
+          /* =============================================
+             COMPLETED
+             ============================================= */
+
+          if (
+            status ===
+            "COMPLETED"
+          ) {
+
+statusCell.innerHTML = `
+
+<b style="
+color:#0b5d3b;
+">
+COMPLETED
+</b>
+
+<br>
+
+<span style="
+font-size:11px;
+color:#666;
+">
+
+${Number(
+order.deliveredPoles ||
+  0
+).toLocaleString()}
+delivered
+
+• 0 pending
+
+</span>
+
+            `;
+
+          }
+
+        }
+      );
+
+  }
+
+
+  /* =====================================================
+     WATCH DELIVERY MODAL
+     ===================================================== */
+
+  function watchDeliveryModal(
+    modal
+  ) {
+
+    if (
+      !modal ||
+modal.dataset
+        .afProcessingWatcherStarted
+    ) {
+
+      return;
+
+    }
+
+
+modal.dataset
+      .afProcessingWatcherStarted =
+      "1";
+
+
+    let attempts = 0;
+
+
+const timer =
+setInterval(
+        () => {
+
+          attempts += 1;
+
+
+          if (
+            !document.body
+              .contains(
+                modal
+              )
+          ) {
+
+clearInterval(
+              timer
+            );
+
+            return;
+
+          }
+
+
+const reference =
+            String(
+modal.querySelector(
+                "#afDeliveryReference"
+              )?.value ||
+              ""
+            ).trim();
+
+
+const order =
+            reference
+
+              ? findOrderByReference(
+                  reference
+                )
+
+              : null;
+
+
+          if (order) {
+
+clearInterval(
+              timer
+            );
+
+
+enhanceOrderDeliveryModal(
+              modal,
+              reference
+            );
+
+
+            return;
+
+          }
+
+
+          if (
+            attempts >= 30
+          ) {
+
+clearInterval(
+              timer
+            );
+
+          }
+
+        },
+        100
+      );
+
+  }
+
+
+  function scan() {
+
+const deliveryModal =
+document.getElementById(
+        "afRecordDeliveryModal"
+      );
+
+
+    if (
+deliveryModal
+    ) {
+
+watchDeliveryModal(
+deliveryModal
+      );
+
+    }
+
+
+enhanceOrdersTable();
+
+  }
+
+
+const observer =
+    new MutationObserver(
+      scan
+    );
+
+
+observer.observe(
+document.body,
+    {
+childList:true,
+subtree:true
+    }
+  );
+
+
+  scan();
+
+
+console.log(
+    "A&F order PROCESSING and partial-delivery control connected."
+  );
+
+})();
