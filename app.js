@@ -15546,7 +15546,7 @@ netKg.toLocaleString() +
 updateClientPerformance();
     }
   };
-
+populateMaterialSupplierDropdown();
 updateForm();
 calculateCompanyMaterial();
 }
