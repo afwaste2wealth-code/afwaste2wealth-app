@@ -74171,3 +74171,857 @@ window.afFixSupplierPerformancePosition =
 afFixSupplierPerformancePosition;
 
 })();
+
+
+/* =========================================================
+   A&F DIRECTOR DASHBOARD - CLIENT PERFORMANCE
+   Client of the Week + Client of the Month
+
+   Each period shows:
+   1. Top Client by Pole Quantity
+   2. Top Client by Pole Revenue
+
+   Both quantity AND revenue are displayed for each winner.
+
+   DIRECTOR DASHBOARD ONLY
+   ========================================================= */
+
+(function () {
+  "use strict";
+
+  if (window.__afClientPerformanceInstalled) return;
+  window.__afClientPerformanceInstalled = true;
+
+const CARD_ID =
+    "afClientPerformanceDashboardCard";
+
+
+  /* =====================================================
+     DIRECTOR CHECK
+     ===================================================== */
+
+  function afClientCurrentUser() {
+
+    try {
+
+      if (
+typeofgetAFCurrentUser ===
+        "function"
+      ) {
+
+        return (
+getAFCurrentUser() ||
+          {}
+        );
+
+      }
+
+    } catch (e) {}
+
+
+    try {
+
+      return JSON.parse(
+localStorage.getItem(
+          "currentUser"
+        ) || "{}"
+      ) || {};
+
+    } catch (e) {
+
+      return {};
+
+    }
+
+  }
+
+
+  function afClientIsDirector() {
+
+    return String(
+afClientCurrentUser().role ||
+      ""
+    ).toLowerCase() ===
+      "director";
+
+  }
+
+
+  /* =====================================================
+     DELIVERY RECORDS
+     ===================================================== */
+
+  function afClientDeliveryRecords() {
+
+    try {
+
+      return JSON.parse(
+localStorage.getItem(
+          "afDeliveryRecords"
+        ) || "[]"
+      ) || [];
+
+    } catch (e) {
+
+      return [];
+
+    }
+
+  }
+
+
+  /* =====================================================
+     DATE HELPERS
+     ===================================================== */
+
+  function afClientParseDate(value) {
+
+    if (!value) return null;
+
+
+const parts =
+      String(value).split("-");
+
+
+    if (parts.length === 3) {
+
+      return new Date(
+        Number(parts[0]),
+        Number(parts[1]) - 1,
+        Number(parts[2])
+      );
+
+    }
+
+
+const date =
+      new Date(value);
+
+
+    return isNaN(
+date.getTime()
+    )
+      ? null
+      : date;
+
+  }
+
+
+  function afClientWeekStart(date) {
+
+const d =
+      new Date(
+date.getFullYear(),
+date.getMonth(),
+date.getDate()
+      );
+
+
+    /*
+     * Monday is start of week.
+     */
+const day =
+d.getDay() || 7;
+
+
+d.setDate(
+d.getDate() -
+      day +
+      1
+    );
+
+
+d.setHours(
+      0, 0, 0, 0
+    );
+
+
+    return d;
+
+  }
+
+
+  function afClientWeekEnd(date) {
+
+const d =
+afClientWeekStart(date);
+
+
+d.setDate(
+d.getDate() + 6
+    );
+
+
+d.setHours(
+      23, 59, 59, 999
+    );
+
+
+    return d;
+
+  }
+
+
+  function afClientInPeriod(
+    date,
+    period
+  ) {
+
+const now =
+      new Date();
+
+
+    if (period === "week") {
+
+      return (
+        date >=
+afClientWeekStart(now) &&
+
+        date <=
+afClientWeekEnd(now)
+      );
+
+    }
+
+
+    return (
+date.getFullYear() ===
+now.getFullYear() &&
+
+date.getMonth() ===
+now.getMonth()
+    );
+
+  }
+
+
+  /* =====================================================
+     BUILD CLIENT TOTALS
+     ===================================================== */
+
+  function afClientTotals(period) {
+
+const records =
+afClientDeliveryRecords();
+
+
+const totals = {};
+
+
+    records
+      .filter(record => {
+
+        /*
+         * POLE SALES ONLY.
+         */
+        if (
+          String(
+record.deliveryType ||
+            ""
+          ).toLowerCase() !==
+          "poles"
+        ) {
+          return false;
+        }
+
+
+        /*
+         * Ignore cancelled/reversed deliveries.
+         */
+        if (
+          String(
+record.status ||
+            ""
+          ).toUpperCase() ===
+          "CANCELLED"
+        ) {
+          return false;
+        }
+
+
+const date =
+afClientParseDate(
+record.date
+          );
+
+
+        if (!date) {
+          return false;
+        }
+
+
+        return afClientInPeriod(
+          date,
+          period
+        );
+
+      })
+      .forEach(record => {
+
+const name =
+          String(
+record.customerName ||
+            "Unknown Client"
+          ).trim();
+
+
+        if (!totals[name]) {
+
+          totals[name] = {
+
+clientName:
+              name,
+
+            poles:
+              0,
+
+            revenue:
+              0,
+
+            deliveries:
+              0
+
+          };
+
+        }
+
+
+const client =
+          totals[name];
+
+
+        /*
+         * Pole quantity.
+         */
+        let poles =
+          Number(
+record.totalPoles
+          ) || 0;
+
+
+        /*
+         * Older records may not contain
+         * totalPoles, so calculate from items.
+         */
+        if (
+          poles <= 0 &&
+Array.isArray(
+record.items
+          )
+        ) {
+
+          poles =
+record.items.reduce(
+              (sum, item) =>
+                sum +
+                (
+                  Number(
+item.quantity
+                  ) || 0
+                ),
+              0
+            );
+
+        }
+
+
+        /*
+         * Revenue:
+         *
+         * finalSaleTotal is preferred because
+         * it already reflects any approved
+         * discount.
+         */
+const revenue =
+          Number(
+record.finalSaleTotal ??
+record.netSaleTotal ??
+record.saleAmount ??
+record.grossSaleTotal ??
+            0
+          ) || 0;
+
+
+client.poles +=
+          poles;
+
+
+client.revenue +=
+          revenue;
+
+
+client.deliveries +=
+          1;
+
+      });
+
+
+    return Object.values(
+      totals
+    );
+
+  }
+
+
+  /* =====================================================
+     FIND BOTH WINNERS
+     ===================================================== */
+
+  function afClientWinners(period) {
+
+const clients =
+afClientTotals(period);
+
+
+    if (!clients.length) {
+
+      return {
+quantityWinner: null,
+revenueWinner: null
+      };
+
+    }
+
+
+const quantityWinner =
+      clients
+        .slice()
+        .sort(
+          (a, b) =>
+b.poles -
+a.poles ||
+b.revenue -
+a.revenue
+        )[0];
+
+
+const revenueWinner =
+      clients
+        .slice()
+        .sort(
+          (a, b) =>
+b.revenue -
+a.revenue ||
+b.poles -
+a.poles
+        )[0];
+
+
+    return {
+quantityWinner,
+revenueWinner
+    };
+
+  }
+
+
+  /* =====================================================
+     NUMBER FORMAT
+     ===================================================== */
+
+  function afClientNumber(
+    value
+  ) {
+
+    return (
+      Number(value) || 0
+    ).toLocaleString();
+
+  }
+
+
+  /* =====================================================
+     WINNER BOX
+     ===================================================== */
+
+  function afClientWinnerBox(
+    heading,
+    winner,
+    icon
+  ) {
+
+    if (!winner) {
+
+      return `
+<div style="
+          padding:10px;
+          border:1px solid #e1e7e3;
+          border-radius:8px;
+          background:#fff;
+        ">
+
+<div style="
+            font-size:11px;
+font-weight:bold;
+            margin-bottom:5px;
+          ">
+            ${icon} ${heading}
+</div>
+
+<div style="
+            font-size:11px;
+            color:#777;
+          ">
+            No pole sales recorded.
+</div>
+
+</div>
+      `;
+
+    }
+
+
+    return `
+<div style="
+        padding:10px;
+        border:1px solid #d8e6de;
+        border-radius:8px;
+        background:#fff;
+      ">
+
+<div style="
+          font-size:11px;
+font-weight:bold;
+          color:#805d00;
+          margin-bottom:4px;
+        ">
+          ${icon} ${heading}
+</div>
+
+
+<div style="
+          font-size:15px;
+font-weight:bold;
+          color:#0b5d3b;
+          margin-bottom:7px;
+        ">
+          ${winner.clientName}
+</div>
+
+
+<div style="
+display:grid;
+          grid-template-columns:
+            repeat(2,minmax(0,1fr));
+          gap:6px;
+          font-size:10px;
+        ">
+
+<div>
+
+<span style="
+              color:#777;
+            ">
+              Poles
+</span>
+
+<br>
+
+<b>
+              ${afClientNumber(
+winner.poles
+              )} pcs
+</b>
+
+</div>
+
+
+<div>
+
+<span style="
+              color:#777;
+            ">
+              Revenue
+</span>
+
+<br>
+
+<b>
+              UGX
+              ${afClientNumber(
+winner.revenue
+              )}
+</b>
+
+</div>
+
+</div>
+
+</div>
+    `;
+
+  }
+
+
+  /* =====================================================
+     PERIOD CARD
+     ===================================================== */
+
+  function afClientPeriodCard(
+    title,
+    winners
+  ) {
+
+    return `
+<div style="
+        border:1px solid #d8e6de;
+        border-radius:10px;
+        padding:10px;
+        background:#fafcfb;
+      ">
+
+<div style="
+          font-size:13px;
+font-weight:bold;
+          margin-bottom:8px;
+          color:#222;
+        ">
+⭐ ${title}
+</div>
+
+
+<div style="
+display:grid;
+          gap:8px;
+        ">
+
+          ${afClientWinnerBox(
+            "Top by Pole Quantity",
+winners.quantityWinner,
+            "🏆"
+          )}
+
+
+          ${afClientWinnerBox(
+            "Top by Pole Revenue",
+winners.revenueWinner,
+            "💰"
+          )}
+
+</div>
+
+</div>
+    `;
+
+  }
+
+
+  /* =====================================================
+     RENDER
+     ===================================================== */
+
+  function afRenderClientPerformance() {
+
+const old =
+document.getElementById(
+        CARD_ID
+      );
+
+
+    /*
+     * Director only.
+     */
+    if (!afClientIsDirector()) {
+
+      if (old) {
+old.remove();
+      }
+
+      return;
+
+    }
+
+
+    /*
+     * We deliberately anchor Client Performance
+     * to Supplier Performance.
+     *
+     * This guarantees the order:
+     *
+     * Company Letters
+     * Supplier Performance
+     * Client Performance
+     */
+const supplierPerformance =
+document.getElementById(
+        "afSupplierPerformanceDashboardCard"
+      );
+
+
+    if (!supplierPerformance) {
+
+      if (old) {
+old.remove();
+      }
+
+      return;
+
+    }
+
+
+const week =
+afClientWinners(
+        "week"
+      );
+
+
+const month =
+afClientWinners(
+        "month"
+      );
+
+
+    let card =
+      old;
+
+
+    if (!card) {
+
+      card =
+document.createElement(
+          "section"
+        );
+
+
+card.id =
+        CARD_ID;
+
+
+card.className =
+        "card";
+
+
+supplierPerformance
+        .insertAdjacentElement(
+          "afterend",
+          card
+        );
+
+    }
+
+
+card.style.cssText = `
+      margin-top:12px;
+      width:100%;
+box-sizing:border-box;
+      border:1px solid #dce6e1;
+      border-radius:12px;
+      padding:12px;
+      background:#f8fbf9;
+    `;
+
+
+card.innerHTML = `
+
+<div style="
+        font-size:14px;
+font-weight:bold;
+        color:#0b5d3b;
+        margin-bottom:10px;
+      ">
+👥 Client Performance
+</div>
+
+
+<div style="
+display:grid;
+        gap:10px;
+      ">
+
+        ${afClientPeriodCard(
+          "Client of the Week",
+          week
+        )}
+
+
+        ${afClientPeriodCard(
+          "Client of the Month",
+          month
+        )}
+
+</div>
+
+    `;
+
+
+    /*
+     * If our right-hand column already exists,
+     * keep Client Performance inside it.
+     */
+const rightColumn =
+document.getElementById(
+        "afDirectorRightPerformanceColumn"
+      );
+
+
+    if (
+rightColumn&&
+card.parentElement !==
+rightColumn
+    ) {
+
+rightColumn.appendChild(
+        card
+      );
+
+    }
+
+  }
+
+
+  /* =====================================================
+     AUTO REFRESH
+     ===================================================== */
+
+  let afClientTimer =
+    null;
+
+
+  function afScheduleClientPerformance() {
+
+clearTimeout(
+afClientTimer
+    );
+
+
+afClientTimer =
+setTimeout(
+afRenderClientPerformance,
+        100
+      );
+
+  }
+
+
+  new MutationObserver(
+afScheduleClientPerformance
+  ).observe(
+document.body,
+    {
+childList:true,
+subtree:true
+    }
+  );
+
+
+window.addEventListener(
+    "storage",
+afScheduleClientPerformance
+  );
+
+
+setTimeout(
+afRenderClientPerformance,
+    350
+  );
+
+
+window.renderAFClientPerformance =
+afRenderClientPerformance;
+
+
+console.log(
+    "A&F Director Client Performance connected."
+  );
+
+})();
