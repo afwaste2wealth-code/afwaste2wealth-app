@@ -71394,6 +71394,7 @@ border-collapse:collapse;
 <th style="padding:10px;text-align:left;">Phone</th>
 <th style="padding:10px;text-align:left;">Location</th>
 <th style="padding:10px;text-align:left;">Material</th>
+<th style="padding:10px;">Date Registered</th>
 <th style="padding:10px;text-align:center;">Actions</th>
 </tr>
 </thead>
@@ -71420,6 +71421,13 @@ suppliers.map(s => `
 
 <td style="padding:10px;">
                                         ${afEscape(s.material || "-")}
+</td>
+<td style="padding:10px;">
+    ${s.dateRegistered
+        ? new Date(s.dateRegistered + "T00:00:00").toLocaleDateString("en-GB")
+        : (s.createdAt
+            ? new Date(s.createdAt).toLocaleDateString("en-GB")
+            : "-")}
 </td>
 
 <td style="
@@ -71463,7 +71471,7 @@ cursor:pointer;
                             :
                             `
 <tr>
-<td colspan="5"
+<td colspan="6"
                                     style="
                                         padding:30px;
 text-align:center;
@@ -71558,6 +71566,18 @@ box-sizing:border-box;
                     padding:10px;
                     margin:6px 0 14px;
                 ">
+<label>Date Registered *</label>
+
+<input
+    id="afSupplierDate"
+    type="date"
+    value="${existing?.dateRegistered || new Date().toISOString().slice(0,10)}"
+    style="
+        width:100%;
+box-sizing:border-box;
+        padding:10px;
+        margin:6px 0 14px;
+    ">
 
 
 <label>Phone Number</label>
@@ -71662,7 +71682,8 @@ function afSaveSupplier(existingId = "") {
 
 const name =
 document.getElementById("afSupplierName").value.trim();
-
+const dateRegistered = 
+document.getElementById("afSupplierDate").value;   
 const phone =
 document.getElementById("afSupplierPhone").value.trim();
 
@@ -71693,6 +71714,7 @@ suppliers.find(s => String(s.id) === String(existingId));
         }
 
 supplier.name = name;
+supplier.dateRegistered = dateRegistered;
 supplier.phone = phone;
 supplier.location = location;
 supplier.material = material;
@@ -71708,6 +71730,7 @@ Date.now() +
 Math.random().toString(36).slice(2,7),
 
             name,
+            dateRegistered,
             phone,
             location,
             material,
