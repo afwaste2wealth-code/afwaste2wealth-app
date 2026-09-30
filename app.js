@@ -72363,3 +72363,82 @@ totalCost
   }, true);
 
 })();
+/* =========================================================
+   A&F GLOBAL TABLE ALIGNMENT
+   Keeps figures clearly inside their correct columns
+   ========================================================= */
+
+(function () {
+
+const style = document.createElement("style");
+
+style.id = "afGlobalTableAlignment";
+
+style.textContent = `
+
+    /* All normal application tables */
+    table {
+      border-collapse: collapse;
+    }
+
+    /* Give every heading and cell breathing space */
+    table th,
+    table td {
+      padding-left: 12px !important;
+      padding-right: 12px !important;
+      box-sizing: border-box;
+      vertical-align: middle;
+    }
+
+    /* Headings remain clearly separated */
+    table th {
+      white-space: nowrap;
+      text-align: left;
+    }
+
+    /* Prevent numbers touching the next column */
+    table td {
+      min-width: 70px;
+    }
+
+    /* First column normally contains date/name/reference */
+    table th:first-child,
+    table td:first-child {
+      padding-left: 14px !important;
+    }
+
+    /* Last column gets equal breathing room */
+    table th:last-child,
+    table td:last-child {
+      padding-right: 14px !important;
+    }
+
+    /*
+     * Tables inside printable documents are left alone.
+     */
+    @media print {
+
+      table th,
+      table td {
+        padding-left: initial !important;
+        padding-right: initial !important;
+        min-width: initial;
+      }
+
+    }
+
+  `;
+
+  /*
+   * Prevent duplicate global styles if code is loaded again.
+   */
+const oldStyle =
+document.getElementById("afGlobalTableAlignment");
+
+  if (oldStyle) {
+oldStyle.remove();
+  }
+
+document.head.appendChild(style);
+
+})();
