@@ -65987,7 +65987,7 @@ return `
 
 @page{
   size:A4;
-  margin:14mm;
+  margin:12mm 14mm 13mm;
 }
 
 *{
@@ -66001,95 +66001,289 @@ font-family:Arial,Helvetica,sans-serif;
   background:#fff;
 }
 
+
+/* ===============================
+   SAMPLE 7 COMPANY HEADER
+   =============================== */
+
 .af-smart-header{
-display:grid;
-  grid-template-columns:90px 1fr;
-  gap:16px;
-align-items:center;
-  border:2px solid #0b5d3b;
-  border-radius:10px;
-  padding:13px 16px 11px;
-  margin-bottom:18px;
 position:relative;
+  margin-bottom:20px;
+  padding-bottom:12px;
+  border-bottom:2px solid #0b5d3b;
 }
 
-.af-smart-header:after{
-  content:"";
-position:absolute;
-  left:0;
-  right:0;
-  bottom:-2px;
-  height:5px;
-  background:#0b5d3b;
-  border-radius:0 0 8px 8px;
+.af-smart-header-main{
+display:grid;
+  grid-template-columns:72px 1fr 230px;
+  gap:14px;
+align-items:center;
 }
 
 .af-smart-mark{
-  width:76px;
-  height:76px;
-  border-radius:16px;
-  background:#0b5d3b;
-  color:#fff;
+  width:65px;
+  height:65px;
+  border-radius:13px;
+  background:#07502f;
+color:white;
 display:flex;
 align-items:center;
 justify-content:center;
-  font-size:25px;
+  font-size:23px;
   font-weight:900;
+position:relative;
+overflow:hidden;
+}
+
+.af-smart-mark::after{
+  content:"";
+position:absolute;
+  width:29px;
+  height:10px;
+  right:2px;
+  top:9px;
+  background:#d6a514;
+  border-radius:100% 0 100% 0;
+transform:rotate(-35deg);
 }
 
 .af-smart-company{
   color:#0b5d3b;
   font-size:22px;
-  line-height:1.1;
   font-weight:900;
-text-transform:uppercase;
-  letter-spacing:.3px;
+  line-height:1.05;
 }
 
 .af-smart-tag{
   margin-top:4px;
+  color:#183b2b;
   font-size:11px;
 font-weight:bold;
-  letter-spacing:1.2px;
+  letter-spacing:1px;
 text-transform:uppercase;
-  color:#52625b;
 }
 
 .af-smart-motto{
-  margin-top:4px;
-  font-size:11px;
-  color:#69766f;
+  margin-top:5px;
+  color:#5e6f67;
+  font-size:10.5px;
+font-style:italic;
+}
+
+.af-smart-contact{
+  border-left:2px solid #d5a315;
+  padding-left:13px;
+  font-size:9.5px;
+  line-height:1.7;
+  color:#263c33;
+}
+
+.af-smart-contact b{
+  color:#0b5d3b;
+}
+
+.af-smart-accent{
+position:absolute;
+  left:0;
+  right:0;
+  bottom:-5px;
+display:grid;
+  grid-template-columns:80% 20%;
+  height:4px;
+}
+
+.af-smart-accent-green{
+  background:#0b5d3b;
+}
+
+.af-smart-accent-gold{
+  background:#d5a315;
 }
 
 .af-smart-title{
-  margin-top:10px;
-  padding-top:8px;
-  border-top:1px solid #cfe0d7;
+text-align:center;
+  margin-top:13px;
   font-size:14px;
   font-weight:900;
-  letter-spacing:1px;
+  letter-spacing:1.1px;
 text-transform:uppercase;
-  color:#17261f;
+  color:#143725;
 }
 
+
+/* ===============================
+   SAMPLE 7 FOOTER
+   =============================== */
+
 .af-smart-footer{
-  margin-top:28px;
-  padding-top:8px;
-  border-top:1px solid #b9c8c0;
+  margin-top:30px;
+page-break-inside:avoid;
+}
+
+.af-smart-footer-wave{
+position:relative;
+  height:82px;
+overflow:hidden;
+  background:#eef5f1;
+  border-radius:0 0 6px 6px;
+}
+
+.af-smart-footer-wave::before{
+  content:"";
+position:absolute;
+  width:125%;
+  height:90px;
+  left:-10%;
+  bottom:-55px;
+  background:#0b5d3b;
+  border-radius:50% 50% 0 0;
+transform:rotate(-3deg);
+}
+
+.af-smart-footer-wave::after{
+  content:"";
+position:absolute;
+  width:120%;
+  height:75px;
+  left:-5%;
+  bottom:-57px;
+  border-top:8px solid #70aa2f;
+  border-radius:50%;
+transform:rotate(-3deg);
+}
+
+.af-smart-gold-wave{
+position:absolute;
+  left:-3%;
+  bottom:25px;
+  width:108%;
+  height:35px;
+  border-top:4px solid #d5a315;
+  border-radius:50%;
+transform:rotate(-3deg);
+  z-index:2;
+}
+
+.af-smart-waste{
+position:absolute;
+  left:25px;
+  bottom:5px;
+  z-index:3;
+color:white;
+  font-size:11px;
+font-weight:bold;
+}
+
+.af-smart-poles{
+position:absolute;
+  right:25px;
+  bottom:5px;
+  z-index:3;
+color:white;
+  font-size:11px;
+font-weight:bold;
+}
+
+.af-smart-pole-picture{
+position:absolute;
+  right:45px;
+  bottom:25px;
+  z-index:3;
+display:flex;
+  gap:3px;
+transform:rotate(-5deg);
+}
+
+.af-smart-pole-picture span{
+  width:63px;
+  height:8px;
+display:block;
+  background:#315d47;
+  border-radius:8px;
+  border:1px solid #557c67;
+}
+
+.af-smart-plastic-picture{
+position:absolute;
+  left:55px;
+  bottom:27px;
+  width:80px;
+  height:30px;
+  z-index:3;
+}
+
+.af-smart-plastic-picture span{
+position:absolute;
+  width:15px;
+  height:13px;
+  background:#7a9c8c;
+  opacity:.9;
+transform:rotate(20deg);
+}
+
+.af-smart-plastic-picture span:nth-child(1){
+  left:0;
+  top:8px;
+}
+
+.af-smart-plastic-picture span:nth-child(2){
+  left:20px;
+  top:0;
+transform:rotate(-15deg);
+}
+
+.af-smart-plastic-picture span:nth-child(3){
+  left:38px;
+  top:11px;
+transform:rotate(35deg);
+}
+
+.af-smart-plastic-picture span:nth-child(4){
+  left:57px;
+  top:3px;
+transform:rotate(-30deg);
+}
+
+.af-smart-footer-strip{
+  background:#06442a;
+color:white;
 text-align:center;
+  padding:7px 10px;
   font-size:9px;
-  color:#68766f;
+font-weight:bold;
+}
+
+.af-smart-footer-strip span{
+  margin:0 6px;
+}
+
+.af-smart-footer-strip .gold{
+  color:#e6bb27;
+}
+
+.af-smart-footer-note{
+text-align:center;
+  margin-top:4px;
+  font-size:8px;
+  color:#718078;
 }
 
 .af-no-print{
 text-align:center;
-  margin:0 0 16px;
+  margin-bottom:15px;
 }
 
 @media print{
 
   .af-no-print{
 display:none!important;
+  }
+
+  .af-smart-mark,
+  .af-smart-footer-wave,
+  .af-smart-footer-strip{
+    -webkit-print-color-adjust:exact;
+print-color-adjust:exact;
   }
 
 }
@@ -66099,20 +66293,28 @@ display:none!important;
 }
 
 
+/* =========================================================
+   SAMPLE 7 SMART HEADER
+   ========================================================= */
+
 function smartHeader(title=""){
 
 return `
 
 <div class="af-smart-header">
 
+<div class="af-smart-header-main">
+
+
 <div class="af-smart-mark">
 A&amp;F
 </div>
 
+
 <div>
 
 <div class="af-smart-company">
-A&amp;F Wekavera Ltd
+A&amp;FWekavera Ltd
 </div>
 
 <div class="af-smart-tag">
@@ -66120,8 +66322,45 @@ Waste2Wealth Solutions
 </div>
 
 <div class="af-smart-motto">
-Turning Waste into Value • Mbalala • Mukono
+Turning Waste into Value
 </div>
+
+</div>
+
+
+<div class="af-smart-contact">
+
+<div>
+<b>Location:</b>
+Mbalala, Mukono
+</div>
+
+<div>
+<b>Tel:</b>
+0752 128 161
+</div>
+
+<div>
+<b>Email:</b>
+afwaste2wealthsolutions@gmail.com
+</div>
+
+</div>
+
+
+</div>
+
+
+<div class="af-smart-accent">
+
+<div class="af-smart-accent-green">
+</div>
+
+<div class="af-smart-accent-gold">
+</div>
+
+</div>
+
 
 ${
 title
@@ -66133,7 +66372,6 @@ ${esc(title)}
   : ""
 }
 
-</div>
 
 </div>
 
@@ -66141,6 +66379,10 @@ ${esc(title)}
 
 }
 
+
+/* =========================================================
+   SAMPLE 7 SMART FOOTER
+   ========================================================= */
 
 function smartFooter(extra=""){
 
@@ -66148,24 +66390,88 @@ return `
 
 <div class="af-smart-footer">
 
-A&amp;F Wekavera Ltd
-•
-Waste2Wealth Solutions
-•
-Turning Waste into Value
+
+<div class="af-smart-footer-wave">
+
+
+<div class="af-smart-gold-wave">
+</div>
+
+
+<div class="af-smart-plastic-picture">
+
+<span></span>
+<span></span>
+<span></span>
+<span></span>
+
+</div>
+
+
+<div class="af-smart-waste">
+♻ RECYCLE PLASTIC
+</div>
+
+
+<div class="af-smart-pole-picture">
+
+<span></span>
+<span></span>
+<span></span>
+<span></span>
+
+</div>
+
+
+<div class="af-smart-poles">
+RECYCLED POLES
+</div>
+
+
+</div>
+
+
+<div class="af-smart-footer-strip">
+
+<span>
+Reduce Waste
+</span>
+
+<span class="gold">
+|
+</span>
+
+<span>
+Recycle Plastic
+</span>
+
+<span class="gold">
+|
+</span>
+
+<span>
+Build a Greener Uganda
+</span>
+
+</div>
+
 
 ${
 extra
-  ? " • "+esc(extra)
+  ? `
+<div class="af-smart-footer-note">
+${esc(extra)}
+</div>
+  `
   : ""
 }
+
 
 </div>
 
 `;
 
 }
-
 
 window.afSmartPrintStyles=
 smartStyles;
