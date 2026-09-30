@@ -73424,3 +73424,629 @@ console.log(
 
 })();
 
+/* =========================================================
+   A&F DIRECTOR DASHBOARD - SUPPLIER PERFORMANCE
+   Supplier of the Week + Supplier of the Month
+   Ranking: Highest Accepted Usable KG
+   Director Dashboard ONLY
+   ========================================================= */
+
+(function () {
+  "use strict";
+
+  if (window.__afSupplierPerformanceInstalled) return;
+  window.__afSupplierPerformanceInstalled = true;
+
+const CARD_ID = "afSupplierPerformanceDashboardCard";
+
+
+  /* -----------------------------
+     CURRENT USER / DIRECTOR CHECK
+     ----------------------------- */
+
+  function afCurrentUser() {
+    try {
+      if (typeof getAFCurrentUser === "function") {
+        return getAFCurrentUser() || {};
+      }
+    } catch (e) {}
+
+    try {
+      return JSON.parse(
+localStorage.getItem("currentUser") || "{}"
+      ) || {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+
+  function afIsDirector() {
+    return String(
+afCurrentUser().role || ""
+    ).toLowerCase() === "director";
+  }
+
+
+  /* -----------------------------
+     PURCHASE DATA
+     ----------------------------- */
+
+  function afPurchases() {
+    try {
+      if (typeof afGetSupplierPurchases === "function") {
+        return afGetSupplierPurchases() || [];
+      }
+
+      return JSON.parse(
+localStorage.getItem("afSupplierPurchases") || "[]"
+      ) || [];
+
+    } catch (e) {
+      return [];
+    }
+  }
+
+
+  function afSuppliers() {
+    try {
+      if (typeof afGetSuppliers === "function") {
+        return afGetSuppliers() || [];
+      }
+    } catch (e) {}
+
+    return [];
+  }
+
+
+  /* -----------------------------
+     DATE HELPERS
+     ----------------------------- */
+
+  function afParseDate(value) {
+
+    if (!value) return null;
+
+const parts =
+      String(value).split("-");
+
+    if (parts.length === 3) {
+      return new Date(
+        Number(parts[0]),
+        Number(parts[1]) - 1,
+        Number(parts[2])
+      );
+    }
+
+const d = new Date(value);
+
+    return isNaN(d.getTime())
+      ? null
+      : d;
+  }
+
+
+  function afStartOfWeek(date) {
+
+const d = new Date(
+date.getFullYear(),
+date.getMonth(),
+date.getDate()
+    );
+
+    /*
+     * Monday = beginning of week
+     */
+const day =
+d.getDay() || 7;
+
+d.setDate(
+d.getDate() - day + 1
+    );
+
+d.setHours(0, 0, 0, 0);
+
+    return d;
+  }
+
+
+  function afEndOfWeek(date) {
+
+const d =
+afStartOfWeek(date);
+
+d.setDate(
+d.getDate() + 6
+    );
+
+d.setHours(
+      23, 59, 59, 999
+    );
+
+    return d;
+  }
+
+
+  function afInCurrentWeek(date) {
+
+const now = new Date();
+
+    return (
+      date >= afStartOfWeek(now) &&
+      date <= afEndOfWeek(now)
+    );
+  }
+
+
+  function afInCurrentMonth(date) {
+
+const now = new Date();
+
+    return (
+date.getFullYear() ===
+now.getFullYear() &&
+
+date.getMonth() ===
+now.getMonth()
+    );
+  }
+
+
+  /* -----------------------------
+     CALCULATE WINNER
+     ----------------------------- */
+
+  function afSupplierWinner(period) {
+
+const purchases =
+afPurchases();
+
+const suppliers =
+afSuppliers();
+
+const filtered =
+purchases.filter(p => {
+
+const date =
+afParseDate(p.date);
+
+        if (!date) return false;
+
+        return period === "week"
+          ? afInCurrentWeek(date)
+          : afInCurrentMonth(date);
+
+      });
+
+
+const totals = {};
+
+
+filtered.forEach(p => {
+
+const supplierId =
+        String(
+p.supplierId || ""
+        );
+
+      if (!supplierId) return;
+
+
+      if (!totals[supplierId]) {
+
+const supplier =
+suppliers.find(s =>
+            String(s.id) ===
+supplierId
+          );
+
+
+        totals[supplierId] = {
+
+supplierId,
+
+supplierName:
+p.supplierName ||
+supplier?.name ||
+            "Unknown Supplier",
+
+          deliveries: 0,
+
+grossKg: 0,
+
+dirtKg: 0,
+
+acceptedKg: 0,
+
+purchaseValue: 0
+
+        };
+
+      }
+
+
+const item =
+        totals[supplierId];
+
+
+item.deliveries += 1;
+
+item.grossKg +=
+        Number(p.grossKg) || 0;
+
+item.dirtKg +=
+        Number(p.dirtKg) || 0;
+
+item.acceptedKg +=
+        Number(p.acceptedKg) || 0;
+
+item.purchaseValue +=
+        Number(p.totalCost) || 0;
+
+    });
+
+
+const ranked =
+Object.values(totals)
+        .sort(
+          (a, b) =>
+b.acceptedKg -
+a.acceptedKg
+        );
+
+
+    if (!ranked.length) {
+      return null;
+    }
+
+
+const winner =
+      ranked[0];
+
+
+winner.averageDirt =
+winner.grossKg> 0
+        ? (
+winner.dirtKg /
+winner.grossKg
+          ) * 100
+        : 0;
+
+
+    return winner;
+  }
+
+
+  /* -----------------------------
+     FORMAT
+     ----------------------------- */
+
+  function afNumber(value, decimals = 0) {
+
+    return (
+      Number(value) || 0
+    ).toLocaleString(
+      undefined,
+      {
+minimumFractionDigits: decimals,
+maximumFractionDigits: decimals
+      }
+    );
+  }
+
+
+  function afWinnerHTML(
+    title,
+    winner
+  ) {
+
+    if (!winner) {
+
+      return `
+<div style="
+          border:1px solid #e1e7e3;
+          border-radius:10px;
+          padding:14px;
+          background:#fff;
+        ">
+
+<div style="
+font-weight:bold;
+            color:#0b5d3b;
+            margin-bottom:10px;
+          ">
+🏆 ${title}
+</div>
+
+<div style="
+            font-size:12px;
+            color:#777;
+          ">
+            No supplier purchases recorded
+            for this period.
+</div>
+
+</div>
+      `;
+    }
+
+
+    return `
+<div style="
+        border:1px solid #d8e6de;
+        border-radius:10px;
+        padding:14px;
+        background:#fff;
+      ">
+
+<div style="
+          font-size:12px;
+font-weight:bold;
+          color:#8a6500;
+          margin-bottom:5px;
+        ">
+🏆 ${title}
+</div>
+
+
+<div style="
+          font-size:18px;
+font-weight:bold;
+          color:#0b5d3b;
+          margin-bottom:10px;
+        ">
+          ${winner.supplierName}
+</div>
+
+
+<div style="
+display:grid;
+          grid-template-columns:
+            repeat(2,minmax(0,1fr));
+          gap:7px;
+          font-size:11px;
+        ">
+
+<div>
+<span style="color:#777;">
+              Accepted
+</span><br>
+<b>
+              ${afNumber(
+winner.acceptedKg,
+                1
+              )} kg
+</b>
+</div>
+
+
+<div>
+<span style="color:#777;">
+              Average Dirt
+</span><br>
+<b>
+              ${afNumber(
+winner.averageDirt,
+                1
+              )}%
+</b>
+</div>
+
+
+<div>
+<span style="color:#777;">
+              Deliveries
+</span><br>
+<b>
+              ${afNumber(
+winner.deliveries
+              )}
+</b>
+</div>
+
+
+<div>
+<span style="color:#777;">
+              Purchase Value
+</span><br>
+<b>
+              UGX
+              ${afNumber(
+winner.purchaseValue
+              )}
+</b>
+</div>
+
+</div>
+
+</div>
+    `;
+  }
+
+
+  /* -----------------------------
+     RENDER DASHBOARD CARD
+     ----------------------------- */
+
+  function afRenderSupplierPerformance() {
+
+const old =
+document.getElementById(
+        CARD_ID
+      );
+
+
+    /*
+     * Remove it immediately if
+     * current user is not Director.
+     */
+    if (!afIsDirector()) {
+
+      if (old) old.remove();
+
+      return;
+    }
+
+
+    /*
+     * Exact Company Letters anchor.
+     */
+const lettersCard =
+document.getElementById(
+        "afCompanyLettersDashboardCard"
+      );
+
+
+    if (!lettersCard) {
+
+      if (old) old.remove();
+
+      return;
+    }
+
+
+const weekWinner =
+afSupplierWinner("week");
+
+const monthWinner =
+afSupplierWinner("month");
+
+
+    let card = old;
+
+
+    if (!card) {
+
+      card =
+document.createElement(
+          "section"
+        );
+
+card.id =
+        CARD_ID;
+
+card.className =
+        "card";
+
+      /*
+       * IMPORTANT:
+       * Insert DIRECTLY BELOW
+       * Company Letters.
+       */
+lettersCard.insertAdjacentElement(
+        "afterend",
+        card
+      );
+    }
+
+
+card.style.cssText = `
+      margin-top:12px;
+      border:1px solid #dce6e1;
+      border-radius:12px;
+      padding:14px;
+      background:#f8fbf9;
+box-sizing:border-box;
+    `;
+
+
+card.innerHTML = `
+
+<div style="
+        font-size:14px;
+font-weight:bold;
+        color:#0b5d3b;
+        margin-bottom:10px;
+      ">
+♻ Supplier Performance
+</div>
+
+
+<div style="
+display:grid;
+        grid-template-columns:
+          repeat(auto-fit,minmax(190px,1fr));
+        gap:10px;
+      ">
+
+        ${afWinnerHTML(
+          "Supplier of the Week",
+weekWinner
+        )}
+
+        ${afWinnerHTML(
+          "Supplier of the Month",
+monthWinner
+        )}
+
+</div>
+
+    `;
+  }
+
+
+  /* -----------------------------
+     AUTO UPDATE
+     ----------------------------- */
+
+  let afSupplierRenderTimer = null;
+
+  function afScheduleSupplierRender() {
+
+clearTimeout(
+afSupplierRenderTimer
+    );
+
+afSupplierRenderTimer =
+setTimeout(
+afRenderSupplierPerformance,
+        80
+      );
+  }
+
+
+  new MutationObserver(
+afScheduleSupplierRender
+  ).observe(
+document.body,
+    {
+childList: true,
+      subtree: true
+    }
+  );
+
+
+  /*
+   * Refresh after supplier purchase
+   * storage changes in another tab.
+   */
+window.addEventListener(
+    "storage",
+afScheduleSupplierRender
+  );
+
+
+  /*
+   * Initial render.
+   */
+setTimeout(
+afRenderSupplierPerformance,
+    150
+  );
+
+
+  /*
+   * Expose refresh function for
+   * later use.
+   */
+  window
+    .renderAFSupplierPerformance =
+afRenderSupplierPerformance;
+
+
+console.log(
+    "A&F Director Supplier Performance connected."
+  );
+
+})();
+
