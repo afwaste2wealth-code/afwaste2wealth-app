@@ -58199,139 +58199,728 @@ calc();
      PAYMENTS
      ======================================================= */
 
-  function openPayments() {
+function openPayments() {
 
-    if (!requireAccess()) {
+  if (!requireAccess()) {
+    return;
+  }
+
+
+const {
+    wrap,
+    box
+  } =
+    modal(
+      "afPayments",
+      1180
+    );
+
+
+  function customerFinancials(
+    customer
+  ) {
+
+const sales =
+deliveryList()
+        .filter(
+          record =>
+            !isCancelled(record) &&
+sameCustomer(
+              customer,
+              record
+            )
+        )
+        .reduce(
+          (
+            total,
+            record
+          ) =>
+            total +
+            Number(
+saleValue(record) ||
+              0
+            ),
+          0
+        );
+
+
+const paid =
+paymentList()
+        .filter(
+          payment =>
+            String(
+payment.customerId ||
+              ""
+            ) ===
+            String(
+customer.id ||
+              ""
+            )
+        )
+        .reduce(
+          (
+            total,
+            payment
+          ) =>
+            total +
+            Number(
+payment.amount ||
+              0
+            ),
+          0
+        );
+
+
+    return {
+
+      sales,
+
+      paid,
+
+      outstanding:
+Math.max(
+          sales -
+          paid,
+          0
+        ),
+
+      credit:
+Math.max(
+          paid -
+          sales,
+          0
+        )
+
+    };
+
+  }
+
+
+  function orderPayments(
+    order
+  ) {
+
+    return paymentList()
+      .filter(
+        payment => {
+
+          if (
+payment.orderId&&
+            String(
+payment.orderId
+            ) ===
+            String(
+order.id
+            )
+          ) {
+
+            return true;
+
+          }
+
+
+          return (
+payment.orderReference&&
+            String(
+payment.orderReference
+            ) ===
+            String(
+order.reference
+            )
+          );
+
+        }
+      )
+      .reduce(
+        (
+          total,
+          payment
+        ) =>
+          total +
+          Number(
+payment.amount ||
+            0
+          ),
+        0
+      );
+
+  }
+
+
+  function getCustomerOrders(
+    customer
+  ) {
+
+    return orderList()
+      .filter(
+        order => {
+
+const sameId =
+            String(
+order.customerId ||
+              ""
+            ) ===
+            String(
+customer.id ||
+              ""
+            );
+
+
+const sameName =
+            String(
+order.customerName ||
+              ""
+            )
+              .trim()
+              .toLowerCase() ===
+            String(
+customer.name ||
+              ""
+            )
+              .trim()
+              .toLowerCase();
+
+
+const status =
+            String(
+order.status ||
+              ""
+            ).toUpperCase();
+
+
+          return (
+            (
+sameId ||
+sameName
+            ) &&
+            status !==
+            "CANCELLED"
+          );
+
+        }
+      )
+      .slice()
+      .reverse();
+
+  }
+
+
+  function printReceipt(
+    payment
+  ) {
+
+    if (!payment) {
       return;
     }
 
-const {
-      wrap,
-      box
-    } =
-      modal(
-        "afPayments",
-        1100
+
+const customer =
+customerList()
+        .find(
+          item =>
+            String(
+item.id ||
+              ""
+            ) ===
+            String(
+payment.customerId ||
+              ""
+            )
+        );
+
+
+const financials =
+      customer
+        ? customerFinancials(
+            customer
+          )
+        : {
+            sales:0,
+            paid:0,
+            outstanding:0,
+            credit:0
+          };
+
+
+    let appliedTo =
+      "Customer Account";
+
+
+    if (
+payment.orderReference
+    ) {
+
+appliedTo =
+        "Order " +
+payment.orderReference;
+
+    }
+
+
+const w =
+window.open(
+        "",
+        "_blank",
+        "width=850,height=700"
       );
 
-    function render() {
+
+    if (!w) {
+
+      alert(
+        "Please allow pop-ups so the receipt can open."
+      );
+
+      return;
+
+    }
+
+
+w.document.write(`
+
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="UTF-8">
+
+<title>
+Payment Receipt
+${esc(
+payment.paymentNo ||
+  ""
+)}
+</title>
+
+<style>
+
+body {
+font-family:Arial,sans-serif;
+  padding:30px;
+  color:#222;
+}
+
+h1,
+h2 {
+text-align:center;
+  margin:4px;
+}
+
+.meta {
+display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px 20px;
+  margin-top:24px;
+}
+
+.meta div {
+  border-bottom:1px solid #ddd;
+  padding:8px;
+}
+
+.amount {
+  margin:25px 0;
+  padding:18px;
+  background:#eef8f2;
+  border:1px solid #cfe6d8;
+text-align:center;
+  font-size:26px;
+font-weight:bold;
+}
+
+.summary {
+  margin-top:20px;
+  padding:14px;
+  border:1px solid #ddd;
+}
+
+.signatures {
+display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:60px;
+  margin-top:60px;
+}
+
+.line {
+  border-top:1px solid #333;
+  padding-top:7px;
+text-align:center;
+}
+
+.print {
+text-align:center;
+  margin-top:30px;
+}
+
+@media print {
+
+  .print {
+display:none;
+  }
+
+  body {
+    padding:0;
+  }
+
+}
+
+</style>
+
+</head>
+
+
+<body>
+
+
+<h1>
+A&F Wekavera Ltd
+</h1>
+
+<h2>
+Waste2Wealth Solutions
+</h2>
+
+<h2>
+PAYMENT RECEIPT
+</h2>
+
+
+<div class="meta">
+
+<div>
+<b>Receipt No:</b>
+${esc(
+payment.paymentNo ||
+  "-"
+)}
+</div>
+
+<div>
+<b>Date:</b>
+${esc(
+payment.date ||
+  "-"
+)}
+</div>
+
+<div>
+<b>Customer:</b>
+${esc(
+payment.customerName ||
+  "-"
+)}
+</div>
+
+<div>
+<b>Phone:</b>
+${esc(
+customer?.phone ||
+payment.customerPhone ||
+  "-"
+)}
+</div>
+
+<div>
+<b>Payment Method:</b>
+${esc(
+payment.method ||
+  "-"
+)}
+</div>
+
+<div>
+<b>Applied To:</b>
+${esc(
+appliedTo
+)}
+</div>
+
+<div>
+<b>Transaction / Reference:</b>
+${esc(
+payment.reference ||
+  "-"
+)}
+</div>
+
+<div>
+<b>Recorded By:</b>
+${esc(
+payment.recordedBy ||
+  "-"
+)}
+</div>
+
+</div>
+
+
+<div class="amount">
+
+Amount Received:
+<br>
+
+${money(
+payment.amount ||
+  0
+)}
+
+</div>
+
+
+<div>
+
+<b>Notes:</b>
+
+${esc(
+payment.notes ||
+  "-"
+)}
+
+</div>
+
+
+<div class="summary">
+
+<b>
+Customer Account Summary
+</b>
+
+<br><br>
+
+Total Sales:
+${money(
+financials.sales
+)}
+
+<br>
+
+Total Payments:
+${money(
+financials.paid
+)}
+
+<br>
+
+Outstanding Balance:
+${money(
+financials.outstanding
+)}
+
+<br>
+
+Customer Credit:
+${money(
+financials.credit
+)}
+
+</div>
+
+
+<div class="signatures">
+
+<div class="line">
+Received By
+</div>
+
+<div class="line">
+Customer / Payer
+</div>
+
+</div>
+
+
+<div class="print">
+
+<button
+onclick="window.print()"
+>
+Print Receipt
+</button>
+
+</div>
+
+
+</body>
+
+</html>
+
+    `);
+
+
+w.document.close();
+
+w.focus();
+
+  }
+
+
+  function render() {
 
 const records =
 paymentList()
-          .slice()
-          .reverse();
+        .slice()
+        .reverse();
+
 
 box.innerHTML = `
 
-        ${title(
-          "💵 Customer Payments",
-          "Record money received from customers",
-          "afPaymentsClose"
-        )}
+${title(
+  "💵 Customer Payments",
+  "Record customer payments and print receipts",
+  "afPaymentsClose"
+)}
+
 
 <button
-          id="afNewPayment"
-          style="${btn()}margin-bottom:14px;"
+  id="afNewPayment"
+  style="${btn()}margin-bottom:14px;"
 >
-          + Record Payment
+
++ Record Payment
+
 </button>
+
 
 <div style="
 overflow:auto;
-        ">
+">
 
 <table style="
-            width:100%;
-            min-width:900px;
+  width:100%;
+  min-width:1050px;
 border-collapse:collapse;
-          ">
+">
 
 <thead>
 
 <tr style="
-                background:#eaf5ee;
+  background:#eaf5ee;
 text-align:left;
-              ">
+">
 
 <th>Date</th>
-<th>Payment No.</th>
+<th>Receipt No.</th>
 <th>Customer</th>
+<th>Applied To</th>
 <th>Method</th>
 <th>Reference</th>
 <th>Amount</th>
+<th>Action</th>
 
 </tr>
 
 </thead>
 
+
 <tbody>
 
-            ${
-              records
-                .map(
-                  r => `
+${
+records.length
+
+  ? records
+      .map(
+        payment => `
 
 <tr>
 
 <td>
-                        ${esc(r.date)}
+${esc(
+payment.date ||
+  "-"
+)}
 </td>
 
 <td>
 <b>
-                          ${esc(
-r.paymentNo
-                          )}
+${esc(
+payment.paymentNo ||
+  "-"
+)}
 </b>
 </td>
 
 <td>
-                        ${esc(
-r.customerName
-                        )}
+${esc(
+payment.customerName ||
+  "-"
+)}
 </td>
 
 <td>
-                        ${esc(
-r.method
-                        )}
+${
+payment.orderReference
+
+  ? esc(
+payment.orderReference
+    )
+
+  : "Customer Account"
+}
 </td>
 
 <td>
-                        ${esc(
-r.reference ||
-                          "-"
-                        )}
+${esc(
+payment.method ||
+  "-"
+)}
+</td>
+
+<td>
+${esc(
+payment.reference ||
+  "-"
+)}
 </td>
 
 <td>
 <b>
-                          ${money(
-r.amount
-                          )}
+${money(
+payment.amount ||
+  0
+)}
 </b>
 </td>
 
-</tr>
+<td>
 
-                  `
-                )
-                .join("") ||
-
-              `
-<tr>
-<td
-colspan="6"
-                    style="
-text-align:center;
-                      padding:20px;
-                    "
+<button
+  data-print-payment="${esc(
+payment.id
+  )}"
 >
-                    No payments recorded.
+Print Receipt
+</button>
+
 </td>
+
 </tr>
-              `
-            }
+
+        `
+      )
+      .join("")
+
+  : `
+
+<tr>
+
+<td
+colspan="8"
+  style="
+text-align:center;
+    padding:20px;
+  "
+>
+
+No payments recorded.
+
+</td>
+
+</tr>
+
+    `
+}
 
 </tbody>
 
@@ -58339,69 +58928,109 @@ text-align:center;
 
 </div>
 
-      `;
+    `;
+
 
 box.querySelectorAll(
-        "th,td"
-      ).forEach(
-        x => {
+      "th,td"
+    )
+    .forEach(
+      cell => {
 
-x.style.padding =
-            "9px";
+cell.style.padding =
+          "9px";
 
-x.style.borderBottom =
-            "1px solid #eee";
+cell.style.borderBottom =
+          "1px solid #eee";
 
-        }
-      );
+      }
+    );
 
-box.querySelector(
-        "#afPaymentsClose"
-      ).onclick =
-        () =>wrap.remove();
 
 box.querySelector(
-        "#afNewPayment"
-      ).onclick =
-        () =>
-openPaymentForm(
-            render
-          );
-    }
+      "#afPaymentsClose"
+    ).onclick =
+      () =>
+wrap.remove();
 
-    render();
+
+box.querySelector(
+      "#afNewPayment"
+    ).onclick =
+      () =>
+openPaymentForm();
+
+
+box.querySelectorAll(
+      "[data-print-payment]"
+    )
+    .forEach(
+      button => {
+
+button.onclick =
+          () => {
+
+const payment =
+paymentList()
+                .find(
+                  record =>
+                    String(
+record.id
+                    ) ===
+                    String(
+button.dataset
+                        .printPayment
+                    )
+                );
+
+
+printReceipt(
+              payment
+            );
+
+          };
+
+      }
+    );
+
   }
 
-  function openPaymentForm(
-afterSave
-  ) {
+
+  function openPaymentForm() {
 
 const customers =
 customerList();
 
+
 const {
-      wrap,
-      box
+      wrap: payWrap,
+      box: payBox
     } =
       modal(
         "afPaymentForm",
-        700
+        780
       );
 
-box.innerHTML = `
 
-      ${title(
-        "Record Customer Payment",
-        "This updates the customer's recorded balance",
-        "afPaymentFormClose"
-      )}
+payBox.innerHTML = `
+
+${title(
+  "Record Customer Payment",
+  "Receive payment against an order or the customer's general account",
+  "afPaymentFormClose"
+)}
+
 
 <div style="
 display:grid;
-        grid-template-columns:
-          1fr 1fr;
-        gap:12px;
-      ">
+  grid-template-columns:
+    repeat(
+      auto-fit,
+minmax(230px,1fr)
+    );
+  gap:12px;
+">
+
 
 <div>
 
@@ -58410,13 +59039,17 @@ display:grid;
 </label>
 
 <input
-            id="afPayDate"
-            type="date"
-            value="${today()}"
-            style="${input()}margin-top:5px;"
+  id="afPayDate"
+  type="date"
+  value="${today()}"
+  style="
+    ${input()}
+    margin-top:5px;
+  "
 >
 
 </div>
+
 
 <div>
 
@@ -58425,33 +59058,67 @@ display:grid;
 </label>
 
 <select
-            id="afPayCustomer"
-            style="${input()}margin-top:5px;"
+  id="afPayCustomer"
+  style="
+    ${input()}
+    margin-top:5px;
+  "
 >
 
 <option value="">
-              Select customer
+Select customer
 </option>
 
-            ${
-              customers
-                .map(
-                  c => `
+${
+customers
+  .map(
+    customer => `
 
 <option
-                      value="${esc(c.id)}"
+value="${esc(
+customer.id
+)}"
 >
-                      ${esc(c.name)}
+${esc(
+customer.name
+)}
 </option>
 
-                  `
-                )
-                .join("")
-            }
+    `
+  )
+  .join("")
+}
 
 </select>
 
 </div>
+
+
+<div>
+
+<label>
+<b>
+Apply Payment To
+</b>
+</label>
+
+<select
+  id="afPayOrder"
+  disabled
+  style="
+    ${input()}
+    margin-top:5px;
+  "
+>
+
+<option value="">
+Customer Account / General
+</option>
+
+</select>
+
+</div>
+
 
 <div>
 
@@ -58460,137 +59127,694 @@ display:grid;
 </label>
 
 <input
-            id="afPayAmount"
-            type="number"
-            min="0"
-            style="${input()}margin-top:5px;"
+  id="afPayAmount"
+  type="number"
+  min="0"
+  step="1"
+  value="0"
+  style="
+    ${input()}
+    margin-top:5px;
+  "
 >
 
 </div>
 
+
 <div>
 
 <label>
-<b>Method</b>
+<b>Method *</b>
 </label>
 
 <select
-            id="afPayMethod"
-            style="${input()}margin-top:5px;"
+  id="afPayMethod"
+  style="
+    ${input()}
+    margin-top:5px;
+  "
 >
 
-<option>Cash</option>
-<option>Mobile Money</option>
-<option>Bank Transfer</option>
-<option>Cheque</option>
-<option>Other</option>
+<option>
+Cash
+</option>
+
+<option>
+Mobile Money
+</option>
+
+<option>
+Bank Transfer
+</option>
+
+<option>
+Cheque
+</option>
+
+<option>
+Other
+</option>
 
 </select>
 
 </div>
 
+
 <div>
 
 <label>
-<b>Reference</b>
+<b>
+Transaction / Reference
+</b>
 </label>
 
 <input
-            id="afPayReference"
-            style="${input()}margin-top:5px;"
+  id="afPayReference"
+  placeholder="Optional"
+  style="
+    ${input()}
+    margin-top:5px;
+  "
 >
 
 </div>
 
 </div>
+
+
+<div
+  id="afPayCustomerSummary"
+  style="
+    margin-top:15px;
+    padding:13px;
+    background:#eef8f2;
+    border:1px solid #cfe6d8;
+    border-radius:8px;
+display:none;
+  "
+>
+</div>
+
+
+<div
+  id="afPayOrderSummary"
+  style="
+    margin-top:12px;
+    padding:13px;
+    background:#fff8e1;
+    border:1px solid #ead59a;
+    border-radius:8px;
+display:none;
+  "
+>
+</div>
+
+
+<div style="
+margin-top:12px;
+">
+
+<label>
+<b>Notes</b>
+</label>
+
+<textarea
+  id="afPayNotes"
+  rows="3"
+  placeholder="Optional payment notes"
+  style="
+    ${input()}
+    margin-top:5px;
+  "
+></textarea>
+
+</div>
+
 
 <button
-        id="afPaySave"
-        style="${btn()}width:100%;margin-top:15px;"
+  id="afPaySave"
+  style="
+    ${btn()}
+    width:100%;
+    margin-top:15px;
+  "
 >
-💾 Save Payment
+
+💾 Save Payment & Create Receipt
+
 </button>
 
     `;
 
-box.querySelector(
+
+const customerSelect =
+payBox.querySelector(
+        "#afPayCustomer"
+      );
+
+
+const orderSelect =
+payBox.querySelector(
+        "#afPayOrder"
+      );
+
+
+const amountInput =
+payBox.querySelector(
+        "#afPayAmount"
+      );
+
+
+const customerSummary =
+payBox.querySelector(
+        "#afPayCustomerSummary"
+      );
+
+
+const orderSummary =
+payBox.querySelector(
+        "#afPayOrderSummary"
+      );
+
+
+    function selectedCustomer() {
+
+      return customers.find(
+        customer =>
+          String(
+customer.id
+          ) ===
+          String(
+customerSelect.value
+          )
+      );
+
+    }
+
+
+    function selectedOrder() {
+
+const customer =
+selectedCustomer();
+
+
+      if (!customer) {
+        return null;
+      }
+
+
+      return getCustomerOrders(
+        customer
+      )
+      .find(
+        order =>
+          String(
+order.id
+          ) ===
+          String(
+orderSelect.value
+          )
+      );
+
+    }
+
+
+    function showCustomerSummary() {
+
+const customer =
+selectedCustomer();
+
+
+      if (!customer) {
+
+customerSummary.style.display =
+          "none";
+
+        return;
+
+      }
+
+
+const totals =
+customerFinancials(
+          customer
+        );
+
+
+customerSummary.style.display =
+        "block";
+
+
+customerSummary.innerHTML = `
+
+<b>
+Customer Account
+</b>
+
+<br><br>
+
+Total Sales:
+<b>
+${money(
+totals.sales
+)}
+</b>
+
+&nbsp; • &nbsp;
+
+Total Paid:
+<b>
+${money(
+totals.paid
+)}
+</b>
+
+<br><br>
+
+Outstanding:
+<b style="
+color:#b42318;
+">
+${money(
+totals.outstanding
+)}
+</b>
+
+&nbsp; • &nbsp;
+
+Credit:
+<b style="
+color:#0b5d3b;
+">
+${money(
+totals.credit
+)}
+</b>
+
+      `;
+
+    }
+
+
+    function fillOrders() {
+
+const customer =
+selectedCustomer();
+
+
+orderSelect.innerHTML = `
+
+<option value="">
+Customer Account / General
+</option>
+
+      `;
+
+
+orderSummary.style.display =
+        "none";
+
+
+      if (!customer) {
+
+orderSelect.disabled =
+          true;
+
+        return;
+
+      }
+
+
+const customerOrders =
+getCustomerOrders(
+          customer
+        );
+
+
+customerOrders.forEach(
+        order => {
+
+const paid =
+orderPayments(
+              order
+            );
+
+
+const total =
+            Number(
+order.value ||
+order.totalValue ||
+              0
+            );
+
+
+const balance =
+Math.max(
+              total -
+              paid,
+              0
+            );
+
+
+const option =
+document.createElement(
+              "option"
+            );
+
+
+option.value =
+order.id;
+
+
+option.textContent =
+
+            (
+order.reference ||
+              "Order"
+            ) +
+
+            " — " +
+
+            String(
+order.status ||
+              ""
+            ) +
+
+            " — Balance " +
+
+            money(
+              balance
+            );
+
+
+orderSelect.appendChild(
+            option
+          );
+
+        }
+      );
+
+
+orderSelect.disabled =
+        false;
+
+    }
+
+
+    function showOrderSummary() {
+
+const order =
+selectedOrder();
+
+
+      if (!order) {
+
+orderSummary.style.display =
+          "none";
+
+amountInput.removeAttribute(
+          "max"
+        );
+
+        return;
+
+      }
+
+
+const total =
+        Number(
+order.value ||
+order.totalValue ||
+          0
+        );
+
+
+const paid =
+orderPayments(
+          order
+        );
+
+
+const balance =
+Math.max(
+          total -
+          paid,
+          0
+        );
+
+
+amountInput.max =
+        String(
+          balance
+        );
+
+
+orderSummary.style.display =
+        "block";
+
+
+orderSummary.innerHTML = `
+
+<b>
+Order:
+${esc(
+order.reference ||
+  "-"
+)}
+</b>
+
+<br><br>
+
+Status:
+<b>
+${esc(
+order.status ||
+  "-"
+)}
+</b>
+
+&nbsp; • &nbsp;
+
+Order Value:
+<b>
+${money(
+  total
+)}
+</b>
+
+<br><br>
+
+Paid Against Order:
+<b>
+${money(
+  paid
+)}
+</b>
+
+&nbsp; • &nbsp;
+
+Order Balance:
+<b style="
+color:#b42318;
+">
+${money(
+  balance
+)}
+</b>
+
+      `;
+
+    }
+
+
+customerSelect.addEventListener(
+      "change",
+      () => {
+
+showCustomerSummary();
+
+fillOrders();
+
+showOrderSummary();
+
+      }
+    );
+
+
+orderSelect.addEventListener(
+      "change",
+showOrderSummary
+    );
+
+
+payBox.querySelector(
       "#afPaymentFormClose"
     ).onclick =
-      () =>wrap.remove();
+      () =>
+payWrap.remove();
 
-box.querySelector(
+
+payBox.querySelector(
       "#afPaySave"
     ).onclick =
       () => {
 
-const customer =
-customers.find(
-            c =>
-              String(c.id) ===
-              String(
-box.querySelector(
-                  "#afPayCustomer"
-                ).value
-              )
-          );
 
-const amount =
-          Number(
-box.querySelector(
-              "#afPayAmount"
-            ).value || 0
-          );
+const customer =
+selectedCustomer();
+
+
+const order =
+selectedOrder();
+
 
 const date =
-box.querySelector(
+payBox.querySelector(
             "#afPayDate"
           ).value;
 
+
+const amount =
+          Number(
+amountInput.value ||
+            0
+          );
+
+
         if (!customer) {
 
-          return alert(
+          alert(
             "Please select a customer."
           );
 
+          return;
+
         }
+
 
         if (!date) {
 
-          return alert(
-            "Please select a date."
+          alert(
+            "Please select the payment date."
           );
+
+          return;
 
         }
 
-        if (amount <= 0) {
 
-          return alert(
+        if (
+          amount <= 0
+        ) {
+
+          alert(
             "Please enter a valid payment amount."
           );
 
+          return;
+
         }
+
+
+        if (order) {
+
+const orderTotal =
+            Number(
+order.value ||
+order.totalValue ||
+              0
+            );
+
+
+const alreadyPaid =
+orderPayments(
+              order
+            );
+
+
+const orderBalance =
+Math.max(
+orderTotal -
+alreadyPaid,
+              0
+            );
+
+
+          if (
+            amount >
+orderBalance
+          ) {
+
+            alert(
+
+              "Payment exceeds the selected order balance.\n\n" +
+
+              "Order Balance: " +
+              money(
+orderBalance
+              ) +
+
+              "\nPayment Entered: " +
+              money(
+                amount
+              )
+
+            );
+
+            return;
+
+          }
+
+        }
+
 
 const records =
 paymentList();
 
-records.push({
+
+const sameDateCount =
+records.filter(
+            record =>
+              String(
+record.date ||
+                ""
+              ) ===
+              String(
+                date
+              )
+          ).length;
+
+
+const paymentNo =
+
+          "PAY-" +
+
+date.replace(
+            /-/g,
+            ""
+          ) +
+
+          "-" +
+
+          String(
+sameDateCount +
+            1
+          ).padStart(
+            3,
+            "0"
+          );
+
+
+const user =
+currentUser();
+
+
+const payment = {
 
           id:
 uid("PAY"),
 
-paymentNo:
-            "PAY-" +
-date.replace(
-              /-/g,
-              ""
-            ) +
-            "-" +
-            String(
-records.length + 1
-            ).padStart(
-              3,
-              "0"
-            ),
+paymentNo,
 
           date,
 
@@ -58600,48 +59824,103 @@ customer.id,
 customerName:
 customer.name,
 
+customerPhone:
+customer.phone ||
+            "",
+
           amount,
 
           method:
-box.querySelector(
+payBox.querySelector(
               "#afPayMethod"
             ).value,
 
           reference:
-box.querySelector(
+payBox.querySelector(
               "#afPayReference"
-            ).value.trim(),
+            )
+            .value
+            .trim(),
+
+          notes:
+payBox.querySelector(
+              "#afPayNotes"
+            )
+            .value
+            .trim(),
+
+orderId:
+            order
+              ? order.id
+              : "",
+
+orderReference:
+            order
+              ? order.reference
+              : "",
+
+orderStatusAtPayment:
+            order
+              ? order.status
+              : "",
 
 recordedAt:
             new Date()
               .toISOString(),
 
 recordedBy:
-currentUser()
-              .fullName ||
-currentUser()
-              .employeeId ||
+user.fullName ||
+user.employeeName ||
+user.employeeId ||
             ""
 
-        });
+        };
+
+
+records.push(
+          payment
+        );
+
 
         save(
 K.payments,
           records
         );
 
-wrap.remove();
+
+payWrap.remove();
+
+
+        render();
+
 
         alert(
-          "Customer payment saved successfully."
+
+          "Customer payment saved successfully.\n\n" +
+
+          "Receipt No: " +
+paymentNo +
+
+          "\nAmount: " +
+          money(
+            amount
+          )
+
         );
 
-        if (afterSave) {
-afterSave();
-        }
+
+printReceipt(
+          payment
+        );
 
       };
+
   }
+
+
+  render();
+
+}
 
   /* =======================================================
      BALANCES
