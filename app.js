@@ -76400,3 +76400,257 @@ console.log(
   );
 
 })();
+
+/* =========================================================
+   A&F CUSTOMER HISTORY BUTTON - CONNECTION FIX
+   Adds History directly beside existing Edit button
+   ========================================================= */
+
+(function () {
+  "use strict";
+
+  if (window.__afCustomerHistoryButtonFixInstalled) return;
+  window.__afCustomerHistoryButtonFixInstalled = true;
+
+
+  function readCustomers() {
+
+    try {
+
+const data =
+JSON.parse(
+localStorage.getItem("afCustomers") || "[]"
+        );
+
+      return Array.isArray(data)
+        ? data.filter(
+            customer =>
+              String(
+customer.status || "ACTIVE"
+              ).toUpperCase() !== "DELETED"
+          )
+        : [];
+
+    } catch (e) {
+
+      return [];
+
+    }
+
+  }
+
+
+  function connectHistoryButtons() {
+
+    /*
+     * Find visible customer-list tables.
+     * We deliberately do not depend on one modal ID.
+     */
+const tables =
+Array.from(
+document.querySelectorAll("table")
+      );
+
+
+tables.forEach(table => {
+
+const headings =
+Array.from(
+table.querySelectorAll("th")
+        )
+          .map(th =>
+            String(
+th.textContent || ""
+            )
+              .trim()
+              .toLowerCase()
+          );
+
+
+      /*
+       * Only work on the Customer List table.
+       */
+const isCustomerTable =
+headings.includes("name") &&
+headings.includes("phone") &&
+headings.includes("sales") &&
+headings.includes("paid") &&
+headings.includes("balance") &&
+headings.includes("action");
+
+
+      if (!isCustomerTable) {
+        return;
+      }
+
+
+const customers =
+readCustomers();
+
+
+const rows =
+Array.from(
+table.querySelectorAll("tbodytr")
+        );
+
+
+rows.forEach(
+        (row, index) => {
+
+const cells =
+Array.from(
+row.querySelectorAll("td")
+            );
+
+
+          if (cells.length< 7) {
+            return;
+          }
+
+
+const customer =
+            customers[index];
+
+
+          if (!customer) {
+            return;
+          }
+
+
+const actionCell =
+            cells[
+cells.length - 1
+            ];
+
+
+          /*
+           * Don't add twice.
+           */
+          if (
+actionCell.querySelector(
+              "[data-af-history-fix]"
+            )
+          ) {
+            return;
+          }
+
+
+const button =
+document.createElement(
+              "button"
+            );
+
+
+button.type =
+            "button";
+
+
+button.textContent =
+            "History";
+
+
+button.dataset
+            .afHistoryFix =
+            String(
+customer.id || ""
+            );
+
+
+button.style.cssText = `
+            border:0;
+            background:#1976d2;
+color:white;
+            padding:7px 10px;
+            border-radius:6px;
+            font-size:11px;
+font-weight:bold;
+cursor:pointer;
+            margin-left:6px;
+          `;
+
+
+button.onclick =
+            function () {
+
+              if (
+typeof window.afOpenCustomerHistory ===
+                "function"
+              ) {
+
+window.afOpenCustomerHistory(
+customer.id
+                );
+
+              } else {
+
+                alert(
+                  "Customer History function could not be found."
+                );
+
+              }
+
+            };
+
+
+actionCell.appendChild(
+            button
+          );
+
+        }
+      );
+
+    });
+
+  }
+
+
+  /*
+   * Customer List is created dynamically,
+   * so watch for it opening.
+   */
+  let timer;
+
+
+const observer =
+    new MutationObserver(
+      function () {
+
+clearTimeout(timer);
+
+        timer =
+setTimeout(
+connectHistoryButtons,
+            60
+          );
+
+      }
+    );
+
+
+observer.observe(
+document.body,
+    {
+childList:true,
+subtree:true
+    }
+  );
+
+
+  /*
+   * Initial check.
+   */
+setTimeout(
+connectHistoryButtons,
+    200
+  );
+
+
+window.connectAFCustomerHistoryButtons =
+connectHistoryButtons;
+
+
+console.log(
+    "A&F Customer History button fix connected."
+  );
+
+})();
