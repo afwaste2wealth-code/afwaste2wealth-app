@@ -68800,3 +68800,546 @@ console.log(
 );
 
 })();
+
+/* =========================================================
+   A&F GLOBAL SMART PRINT BRANDING
+   Applies the same Sample 7 company format to all printouts
+   Paste ONCE at the very bottom of app.js
+   ========================================================= */
+(function connectAFGlobalSmartPrintBranding(){
+"use strict";
+
+if (window.__afGlobalSmartPrintBrandingInstalled) {
+  return;
+}
+
+window.__afGlobalSmartPrintBrandingInstalled = true;
+
+
+/* =========================================================
+   IDENTIFY WHICH DOCUMENT IS BEING PRINTED
+   ========================================================= */
+
+function detectAFPrintTitle(doc) {
+
+const pageTitle =
+    String(doc.title || "")
+      .trim()
+      .toUpperCase();
+
+const headings =
+Array.from(
+doc.querySelectorAll("h1,h2,h3")
+    )
+      .map(el =>
+        String(el.textContent || "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .toUpperCase()
+      );
+
+const bodyText =
+    String(doc.body?.innerText || "")
+      .replace(/\s+/g, " ")
+      .toUpperCase();
+
+
+  if (
+pageTitle.includes("PAYMENT RECEIPT") ||
+headings.includes("PAYMENT RECEIPT")
+  ) {
+    return "Payment Receipt";
+  }
+
+
+  if (
+pageTitle.includes("DELIVERY NOTE") ||
+headings.includes("DELIVERY NOTE")
+  ) {
+    return "Delivery Note";
+  }
+
+
+  if (
+pageTitle.startsWith("PAYSLIP") ||
+headings.includes("EMPLOYEE PAYSLIP")
+  ) {
+    return "Employee Payslip";
+  }
+
+
+  if (
+pageTitle.includes("EMPLOYEE REGISTRATION FORM") ||
+headings.includes("EMPLOYEE REGISTRATION FORM")
+  ) {
+    return "Employee Registration Form";
+  }
+
+
+  if (
+pageTitle.includes("QUALITY & DISCIPLINE") ||
+bodyText.includes(
+      "EMPLOYEE QUALITY & DISCIPLINE"
+    )
+  ) {
+
+    return (
+      "Employee Quality & Discipline – " +
+      "Weekly Performance Assessment"
+    );
+
+  }
+
+
+  if (
+pageTitle.includes("QUOTATION") ||
+headings.includes("QUOTATION")
+  ) {
+    return "Quotation";
+  }
+
+
+  if (
+    /^ORDER\b/.test(pageTitle) ||
+headings.includes("ORDER")
+  ) {
+    return "Order";
+  }
+
+
+  return "";
+}
+
+
+/* =========================================================
+   REMOVE OLD INDIVIDUAL HEADERS / FOOTERS
+   ========================================================= */
+
+function removeAFOldPrintBranding(doc) {
+
+doc.querySelectorAll(".header")
+    .forEach(header => {
+
+const text =
+        String(header.innerText || "")
+          .replace(/\s+/g, " ")
+          .toUpperCase();
+
+
+      if (
+        !text.includes("A&F") &&
+        !text.includes("WASTE2WEALTH")
+      ) {
+        return;
+      }
+
+
+      /*
+       * Quality & Discipline keeps employee details
+       * inside its old header.
+       *
+       * Preserve those employee details before
+       * removing the old company heading.
+       */
+const employeeArea =
+header.querySelector(
+          ".employee-area"
+        );
+
+
+      if (
+employeeArea&&
+header.parentNode
+      ) {
+
+header.parentNode.insertBefore(
+employeeArea,
+header.nextSibling
+        );
+
+      }
+
+
+header.remove();
+
+    });
+
+
+const removableTitles =
+    new Set([
+      "A&F WEKAVERA LTD",
+      "WASTE2WEALTH SOLUTIONS",
+      "PAYMENT RECEIPT",
+      "DELIVERY NOTE",
+      "EMPLOYEE PAYSLIP",
+      "EMPLOYEE REGISTRATION FORM",
+      "QUOTATION",
+      "ORDER"
+    ]);
+
+
+doc.querySelectorAll("h1,h2")
+    .forEach(el => {
+
+const text =
+        String(el.textContent || "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .toUpperCase();
+
+
+      if (
+removableTitles.has(text) ||
+text.startsWith(
+          "EMPLOYEE QUALITY & DISCIPLINE"
+        )
+      ) {
+
+el.remove();
+
+      }
+
+    });
+
+
+  /*
+   * Remove old simple document footer.
+   * The new Sample 7 footer replaces it.
+   */
+
+doc.querySelectorAll(".footer")
+    .forEach(footer => {
+
+const text =
+        String(
+footer.innerText || ""
+        ).toUpperCase();
+
+
+      if (
+text.includes("A&F") ||
+text.includes("GENERATED FROM") ||
+text.includes(
+          "QUALITY & DISCIPLINE RECORD"
+        )
+      ) {
+
+footer.remove();
+
+      }
+
+    });
+
+}
+
+
+/* =========================================================
+   APPLY THE GLOBAL SAMPLE 7 DESIGN
+   ========================================================= */
+
+function applyAFGlobalPrintBranding(
+  popup
+) {
+
+  try {
+
+    if (
+      !popup ||
+popup.closed ||
+      !popup.document ||
+      !popup.document.body
+    ) {
+      return;
+    }
+
+
+const doc =
+popup.document;
+
+
+    /*
+     * Correct company-name spacing in any
+     * document already using the Smart Header.
+     */
+
+const existingCompany =
+doc.querySelector(
+        ".af-smart-company"
+      );
+
+
+    if (existingCompany) {
+
+existingCompany.textContent =
+        "A&F Wekavera Ltd";
+
+    }
+
+
+    /*
+     * Company Letters already use the
+     * Sample 7 Smart Header.
+     *
+     * Do not add another one.
+     */
+
+    if (
+doc.querySelector(
+        ".af-smart-header"
+      )
+    ) {
+      return;
+    }
+
+
+const documentTitle =
+detectAFPrintTitle(
+        doc
+      );
+
+
+    /*
+     * Leave unrelated popup windows untouched.
+     */
+
+    if (!documentTitle) {
+      return;
+    }
+
+
+    if (
+typeof window.afSmartPrintStyles !==
+        "function" ||
+
+typeof window.afSmartPrintHeader !==
+        "function" ||
+
+typeof window.afSmartPrintFooter !==
+        "function"
+    ) {
+
+console.warn(
+        "A&F Smart Print functions were not found."
+      );
+
+      return;
+
+    }
+
+
+    /*
+     * Load the ONE shared Sample 7 style.
+     */
+
+const style =
+doc.createElement(
+        "style"
+      );
+
+
+style.setAttribute(
+      "data-af-global-smart-print",
+      "1"
+    );
+
+
+style.textContent =
+window.afSmartPrintStyles();
+
+
+doc.head.appendChild(
+      style
+    );
+
+
+    /*
+     * Payslip has its own print container.
+     * Other documents print directly from body.
+     */
+
+const target =
+doc.querySelector(
+        ".payslip"
+      ) ||
+doc.body;
+
+
+    /*
+     * Remove old company branding.
+     */
+
+removeAFOldPrintBranding(
+      doc
+    );
+
+
+    /*
+     * Add ONE global company header.
+     */
+
+target.insertAdjacentHTML(
+      "afterbegin",
+window.afSmartPrintHeader(
+documentTitle
+      )
+    );
+
+
+    /*
+     * Ensure correct company name spacing.
+     */
+
+const company =
+target.querySelector(
+        ".af-smart-company"
+      );
+
+
+    if (company) {
+
+company.textContent =
+        "A&F Wekavera Ltd";
+
+    }
+
+
+    /*
+     * Add ONE global Sample 7 footer.
+     */
+
+const footerHTML =
+window.afSmartPrintFooter(
+documentTitle
+      );
+
+
+const bottomPrintControl =
+target.querySelector(
+        ".print-button"
+      ) ||
+target.querySelector(
+        ".print"
+      );
+
+
+    if (
+bottomPrintControl
+    ) {
+
+bottomPrintControl
+        .insertAdjacentHTML(
+          "beforebegin",
+footerHTML
+        );
+
+    } else {
+
+target.insertAdjacentHTML(
+        "beforeend",
+footerHTML
+      );
+
+    }
+
+
+doc.documentElement.setAttribute(
+      "data-af-smart-branded",
+      "1"
+    );
+
+
+  } catch (error) {
+
+console.error(
+      "A&F global print branding error:",
+      error
+    );
+
+  }
+
+}
+
+
+window.applyAFGlobalPrintBranding =
+applyAFGlobalPrintBranding;
+
+
+/* =========================================================
+   CONNECT AUTOMATICALLY TO EVERY PRINT WINDOW
+   ========================================================= */
+
+const nativeWindowOpen =
+window.open;
+
+
+window.open =
+function() {
+
+const popup =
+nativeWindowOpen.apply(
+      window,
+      arguments
+    );
+
+
+  if (!popup) {
+    return popup;
+  }
+
+
+  try {
+
+const popupDocument =
+popup.document;
+
+
+const nativeDocumentClose =
+popupDocument.close.bind(
+popupDocument
+      );
+
+
+popupDocument.close =
+    function() {
+
+const result =
+nativeDocumentClose();
+
+
+setTimeout(
+        function() {
+
+applyAFGlobalPrintBranding(
+            popup
+          );
+
+        },
+        0
+      );
+
+
+      return result;
+
+    };
+
+
+  } catch (error) {
+
+console.warn(
+      "A&F could not attach global print branding:",
+      error
+    );
+
+  }
+
+
+  return popup;
+
+};
+
+
+console.log(
+  "A&F global Smart Print branding connected."
+);
+
+})();
