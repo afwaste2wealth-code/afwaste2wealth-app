@@ -75615,7 +75615,7 @@ modal.id =
 modal.style.cssText = `
 position:fixed;
       inset:0;
-      z-index:100500;
+      z-index:9999999;
 background:rgba(0,0,0,.55);
 display:flex;
 justify-content:center;
