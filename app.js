@@ -72412,10 +72412,41 @@ style.textContent = `
     table td:last-child {
       padding-right: 14px !important;
     }
+/* =====================================================
+       GLOBAL COLUMN ALIGNMENT
+       Keep headings and values directly under each other
+       ===================================================== */
+
+    table th,
+    table td {
+      text-align: center !important;
+    }
+
+    /* Text columns remain easy to read */
+    table th:first-child,
+    table td:first-child,
+    table th:nth-child(2),
+    table td:nth-child(2),
+    table th:nth-child(3),
+    table td:nth-child(3) {
+      text-align: left !important;
+    }
+
+    /* Give figures equal space on both sides */
+    table td {
+      padding-left: 10px !important;
+      padding-right: 10px !important;
+    }
+
+    table th {
+      padding-left: 10px !important;
+      padding-right: 10px !important;
+    }
 
     /*
      * Tables inside printable documents are left alone.
      */
+     
     @media print {
 
       table th,
