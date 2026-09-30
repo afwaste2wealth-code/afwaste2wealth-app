@@ -15068,6 +15068,35 @@ overflow:auto;
 <option value="client">Client Material</option>
 </select>
 
+<div id="supplierSection">
+
+<label>Supplier</label>
+
+<select
+    id="materialSupplier"
+    style="width:100%;padding:10px;margin:6px 0 6px"
+>
+<option value="">-- Select Supplier --</option>
+</select>
+
+<button
+    type="button"
+    id="addSupplierFromMaterial"
+    style="
+      border:0;
+background:none;
+      color:#0b5d3b;
+font-weight:bold;
+cursor:pointer;
+      padding:2px 0 14px;
+    "
+>
+    + Add New Supplier
+</button>
+
+</div>
+
+
 <div id="clientSection" style="display:none">
 
 <label>Client Name</label>
@@ -15219,6 +15248,7 @@ document.body.appendChild(modal);
 
 const source = modal.querySelector("#materialSource");
 const clientSection = modal.querySelector("#clientSection");
+const supplierSection = modal.querySelector("#supplierSection");
 const clientService = modal.querySelector("#clientService");
 const companySection = modal.querySelector("#companySection");
 const pelletSection = modal.querySelector("#pelletSection");
@@ -15235,6 +15265,7 @@ const pelletWeight = modal.querySelector("#pelletWeight");
 const isClient = source.value === "client";
 
 clientSection.style.display = isClient ? "block" : "none";
+     supplierSection.style.display = isClient ? "none" : "block";
 
 companySection.style.display = isClient ? "none" : "block";
 
@@ -71198,3 +71229,910 @@ console.log(
 
 
 })();
+
+/* =========================================================
+   A&F SUPPLIER MANAGEMENT MODULE
+   Supplier Register + Edit + History + Material-In Dropdown
+   ========================================================= */
+
+const AF_SUPPLIERS_KEY = "afSuppliers";
+const AF_SUPPLIER_PURCHASES_KEY = "afSupplierPurchases";
+
+
+function afGetSuppliers() {
+    try {
+        return JSON.parse(localStorage.getItem(AF_SUPPLIERS_KEY)) || [];
+    } catch (e) {
+        return [];
+    }
+}
+
+
+function afSaveSuppliers(list) {
+localStorage.setItem(AF_SUPPLIERS_KEY, JSON.stringify(list));
+}
+
+
+function afGetSupplierPurchases() {
+    try {
+        return JSON.parse(localStorage.getItem(AF_SUPPLIER_PURCHASES_KEY)) || [];
+    } catch (e) {
+        return [];
+    }
+}
+
+
+function afSaveSupplierPurchases(list) {
+localStorage.setItem(AF_SUPPLIER_PURCHASES_KEY, JSON.stringify(list));
+}
+
+
+/* =========================================================
+   MAIN SUPPLIER SCREEN
+   ========================================================= */
+
+function supplierManagement() {
+
+const old = document.getElementById("afSupplierModal");
+    if (old) old.remove();
+
+const suppliers = afGetSuppliers();
+
+const modal = document.createElement("div");
+modal.id = "afSupplierModal";
+
+modal.style.cssText = `
+position:fixed;
+        inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+justify-content:center;
+align-items:center;
+        z-index:99999;
+font-family:Arial,sans-serif;
+    `;
+
+modal.innerHTML = `
+<div style="
+            width:94%;
+            max-width:1000px;
+            max-height:92vh;
+overflow:auto;
+background:white;
+            border-radius:14px;
+            padding:22px;
+            box-shadow:0 10px 40px rgba(0,0,0,.30);
+        ">
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:center;
+                margin-bottom:18px;
+            ">
+<div>
+<h2 style="margin:0;color:#0b5d3b;">
+                        Suppliers
+</h2>
+
+<div style="
+                        color:#666;
+                        font-size:13px;
+                        margin-top:4px;
+                    ">
+                        Supplier Register & Purchase History
+</div>
+</div>
+
+<button
+                    type="button"
+onclick="document.getElementById('afSupplierModal').remove()"
+                    style="
+                        border:0;
+                        background:#eee;
+                        padding:8px 13px;
+                        border-radius:7px;
+cursor:pointer;
+                        font-size:18px;
+                    ">
+✕
+</button>
+</div>
+
+
+<div style="
+display:flex;
+                gap:10px;
+flex-wrap:wrap;
+                margin-bottom:18px;
+            ">
+
+<button
+                    type="button"
+onclick="afAddSupplierForm()"
+                    style="
+                        background:#0b5d3b;
+color:white;
+                        border:0;
+                        padding:11px 18px;
+                        border-radius:7px;
+font-weight:bold;
+cursor:pointer;
+                    ">
+                    + Add Supplier
+</button>
+
+<button
+                    type="button"
+onclick="afSupplierPurchaseHistory()"
+                    style="
+                        background:#176b87;
+color:white;
+                        border:0;
+                        padding:11px 18px;
+                        border-radius:7px;
+font-weight:bold;
+cursor:pointer;
+                    ">
+                    Purchase History
+</button>
+
+</div>
+
+
+<div style="overflow-x:auto;">
+
+<table style="
+                    width:100%;
+border-collapse:collapse;
+                    min-width:700px;
+                ">
+
+<thead>
+<tr style="background:#0b5d3b;color:white;">
+<th style="padding:10px;text-align:left;">Supplier</th>
+<th style="padding:10px;text-align:left;">Phone</th>
+<th style="padding:10px;text-align:left;">Location</th>
+<th style="padding:10px;text-align:left;">Material</th>
+<th style="padding:10px;text-align:center;">Actions</th>
+</tr>
+</thead>
+
+<tbody>
+
+                        ${
+suppliers.length
+                            ?
+suppliers.map(s => `
+<tr style="border-bottom:1px solid #ddd;">
+
+<td style="padding:10px;">
+<strong>${afEscape(s.name)}</strong>
+</td>
+
+<td style="padding:10px;">
+                                        ${afEscape(s.phone || "-")}
+</td>
+
+<td style="padding:10px;">
+                                        ${afEscape(s.location || "-")}
+</td>
+
+<td style="padding:10px;">
+                                        ${afEscape(s.material || "-")}
+</td>
+
+<td style="
+                                        padding:10px;
+text-align:center;
+white-space:nowrap;
+                                    ">
+
+<button
+                                            type="button"
+onclick="afEditSupplier('${s.id}')"
+                                            style="
+                                                border:0;
+                                                background:#f0ad4e;
+                                                padding:6px 10px;
+                                                border-radius:5px;
+cursor:pointer;
+                                            ">
+                                            Edit
+</button>
+
+<button
+                                            type="button"
+onclick="afViewSupplierHistory('${s.id}')"
+                                            style="
+                                                border:0;
+                                                background:#176b87;
+color:white;
+                                                padding:6px 10px;
+                                                border-radius:5px;
+cursor:pointer;
+                                                margin-left:4px;
+                                            ">
+                                            History
+</button>
+
+</td>
+
+</tr>
+                            `).join("")
+                            :
+                            `
+<tr>
+<td colspan="5"
+                                    style="
+                                        padding:30px;
+text-align:center;
+                                        color:#777;
+                                    ">
+                                    No suppliers registered yet.
+</td>
+</tr>
+                            `
+                        }
+
+</tbody>
+
+</table>
+
+</div>
+
+</div>
+    `;
+
+document.body.appendChild(modal);
+}
+
+
+/* =========================================================
+   ADD SUPPLIER
+   ========================================================= */
+
+function afAddSupplierForm() {
+afSupplierForm();
+}
+
+
+function afEditSupplier(id) {
+
+const supplier =
+afGetSuppliers().find(s => String(s.id) === String(id));
+
+    if (!supplier) {
+        alert("Supplier not found.");
+        return;
+    }
+
+afSupplierForm(supplier);
+}
+
+
+function afSupplierForm(existing = null) {
+
+const old = document.getElementById("afSupplierFormModal");
+    if (old) old.remove();
+
+const modal = document.createElement("div");
+modal.id = "afSupplierFormModal";
+
+modal.style.cssText = `
+position:fixed;
+        inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+justify-content:center;
+align-items:center;
+        z-index:100000;
+font-family:Arial,sans-serif;
+    `;
+
+modal.innerHTML = `
+<div style="
+background:white;
+            width:92%;
+            max-width:520px;
+            max-height:90vh;
+overflow:auto;
+            border-radius:14px;
+            padding:22px;
+        ">
+
+<h2 style="margin-top:0;color:#0b5d3b;">
+                ${existing ? "Edit Supplier" : "Add New Supplier"}
+</h2>
+
+
+<label>Supplier Name *</label>
+
+<input
+                id="afSupplierName"
+                type="text"
+                value="${afEscape(existing?.name || "")}"
+                style="
+                    width:100%;
+box-sizing:border-box;
+                    padding:10px;
+                    margin:6px 0 14px;
+                ">
+
+
+<label>Phone Number</label>
+
+<input
+                id="afSupplierPhone"
+                type="text"
+                value="${afEscape(existing?.phone || "")}"
+                style="
+                    width:100%;
+box-sizing:border-box;
+                    padding:10px;
+                    margin:6px 0 14px;
+                ">
+
+
+<label>Location</label>
+
+<input
+                id="afSupplierLocation"
+                type="text"
+                value="${afEscape(existing?.location || "")}"
+                style="
+                    width:100%;
+box-sizing:border-box;
+                    padding:10px;
+                    margin:6px 0 14px;
+                ">
+
+
+<label>Main Material Supplied</label>
+
+<select
+                id="afSupplierMaterial"
+                style="
+                    width:100%;
+box-sizing:border-box;
+                    padding:10px;
+                    margin:6px 0 14px;
+                ">
+
+<option value="">-- Select Material --</option>
+
+                ${["HDPE","LDPE","PP","MixedPlastic","Other"]
+                    .map(m => `
+<option
+                            value="${m}"
+                            ${existing?.material === m ? "selected" : ""}>
+                            ${m}
+</option>
+                    `).join("")}
+
+</select>
+
+
+<div style="
+display:flex;
+                gap:10px;
+                margin-top:10px;
+            ">
+
+<button
+                    type="button"
+onclick="afSaveSupplier('${existing?.id || ""}')"
+                    style="
+                        flex:1;
+                        border:0;
+                        background:#0b5d3b;
+color:white;
+                        padding:11px;
+                        border-radius:7px;
+font-weight:bold;
+cursor:pointer;
+                    ">
+                    ${existing ? "Update Supplier" : "Save Supplier"}
+</button>
+
+<button
+                    type="button"
+                    onclick="document.getElementById('afSupplierFormModal').remove()"
+                    style="
+                        flex:1;
+                        border:0;
+                        background:#ddd;
+                        padding:11px;
+                        border-radius:7px;
+cursor:pointer;
+                    ">
+                    Cancel
+</button>
+
+</div>
+
+</div>
+    `;
+
+document.body.appendChild(modal);
+}
+
+
+function afSaveSupplier(existingId = "") {
+
+const name =
+document.getElementById("afSupplierName").value.trim();
+
+const phone =
+document.getElementById("afSupplierPhone").value.trim();
+
+const location =
+document.getElementById("afSupplierLocation").value.trim();
+
+const material =
+document.getElementById("afSupplierMaterial").value;
+
+
+    if (!name) {
+        alert("Please enter supplier name.");
+        return;
+    }
+
+
+const suppliers = afGetSuppliers();
+
+
+    if (existingId) {
+
+const supplier =
+suppliers.find(s => String(s.id) === String(existingId));
+
+        if (!supplier) {
+            alert("Supplier not found.");
+            return;
+        }
+
+supplier.name = name;
+supplier.phone = phone;
+supplier.location = location;
+supplier.material = material;
+supplier.updatedAt = new Date().toISOString();
+
+    } else {
+
+suppliers.push({
+            id:
+                "SUP-" +
+Date.now() +
+                "-" +
+Math.random().toString(36).slice(2,7),
+
+            name,
+            phone,
+            location,
+            material,
+
+createdAt:new Date().toISOString()
+        });
+    }
+
+
+afSaveSuppliers(suppliers);
+
+document.getElementById("afSupplierFormModal")?.remove();
+
+supplierManagement();
+
+populateMaterialSupplierDropdown();
+
+    alert(
+existingId
+        ? "Supplier updated successfully."
+        : "Supplier saved successfully."
+    );
+}
+
+
+/* =========================================================
+   POPULATE RECORD MATERIAL-IN SUPPLIER DROPDOWN
+   ========================================================= */
+
+function populateMaterialSupplierDropdown() {
+
+const dropdown =
+document.getElementById("materialSupplier");
+
+    if (!dropdown) return;
+
+
+const currentValue = dropdown.value;
+
+const suppliers =
+afGetSuppliers()
+        .slice()
+        .sort((a,b) =>
+            (a.name || "").localeCompare(b.name || "")
+        );
+
+
+dropdown.innerHTML =
+        `<option value="">-- Select Supplier --</option>` +
+suppliers.map(s => `
+<option value="${s.id}">
+                ${afEscape(s.name)}
+</option>
+        `).join("");
+
+
+    if (
+currentValue&&
+suppliers.some(s => String(s.id) === String(currentValue))
+    ) {
+dropdown.value = currentValue;
+    }
+}
+
+
+/* =========================================================
+   RECORD SUPPLIER PURCHASE
+   Call this when company material is saved
+   ========================================================= */
+
+function afRecordSupplierPurchase(data) {
+
+    if (!data || !data.supplierId) return;
+
+
+const grossKg =
+        Number(data.grossKg) || 0;
+
+const dirtPercent =
+        Number(data.dirtPercent) || 0;
+
+const pricePerKg =
+        Number(data.pricePerKg) || 0;
+
+const transportCost =
+        Number(data.transportCost) || 0;
+
+
+const dirtKg =
+grossKg * dirtPercent / 100;
+
+const acceptedKg =
+grossKg - dirtKg;
+
+const materialCost =
+acceptedKg * pricePerKg;
+
+const totalCost =
+materialCost + transportCost;
+
+
+const purchases =
+afGetSupplierPurchases();
+
+
+purchases.push({
+
+        id:
+            "PUR-" +
+Date.now() +
+            "-" +
+Math.random().toString(36).slice(2,7),
+
+supplierId:data.supplierId,
+
+        date:
+data.date ||
+            new Date().toISOString().slice(0,10),
+
+materialType:
+data.materialType || "",
+
+grossKg,
+dirtPercent,
+dirtKg,
+acceptedKg,
+pricePerKg,
+materialCost,
+transportCost,
+totalCost,
+
+createdAt:new Date().toISOString()
+
+    });
+
+
+afSaveSupplierPurchases(purchases);
+}
+
+
+/* =========================================================
+   INDIVIDUAL SUPPLIER HISTORY
+   ========================================================= */
+
+function afViewSupplierHistory(supplierId) {
+
+const supplier =
+afGetSuppliers()
+        .find(s => String(s.id) === String(supplierId));
+
+    if (!supplier) {
+        alert("Supplier not found.");
+        return;
+    }
+
+
+const records =
+afGetSupplierPurchases()
+        .filter(p =>
+            String(p.supplierId) === String(supplierId)
+        )
+        .sort((a,b) =>
+            String(b.date).localeCompare(String(a.date))
+        );
+
+
+afShowPurchaseHistory(
+supplier.name + " - Purchase History",
+        records
+    );
+}
+
+
+/* =========================================================
+   ALL SUPPLIER PURCHASE HISTORY
+   ========================================================= */
+
+function afSupplierPurchaseHistory() {
+
+const records =
+afGetSupplierPurchases()
+        .slice()
+        .sort((a,b) =>
+            String(b.date).localeCompare(String(a.date))
+        );
+
+afShowPurchaseHistory(
+        "Supplier Purchase History",
+        records
+    );
+}
+
+
+/* =========================================================
+   HISTORY SCREEN
+   ========================================================= */
+
+function afShowPurchaseHistory(title, records) {
+
+const old =
+document.getElementById("afSupplierHistoryModal");
+
+    if (old) old.remove();
+
+
+const suppliers = afGetSuppliers();
+
+const supplierName = id =>
+suppliers.find(
+            s => String(s.id) === String(id)
+        )?.name || "Unknown";
+
+
+const modal =
+document.createElement("div");
+
+modal.id = "afSupplierHistoryModal";
+
+modal.style.cssText = `
+position:fixed;
+        inset:0;
+background:rgba(0,0,0,.55);
+display:flex;
+justify-content:center;
+align-items:center;
+        z-index:100001;
+font-family:Arial,sans-serif;
+    `;
+
+
+modal.innerHTML = `
+<div style="
+            width:96%;
+            max-width:1150px;
+            max-height:92vh;
+overflow:auto;
+background:white;
+            border-radius:14px;
+            padding:20px;
+        ">
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:center;
+            ">
+
+<h2 style="color:#0b5d3b;">
+                    ${afEscape(title)}
+</h2>
+
+<button
+                    onclick="document.getElementById('afSupplierHistoryModal').remove()"
+                    style="
+                        border:0;
+                        padding:8px 12px;
+                        border-radius:6px;
+cursor:pointer;
+                    ">
+✕
+</button>
+
+</div>
+
+
+<div style="overflow-x:auto;">
+
+<table style="
+                    width:100%;
+border-collapse:collapse;
+                    min-width:1000px;
+                ">
+
+<thead>
+
+<tr style="
+                            background:#0b5d3b;
+color:white;
+                        ">
+
+<th style="padding:8px;">Date</th>
+<th style="padding:8px;">Supplier</th>
+<th style="padding:8px;">Material</th>
+<th style="padding:8px;">Gross kg</th>
+<th style="padding:8px;">Dirt %</th>
+<th style="padding:8px;">Dirt kg</th>
+<th style="padding:8px;">Accepted kg</th>
+<th style="padding:8px;">UGX/kg</th>
+<th style="padding:8px;">Material Cost</th>
+<th style="padding:8px;">Transport</th>
+<th style="padding:8px;">Total</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+
+                        ${
+records.length
+                            ?
+records.map(r => `
+
+<tr style="
+                                    border-bottom:1px solid #ddd;
+                                ">
+
+<td style="padding:8px;">
+                                        ${afEscape(r.date || "")}
+</td>
+
+<td style="padding:8px;">
+                                        ${afEscape(
+supplierName(r.supplierId)
+                                        )}
+</td>
+
+<td style="padding:8px;">
+                                        ${afEscape(
+r.materialType || ""
+                                        )}
+</td>
+
+<td style="padding:8px;text-align:right;">
+                                        ${afNumber(r.grossKg)}
+</td>
+
+<td style="padding:8px;text-align:right;">
+                                        ${afNumber(r.dirtPercent)}%
+</td>
+
+<td style="padding:8px;text-align:right;">
+                                        ${afNumber(r.dirtKg)}
+</td>
+
+<td style="
+                                        padding:8px;
+text-align:right;
+font-weight:bold;
+                                    ">
+                                        ${afNumber(r.acceptedKg)}
+</td>
+
+<td style="padding:8px;text-align:right;">
+                                        ${afMoney(r.pricePerKg)}
+</td>
+
+<td style="padding:8px;text-align:right;">
+                                        ${afMoney(r.materialCost)}
+</td>
+
+<td style="padding:8px;text-align:right;">
+                                        ${afMoney(r.transportCost)}
+</td>
+
+<td style="
+                                        padding:8px;
+text-align:right;
+font-weight:bold;
+                                    ">
+                                        ${afMoney(r.totalCost)}
+</td>
+
+</tr>
+
+                            `).join("")
+                            :
+                            `
+<tr>
+<td
+colspan="11"
+                                    style="
+                                        padding:30px;
+text-align:center;
+                                        color:#777;
+                                    ">
+                                    No purchase history yet.
+</td>
+</tr>
+                            `
+                        }
+
+</tbody>
+
+</table>
+
+</div>
+
+</div>
+    `;
+
+
+document.body.appendChild(modal);
+}
+
+
+/* =========================================================
+   HELPER FUNCTIONS
+   ========================================================= */
+
+function afMoney(value) {
+
+    return "UGX " +
+        (Number(value) || 0)
+        .toLocaleString();
+}
+
+
+function afNumber(value) {
+
+    return (Number(value) || 0)
+        .toLocaleString(
+            undefined,
+            {maximumFractionDigits:2}
+        );
+}
+
+
+function afEscape(value) {
+
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
