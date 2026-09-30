@@ -74050,3 +74050,124 @@ console.log(
 
 })();
 
+/* =========================================================
+   A&F SUPPLIER PERFORMANCE - VERTICAL POSITION FIX
+   Places Supplier Performance directly BELOW Company Letters
+   ========================================================= */
+
+(function () {
+
+  function afFixSupplierPerformancePosition() {
+
+const letters =
+document.getElementById("afCompanyLettersDashboardCard");
+
+const performance =
+document.getElementById("afSupplierPerformanceDashboardCard");
+
+    if (!letters || !performance) return;
+
+
+    /*
+     * Company Letters and Supplier Performance must
+     * share the same right-hand dashboard column.
+     */
+    let column =
+document.getElementById("afDirectorRightPerformanceColumn");
+
+
+    if (!column) {
+
+      column = document.createElement("div");
+
+column.id =
+        "afDirectorRightPerformanceColumn";
+
+column.style.cssText = `
+display:flex;
+flex-direction:column;
+        gap:12px;
+        width:100%;
+        min-width:0;
+box-sizing:border-box;
+      `;
+
+
+      /*
+       * Put the new column exactly where
+       * Company Letters currently sits.
+       */
+letters.parentNode.insertBefore(
+        column,
+        letters
+      );
+
+
+      /*
+       * Move Company Letters into the column.
+       */
+column.appendChild(
+        letters
+      );
+
+    }
+
+
+    /*
+     * Move Supplier Performance immediately
+     * underneath Company Letters.
+     */
+column.appendChild(
+      performance
+    );
+
+
+    /*
+     * Both cards use the full available width.
+     */
+letters.style.width = "100%";
+letters.style.boxSizing = "border-box";
+
+performance.style.width = "100%";
+performance.style.marginTop = "0";
+performance.style.boxSizing = "border-box";
+
+  }
+
+
+  /*
+   * Run after dashboard finishes drawing.
+   */
+setTimeout(
+afFixSupplierPerformancePosition,
+    250
+  );
+
+
+  /*
+   * Reapply when dashboard is redrawn.
+   */
+  let timer = null;
+
+  new MutationObserver(function () {
+
+clearTimeout(timer);
+
+    timer = setTimeout(
+afFixSupplierPerformancePosition,
+      100
+    );
+
+  }).observe(
+document.body,
+    {
+childList:true,
+subtree:true
+    }
+  );
+
+
+window.afFixSupplierPerformancePosition =
+afFixSupplierPerformancePosition;
+
+})();
