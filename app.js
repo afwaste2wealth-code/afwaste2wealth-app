@@ -64102,7 +64102,7 @@ const list =
 
     modal
       .querySelectorAll(
-        "tbodytr"
+        "tbody tr"
       )
       .forEach(
         row => {
@@ -65694,7 +65694,7 @@ const list =
 const rows =
 Array.from(
 table.querySelectorAll(
-          "tbodytr"
+          "tbody tr"
         )
       );
 
@@ -76226,7 +76226,7 @@ document.getElementById(
 const rows =
 Array.from(
 modal.querySelectorAll(
-          "tbodytr"
+          "tbody tr"
         )
       );
 
@@ -76490,7 +76490,7 @@ readCustomers();
 
 const rows =
 Array.from(
-table.querySelectorAll("tbodytr")
+table.querySelectorAll("tbody tr")
         );
 
 
