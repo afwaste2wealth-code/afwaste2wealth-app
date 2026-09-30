@@ -72159,3 +72159,346 @@ function afEscape(value) {
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
 }
+
+/* =========================================================
+   A&F SUPPLIER ↔ MATERIAL-IN MASTER CONNECTION
+   One-block integration fix
+   ========================================================= */
+
+(function connectAFSupplierMaterialSystem() {
+
+  /* ---------------------------------------------------------
+     1. Keep the original Record Material In function
+     --------------------------------------------------------- */
+
+  if (typeof window.recordMaterialIn !== "function") {
+console.error(
+      "A&F Supplier Integration: recordMaterialIn() was not found."
+    );
+    return;
+  }
+
+const originalRecordMaterialIn = window.recordMaterialIn;
+
+
+  /* ---------------------------------------------------------
+     2. Wrap Record Material In
+     --------------------------------------------------------- */
+
+window.recordMaterialIn = function () {
+
+originalRecordMaterialIn();
+
+const supplierDropdown =
+document.getElementById("materialSupplier");
+
+const saveButton =
+document.getElementById("saveMaterial");
+
+const source =
+document.getElementById("materialSource");
+
+    if (!supplierDropdown || !saveButton) {
+      return;
+    }
+
+
+    /* -------------------------------------------------------
+       LOAD ALL REGISTERED SUPPLIERS
+       ------------------------------------------------------- */
+
+    if (typeof afGetSuppliers === "function") {
+
+const suppliers =
+afGetSuppliers()
+          .slice()
+          .sort((a, b) =>
+            String(a.name || "")
+              .localeCompare(String(b.name || ""))
+          );
+
+supplierDropdown.innerHTML =
+        '<option value="">-- Select Supplier --</option>' +
+
+suppliers.map(supplier =>
+
+          '<option value="' +
+          String(supplier.id) +
+          '">' +
+          String(supplier.name || "") +
+          '</option>'
+
+        ).join("");
+    }
+
+
+    /* -------------------------------------------------------
+       INTERCEPT MATERIAL SAVE
+       Capture supplier BEFORE original save code runs
+       ------------------------------------------------------- */
+
+saveButton.addEventListener(
+      "click",
+      function supplierMaterialConnector(event) {
+
+const isClient =
+          source &&source.value === "client";
+
+        /*
+         * Client material does not require a supplier.
+         */
+        if (isClient) {
+          return;
+        }
+
+
+        /* ---------------------------------------------------
+           REQUIRE SUPPLIER FOR COMPANY MATERIAL
+           --------------------------------------------------- */
+
+const supplierId =
+supplierDropdown.value;
+
+        if (!supplierId) {
+
+event.preventDefault();
+event.stopImmediatePropagation();
+
+          alert(
+            "Please select the supplier who supplied this material."
+          );
+
+          return;
+        }
+
+
+const supplier =
+typeof afGetSuppliers === "function"
+            ? afGetSuppliers().find(
+                item =>
+                  String(item.id) ===
+                  String(supplierId)
+              )
+            : null;
+
+
+        /*
+         * Wait until the existing Record Material In code
+         * has created and saved its material record.
+         */
+setTimeout(function () {
+
+          let records = [];
+
+          try {
+
+            records =
+JSON.parse(
+localStorage.getItem(
+                  "materialRecords"
+                ) || "[]"
+              );
+
+          } catch (error) {
+
+console.error(
+              "Unable to read material records.",
+              error
+            );
+
+            return;
+          }
+
+
+          if (!records.length) {
+            return;
+          }
+
+
+          /*
+           * The record just created by the original
+           * Record Material In function is the last record.
+           */
+const record =
+            records[records.length - 1];
+
+
+          if (!record) {
+            return;
+          }
+
+
+          /*
+           * Do not accidentally attach supplier information
+           * to client-owned material.
+           */
+          if (
+            String(
+record.materialSource || ""
+            ).toLowerCase() === "client"
+          ) {
+            return;
+          }
+
+
+          /* -------------------------------------------------
+             CONNECT SUPPLIER TO MATERIAL BATCH
+             ------------------------------------------------- */
+
+record.supplierId =
+supplierId;
+
+record.supplierName =
+            supplier
+              ? String(supplier.name || "")
+              : "";
+
+
+localStorage.setItem(
+            "materialRecords",
+JSON.stringify(records)
+          );
+
+
+          /* -------------------------------------------------
+             CREATE SUPPLIER PURCHASE HISTORY
+             ------------------------------------------------- */
+
+          if (
+typeof afRecordSupplierPurchase ===
+            "function"
+          ) {
+
+            /*
+             * Prevent duplicate purchase history if this
+             * particular batch was already connected.
+             */
+
+            let existingPurchases = [];
+
+            if (
+typeof afGetSupplierPurchases ===
+              "function"
+            ) {
+
+existingPurchases =
+afGetSupplierPurchases();
+
+            }
+
+
+const alreadyRecorded =
+existingPurchases.some(
+                purchase =>
+                  String(
+purchase.materialRecordId || ""
+                  ) ===
+                  String(record.id || "")
+              );
+
+
+            if (!alreadyRecorded) {
+
+afRecordSupplierPurchase({
+
+supplierId:
+supplierId,
+
+                date:
+record.date ||
+                  new Date()
+                    .toISOString()
+                    .slice(0, 10),
+
+materialType:
+record.materialType || "",
+
+grossKg:
+                  Number(
+record.grossWeight || 0
+                  ),
+
+dirtPercent:
+                  Number(
+record.dirtPercent || 0
+                  ),
+
+pricePerKg:
+                  Number(
+record.pricePerKg || 0
+                  ),
+
+transportCost:
+                  Number(
+record.transportCost || 0
+                  )
+
+              });
+
+
+              /*
+               * Add materialRecordId to the newest supplier
+               * purchase for duplicate protection.
+               */
+
+              if (
+typeof afGetSupplierPurchases ===
+                  "function" &&
+typeof afSaveSupplierPurchases ===
+                  "function"
+              ) {
+
+const purchases =
+afGetSupplierPurchases();
+
+const newest =
+                  purchases[
+purchases.length - 1
+                  ];
+
+                if (
+                  newest &&
+                  String(newest.supplierId) ===
+                  String(supplierId)
+                ) {
+
+newest.materialRecordId =
+record.id || "";
+
+newest.batchNumber =
+record.batchNumber || "";
+
+afSaveSupplierPurchases(
+                    purchases
+                  );
+                }
+              }
+            }
+          }
+
+
+console.log(
+            "A&F Supplier purchase connected:",
+record.batchNumber,
+record.supplierName
+          );
+
+        }, 0);
+
+      },
+
+      /*
+       * Capture phase lets this validation run
+       * before the existing onclick save handler.
+       */
+      true
+    );
+
+  };
+
+
+console.log(
+    "A&F Supplier ↔ Material-In integration loaded."
+  );
+
+})();
