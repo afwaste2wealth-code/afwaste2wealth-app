@@ -73072,3 +73072,355 @@ recoverButton
 
 })();
 
+/* =========================================================
+   A&F SUPPLIER PERFORMANCE SUMMARY
+   Adds summary cards to individual Supplier History
+   REPORTING ONLY - DOES NOT CHANGE STOCK
+   ========================================================= */
+
+(function () {
+
+  if (window.__afSupplierSummaryInstalled) return;
+  window.__afSupplierSummaryInstalled = true;
+
+
+  function afFormatNumber(value, decimals = 0) {
+
+const number = Number(value) || 0;
+
+    return number.toLocaleString(
+      undefined,
+      {
+minimumFractionDigits: decimals,
+maximumFractionDigits: decimals
+      }
+    );
+  }
+
+
+  function afBuildSupplierSummary(records) {
+
+    records = Array.isArray(records)
+      ? records
+      : [];
+
+const deliveries =
+records.length;
+
+
+const grossKg =
+records.reduce(
+        (sum, r) =>
+          sum + (Number(r.grossKg) || 0),
+        0
+      );
+
+
+const dirtKg =
+records.reduce(
+        (sum, r) =>
+          sum + (Number(r.dirtKg) || 0),
+        0
+      );
+
+
+const acceptedKg =
+records.reduce(
+        (sum, r) =>
+          sum + (Number(r.acceptedKg) || 0),
+        0
+      );
+
+
+const materialCost =
+records.reduce(
+        (sum, r) =>
+          sum + (Number(r.materialCost) || 0),
+        0
+      );
+
+
+const transportCost =
+records.reduce(
+        (sum, r) =>
+          sum + (Number(r.transportCost) || 0),
+        0
+      );
+
+
+const totalPurchaseValue =
+records.reduce(
+        (sum, r) =>
+          sum + (Number(r.totalCost) || 0),
+        0
+      );
+
+
+    /*
+     * WEIGHTED AVERAGE DIRT %
+     *
+     * This is more accurate than simply averaging
+     * the dirt percentages of individual deliveries.
+     */
+const averageDirt =
+grossKg> 0
+        ? (dirtKg / grossKg) * 100
+        : 0;
+
+
+const cards = [
+
+      {
+        title: "Deliveries",
+        value: afFormatNumber(deliveries)
+      },
+
+      {
+        title: "Gross Supplied",
+        value:
+afFormatNumber(grossKg, 1) +
+          " kg"
+      },
+
+      {
+        title: "Dirt Deducted",
+        value:
+afFormatNumber(dirtKg, 1) +
+          " kg"
+      },
+
+      {
+        title: "Accepted Material",
+        value:
+afFormatNumber(acceptedKg, 1) +
+          " kg"
+      },
+
+      {
+        title: "Average Dirt",
+        value:
+afFormatNumber(averageDirt, 1) +
+          "%"
+      },
+
+      {
+        title: "Material Cost",
+        value:
+          "UGX " +
+afFormatNumber(materialCost)
+      },
+
+      {
+        title: "Transport",
+        value:
+          "UGX " +
+afFormatNumber(transportCost)
+      },
+
+      {
+        title: "Total Purchase Value",
+        value:
+          "UGX " +
+afFormatNumber(totalPurchaseValue)
+      }
+
+    ];
+
+
+    return `
+<div
+        id="afSupplierSummary"
+        style="
+          margin:0 0 20px 0;
+          padding:15px;
+          background:#f7faf8;
+          border:1px solid #d8e6de;
+          border-radius:10px;
+        "
+>
+
+<div
+          style="
+            font-size:16px;
+font-weight:bold;
+            color:#0b5d3b;
+            margin-bottom:12px;
+          "
+>
+          Supplier Summary
+</div>
+
+
+<div
+          style="
+display:grid;
+            grid-template-columns:
+              repeat(auto-fit,minmax(145px,1fr));
+            gap:10px;
+          "
+>
+
+          ${cards.map(card => `
+
+<div
+              style="
+background:white;
+                border:1px solid #ddd;
+                border-radius:8px;
+                padding:12px;
+text-align:center;
+                min-height:65px;
+display:flex;
+flex-direction:column;
+justify-content:center;
+              "
+>
+
+<div
+                style="
+                  font-size:12px;
+                  color:#666;
+                  margin-bottom:5px;
+                "
+>
+                ${card.title}
+</div>
+
+<div
+                style="
+                  font-size:16px;
+font-weight:bold;
+                  color:#222;
+                "
+>
+                ${card.value}
+</div>
+
+</div>
+
+          `).join("")}
+
+</div>
+
+</div>
+    `;
+  }
+
+
+  /*
+   * Preserve the existing working history function.
+   */
+const originalShowPurchaseHistory =
+window.afShowPurchaseHistory;
+
+
+  if (
+typeof originalShowPurchaseHistory !==
+    "function"
+  ) {
+
+console.warn(
+      "A&F Supplier Summary: " +
+      "Purchase History function not found."
+    );
+
+    return;
+  }
+
+
+window.afShowPurchaseHistory =
+    function (title, records) {
+
+      /*
+       * First open the existing history normally.
+       */
+originalShowPurchaseHistory(
+        title,
+        records
+      );
+
+
+      /*
+       * Do not put the summary on the general
+       * ALL-SUPPLIERS Purchase History screen.
+       *
+       * It appears only when viewing one supplier.
+       */
+      if (
+        title ===
+        "Supplier Purchase History"
+      ) {
+        return;
+      }
+
+
+setTimeout(function () {
+
+const modal =
+document.getElementById(
+            "afSupplierHistoryModal"
+          );
+
+        if (!modal) return;
+
+
+        if (
+modal.querySelector(
+            "#afSupplierSummary"
+          )
+        ) {
+          return;
+        }
+
+
+        /*
+         * Find the table container.
+         */
+const table =
+modal.querySelector("table");
+
+        if (!table) return;
+
+
+const tableContainer =
+table.parentElement;
+
+
+        /*
+         * Create summary wrapper.
+         */
+const wrapper =
+document.createElement("div");
+
+wrapper.innerHTML =
+afBuildSupplierSummary(
+            records
+          );
+
+
+const summary =
+wrapper.firstElementChild;
+
+
+        /*
+         * Place summary directly above
+         * the Purchase History table.
+         */
+tableContainer.parentElement
+          .insertBefore(
+            summary,
+tableContainer
+          );
+
+
+      }, 50);
+
+    };
+
+
+console.log(
+    "A&F Supplier Performance Summary installed."
+  );
+
+})();
+
