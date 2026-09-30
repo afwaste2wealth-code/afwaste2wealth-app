@@ -66112,7 +66112,7 @@ A&amp;F
 <div>
 
 <div class="af-smart-company">
-A&amp;FWekavera Ltd
+A&amp;F Wekavera Ltd
 </div>
 
 <div class="af-smart-tag">
@@ -66148,7 +66148,7 @@ return `
 
 <div class="af-smart-footer">
 
-A&amp;FWekavera Ltd
+A&amp;F Wekavera Ltd
 •
 Waste2Wealth Solutions
 •
@@ -66489,7 +66489,7 @@ letter.signatoryTitle||
 
 <br>
 
-A&amp;FWekavera Ltd
+A&amp;F Wekavera Ltd
 
 </div>
 
@@ -67056,11 +67056,6 @@ margin-top:20px;
 ">
 
 
-${
-old
-
-  ? `
-
 <button
 id="afLetterPrintFromEditor"
 style="${btn("#555")}"
@@ -67069,11 +67064,6 @@ style="${btn("#555")}"
 🖨 Print / PDF
 
 </button>
-
-  `
-
-  : ""
-}
 
 
 ${
@@ -67454,24 +67444,53 @@ saveLetter(
 
   }
 
-
 const printButton=
 m.querySelector(
   "#afLetterPrintFromEditor"
 );
 
 
+if(
+printButton
+){
+
+printButton.onclick=
+()=>{
+
   if(
-printButton&&
+    locked &&
     old
   ){
 
-printButton.onclick=
-()=>printLetter(
-  old
+printLetter(
+      old
+    );
+
+    return;
+  }
+
+
+const preview=
+collect(
+old?.status||
+  "DRAFT"
 );
 
+
+  if(
+    !preview
+  ){
+    return;
   }
+
+
+printLetter(
+  preview
+);
+
+};
+
+}
 
 }
 
