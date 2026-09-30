@@ -55291,45 +55291,661 @@ wrap.remove();
 
   function openCustomerList() {
 
-    if (!requireAccess()) {
-      return;
-    }
+  if (!requireAccess()) {
+    return;
+  }
 
 syncExistingCustomers();
 
 const {
-      wrap,
-      box
+    wrap,
+    box
+  } =
+    modal(
+      "afCustomerList",
+      1150
+    );
+
+
+  function syncCustomerOpenOrders(
+    customer
+  ) {
+
+const records =
+orderList();
+
+
+    let changed =
+      false;
+
+
+records.forEach(
+      order => {
+
+        if (
+          String(
+order.customerId || ""
+          ) !==
+          String(
+customer.id || ""
+          )
+        ) {
+
+          return;
+
+        }
+
+
+const status =
+          String(
+order.status || ""
+          ).toUpperCase();
+
+
+        if (
+          [
+            "QUOTED",
+            "PENDING",
+            "CONFIRMED",
+            "PROCESSING"
+          ].includes(
+            status
+          )
+        ) {
+
+order.customerName =
+customer.name || "";
+
+
+order.customerPhone =
+customer.phone || "";
+
+
+order.customerLocation =
+customer.location || "";
+
+
+order.customerEmail =
+customer.email || "";
+
+
+order.customerContactPerson =
+customer.contactPerson || "";
+
+
+order.customerType =
+customer.customerType || "";
+
+
+order.customerUpdatedAt =
+            new Date()
+              .toISOString();
+
+
+          changed =
+            true;
+
+        }
+
+      }
+    );
+
+
+    if (changed) {
+
+      save(
+K.orders,
+        records
+      );
+
+    }
+
+  }
+
+
+  function openEditCustomer(
+customerId
+  ) {
+
+const allCustomers =
+      read(
+K.customers,
+        []
+      );
+
+
+const index =
+allCustomers.findIndex(
+        customer =>
+
+          String(
+customer.id || ""
+          ) ===
+          String(
+customerId || ""
+          )
+      );
+
+
+    if (index < 0) {
+
+      alert(
+        "Customer record not found."
+      );
+
+      return;
+
+    }
+
+
+const customer =
+allCustomers[index];
+
+
+const {
+      wrap: editWrap,
+      box: editBox
     } =
       modal(
-        "afCustomerList",
-        1150
+        "afEditCustomer",
+        760
       );
+
+
+editBox.innerHTML = `
+
+${title(
+  "✏️ Edit Customer",
+  "Update the customer's saved information",
+  "afEditCustomerClose"
+)}
+
+
+<div style="
+display:grid;
+  grid-template-columns:
+    repeat(
+      auto-fit,
+minmax(240px,1fr)
+    );
+  gap:12px;
+">
+
+
+<div>
+
+<label>
+<b>
+Customer / Company Name *
+</b>
+</label>
+
+<input
+  id="afEditCustName"
+  value="${esc(
+customer.name || ""
+  )}"
+  style="
+    ${input()}
+    margin-top:5px;
+  "
+>
+
+</div>
+
+
+<div>
+
+<label>
+<b>
+Phone Number *
+</b>
+</label>
+
+<input
+  id="afEditCustPhone"
+  value="${esc(
+customer.phone || ""
+  )}"
+  style="
+    ${input()}
+    margin-top:5px;
+  "
+>
+
+</div>
+
+
+<div>
+
+<label>
+<b>Email</b>
+</label>
+
+<input
+  id="afEditCustEmail"
+  type="email"
+  value="${esc(
+customer.email || ""
+  )}"
+  style="
+    ${input()}
+    margin-top:5px;
+  "
+>
+
+</div>
+
+
+<div>
+
+<label>
+<b>
+Location / Address
+</b>
+</label>
+
+<input
+  id="afEditCustLocation"
+  value="${esc(
+customer.location || ""
+  )}"
+  style="
+    ${input()}
+    margin-top:5px;
+  "
+>
+
+</div>
+
+
+<div>
+
+<label>
+<b>
+Contact Person
+</b>
+</label>
+
+<input
+  id="afEditCustContact"
+  value="${esc(
+customer.contactPerson || ""
+  )}"
+  style="
+    ${input()}
+    margin-top:5px;
+  "
+>
+
+</div>
+
+
+<div>
+
+<label>
+<b>
+Customer Type
+</b>
+</label>
+
+<select
+  id="afEditCustType"
+  style="
+    ${input()}
+    margin-top:5px;
+  "
+>
+
+${
+[
+  "Individual",
+  "Company",
+  "Dealer",
+  "Contractor",
+  "Institution",
+  "Government",
+  "Other"
+]
+.map(
+  type => `
+
+<option
+  value="${esc(type)}"
+  ${
+    String(
+customer.customerType ||
+      "Individual"
+    ) === type
+      ? "selected"
+      : ""
+  }
+>
+${esc(type)}
+</option>
+
+  `
+)
+.join("")
+}
+
+</select>
+
+</div>
+
+</div>
+
+
+<div style="
+  margin-top:12px;
+">
+
+<label>
+<b>Notes</b>
+</label>
+
+<textarea
+  id="afEditCustNotes"
+  rows="3"
+  style="
+    ${input()}
+    margin-top:5px;
+  "
+>${esc(
+customer.notes || ""
+)}</textarea>
+
+</div>
+
+
+<div style="
+  margin-top:12px;
+  padding:10px;
+  background:#eef8f2;
+  border:1px solid #cfe6d8;
+  border-radius:7px;
+  font-size:12px;
+  color:#0b5d3b;
+">
+
+Changes will also update this
+customer's open quotations and
+orders.
+
+Completed delivery history will
+remain unchanged.
+
+</div>
+
+
+<button
+  id="afEditCustomerSave"
+  style="
+    ${btn()}
+    width:100%;
+    margin-top:15px;
+  "
+>
+
+💾 Save Customer Changes
+
+</button>
+
+    `;
+
+
+editBox.querySelector(
+      "#afEditCustomerClose"
+    ).onclick =
+      () =>
+editWrap.remove();
+
+
+editBox.querySelector(
+      "#afEditCustomerSave"
+    ).onclick =
+      () => {
+
+
+const name =
+editBox.querySelector(
+            "#afEditCustName"
+          )
+          .value
+          .trim();
+
+
+const phone =
+editBox.querySelector(
+            "#afEditCustPhone"
+          )
+          .value
+          .trim();
+
+
+        if (!name) {
+
+          alert(
+            "Please enter the customer name."
+          );
+
+          return;
+
+        }
+
+
+        if (!phone) {
+
+          alert(
+            "Please enter the phone number."
+          );
+
+          return;
+
+        }
+
+
+const duplicate =
+allCustomers.some(
+            (
+              other,
+otherIndex
+            ) => {
+
+
+              if (
+otherIndex ===
+                index
+              ) {
+
+                return false;
+
+              }
+
+
+              if (
+                String(
+other.status ||
+                  "ACTIVE"
+                ).toUpperCase() ===
+                "DELETED"
+              ) {
+
+                return false;
+
+              }
+
+
+const sameName =
+                String(
+other.name || ""
+                )
+                .trim()
+                .toLowerCase() ===
+name.toLowerCase();
+
+
+const samePhone =
+                String(
+other.phone || ""
+                )
+                .replace(
+                  /\s+/g,
+                  ""
+                ) ===
+
+phone.replace(
+                  /\s+/g,
+                  ""
+                );
+
+
+              return (
+sameName ||
+samePhone
+              );
+
+            }
+          );
+
+
+        if (duplicate) {
+
+          alert(
+            "Another customer already uses the same name or phone number."
+          );
+
+          return;
+
+        }
+
+
+customer.name =
+          name;
+
+
+customer.phone =
+          phone;
+
+
+customer.email =
+editBox.querySelector(
+            "#afEditCustEmail"
+          )
+          .value
+          .trim();
+
+
+customer.location =
+editBox.querySelector(
+            "#afEditCustLocation"
+          )
+          .value
+          .trim();
+
+
+customer.contactPerson =
+editBox.querySelector(
+            "#afEditCustContact"
+          )
+          .value
+          .trim();
+
+
+customer.customerType =
+editBox.querySelector(
+            "#afEditCustType"
+          ).value;
+
+
+customer.notes =
+editBox.querySelector(
+            "#afEditCustNotes"
+          )
+          .value
+          .trim();
+
+
+customer.updatedAt =
+          new Date()
+            .toISOString();
+
+
+const user =
+currentUser();
+
+
+customer.updatedBy =
+user.fullName ||
+user.employeeName ||
+user.employeeId ||
+          "";
+
+
+allCustomers[index] =
+          customer;
+
+
+        save(
+K.customers,
+allCustomers
+        );
+
+
+syncCustomerOpenOrders(
+          customer
+        );
+
+
+editWrap.remove();
+
+
+        alert(
+          "Customer updated successfully."
+        );
+
+
+        render();
+
+      };
+
+  }
+
+
+  function render() {
+
+syncExistingCustomers();
+
+
+const list =
+customerList();
+
 
 box.innerHTML = `
 
-      ${title(
-        "👥 Customer List",
-        "Registered customers and live balances",
-        "afCustomerListClose"
-      )}
+${title(
+  "👥 Customer List",
+  "Registered customers and live balances",
+  "afCustomerListClose"
+)}
+
 
 <div style="
 overflow:auto;
-      ">
+">
 
 <table style="
-          width:100%;
-          min-width:950px;
+  width:100%;
+  min-width:1050px;
 border-collapse:collapse;
-        ">
+">
 
 <thead>
 
 <tr style="
-              background:#eaf5ee;
+  background:#eaf5ee;
 text-align:left;
-            ">
+">
 
 <th>No.</th>
 <th>Name</th>
@@ -55339,91 +55955,132 @@ text-align:left;
 <th>Paid</th>
 <th>Balance</th>
 
+<th
+  data-af-customer-action-heading="1"
+>
+Action
+</th>
+
 </tr>
 
 </thead>
 
+
 <tbody>
 
-          ${
-customerList()
-              .map(c => {
+${
+list.length
 
-const t =
-customerTotals(c);
+  ? list.map(
+      customer => {
 
-                return `
+const totals =
+customerTotals(
+            customer
+          );
+
+
+        return `
 
 <tr>
 
 <td>
-                      ${esc(
-c.customerNo ||
-                        "-"
-                      )}
+${esc(
+customer.customerNo ||
+  "-"
+)}
 </td>
 
 <td>
 <b>
-                        ${esc(c.name)}
+${esc(
+customer.name ||
+  "-"
+)}
 </b>
 </td>
 
 <td>
-                      ${esc(
-c.phone ||
-                        "-"
-                      )}
+${esc(
+customer.phone ||
+  "-"
+)}
 </td>
 
 <td>
-                      ${esc(
-c.location ||
-                        "-"
-                      )}
+${esc(
+customer.location ||
+  "-"
+)}
 </td>
 
 <td>
-                      ${money(
-t.sales
-                      )}
+${money(
+totals.sales
+)}
 </td>
 
 <td>
-                      ${money(
-t.paid
-                      )}
+${money(
+totals.paid
+)}
 </td>
 
 <td>
 <b>
-                        ${money(
-t.balance
-                        )}
+${money(
+totals.balance
+)}
 </b>
 </td>
 
-</tr>
 
-                `;
-
-              })
-              .join("") ||
-
-            `
-<tr>
 <td
-colspan="7"
-                  style="
-text-align:center;
-                    padding:20px;
-                  "
+  data-af-customer-action-cell="1"
 >
-                  No customers registered yet.
+
+<button
+  type="button"
+  data-edit-customer="${esc(
+customer.id
+  )}"
+  style="${btn()}"
+>
+
+Edit
+
+</button>
+
 </td>
+
 </tr>
-            `
-          }
+
+        `;
+
+      }
+    )
+    .join("")
+
+  : `
+
+<tr>
+
+<td
+colspan="8"
+  style="
+text-align:center;
+    padding:20px;
+  "
+>
+
+No customers registered yet.
+
+</td>
+
+</tr>
+
+    `
+}
 
 </tbody>
 
@@ -55433,25 +56090,56 @@ text-align:center;
 
     `;
 
+
 box.querySelectorAll(
       "th,td"
-    ).forEach(
-      x => {
+    )
+    .forEach(
+      cell => {
 
-x.style.padding =
+cell.style.padding =
           "9px";
 
-x.style.borderBottom =
+
+cell.style.borderBottom =
           "1px solid #eee";
 
       }
     );
 
+
 box.querySelector(
       "#afCustomerListClose"
     ).onclick =
-      () =>wrap.remove();
+      () =>
+wrap.remove();
+
+
+box.querySelectorAll(
+      "[data-edit-customer]"
+    )
+    .forEach(
+      button => {
+
+button.onclick =
+          () => {
+
+openEditCustomer(
+button.dataset
+                .editCustomer
+            );
+
+          };
+
+      }
+    );
+
   }
+
+
+  render();
+
+}
 
   /* =======================================================
      SALES / DELIVERY HISTORY
