@@ -69343,3 +69343,1858 @@ console.log(
 );
 
 })();
+
+/* =========================================================
+   A&F COMPANY PROFILE / PRINT SETTINGS
+   Director only
+   Controls company details used by global printouts
+   Paste ONCE at the very bottom of app.js
+   ========================================================= */
+
+(function connectAFCompanyProfileSettings(){
+"use strict";
+
+const PROFILE_KEY =
+  "afCompanyProfile";
+
+const SETTINGS_MODAL_ID =
+  "afCompanyProfileSettingsModal";
+
+
+/* =========================================================
+   DEFAULT COMPANY INFORMATION
+   ========================================================= */
+
+const DEFAULTS = {
+
+companyName:
+    "A&F Wekavera Ltd",
+
+tradingName:
+    "Waste2Wealth Solutions",
+
+tinNo:
+    "",
+
+  phone:
+    "0752 128 161",
+
+  email:
+    "afwaste2wealthsolutions@gmail.com",
+
+  address:
+    "Mbalala, Mukono",
+
+  website:
+    "",
+
+  motto:
+    "Turning Waste into Value",
+
+receiptFooterNote:
+    "Thank you for your business."
+
+};
+
+
+/* =========================================================
+   HELPERS
+   ========================================================= */
+
+const esc = value =>
+  String(
+    value ?? ""
+  )
+  .replace(
+    /&/g,
+    "&amp;"
+  )
+  .replace(
+    /</g,
+    "&lt;"
+  )
+  .replace(
+    />/g,
+    "&gt;"
+  )
+  .replace(
+    /"/g,
+    "&quot;"
+  )
+  .replace(
+    /'/g,
+    "&#039;"
+  );
+
+
+function currentUser() {
+
+  try {
+
+    if (
+typeof getAFCurrentUser ===
+      "function"
+    ) {
+
+      return (
+getAFCurrentUser() ||
+        {}
+      );
+
+    }
+
+  } catch (error) {}
+
+
+  try {
+
+    return (
+JSON.parse(
+localStorage.getItem(
+          "currentUser"
+        ) || "{}"
+      ) || {}
+    );
+
+  } catch (error) {
+
+    return {};
+
+  }
+
+}
+
+
+function isDirector() {
+
+  return (
+    String(
+currentUser().role ||
+      ""
+    ).toLowerCase() ===
+    "director"
+  );
+
+}
+
+
+function requireDirector() {
+
+  if (
+isDirector()
+  ) {
+
+    return true;
+
+  }
+
+
+  alert(
+    "Access Denied\n\n" +
+    "Only the Director can manage " +
+    "Company Profile / Print Settings."
+  );
+
+
+  return false;
+
+}
+
+
+/* =========================================================
+   READ COMPANY PROFILE
+   ========================================================= */
+
+function getProfile() {
+
+  let saved = {};
+
+
+  try {
+
+saved =
+JSON.parse(
+localStorage.getItem(
+        PROFILE_KEY
+      ) || "{}"
+    ) || {};
+
+  } catch (error) {
+
+saved = {};
+
+  }
+
+
+  return {
+
+    ...DEFAULTS,
+    ...saved
+
+  };
+
+}
+
+
+/* =========================================================
+   SAVE COMPANY PROFILE
+   ========================================================= */
+
+function saveProfile(
+  profile
+) {
+
+localStorage.setItem(
+    PROFILE_KEY,
+JSON.stringify(
+      profile
+    )
+  );
+
+}
+
+
+/* =========================================================
+   STYLES
+   ========================================================= */
+
+function inputStyle() {
+
+  return `
+
+    width:100%;
+box-sizing:border-box;
+    padding:10px;
+    border:1px solid #ccd5d0;
+    border-radius:7px;
+background:white;
+font-family:Arial,sans-serif;
+
+  `;
+
+}
+
+
+function buttonStyle(
+  background = "#0b5d3b"
+) {
+
+  return `
+
+    border:0;
+    background:${background};
+color:white;
+    padding:10px 14px;
+    border-radius:8px;
+font-weight:bold;
+cursor:pointer;
+
+  `;
+
+}
+
+
+/* =========================================================
+   BUILD CONTACT DETAILS FOR PRINT HEADER
+   ========================================================= */
+
+function contactRows(
+  profile,
+  title = ""
+) {
+
+const rows = [];
+
+
+  if (
+profile.address
+  ) {
+
+rows.push(
+      `
+<div>
+<b>Location:</b>
+${esc(
+profile.address
+)}
+</div>
+      `
+    );
+
+  }
+
+
+  if (
+profile.phone
+  ) {
+
+rows.push(
+      `
+<div>
+<b>Tel:</b>
+${esc(
+profile.phone
+)}
+</div>
+      `
+    );
+
+  }
+
+
+  if (
+profile.email
+  ) {
+
+rows.push(
+      `
+<div>
+<b>Email:</b>
+${esc(
+profile.email
+)}
+</div>
+      `
+    );
+
+  }
+
+
+  /*
+   * TIN is shown on commercial /
+   * official external documents.
+   *
+   * It is not forced onto staff forms.
+   */
+
+constshowTin =
+    /payment receipt|quotation|order|deliverynote|official company letter/i
+      .test(
+        String(
+          title || ""
+        )
+      );
+
+
+  if (
+showTin&&
+profile.tinNo
+  ) {
+
+rows.push(
+      `
+<div>
+<b>TIN:</b>
+${esc(
+profile.tinNo
+)}
+</div>
+      `
+    );
+
+  }
+
+
+  if (
+profile.website
+  ) {
+
+rows.push(
+      `
+<div>
+<b>Web:</b>
+${esc(
+profile.website
+)}
+</div>
+      `
+    );
+
+  }
+
+
+  return rows.join(
+    ""
+  );
+
+}
+
+
+/* =========================================================
+   GLOBAL DYNAMIC SAMPLE 7 HEADER
+   ========================================================= */
+
+function profileHeader(
+  title = ""
+) {
+
+const profile =
+getProfile();
+
+
+return `
+
+<div class="af-smart-header">
+
+
+<div class="af-smart-header-main">
+
+
+<div class="af-smart-mark">
+
+A&amp;F
+
+</div>
+
+
+<div>
+
+
+<div class="af-smart-company">
+
+${esc(
+profile.companyName
+)}
+
+</div>
+
+
+<div class="af-smart-tag">
+
+${esc(
+profile.tradingName
+)}
+
+</div>
+
+
+<div class="af-smart-motto">
+
+${esc(
+profile.motto
+)}
+
+</div>
+
+
+</div>
+
+
+<div class="af-smart-contact">
+
+${contactRows(
+profile,
+title
+)}
+
+</div>
+
+
+</div>
+
+
+<div class="af-smart-accent">
+
+<div class="af-smart-accent-green">
+</div>
+
+<div class="af-smart-accent-gold">
+</div>
+
+</div>
+
+
+${
+title
+
+  ? `
+
+<div class="af-smart-title">
+
+${esc(
+title
+)}
+
+</div>
+
+    `
+
+  : ""
+}
+
+
+</div>
+
+`;
+
+}
+
+
+/* =========================================================
+   GLOBAL DYNAMIC SAMPLE 7 FOOTER
+   ========================================================= */
+
+function profileFooter(
+  extra = ""
+) {
+
+const profile =
+getProfile();
+
+
+const notes = [];
+
+
+  if (
+extra
+  ) {
+
+notes.push(
+      esc(
+        extra
+      )
+    );
+
+  }
+
+
+  /*
+   * Special receipt message.
+   */
+
+  if (
+    /payment receipt/i.test(
+      String(
+extra ||
+        ""
+      )
+    ) &&
+profile.receiptFooterNote
+  ) {
+
+notes.push(
+      esc(
+profile.receiptFooterNote
+      )
+    );
+
+  }
+
+
+return `
+
+<div class="af-smart-footer">
+
+
+<div class="af-smart-footer-wave">
+
+
+<div class="af-smart-gold-wave">
+</div>
+
+
+<div class="af-smart-plastic-picture">
+
+<span></span>
+<span></span>
+<span></span>
+<span></span>
+
+</div>
+
+
+<div class="af-smart-waste">
+
+♻ RECYCLE PLASTIC
+
+</div>
+
+
+<div class="af-smart-pole-picture">
+
+<span></span>
+<span></span>
+<span></span>
+<span></span>
+
+</div>
+
+
+<div class="af-smart-poles">
+
+RECYCLED POLES
+
+</div>
+
+
+</div>
+
+
+<div class="af-smart-footer-strip">
+
+<span>
+Reduce Waste
+</span>
+
+<span class="gold">
+|
+</span>
+
+<span>
+Recycle Plastic
+</span>
+
+<span class="gold">
+|
+</span>
+
+<span>
+Build a Greener Uganda
+</span>
+
+</div>
+
+
+${
+notes.length
+
+  ? `
+
+<div class="af-smart-footer-note">
+
+${notes.join(
+  " • "
+)}
+
+</div>
+
+    `
+
+  : ""
+}
+
+
+</div>
+
+`;
+
+}
+
+
+/* =========================================================
+   PROFILE PREVIEW
+   ========================================================= */
+
+function renderPreview(
+  modal
+) {
+
+const preview =
+modal.querySelector(
+    "#afCompanyProfilePreview"
+  );
+
+
+  if (
+    !preview
+  ) {
+
+    return;
+
+  }
+
+
+const profile =
+getProfile();
+
+
+preview.innerHTML = `
+
+
+<div style="
+  font-weight:900;
+  color:#0b5d3b;
+  font-size:18px;
+">
+
+${esc(
+profile.companyName
+)}
+
+</div>
+
+
+<div style="
+font-weight:bold;
+  margin-top:3px;
+">
+
+${esc(
+profile.tradingName
+)}
+
+</div>
+
+
+<div style="
+  margin-top:4px;
+font-style:italic;
+  color:#66736d;
+">
+
+${esc(
+profile.motto
+)}
+
+</div>
+
+
+<div style="
+  margin-top:10px;
+  line-height:1.7;
+">
+
+
+${
+profile.address
+
+  ? `
+<b>Location:</b>
+${esc(
+profile.address
+)}
+<br>
+  `
+
+  : ""
+}
+
+
+${
+profile.phone
+
+  ? `
+<b>Phone:</b>
+${esc(
+profile.phone
+)}
+<br>
+  `
+
+  : ""
+}
+
+
+${
+profile.email
+
+  ? `
+<b>Email:</b>
+${esc(
+profile.email
+)}
+<br>
+  `
+
+  : ""
+}
+
+
+${
+profile.tinNo
+
+  ? `
+<b>TIN:</b>
+${esc(
+profile.tinNo
+)}
+<br>
+  `
+
+  : ""
+}
+
+
+${
+profile.website
+
+  ? `
+<b>Website:</b>
+${esc(
+profile.website
+)}
+  `
+
+  : ""
+}
+
+
+</div>
+
+`;
+
+}
+
+
+/* =========================================================
+   COMPANY PROFILE SETTINGS SCREEN
+   ========================================================= */
+
+function manageAFCompanyProfileSettings() {
+
+  if (
+    !requireDirector()
+  ) {
+
+    return;
+
+  }
+
+
+document.getElementById(
+    SETTINGS_MODAL_ID
+  )?.remove();
+
+
+const profile =
+getProfile();
+
+
+const modal =
+document.createElement(
+    "div"
+  );
+
+
+modal.id =
+SETTINGS_MODAL_ID;
+
+
+modal.style.cssText = `
+
+position:fixed;
+inset:0;
+z-index:1000005;
+background:rgba(0,0,0,.58);
+display:flex;
+align-items:center;
+justify-content:center;
+padding:10px;
+box-sizing:border-box;
+font-family:Arial,sans-serif;
+
+`;
+
+
+modal.innerHTML = `
+
+
+<div style="
+  width:900px;
+  max-width:98%;
+  max-height:95vh;
+overflow:auto;
+background:white;
+  border-radius:14px;
+  box-shadow:0 16px 50px rgba(0,0,0,.3);
+">
+
+
+<div style="
+  background:#0b5d3b;
+color:white;
+  padding:18px 22px;
+display:flex;
+justify-content:space-between;
+align-items:flex-start;
+  gap:12px;
+">
+
+
+<div>
+
+
+<div style="
+  font-size:11px;
+font-weight:bold;
+  letter-spacing:1.2px;
+  opacity:.85;
+">
+
+A&amp;F WEKAVERA LTD
+•
+DIRECTOR ONLY
+
+</div>
+
+
+<h2 style="
+  margin:5px 0 0;
+">
+
+Company Profile / Print Settings
+
+</h2>
+
+
+<div style="
+  margin-top:4px;
+  font-size:12px;
+  opacity:.9;
+">
+
+Update the details used automatically
+on official printouts
+
+</div>
+
+
+</div>
+
+
+<button
+  id="afCompanyProfileClose"
+  style="${buttonStyle(
+    "#333"
+  )}"
+>
+
+✕ Close
+
+</button>
+
+
+</div>
+
+
+<div style="
+  padding:22px;
+">
+
+
+<div style="
+  background:#eef8f2;
+  border:1px solid #cfe6d8;
+  border-radius:8px;
+  padding:11px 13px;
+  margin-bottom:16px;
+  color:#0b5d3b;
+  font-size:12px;
+  line-height:1.5;
+">
+
+Change these details once here.
+
+Future receipts, quotations, orders,
+delivery notes, company letters and
+other connected printouts will use the
+updated company information automatically.
+
+</div>
+
+
+<div style="
+display:grid;
+  grid-template-columns:
+repeat(
+    2,
+minmax(0,1fr)
+  );
+  gap:14px;
+">
+
+
+<div>
+
+<label>
+<b>Company Name *</b>
+</label>
+
+<input
+  id="afCPCompanyName"
+  value="${esc(
+profile.companyName
+)}"
+  style="
+    ${inputStyle()}
+    margin-top:6px;
+  "
+>
+
+</div>
+
+
+<div>
+
+<label>
+<b>Trading Name / Brand</b>
+</label>
+
+<input
+  id="afCPTradingName"
+  value="${esc(
+profile.tradingName
+)}"
+  style="
+    ${inputStyle()}
+    margin-top:6px;
+  "
+>
+
+</div>
+
+
+<div>
+
+<label>
+<b>TIN Number</b>
+</label>
+
+<input
+  id="afCPTin"
+  value="${esc(
+profile.tinNo
+)}"
+  placeholder="Enter company TIN"
+  style="
+    ${inputStyle()}
+    margin-top:6px;
+  "
+>
+
+</div>
+
+
+<div>
+
+<label>
+<b>Phone Number</b>
+</label>
+
+<input
+  id="afCPPhone"
+  value="${esc(
+profile.phone
+)}"
+  placeholder="e.g. 0752 128 161"
+  style="
+    ${inputStyle()}
+    margin-top:6px;
+  "
+>
+
+</div>
+
+
+<div>
+
+<label>
+<b>Email Address</b>
+</label>
+
+<input
+  id="afCPEmail"
+  type="email"
+  value="${esc(
+profile.email
+)}"
+  placeholder="Company email"
+  style="
+    ${inputStyle()}
+    margin-top:6px;
+  "
+>
+
+</div>
+
+
+<div>
+
+<label>
+<b>Website</b>
+</label>
+
+<input
+  id="afCPWebsite"
+  value="${esc(
+profile.website
+)}"
+  placeholder="Optional"
+  style="
+    ${inputStyle()}
+    margin-top:6px;
+  "
+>
+
+</div>
+
+
+<div style="
+grid-column:1/-1;
+">
+
+<label>
+<b>Physical Address</b>
+</label>
+
+<input
+  id="afCPAddress"
+  value="${esc(
+profile.address
+)}"
+  placeholder="Company location / address"
+  style="
+    ${inputStyle()}
+    margin-top:6px;
+  "
+>
+
+</div>
+
+
+<div style="
+grid-column:1/-1;
+">
+
+<label>
+<b>Motto</b>
+</label>
+
+<input
+  id="afCPMotto"
+  value="${esc(
+profile.motto
+)}"
+  style="
+    ${inputStyle()}
+    margin-top:6px;
+  "
+>
+
+</div>
+
+
+<div style="
+grid-column:1/-1;
+">
+
+<label>
+<b>Receipt Footer Note</b>
+</label>
+
+<input
+  id="afCPReceiptFooter"
+  value="${esc(
+profile.receiptFooterNote
+)}"
+  placeholder="Optional note on payment receipts"
+  style="
+    ${inputStyle()}
+    margin-top:6px;
+  "
+>
+
+</div>
+
+
+</div>
+
+
+<h3 style="
+  color:#0b5d3b;
+  margin:22px 0 8px;
+">
+
+Print Header Preview
+
+</h3>
+
+
+<div
+  id="afCompanyProfilePreview"
+  style="
+    border:1px solid #d8e3dd;
+    border-radius:10px;
+    padding:16px;
+    background:#fbfdfc;
+    font-size:12px;
+  "
+>
+</div>
+
+
+<div style="
+display:flex;
+justify-content:flex-end;
+  gap:10px;
+flex-wrap:wrap;
+  margin-top:18px;
+">
+
+
+<button
+  id="afCompanyProfileBack"
+  style="${buttonStyle(
+    "#52625b"
+  )}"
+>
+
+← Back to System Settings
+
+</button>
+
+
+<button
+  id="afCompanyProfileSave"
+  style="${buttonStyle()}"
+>
+
+💾 Save Company Profile
+
+</button>
+
+
+</div>
+
+
+</div>
+
+
+</div>
+
+`;
+
+
+document.body.appendChild(
+  modal
+);
+
+
+renderPreview(
+  modal
+);
+
+
+/* =========================================================
+   CLOSE
+   ========================================================= */
+
+modal.querySelector(
+  "#afCompanyProfileClose"
+).onclick =
+() => {
+
+modal.remove();
+
+};
+
+
+/* =========================================================
+   BACK
+   ========================================================= */
+
+modal.querySelector(
+  "#afCompanyProfileBack"
+).onclick =
+() => {
+
+modal.remove();
+
+
+  if (
+typeof systemSettings ===
+    "function"
+  ) {
+
+systemSettings();
+
+  }
+
+};
+
+
+/* =========================================================
+   SAVE PROFILE
+   ========================================================= */
+
+modal.querySelector(
+  "#afCompanyProfileSave"
+).onclick =
+() => {
+
+
+const companyName =
+modal.querySelector(
+    "#afCPCompanyName"
+  ).value.trim();
+
+
+  if (
+    !companyName
+  ) {
+
+    alert(
+      "Please enter the Company Name."
+    );
+
+    return;
+
+  }
+
+
+const nextProfile = {
+
+companyName,
+
+tradingName:
+modal.querySelector(
+    "#afCPTradingName"
+  ).value.trim(),
+
+tinNo:
+modal.querySelector(
+    "#afCPTin"
+  ).value.trim(),
+
+phone:
+modal.querySelector(
+    "#afCPPhone"
+  ).value.trim(),
+
+email:
+modal.querySelector(
+    "#afCPEmail"
+  ).value.trim(),
+
+address:
+modal.querySelector(
+    "#afCPAddress"
+  ).value.trim(),
+
+website:
+modal.querySelector(
+    "#afCPWebsite"
+  ).value.trim(),
+
+motto:
+modal.querySelector(
+    "#afCPMotto"
+  ).value.trim(),
+
+receiptFooterNote:
+modal.querySelector(
+    "#afCPReceiptFooter"
+  ).value.trim(),
+
+updatedAt:
+new Date()
+  .toISOString(),
+
+updatedBy:
+currentUser()
+  .fullName ||
+currentUser()
+  .employeeId ||
+"Director"
+
+};
+
+
+saveProfile(
+nextProfile
+);
+
+
+renderPreview(
+  modal
+);
+
+
+alert(
+  "Company Profile saved successfully.\n\n" +
+  "Future connected printouts will use " +
+  "the updated details automatically."
+);
+
+};
+
+}
+
+
+/* =========================================================
+   ADD COMPANY PROFILE BUTTON TO SYSTEM SETTINGS
+   ========================================================= */
+
+if (
+typeof systemSettings ===
+  "function" &&
+!window.__afCompanyProfileSettingsConnected
+) {
+
+window.__afCompanyProfileSettingsConnected =
+true;
+
+
+const originalSystemSettings =
+systemSettings;
+
+
+systemSettings =
+function() {
+
+
+const result =
+originalSystemSettings.apply(
+    this,
+    arguments
+  );
+
+
+setTimeout(
+  () => {
+
+
+const settingsModal =
+Array.from(
+document.querySelectorAll(
+        "body > div"
+      )
+    )
+    .reverse()
+    .find(
+      element =>
+element.querySelector(
+          "#closeSystemSettings"
+        )
+    );
+
+
+    if (
+      !settingsModal
+    ) {
+
+      return;
+
+    }
+
+
+    if (
+settingsModal.querySelector(
+        "#afCompanyProfileSettingsBtn"
+      )
+    ) {
+
+      return;
+
+    }
+
+
+const teamButton =
+settingsModal.querySelector(
+        "#teamSettingsBtn"
+      );
+
+
+const grid =
+teamButton?.parentElement;
+
+
+    if (
+      !grid
+    ) {
+
+      return;
+
+    }
+
+
+const button =
+document.createElement(
+        "button"
+      );
+
+
+button.id =
+      "afCompanyProfileSettingsBtn";
+
+
+button.style.cssText =
+
+typeof
+systemSettingsButtonStyle ===
+      "function"
+
+  ? systemSettingsButtonStyle()
+
+  : `
+
+      min-height:120px;
+      border:1px solid #d9e5de;
+      background:#f7fbf9;
+      border-radius:12px;
+      padding:15px;
+cursor:pointer;
+text-align:left;
+
+    `;
+
+
+button.innerHTML = `
+
+🏢
+
+<strong>
+Company Profile / Print Settings
+</strong>
+
+<span>
+TIN, email, phone, address
+and print details
+</span>
+
+`;
+
+
+button.onclick =
+() => {
+
+
+settingsModal.remove();
+
+
+manageAFCompanyProfileSettings();
+
+};
+
+
+grid.appendChild(
+      button
+    );
+
+
+  },
+  0
+);
+
+
+  return result;
+
+};
+
+}
+
+
+/* =========================================================
+   EXPOSE COMPANY PROFILE
+   ========================================================= */
+
+window.afGetCompanyProfile =
+getProfile;
+
+
+window.manageAFCompanyProfileSettings =
+manageAFCompanyProfileSettings;
+
+
+/* =========================================================
+   REPLACE GLOBAL PRINT HEADER WITH DYNAMIC PROFILE HEADER
+   ========================================================= */
+
+window.afSmartPrintHeader =
+profileHeader;
+
+
+window.afSmartPrintFooter =
+profileFooter;
+
+
+/* =========================================================
+   APPLY PROFILE TO SMART HEADER ALREADY CREATED
+   Used especially by Company Letters
+   ========================================================= */
+
+function applyProfileToPopup(
+  popup
+) {
+
+  try {
+
+
+    if (
+      !popup ||
+popup.closed ||
+      !popup.document
+    ) {
+
+      return;
+
+    }
+
+
+const documentReference =
+popup.document;
+
+
+const profile =
+getProfile();
+
+
+const header =
+documentReference.querySelector(
+        ".af-smart-header"
+      );
+
+
+    if (
+      !header
+    ) {
+
+      return;
+
+    }
+
+
+const documentTitle =
+String(
+
+documentReference.querySelector(
+        ".af-smart-title"
+      )?.textContent ||
+
+documentReference.title ||
+
+      ""
+
+    ).trim();
+
+
+const company =
+header.querySelector(
+        ".af-smart-company"
+      );
+
+
+const trading =
+header.querySelector(
+        ".af-smart-tag"
+      );
+
+
+const motto =
+header.querySelector(
+        ".af-smart-motto"
+      );
+
+
+const contact =
+header.querySelector(
+        ".af-smart-contact"
+      );
+
+
+    if (
+company
+    ) {
+
+company.textContent =
+profile.companyName;
+
+    }
+
+
+    if (
+trading
+    ) {
+
+trading.textContent =
+profile.tradingName;
+
+    }
+
+
+    if (
+motto
+    ) {
+
+motto.textContent =
+profile.motto;
+
+    }
+
+
+    if (
+contact
+    ) {
+
+contact.innerHTML =
+contactRows(
+          profile,
+documentTitle
+        );
+
+    }
+
+
+    /*
+     * Add Director-defined receipt footer note.
+     */
+
+const footerNote =
+documentReference.querySelector(
+        ".af-smart-footer-note"
+      );
+
+
+    if (
+footerNote&&
+      /payment receipt/i.test(
+documentTitle
+      ) &&
+profile.receiptFooterNote
+    ) {
+
+
+const current =
+String(
+footerNote.textContent ||
+        ""
+      ).trim();
+
+
+      if (
+        !current.includes(
+profile.receiptFooterNote
+        )
+      ) {
+
+
+footerNote.textContent =
+
+current
+
+  ? current +
+    " • " +
+profile.receiptFooterNote
+
+  : profile.receiptFooterNote;
+
+      }
+
+    }
+
+
+  } catch (error) {
+
+
+console.error(
+      "A&F Company Profile print update error:",
+      error
+    );
+
+  }
+
+}
+
+
+/* =========================================================
+   FINAL PRINT HOOK
+   Runs after existing global branding.
+   ========================================================= */
+
+if (
+!window.__afCompanyProfilePrintHookInstalled
+) {
+
+
+window.__afCompanyProfilePrintHookInstalled =
+true;
+
+
+const previousWindowOpen =
+window.open;
+
+
+window.open =
+function() {
+
+
+const popup =
+previousWindowOpen.apply(
+    this,
+    arguments
+  );
+
+
+  if (
+    !popup
+  ) {
+
+    return popup;
+
+  }
+
+
+  try {
+
+
+const popupDocument =
+popup.document;
+
+
+const previousClose =
+popupDocument.close.bind(
+popupDocument
+      );
+
+
+popupDocument.close =
+function() {
+
+
+const result =
+previousClose();
+
+
+setTimeout(
+  () => {
+
+
+applyProfileToPopup(
+          popup
+        );
+
+
+  },
+  50
+);
+
+
+      return result;
+
+    };
+
+
+  } catch (error) {
+
+
+console.warn(
+      "A&F Company Profile print hook could not attach:",
+      error
+    );
+
+  }
+
+
+  return popup;
+
+};
+
+}
+
+
+console.log(
+  "A&F Company Profile / Print Settings connected successfully."
+);
+
+
+})();
