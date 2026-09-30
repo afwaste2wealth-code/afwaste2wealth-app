@@ -62537,3 +62537,1312 @@ console.log(
   );
 
 })();
+
+/* =========================================================
+   A&F CUSTOMER EDIT CONTROL
+   Paste ONCE at the very bottom of app.js
+   ========================================================= */
+
+(function connectAFCustomerEdit() {
+  "use strict";
+
+const CUSTOMER_KEY =
+    "afCustomers";
+
+const ORDER_KEY =
+    "afSalesOrders";
+
+
+  function read(
+    key,
+    fallback
+  ) {
+
+    try {
+
+const value =
+JSON.parse(
+localStorage.getItem(
+            key
+          ) || "null"
+        );
+
+      return value ??
+        fallback;
+
+    } catch (error) {
+
+      return fallback;
+
+    }
+
+  }
+
+
+  function save(
+    key,
+    value
+  ) {
+
+localStorage.setItem(
+      key,
+JSON.stringify(
+        value
+      )
+    );
+
+  }
+
+
+  function esc(value) {
+
+    return String(
+      value ?? ""
+    )
+      .replace(
+        /&/g,
+        "&amp;"
+      )
+      .replace(
+        /</g,
+        "&lt;"
+      )
+      .replace(
+        />/g,
+        "&gt;"
+      )
+      .replace(
+        /"/g,
+        "&quot;"
+      )
+      .replace(
+        /'/g,
+        "&#039;"
+      );
+
+  }
+
+
+  function customers() {
+
+const list =
+      read(
+        CUSTOMER_KEY,
+        []
+      );
+
+
+    return Array.isArray(
+      list
+    )
+
+      ? list.filter(
+          customer =>
+
+            String(
+customer.status ||
+              "ACTIVE"
+            ).toUpperCase() !==
+            "DELETED"
+        )
+
+      : [];
+
+  }
+
+
+  function currentUser() {
+
+    try {
+
+      if (
+typeof
+window.getAFCurrentUser ===
+        "function"
+      ) {
+
+        return (
+          window
+            .getAFCurrentUser() ||
+          {}
+        );
+
+      }
+
+    } catch (error) {}
+
+
+    try {
+
+      return (
+JSON.parse(
+localStorage.getItem(
+            "currentUser"
+          ) || "{}"
+        ) || {}
+      );
+
+    } catch (error) {
+
+      return {};
+
+    }
+
+  }
+
+
+  function inputStyle() {
+
+    return `
+
+      width:100%;
+box-sizing:border-box;
+      padding:10px;
+      border:1px solid #ccd5d0;
+      border-radius:7px;
+background:white;
+
+    `;
+
+  }
+
+
+  function btnStyle(
+    background
+  ) {
+
+    return `
+
+      border:0;
+      background:${
+        background ||
+        "#0b5d3b"
+      };
+color:white;
+      padding:9px 13px;
+      border-radius:7px;
+font-weight:bold;
+cursor:pointer;
+
+    `;
+
+  }
+
+
+  /* =====================================================
+     UPDATE OPEN QUOTATIONS / ORDERS
+     ===================================================== */
+
+  function syncOpenOrders(
+    customer
+  ) {
+
+const list =
+      read(
+        ORDER_KEY,
+        []
+      );
+
+
+    if (
+      !Array.isArray(
+        list
+      )
+    ) {
+
+      return;
+
+    }
+
+
+    let changed =
+      false;
+
+
+list.forEach(
+      order => {
+
+        if (
+          String(
+order.customerId ||
+            ""
+          ) !==
+          String(
+customer.id ||
+            ""
+          )
+        ) {
+
+          return;
+
+        }
+
+
+const status =
+          String(
+order.status ||
+            ""
+          ).toUpperCase();
+
+
+        /*
+         * Only active commercial
+         * records are updated.
+         *
+         * Completed / cancelled
+         * history remains unchanged.
+         */
+        if (
+          [
+            "QUOTED",
+            "PENDING",
+            "CONFIRMED",
+            "PROCESSING"
+          ].includes(
+            status
+          )
+        ) {
+
+order.customerName =
+customer.name ||
+            "";
+
+
+order.customerPhone =
+customer.phone ||
+            "";
+
+
+order.customerLocation =
+customer.location ||
+            "";
+
+
+order.customerContactPerson =
+customer.contactPerson ||
+            "";
+
+
+order.customerEmail =
+customer.email ||
+            "";
+
+
+order.customerType =
+customer.customerType ||
+            "";
+
+
+order.customerUpdatedAt =
+            new Date()
+              .toISOString();
+
+
+          changed =
+            true;
+
+        }
+
+      }
+    );
+
+
+    if (changed) {
+
+      save(
+        ORDER_KEY,
+        list
+      );
+
+    }
+
+  }
+
+
+  /* =====================================================
+     REFRESH CUSTOMER LIST
+     ===================================================== */
+
+  function refreshCustomerList() {
+
+const listModal =
+document.getElementById(
+        "afCustomerList"
+      );
+
+
+    if (listModal) {
+
+listModal.remove();
+
+    }
+
+
+setTimeout(
+      () => {
+
+const button =
+document.getElementById(
+            "afSCList"
+          );
+
+
+        if (button) {
+
+button.click();
+
+        }
+
+      },
+      80
+    );
+
+  }
+
+
+  /* =====================================================
+     EDIT CUSTOMER FORM
+     ===================================================== */
+
+  function openEditCustomer(
+customerId
+  ) {
+
+const list =
+      read(
+        CUSTOMER_KEY,
+        []
+      );
+
+
+    if (
+      !Array.isArray(
+        list
+      )
+    ) {
+
+      return;
+
+    }
+
+
+const index =
+list.findIndex(
+        customer =>
+
+          String(
+customer.id ||
+            ""
+          ) ===
+
+          String(
+customerId ||
+            ""
+          )
+      );
+
+
+    if (
+      index < 0
+    ) {
+
+      alert(
+        "Customer record not found."
+      );
+
+      return;
+
+    }
+
+
+const customer =
+      list[index];
+
+
+const old =
+document.getElementById(
+        "afEditCustomerModal"
+      );
+
+
+    if (old) {
+
+old.remove();
+
+    }
+
+
+const modal =
+document.createElement(
+        "div"
+      );
+
+
+modal.id =
+      "afEditCustomerModal";
+
+
+modal.style.cssText = `
+
+position:fixed;
+      inset:0;
+      z-index:1000001;
+background:rgba(0,0,0,.58);
+display:flex;
+align-items:center;
+justify-content:center;
+      padding:10px;
+box-sizing:border-box;
+font-family:Arial,sans-serif;
+
+    `;
+
+
+modal.innerHTML = `
+
+<div style="
+  width:100%;
+  max-width:760px;
+  max-height:94vh;
+overflow:auto;
+background:white;
+  border-radius:14px;
+  padding:22px;
+box-sizing:border-box;
+">
+
+
+<div style="
+display:flex;
+justify-content:space-between;
+  gap:12px;
+align-items:flex-start;
+  margin-bottom:18px;
+">
+
+<div>
+
+<h2 style="
+  margin:0;
+  color:#0b5d3b;
+">
+
+✏️ Edit Customer
+
+</h2>
+
+
+<div style="
+  font-size:12px;
+  color:#666;
+  margin-top:5px;
+">
+
+Customer No:
+${esc(
+customer.customerNo ||
+  "-"
+)}
+
+</div>
+
+</div>
+
+
+<button
+  id="afEditCustomerClose"
+  type="button"
+  style="${
+btnStyle(
+      "#333"
+    )
+  }"
+>
+
+✕ Close
+
+</button>
+
+</div>
+
+
+<div style="
+display:grid;
+  grid-template-columns:
+    repeat(
+      auto-fit,
+minmax(
+        240px,
+        1fr
+      )
+    );
+  gap:12px;
+">
+
+
+<div>
+
+<label>
+<b>
+Customer / Company Name *
+</b>
+</label>
+
+<input
+  id="afEditCustName"
+  value="${esc(
+customer.name ||
+    ""
+  )}"
+  style="
+    ${inputStyle()}
+    margin-top:5px;
+  "
+>
+
+</div>
+
+
+<div>
+
+<label>
+<b>
+Phone Number *
+</b>
+</label>
+
+<input
+  id="afEditCustPhone"
+  value="${esc(
+customer.phone ||
+    ""
+  )}"
+  style="
+    ${inputStyle()}
+    margin-top:5px;
+  "
+>
+
+</div>
+
+
+<div>
+
+<label>
+<b>Email</b>
+</label>
+
+<input
+  id="afEditCustEmail"
+  type="email"
+  value="${esc(
+customer.email ||
+    ""
+  )}"
+  style="
+    ${inputStyle()}
+    margin-top:5px;
+  "
+>
+
+</div>
+
+
+<div>
+
+<label>
+<b>
+Location / Address
+</b>
+</label>
+
+<input
+  id="afEditCustLocation"
+  value="${esc(
+customer.location ||
+    ""
+  )}"
+  style="
+    ${inputStyle()}
+    margin-top:5px;
+  "
+>
+
+</div>
+
+
+<div>
+
+<label>
+<b>
+Contact Person
+</b>
+</label>
+
+<input
+  id="afEditCustContact"
+  value="${esc(
+customer.contactPerson ||
+    ""
+  )}"
+  style="
+    ${inputStyle()}
+    margin-top:5px;
+  "
+>
+
+</div>
+
+
+<div>
+
+<label>
+<b>
+Customer Type
+</b>
+</label>
+
+<select
+  id="afEditCustType"
+  style="
+    ${inputStyle()}
+    margin-top:5px;
+  "
+>
+
+${
+[
+  "Individual",
+  "Company",
+  "Dealer",
+  "Contractor",
+  "Institution",
+  "Government",
+  "Other"
+]
+  .map(
+    type => `
+
+<option
+  value="${esc(type)}"
+  ${
+    String(
+customer.customerType ||
+      "Individual"
+    ) === type
+
+      ? "selected"
+
+      : ""
+  }
+>
+
+${esc(type)}
+
+</option>
+
+    `
+  )
+  .join("")
+}
+
+</select>
+
+</div>
+
+</div>
+
+
+<div style="
+  margin-top:12px;
+">
+
+<label>
+<b>Notes</b>
+</label>
+
+<textarea
+  id="afEditCustNotes"
+  rows="4"
+  style="
+    ${inputStyle()}
+    margin-top:5px;
+  "
+>${esc(
+customer.notes ||
+  ""
+)}</textarea>
+
+</div>
+
+
+<div style="
+  margin-top:12px;
+  padding:10px;
+  background:#eef8f2;
+  border:1px solid #cfe6d8;
+  border-radius:7px;
+  font-size:12px;
+  color:#0b5d3b;
+  line-height:1.5;
+">
+
+Changes to name, phone and
+location will also update this
+customer's open quotations and
+orders.
+
+Completed sales and old delivery
+records remain unchanged for
+audit history.
+
+</div>
+
+
+<button
+  id="afEditCustomerSave"
+  type="button"
+  style="
+    ${btnStyle()}
+    width:100%;
+    margin-top:16px;
+  "
+>
+
+💾 Save Customer Changes
+
+</button>
+
+
+</div>
+
+    `;
+
+
+document.body
+      .appendChild(
+        modal
+      );
+
+
+modal.querySelector(
+      "#afEditCustomerClose"
+    ).onclick =
+      () =>
+modal.remove();
+
+
+    /* ===================================================
+       SAVE CUSTOMER CHANGES
+       =================================================== */
+
+modal.querySelector(
+      "#afEditCustomerSave"
+    ).onclick =
+      () => {
+
+
+const name =
+modal.querySelector(
+            "#afEditCustName"
+          )
+            .value
+            .trim();
+
+
+const phone =
+modal.querySelector(
+            "#afEditCustPhone"
+          )
+            .value
+            .trim();
+
+
+const email =
+modal.querySelector(
+            "#afEditCustEmail"
+          )
+            .value
+            .trim();
+
+
+const location =
+modal.querySelector(
+            "#afEditCustLocation"
+          )
+            .value
+            .trim();
+
+
+const contactPerson =
+modal.querySelector(
+            "#afEditCustContact"
+          )
+            .value
+            .trim();
+
+
+const customerType =
+modal.querySelector(
+            "#afEditCustType"
+          ).value;
+
+
+const notes =
+modal.querySelector(
+            "#afEditCustNotes"
+          )
+            .value
+            .trim();
+
+
+        if (!name) {
+
+          alert(
+            "Please enter the customer name."
+          );
+
+          return;
+
+        }
+
+
+        if (!phone) {
+
+          alert(
+            "Please enter the phone number."
+          );
+
+          return;
+
+        }
+
+
+const normalizedPhone =
+phone.replace(
+            /\s+/g,
+            ""
+          );
+
+
+const normalizedName =
+name.toLowerCase();
+
+
+        /*
+         * Prevent duplicate
+         * customer records.
+         */
+const duplicate =
+list.some(
+            (
+existingCustomer,
+existingIndex
+            ) => {
+
+
+              if (
+existingIndex ===
+                index
+              ) {
+
+                return false;
+
+              }
+
+
+              if (
+                String(
+existingCustomer.status ||
+                  "ACTIVE"
+                ).toUpperCase() ===
+                "DELETED"
+              ) {
+
+                return false;
+
+              }
+
+
+const samePhone =
+                String(
+existingCustomer.phone ||
+                  ""
+                )
+                  .replace(
+                    /\s+/g,
+                    ""
+                  ) ===
+normalizedPhone;
+
+
+const sameName =
+                String(
+existingCustomer.name ||
+                  ""
+                )
+                  .trim()
+                  .toLowerCase() ===
+normalizedName;
+
+
+              return (
+samePhone ||
+sameName
+              );
+
+            }
+          );
+
+
+        if (duplicate) {
+
+          alert(
+            "Another customer already uses the same name or phone number."
+          );
+
+          return;
+
+        }
+
+
+const user =
+currentUser();
+
+
+customer.name =
+          name;
+
+
+customer.phone =
+          phone;
+
+
+customer.email =
+          email;
+
+
+customer.location =
+          location;
+
+
+customer.contactPerson =
+contactPerson;
+
+
+customer.customerType =
+customerType;
+
+
+customer.notes =
+          notes;
+
+
+customer.status =
+customer.status ||
+          "ACTIVE";
+
+
+customer.updatedAt =
+          new Date()
+            .toISOString();
+
+
+customer.updatedBy =
+user.fullName ||
+user.employeeName ||
+user.employeeId ||
+          "";
+
+
+        list[index] =
+          customer;
+
+
+        save(
+          CUSTOMER_KEY,
+          list
+        );
+
+
+        /*
+         * Keep open quotations
+         * and orders synchronized.
+         */
+syncOpenOrders(
+          customer
+        );
+
+
+modal.remove();
+
+
+        alert(
+
+          "Customer updated successfully.\n\n" +
+
+          "Name: " +
+customer.name +
+
+          "\nPhone: " +
+customer.phone +
+
+          "\nLocation: " +
+          (
+customer.location ||
+            "Not entered"
+          )
+
+        );
+
+
+refreshCustomerList();
+
+      };
+
+  }
+
+
+  /* =====================================================
+     ADD EDIT BUTTON TO CUSTOMER LIST
+     ===================================================== */
+
+  function enhanceCustomerList() {
+
+const modal =
+document.getElementById(
+        "afCustomerList"
+      );
+
+
+    if (!modal) {
+
+      return;
+
+    }
+
+
+const table =
+modal.querySelector(
+        "table"
+      );
+
+
+    if (!table) {
+
+      return;
+
+    }
+
+
+const headerRow =
+table.querySelector(
+        "theadtr"
+      );
+
+
+    if (!headerRow) {
+
+      return;
+
+    }
+
+
+    /*
+     * Add Action heading.
+     */
+    if (
+      !headerRow.querySelector(
+        "[data-af-customer-action-heading]"
+      )
+    ) {
+
+const heading =
+document.createElement(
+          "th"
+        );
+
+
+heading.textContent =
+        "Action";
+
+
+heading.dataset
+        .afCustomerActionHeading =
+        "1";
+
+
+heading.style.padding =
+        "9px";
+
+
+heading.style.borderBottom =
+        "1px solid #eee";
+
+
+headerRow.appendChild(
+        heading
+      );
+
+    }
+
+
+const list =
+      customers();
+
+
+const rows =
+Array.from(
+table.querySelectorAll(
+          "tbodytr"
+        )
+      );
+
+
+rows.forEach(
+      (
+        row,
+        index
+      ) => {
+
+
+const cells =
+row.querySelectorAll(
+            "td"
+          );
+
+
+        /*
+         * Ignore the
+         * "No customers" row.
+         */
+        if (
+cells.length< 7
+        ) {
+
+          return;
+
+        }
+
+
+const customer =
+          list[index];
+
+
+        if (!customer) {
+
+          return;
+
+        }
+
+
+        let actionCell =
+row.querySelector(
+            "[data-af-customer-action-cell]"
+          );
+
+
+        if (!actionCell) {
+
+actionCell =
+document.createElement(
+              "td"
+            );
+
+
+actionCell.dataset
+            .afCustomerActionCell =
+            "1";
+
+
+actionCell.style.padding =
+            "9px";
+
+
+actionCell.style.borderBottom =
+            "1px solid #eee";
+
+
+row.appendChild(
+actionCell
+          );
+
+        }
+
+
+        if (
+          !actionCell.querySelector(
+            "[data-edit-customer]"
+          )
+        ) {
+
+const button =
+document.createElement(
+              "button"
+            );
+
+
+button.type =
+            "button";
+
+
+button.textContent =
+            "Edit";
+
+
+button.dataset
+            .editCustomer =
+customer.id ||
+            "";
+
+
+button.style.cssText =
+btnStyle();
+
+
+button.onclick =
+            () =>
+openEditCustomer(
+customer.id
+              );
+
+
+actionCell.appendChild(
+            button
+          );
+
+        }
+
+      }
+    );
+
+  }
+
+
+  /* =====================================================
+     WATCH CUSTOMER LIST
+     ===================================================== */
+
+const observer =
+    new MutationObserver(
+enhanceCustomerList
+    );
+
+
+observer.observe(
+document.body,
+    {
+childList:true,
+subtree:true
+    }
+  );
+
+
+enhanceCustomerList();
+
+
+console.log(
+    "A&F customer edit control connected."
+  );
+
+})();
