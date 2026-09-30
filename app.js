@@ -65815,3 +65815,2663 @@ console.log(
   );
 
 })();
+
+/* =========================================================
+   A&F SMART PRINT HEADER + COMPANY LETTERS
+   Director only — paste ONCE at the very bottom of app.js
+   ========================================================= */
+(function connectAFSmartPrintAndCompanyLetters(){
+"use strict";
+
+const KEY="afCompanyLetters";
+const MAIN_ID="afCompanyLettersModal";
+const EDIT_ID="afCompanyLetterEditorModal";
+const CARD_ID="afCompanyLettersDashboardCard";
+
+const esc=v=>String(v??"")
+  .replace(/&/g,"&amp;")
+  .replace(/</g,"&lt;")
+  .replace(/>/g,"&gt;")
+  .replace(/"/g,"&quot;")
+  .replace(/'/g,"&#039;");
+
+function user(){
+  try{
+    if(typeof getAFCurrentUser==="function") return getAFCurrentUser()||{};
+  }catch(e){}
+  try{return JSON.parse(localStorage.getItem("currentUser")||"{}")||{};}
+  catch(e){return {};}
+}
+
+function isDirector(){
+  return String(user().role||"").toLowerCase()==="director";
+}
+
+function requireDirector(){
+  if(isDirector()) return true;
+
+  alert(
+    "Access Denied\n\nOnly the Director can use Company Letters."
+  );
+
+  return false;
+}
+
+function today(){
+const d=new Date();
+
+  return d.getFullYear()+"-"+
+    String(d.getMonth()+1).padStart(2,"0")+"-"+
+    String(d.getDate()).padStart(2,"0");
+}
+
+function niceDate(value){
+  if(!value) return "";
+
+const p=String(value).split("-");
+
+  if(p.length!==3){
+    return String(value);
+  }
+
+  return new Date(
+    +p[0],
+    +p[1]-1,
+    +p[2]
+  ).toLocaleDateString(
+    undefined,
+    {
+      day:"2-digit",
+month:"long",
+year:"numeric"
+    }
+  );
+}
+
+function read(){
+  try{
+const v=JSON.parse(
+localStorage.getItem(KEY)||"[]"
+    );
+
+    return Array.isArray(v)
+      ? v
+      : [];
+  }catch(e){
+    return [];
+  }
+}
+
+function save(v){
+localStorage.setItem(
+    KEY,
+JSON.stringify(
+Array.isArray(v)
+        ? v
+        : []
+    )
+  );
+}
+
+function close(id){
+document.getElementById(id)?.remove();
+}
+
+const btn=(bg="#0b5d3b")=>`
+border:0;
+background:${bg};
+color:white;
+padding:10px 14px;
+border-radius:8px;
+font-weight:bold;
+cursor:pointer;
+`;
+
+const input=()=>`
+width:100%;
+box-sizing:border-box;
+padding:10px;
+border:1px solid #ccd5d0;
+border-radius:7px;
+background:white;
+font-family:Arial,sans-serif;
+`;
+
+function nextRef(dateValue){
+
+const year=
+    String(
+dateValue||today()
+    ).slice(0,4);
+
+  let max=0;
+
+  read().forEach(r=>{
+
+const m=
+      String(
+r.reference||""
+      ).match(
+        /^AFWL\/LET\/(\d{4})\/(\d+)$/i
+      );
+
+    if(
+      m &&
+      m[1]===year
+    ){
+      max=Math.max(
+        max,
+        Number(m[2]||0)
+      );
+    }
+
+  });
+
+  return (
+    "AFWL/LET/"+
+    year+
+    "/"+
+    String(max+1)
+      .padStart(3,"0")
+  );
+}
+
+
+/* =========================================================
+   REUSABLE SMART PRINT HEADER
+   ========================================================= */
+
+function smartStyles(){
+
+return `
+
+@page{
+  size:A4;
+  margin:14mm;
+}
+
+*{
+box-sizing:border-box;
+}
+
+body{
+  margin:0;
+  color:#1f2a25;
+font-family:Arial,Helvetica,sans-serif;
+  background:#fff;
+}
+
+.af-smart-header{
+display:grid;
+  grid-template-columns:90px 1fr;
+  gap:16px;
+align-items:center;
+  border:2px solid #0b5d3b;
+  border-radius:10px;
+  padding:13px 16px 11px;
+  margin-bottom:18px;
+position:relative;
+}
+
+.af-smart-header:after{
+  content:"";
+position:absolute;
+  left:0;
+  right:0;
+  bottom:-2px;
+  height:5px;
+  background:#0b5d3b;
+  border-radius:0 0 8px 8px;
+}
+
+.af-smart-mark{
+  width:76px;
+  height:76px;
+  border-radius:16px;
+  background:#0b5d3b;
+  color:#fff;
+display:flex;
+align-items:center;
+justify-content:center;
+  font-size:25px;
+  font-weight:900;
+}
+
+.af-smart-company{
+  color:#0b5d3b;
+  font-size:22px;
+  line-height:1.1;
+  font-weight:900;
+text-transform:uppercase;
+  letter-spacing:.3px;
+}
+
+.af-smart-tag{
+  margin-top:4px;
+  font-size:11px;
+font-weight:bold;
+  letter-spacing:1.2px;
+text-transform:uppercase;
+  color:#52625b;
+}
+
+.af-smart-motto{
+  margin-top:4px;
+  font-size:11px;
+  color:#69766f;
+}
+
+.af-smart-title{
+  margin-top:10px;
+  padding-top:8px;
+  border-top:1px solid #cfe0d7;
+  font-size:14px;
+  font-weight:900;
+  letter-spacing:1px;
+text-transform:uppercase;
+  color:#17261f;
+}
+
+.af-smart-footer{
+  margin-top:28px;
+  padding-top:8px;
+  border-top:1px solid #b9c8c0;
+text-align:center;
+  font-size:9px;
+  color:#68766f;
+}
+
+.af-no-print{
+text-align:center;
+  margin:0 0 16px;
+}
+
+@media print{
+
+  .af-no-print{
+display:none!important;
+  }
+
+}
+
+`;
+
+}
+
+
+function smartHeader(title=""){
+
+return `
+
+<div class="af-smart-header">
+
+<div class="af-smart-mark">
+A&amp;F
+</div>
+
+<div>
+
+<div class="af-smart-company">
+A&amp;FWekavera Ltd
+</div>
+
+<div class="af-smart-tag">
+Waste2Wealth Solutions
+</div>
+
+<div class="af-smart-motto">
+Turning Waste into Value • Mbalala • Mukono
+</div>
+
+${
+title
+  ? `
+<div class="af-smart-title">
+${esc(title)}
+</div>
+  `
+  : ""
+}
+
+</div>
+
+</div>
+
+`;
+
+}
+
+
+function smartFooter(extra=""){
+
+return `
+
+<div class="af-smart-footer">
+
+A&amp;FWekavera Ltd
+•
+Waste2Wealth Solutions
+•
+Turning Waste into Value
+
+${
+extra
+  ? " • "+esc(extra)
+  : ""
+}
+
+</div>
+
+`;
+
+}
+
+
+window.afSmartPrintStyles=
+smartStyles;
+
+window.afSmartPrintHeader=
+smartHeader;
+
+window.afSmartPrintFooter=
+smartFooter;
+
+
+/* =========================================================
+   PRINT COMPANY LETTER
+   ========================================================= */
+
+function printLetter(letter){
+
+  if(
+    !requireDirector() ||
+    !letter
+  ){
+    return;
+  }
+
+
+const w=
+window.open(
+      "",
+      "_blank",
+      "width=950,height=850"
+    );
+
+
+  if(!w){
+
+    alert(
+      "Please allow pop-ups so the company letter can open."
+    );
+
+    return;
+  }
+
+
+const draft=
+    String(
+letter.status||
+      "DRAFT"
+    ).toUpperCase()==="DRAFT";
+
+
+const br=v=>
+    esc(v||"")
+      .replace(
+        /\n/g,
+        "<br>"
+      );
+
+
+w.document.write(`
+
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="UTF-8">
+
+<title>
+${esc(
+letter.reference||
+  "Company Letter"
+)}
+</title>
+
+
+<style>
+
+${smartStyles()}
+
+
+body{
+  font-size:12.5px;
+  line-height:1.55;
+}
+
+
+.letter-meta{
+display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px 24px;
+  margin:8px 0 20px;
+}
+
+
+.letter-meta>div{
+  padding:7px 0;
+  border-bottom:1px solid #dce5e0;
+}
+
+
+.letter-to{
+  margin-bottom:18px;
+}
+
+
+.letter-subject{
+  margin:18px 0;
+  font-weight:900;
+text-transform:uppercase;
+text-decoration:underline;
+}
+
+
+.letter-body{
+  min-height:280px;
+  line-height:1.7;
+}
+
+
+.letter-signature{
+  margin-top:38px;
+  width:310px;
+}
+
+
+.signature-space{
+  height:46px;
+}
+
+
+.signature-line{
+  border-top:1px solid #333;
+  padding-top:5px;
+}
+
+
+.letter-extra{
+  margin-top:24px;
+  padding-top:10px;
+  border-top:1px solid #e0e6e2;
+  font-size:11px;
+}
+
+
+.draft-mark{
+  margin-bottom:14px;
+  padding:7px 10px;
+  border:1px dashed #b42318;
+  color:#b42318;
+font-weight:bold;
+text-align:center;
+}
+
+
+.print-btn{
+  border:0;
+  background:#0b5d3b;
+color:white;
+  padding:10px 18px;
+  border-radius:7px;
+font-weight:bold;
+cursor:pointer;
+}
+
+</style>
+
+</head>
+
+
+<body>
+
+
+<div class="af-no-print">
+
+<button
+class="print-btn"
+onclick="window.print()"
+>
+Print / Save as PDF
+</button>
+
+</div>
+
+
+${smartHeader(
+  "Official Company Letter"
+)}
+
+
+${
+draft
+  ? `
+<div class="draft-mark">
+DRAFT — NOT YET ISSUED
+</div>
+  `
+  : ""
+}
+
+
+<div class="letter-meta">
+
+<div>
+
+<b>Ref:</b>
+
+${esc(
+letter.reference||
+"-"
+)}
+
+</div>
+
+
+<div style="text-align:right">
+
+<b>Date:</b>
+
+${esc(
+niceDate(
+letter.date
+)
+)}
+
+</div>
+
+</div>
+
+
+<div class="letter-to">
+
+<b>To:</b>
+
+<br>
+
+${esc(
+letter.recipientName||
+""
+)}
+
+<br>
+
+${
+letter.recipientOrganisation
+  ? esc(
+letter.recipientOrganisation
+    )+
+    "<br>"
+  : ""
+}
+
+${br(
+letter.recipientAddress
+)}
+
+</div>
+
+
+<div class="letter-subject">
+
+RE:
+${esc(
+letter.subject||
+""
+)}
+
+</div>
+
+
+<div style="margin-bottom:15px">
+
+${esc(
+letter.salutation||
+"Dear Sir/Madam,"
+)}
+
+</div>
+
+
+<div class="letter-body">
+
+${br(
+letter.body
+)}
+
+</div>
+
+
+<div class="letter-signature">
+
+<div>
+
+${esc(
+letter.closing||
+"Yours faithfully,"
+)}
+
+</div>
+
+
+<div class="signature-space">
+</div>
+
+
+<div class="signature-line">
+
+<b>
+${esc(
+letter.signatoryName||
+""
+)}
+</b>
+
+<br>
+
+${esc(
+letter.signatoryTitle||
+"Director"
+)}
+
+<br>
+
+A&amp;FWekavera Ltd
+
+</div>
+
+</div>
+
+
+${
+letter.cc||
+letter.attachments
+
+  ? `
+
+<div class="letter-extra">
+
+${
+letter.cc
+  ? `
+<div>
+
+<b>CC:</b>
+
+<br>
+
+${br(
+letter.cc
+)}
+
+</div>
+  `
+  : ""
+}
+
+
+${
+letter.attachments
+  ? `
+<div style="margin-top:8px">
+
+<b>Attachments:</b>
+
+<br>
+
+${br(
+letter.attachments
+)}
+
+</div>
+  `
+  : ""
+}
+
+</div>
+
+  `
+
+  : ""
+}
+
+
+${smartFooter(
+  "Official Correspondence"
+)}
+
+
+</body>
+
+</html>
+
+`);
+
+
+w.document.close();
+
+w.focus();
+
+}
+
+
+/* =========================================================
+   CREATE / EDIT LETTER
+   ========================================================= */
+
+function openEditor(id=""){
+
+  if(
+    !requireDirector()
+  ){
+    return;
+  }
+
+
+close(
+  EDIT_ID
+);
+
+
+const records=
+read();
+
+
+const old=
+id
+  ? records.find(
+      x=>
+        String(x.id)===
+        String(id)
+    )
+  : null;
+
+
+  if(
+    id &&
+    !old
+  ){
+
+    alert(
+      "Company letter could not be found."
+    );
+
+    return;
+  }
+
+
+const me=
+user();
+
+
+const locked=
+  !!old &&
+  String(
+old.status||
+    ""
+  ).toUpperCase()==="ISSUED";
+
+
+const dateValue=
+old?.date||
+  today();
+
+
+constrefValue=
+old?.reference||
+nextRef(
+dateValue
+  );
+
+
+const m=
+document.createElement(
+  "div"
+);
+
+
+m.id=
+EDIT_ID;
+
+
+m.style.cssText=`
+position:fixed;
+inset:0;
+z-index:1000002;
+background:rgba(0,0,0,.60);
+display:flex;
+align-items:center;
+justify-content:center;
+padding:10px;
+box-sizing:border-box;
+font-family:Arial,sans-serif;
+`;
+
+
+m.innerHTML=`
+
+<div style="
+width:1000px;
+max-width:98%;
+max-height:96vh;
+overflow:auto;
+background:white;
+border-radius:14px;
+box-shadow:0 16px 50px rgba(0,0,0,.32);
+">
+
+
+<div style="
+background:#0b5d3b;
+color:white;
+padding:18px 22px;
+display:flex;
+justify-content:space-between;
+align-items:flex-start;
+gap:12px;
+">
+
+<div>
+
+<div style="
+font-size:11px;
+font-weight:bold;
+letter-spacing:1.2px;
+opacity:.86;
+">
+
+A&amp;F WEKAVERA LTD
+•
+DIRECTOR ONLY
+
+</div>
+
+
+<h2 style="
+margin:5px 0 0;
+">
+
+${
+old
+  ? locked
+    ? "View Company Letter"
+    : "Edit Company Letter"
+  : "New Company Letter"
+}
+
+</h2>
+
+
+<div style="
+margin-top:4px;
+font-size:12px;
+opacity:.9;
+">
+
+${esc(
+refValue
+)}
+
+</div>
+
+</div>
+
+
+<button
+id="afLetterEditorClose"
+style="${btn("#333")}"
+>
+
+✕ Close
+
+</button>
+
+</div>
+
+
+<div style="padding:22px">
+
+
+${
+locked
+
+  ? `
+
+<div style="
+margin-bottom:16px;
+padding:11px 13px;
+border:1px solid #cfe6d8;
+background:#eef8f2;
+color:#0b5d3b;
+border-radius:8px;
+font-size:12px;
+">
+
+<b>
+Issued letter:
+</b>
+
+This historical copy is locked from editing.
+
+</div>
+
+  `
+
+  : ""
+}
+
+
+<div style="
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:14px;
+">
+
+
+<div>
+
+<label>
+<b>Date</b>
+</label>
+
+<input
+id="afLetterDate"
+type="date"
+value="${esc(
+dateValue
+)}"
+style="${input()}margin-top:6px"
+${locked?"disabled":""}
+>
+
+</div>
+
+
+<div>
+
+<label>
+<b>Reference No.</b>
+</label>
+
+<input
+id="afLetterReference"
+value="${esc(
+refValue
+)}"
+readonly
+style="${input()}margin-top:6px;background:#f4f6f5"
+>
+
+</div>
+
+
+<div>
+
+<label>
+<b>Recipient Name *</b>
+</label>
+
+<input
+id="afLetterRecipientName"
+value="${esc(
+old?.recipientName||
+""
+)}"
+placeholder="e.g. The Branch Manager"
+style="${input()}margin-top:6px"
+${locked?"disabled":""}
+>
+
+</div>
+
+
+<div>
+
+<label>
+<b>Company / Organisation</b>
+</label>
+
+<input
+id="afLetterRecipientOrganisation"
+value="${esc(
+old?.recipientOrganisation||
+""
+)}"
+placeholder="Organisation name"
+style="${input()}margin-top:6px"
+${locked?"disabled":""}
+>
+
+</div>
+
+
+<div style="
+grid-column:1/-1;
+">
+
+<label>
+<b>Recipient Address</b>
+</label>
+
+<textarea
+id="afLetterRecipientAddress"
+rows="2"
+placeholder="Postal or physical address"
+style="${input()}margin-top:6px;resize:vertical"
+${locked?"disabled":""}
+>${esc(
+old?.recipientAddress||
+""
+)}</textarea>
+
+</div>
+
+
+<div style="
+grid-column:1/-1;
+">
+
+<label>
+<b>Subject / RE: *</b>
+</label>
+
+<input
+id="afLetterSubject"
+value="${esc(
+old?.subject||
+""
+)}"
+placeholder="Subject of the letter"
+style="${input()}margin-top:6px"
+${locked?"disabled":""}
+>
+
+</div>
+
+
+<div style="
+grid-column:1/-1;
+">
+
+<label>
+<b>Salutation</b>
+</label>
+
+<input
+id="afLetterSalutation"
+value="${esc(
+old?.salutation||
+"Dear Sir/Madam,"
+)}"
+style="${input()}margin-top:6px"
+${locked?"disabled":""}
+>
+
+</div>
+
+
+<div style="
+grid-column:1/-1;
+">
+
+<label>
+<b>Letter Body *</b>
+</label>
+
+<textarea
+id="afLetterBody"
+rows="13"
+placeholder="Write the company letter here..."
+style="${input()}margin-top:6px;resize:vertical;line-height:1.55"
+${locked?"disabled":""}
+>${esc(
+old?.body||
+""
+)}</textarea>
+
+</div>
+
+
+<div>
+
+<label>
+<b>Closing</b>
+</label>
+
+<input
+id="afLetterClosing"
+value="${esc(
+old?.closing||
+"Yours faithfully,"
+)}"
+style="${input()}margin-top:6px"
+${locked?"disabled":""}
+>
+
+</div>
+
+
+<div>
+
+<label>
+<b>Signatory Name</b>
+</label>
+
+<input
+id="afLetterSignatoryName"
+value="${esc(
+old?.signatoryName||
+me.fullName||
+""
+)}"
+style="${input()}margin-top:6px"
+${locked?"disabled":""}
+>
+
+</div>
+
+
+<div>
+
+<label>
+<b>Signatory Position</b>
+</label>
+
+<input
+id="afLetterSignatoryTitle"
+value="${esc(
+old?.signatoryTitle||
+"Director"
+)}"
+style="${input()}margin-top:6px"
+${locked?"disabled":""}
+>
+
+</div>
+
+
+<div>
+
+<label>
+<b>CC</b>
+</label>
+
+<textarea
+id="afLetterCC"
+rows="2"
+placeholder="Optional"
+style="${input()}margin-top:6px;resize:vertical"
+${locked?"disabled":""}
+>${esc(
+old?.cc||
+""
+)}</textarea>
+
+</div>
+
+
+<div style="
+grid-column:1/-1;
+">
+
+<label>
+<b>Attachments</b>
+</label>
+
+<textarea
+id="afLetterAttachments"
+rows="2"
+placeholder="Optional list of attached documents"
+style="${input()}margin-top:6px;resize:vertical"
+${locked?"disabled":""}
+>${esc(
+old?.attachments||
+""
+)}</textarea>
+
+</div>
+
+</div>
+
+
+<div style="
+display:flex;
+justify-content:flex-end;
+flex-wrap:wrap;
+gap:10px;
+margin-top:20px;
+">
+
+
+${
+old
+
+  ? `
+
+<button
+id="afLetterPrintFromEditor"
+style="${btn("#555")}"
+>
+
+🖨 Print / PDF
+
+</button>
+
+  `
+
+  : ""
+}
+
+
+${
+!locked
+
+  ? `
+
+<button
+id="afLetterSaveDraft"
+style="${btn("#52625b")}"
+>
+
+💾 Save Draft
+
+</button>
+
+
+<button
+id="afLetterSaveIssue"
+style="${btn()}"
+>
+
+✓ Save & Issue Letter
+
+</button>
+
+  `
+
+  : ""
+}
+
+
+</div>
+
+</div>
+
+</div>
+
+`;
+
+
+document.body.appendChild(
+  m
+);
+
+
+m.querySelector(
+  "#afLetterEditorClose"
+).onclick=
+()=>m.remove();
+
+
+const dateEl=
+m.querySelector(
+  "#afLetterDate"
+);
+
+
+  if(!old){
+
+dateEl.onchange=
+()=>{
+
+m.querySelector(
+  "#afLetterReference"
+).value=
+nextRef(
+dateEl.value
+);
+
+};
+
+  }
+
+
+function collect(status){
+
+const recipientName=
+m.querySelector(
+  "#afLetterRecipientName"
+).value.trim();
+
+
+const subject=
+m.querySelector(
+  "#afLetterSubject"
+).value.trim();
+
+
+const body=
+m.querySelector(
+  "#afLetterBody"
+).value.trim();
+
+
+  if(
+    !recipientName
+  ){
+
+    alert(
+      "Please enter the recipient name."
+    );
+
+    return null;
+  }
+
+
+  if(
+    !subject
+  ){
+
+    alert(
+      "Please enter the letter subject."
+    );
+
+    return null;
+  }
+
+
+  if(
+    !body
+  ){
+
+    alert(
+      "Please write the letter body."
+    );
+
+    return null;
+  }
+
+
+return {
+
+id:
+old?.id||
+"LET-"+Date.now(),
+
+reference:
+m.querySelector(
+  "#afLetterReference"
+).value.trim(),
+
+date:
+dateEl.value||
+today(),
+
+recipientName,
+
+recipientOrganisation:
+m.querySelector(
+  "#afLetterRecipientOrganisation"
+).value.trim(),
+
+recipientAddress:
+m.querySelector(
+  "#afLetterRecipientAddress"
+).value.trim(),
+
+subject,
+
+salutation:
+m.querySelector(
+  "#afLetterSalutation"
+).value.trim()||
+"Dear Sir/Madam,",
+
+body,
+
+closing:
+m.querySelector(
+  "#afLetterClosing"
+).value.trim()||
+"Yours faithfully,",
+
+signatoryName:
+m.querySelector(
+  "#afLetterSignatoryName"
+).value.trim(),
+
+signatoryTitle:
+m.querySelector(
+  "#afLetterSignatoryTitle"
+).value.trim()||
+"Director",
+
+cc:
+m.querySelector(
+  "#afLetterCC"
+).value.trim(),
+
+attachments:
+m.querySelector(
+  "#afLetterAttachments"
+).value.trim(),
+
+status,
+
+createdAt:
+old?.createdAt||
+new Date()
+  .toISOString(),
+
+createdBy:
+old?.createdBy||
+me.fullName||
+me.employeeId||
+"Director",
+
+updatedAt:
+new Date()
+  .toISOString(),
+
+updatedBy:
+me.fullName||
+me.employeeId||
+"Director",
+
+issuedAt:
+status==="ISSUED"
+  ? old?.issuedAt||
+    new Date()
+      .toISOString()
+  : old?.issuedAt||
+    "",
+
+issuedBy:
+status==="ISSUED"
+  ? old?.issuedBy||
+me.fullName||
+me.employeeId||
+    "Director"
+  : old?.issuedBy||
+    ""
+
+};
+
+}
+
+
+function saveLetter(status){
+
+const r=
+collect(
+  status
+);
+
+
+  if(
+    !r
+  ){
+    return;
+  }
+
+
+const all=
+read();
+
+
+  if(
+all.some(
+      x=>
+        String(
+x.reference||
+          ""
+        )===r.reference&&
+        String(
+x.id
+        )!==
+        String(
+r.id
+        )
+    )
+  ){
+
+    alert(
+      "This letter reference already exists. Please close and open New Letter again."
+    );
+
+    return;
+  }
+
+
+const i=
+all.findIndex(
+  x=>
+    String(x.id)===
+    String(r.id)
+);
+
+
+  if(
+i>=0
+  ){
+
+all[i]=r;
+
+  }else{
+
+all.push(
+  r
+);
+
+  }
+
+
+save(
+  all
+);
+
+
+m.remove();
+
+
+alert(
+
+status==="ISSUED"
+
+  ? "Company letter saved and issued successfully."
+
+  : "Company letter saved as draft."
+
+);
+
+
+openLetters();
+
+}
+
+
+const draftButton=
+m.querySelector(
+  "#afLetterSaveDraft"
+);
+
+
+  if(
+draftButton
+  ){
+
+draftButton.onclick=
+()=>saveLetter(
+  "DRAFT"
+);
+
+  }
+
+
+const issueButton=
+m.querySelector(
+  "#afLetterSaveIssue"
+);
+
+
+  if(
+issueButton
+  ){
+
+issueButton.onclick=
+()=>{
+
+const confirmed=
+confirm(
+  "Issue this company letter?\n\nOnce issued, the letter will be locked from editing and kept in Letter History."
+);
+
+
+  if(
+    confirmed
+  ){
+
+saveLetter(
+  "ISSUED"
+);
+
+  }
+
+};
+
+  }
+
+
+const printButton=
+m.querySelector(
+  "#afLetterPrintFromEditor"
+);
+
+
+  if(
+printButton&&
+    old
+  ){
+
+printButton.onclick=
+()=>printLetter(
+  old
+);
+
+  }
+
+}
+
+
+/* =========================================================
+   COMPANY LETTERS MAIN SCREEN
+   ========================================================= */
+
+function openLetters(
+filter="ALL"
+){
+
+  if(
+    !requireDirector()
+  ){
+    return;
+  }
+
+
+close(
+  MAIN_ID
+);
+
+
+const all=
+read()
+  .slice()
+  .sort(
+    (a,b)=>
+      String(
+b.createdAt||
+b.date||
+        ""
+      ).localeCompare(
+        String(
+a.createdAt||
+a.date||
+          ""
+        )
+      )
+  );
+
+
+const F=
+String(
+  filter||
+  "ALL"
+).toUpperCase();
+
+
+const shown=
+all.filter(
+  x=>
+    F==="ALL" ||
+    String(
+x.status||
+      "DRAFT"
+    ).toUpperCase()===F
+);
+
+
+const drafts=
+all.filter(
+  x=>
+    String(
+x.status||
+      "DRAFT"
+    ).toUpperCase()==="DRAFT"
+).length;
+
+
+const issued=
+all.filter(
+  x=>
+    String(
+x.status||
+      ""
+    ).toUpperCase()==="ISSUED"
+).length;
+
+
+const rows=
+shown.length
+
+? shown.map(
+    r=>{
+
+const status=
+String(
+r.status||
+  "DRAFT"
+).toUpperCase();
+
+
+return `
+
+<tr>
+
+<td>
+${esc(
+r.date||
+"-"
+)}
+</td>
+
+
+<td>
+<b>
+${esc(
+r.reference||
+"-"
+)}
+</b>
+</td>
+
+
+<td>
+
+${esc(
+r.recipientName||
+"-"
+)}
+
+${
+r.recipientOrganisation
+
+  ? `
+<br>
+<small>
+${esc(
+r.recipientOrganisation
+)}
+</small>
+  `
+
+  : ""
+}
+
+</td>
+
+
+<td>
+${esc(
+r.subject||
+"-"
+)}
+</td>
+
+
+<td>
+
+<span style="
+display:inline-block;
+padding:4px 8px;
+border-radius:20px;
+font-size:10px;
+font-weight:bold;
+background:${
+status==="ISSUED"
+  ? "#e6f4eb"
+  : "#fff4d6"
+};
+color:${
+status==="ISSUED"
+  ? "#0b5d3b"
+  : "#8a5a00"
+};
+">
+
+${esc(
+status
+)}
+
+</span>
+
+</td>
+
+
+<td>
+
+<div style="
+display:flex;
+gap:6px;
+flex-wrap:wrap;
+">
+
+
+<button
+data-act="${
+status==="ISSUED"
+  ? "view"
+  : "edit"
+}"
+data-id="${esc(
+r.id
+)}"
+style="${
+btn(
+status==="ISSUED"
+  ? "#52625b"
+  : "#0b5d3b"
+)
+}padding:7px 10px;font-size:11px"
+>
+
+${
+status==="ISSUED"
+  ? "View"
+  : "Edit"
+}
+
+</button>
+
+
+<button
+data-act="print"
+data-id="${esc(
+r.id
+)}"
+style="${btn("#555")}padding:7px 10px;font-size:11px"
+>
+
+Print
+
+</button>
+
+
+${
+status==="DRAFT"
+
+  ? `
+
+<button
+data-act="issue"
+data-id="${esc(
+r.id
+)}"
+style="${btn("#126d45")}padding:7px 10px;font-size:11px"
+>
+
+Issue
+
+</button>
+
+  `
+
+  : ""
+}
+
+
+</div>
+
+</td>
+
+</tr>
+
+`;
+
+    }
+  ).join("")
+
+: `
+
+<tr>
+
+<td
+colspan="6"
+style="
+text-align:center;
+padding:24px;
+color:#66736d;
+"
+>
+
+No company letters found in this section.
+
+</td>
+
+</tr>
+
+`;
+
+
+const m=
+document.createElement(
+  "div"
+);
+
+
+m.id=
+MAIN_ID;
+
+
+m.style.cssText=`
+position:fixed;
+inset:0;
+z-index:1000001;
+background:rgba(0,0,0,.60);
+display:flex;
+align-items:center;
+justify-content:center;
+padding:10px;
+box-sizing:border-box;
+font-family:Arial,sans-serif;
+`;
+
+
+m.innerHTML=`
+
+<div style="
+width:1120px;
+max-width:98%;
+max-height:95vh;
+overflow:auto;
+background:white;
+border-radius:15px;
+box-shadow:0 16px 50px rgba(0,0,0,.32);
+">
+
+
+<div style="
+background:#0b5d3b;
+color:white;
+padding:20px 24px;
+display:flex;
+justify-content:space-between;
+align-items:flex-start;
+gap:12px;
+">
+
+<div>
+
+<div style="
+font-size:11px;
+font-weight:bold;
+letter-spacing:1.3px;
+opacity:.85;
+">
+
+A&amp;F WEKAVERA LTD
+•
+DIRECTOR ONLY
+
+</div>
+
+
+<h2 style="
+margin:5px 0 0;
+font-size:24px;
+">
+
+✉ Company Letters
+
+</h2>
+
+
+<div style="
+margin-top:5px;
+font-size:12px;
+opacity:.9;
+">
+
+Create, save, issue and print official company correspondence
+
+</div>
+
+</div>
+
+
+<button
+id="afCompanyLettersClose"
+style="${btn("#333")}"
+>
+
+✕ Close
+
+</button>
+
+</div>
+
+
+<div style="
+padding:22px;
+">
+
+
+<div style="
+display:grid;
+grid-template-columns:
+repeat(
+auto-fit,
+minmax(170px,1fr)
+);
+gap:10px;
+margin-bottom:18px;
+">
+
+
+<div style="
+border:1px solid #e1e7e4;
+border-radius:10px;
+padding:14px;
+">
+
+<small>
+All Letters
+</small>
+
+<div style="
+font-size:24px;
+font-weight:bold;
+">
+${all.length}
+</div>
+
+</div>
+
+
+<div style="
+border:1px solid #e1e7e4;
+border-radius:10px;
+padding:14px;
+">
+
+<small>
+Drafts
+</small>
+
+<div style="
+font-size:24px;
+font-weight:bold;
+color:#8a5a00;
+">
+${drafts}
+</div>
+
+</div>
+
+
+<div style="
+border:1px solid #e1e7e4;
+border-radius:10px;
+padding:14px;
+">
+
+<small>
+Issued
+</small>
+
+<div style="
+font-size:24px;
+font-weight:bold;
+color:#0b5d3b;
+">
+${issued}
+</div>
+
+</div>
+
+</div>
+
+
+<div style="
+display:flex;
+flex-wrap:wrap;
+gap:8px;
+margin-bottom:16px;
+">
+
+
+<button
+id="afCompanyNewLetter"
+style="${btn()}"
+>
+
++ New Company Letter
+
+</button>
+
+
+<button
+data-filter="ALL"
+style="${
+btn(
+F==="ALL"
+  ? "#0b5d3b"
+  : "#52625b"
+)
+}"
+>
+
+Letter History
+
+</button>
+
+
+<button
+data-filter="DRAFT"
+style="${
+btn(
+F==="DRAFT"
+  ? "#8a5a00"
+  : "#52625b"
+)
+}"
+>
+
+Drafts
+
+</button>
+
+
+<button
+data-filter="ISSUED"
+style="${
+btn(
+F==="ISSUED"
+  ? "#0b5d3b"
+  : "#52625b"
+)
+}"
+>
+
+Issued Letters
+
+</button>
+
+</div>
+
+
+<div style="
+overflow:auto;
+border:1px solid #e1e6e3;
+border-radius:9px;
+">
+
+<table style="
+width:100%;
+min-width:900px;
+border-collapse:collapse;
+font-size:12px;
+">
+
+
+<thead>
+
+<tr style="
+background:#eaf5ee;
+text-align:left;
+">
+
+<th>Date</th>
+<th>Reference</th>
+<th>Recipient</th>
+<th>Subject</th>
+<th>Status</th>
+<th>Action</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+
+${rows}
+
+</tbody>
+
+</table>
+
+</div>
+
+
+<div style="
+margin-top:16px;
+padding:11px 13px;
+border:1px solid #cfe6d8;
+background:#eef8f2;
+border-radius:8px;
+color:#0b5d3b;
+font-size:12px;
+line-height:1.5;
+">
+
+Issued letters are locked from editing so official history remains unchanged.
+
+Drafts can be edited until they are issued.
+
+</div>
+
+</div>
+
+</div>
+
+`;
+
+
+document.body.appendChild(
+  m
+);
+
+
+m.querySelectorAll(
+  "th,td"
+).forEach(
+  c=>{
+
+c.style.padding=
+"9px";
+
+c.style.borderBottom=
+"1px solid #e7ece9";
+
+c.style.verticalAlign=
+"top";
+
+  }
+);
+
+
+m.querySelector(
+  "#afCompanyLettersClose"
+).onclick=
+()=>m.remove();
+
+
+m.querySelector(
+  "#afCompanyNewLetter"
+).onclick=
+()=>{
+
+m.remove();
+
+openEditor();
+
+};
+
+
+m.querySelectorAll(
+  "[data-filter]"
+).forEach(
+  b=>
+b.onclick=
+      ()=>openLetters(
+b.dataset.filter
+      )
+);
+
+
+m.addEventListener(
+  "click",
+  e=>{
+
+const b=
+e.target.closest(
+  "[data-act]"
+);
+
+
+  if(
+    !b
+  ){
+    return;
+  }
+
+
+const latest=
+read();
+
+
+const r=
+latest.find(
+  x=>
+    String(x.id)===
+    String(
+b.dataset.id
+    )
+);
+
+
+  if(
+    !r
+  ){
+
+    alert(
+      "Company letter could not be found."
+    );
+
+    return;
+  }
+
+
+  if(
+b.dataset.act==="edit" ||
+b.dataset.act==="view"
+  ){
+
+m.remove();
+
+openEditor(
+r.id
+);
+
+    return;
+  }
+
+
+  if(
+b.dataset.act==="print"
+  ){
+
+printLetter(
+  r
+);
+
+    return;
+  }
+
+
+  if(
+b.dataset.act==="issue"
+  ){
+
+const confirmed=
+confirm(
+  "Issue "+
+  (
+r.reference||
+    "this letter"
+  )+
+  "?\n\nOnce issued, it will be locked from editing."
+);
+
+
+    if(
+      !confirmed
+    ){
+      return;
+    }
+
+
+const me=
+user();
+
+
+r.status=
+"ISSUED";
+
+
+r.issuedAt=
+new Date()
+  .toISOString();
+
+
+r.issuedBy=
+me.fullName||
+me.employeeId||
+"Director";
+
+
+r.updatedAt=
+new Date()
+  .toISOString();
+
+
+r.updatedBy=
+r.issuedBy;
+
+
+save(
+  latest
+);
+
+
+alert(
+  "Company letter issued successfully."
+);
+
+
+openLetters(
+  F
+);
+
+  }
+
+  }
+);
+
+}
+
+
+/* =========================================================
+   DIRECTOR DASHBOARD CARD
+   ========================================================= */
+
+function renderCard(){
+
+const old=
+document.getElementById(
+  CARD_ID
+);
+
+
+  if(
+    !isDirector()
+  ){
+
+old?.remove();
+
+    return;
+  }
+
+
+  if(
+    old
+  ){
+    return;
+  }
+
+
+const anchor=
+document.getElementById(
+  "afMonthlyBusinessChartsCard"
+);
+
+
+const fallback=
+document.getElementById(
+  "mainApplication"
+);
+
+
+  if(
+    !anchor &&
+    !fallback
+  ){
+    return;
+  }
+
+
+const all=
+read();
+
+
+const drafts=
+all.filter(
+  x=>
+    String(
+x.status||
+      "DRAFT"
+    ).toUpperCase()==="DRAFT"
+).length;
+
+
+const card=
+document.createElement(
+  "section"
+);
+
+
+card.id=
+CARD_ID;
+
+
+card.className=
+"card";
+
+
+card.style.cssText=`
+margin-top:16px;
+border:1px solid #dce6e1;
+border-radius:12px;
+padding:16px;
+background:white;
+`;
+
+
+card.innerHTML=`
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:center;
+gap:14px;
+flex-wrap:wrap;
+">
+
+<div>
+
+<div style="
+color:#0b5d3b;
+font-size:15px;
+font-weight:bold;
+margin-bottom:4px;
+">
+
+✉ Company Letters
+
+</div>
+
+
+<div style="
+font-size:12px;
+color:#66736d;
+line-height:1.5;
+">
+
+Director-only official correspondence
+
+•
+
+${all.length}
+letter(s)
+
+•
+
+${drafts}
+draft(s)
+
+</div>
+
+</div>
+
+
+<button
+id="afOpenCompanyLettersDashboard"
+style="${btn()}"
+>
+
+Open Company Letters
+
+</button>
+
+</div>
+
+`;
+
+
+  if(
+    anchor
+  ){
+
+anchor.insertAdjacentElement(
+  "afterend",
+  card
+);
+
+  }else{
+
+fallback.appendChild(
+  card
+);
+
+  }
+
+
+card.querySelector(
+  "#afOpenCompanyLettersDashboard"
+).onclick=
+openLetters;
+
+}
+
+
+/* =========================================================
+   EXPOSE + AUTO CONNECT
+   ========================================================= */
+
+window.openAFCompanyLetters=
+openLetters;
+
+
+window.printAFCompanyLetter=
+printLetter;
+
+
+window.renderAFCompanyLettersDashboardCard=
+renderCard;
+
+
+new MutationObserver(
+renderCard
+).observe(
+document.body,
+  {
+childList:true,
+subtree:true
+  }
+);
+
+
+setTimeout(
+renderCard,
+  0
+);
+
+
+console.log(
+  "A&F Smart Print Header + Director Company Letters connected successfully."
+);
+
+})();
