@@ -72473,3 +72473,602 @@ oldStyle.remove();
 document.head.appendChild(style);
 
 })();
+
+/* =========================================================
+   A&F RECOVER PREVIOUS SUPPLIER PURCHASES
+   Links old Material-In records to suppliers.
+   DOES NOT add stock or create new Material-In records.
+   ========================================================= */
+
+(function () {
+
+window.afRecoverPreviousPurchases = function () {
+
+const suppliers =
+typeof afGetSuppliers === "function"
+        ? afGetSuppliers()
+        : [];
+
+    if (!suppliers.length) {
+      alert("Please register suppliers first.");
+      return;
+    }
+
+    let materialRecords = [];
+
+    try {
+materialRecords =
+JSON.parse(
+localStorage.getItem("materialRecords") || "[]"
+        );
+    } catch (e) {
+      alert("Material records could not be loaded.");
+      return;
+    }
+
+const purchases =
+typeof afGetSupplierPurchases === "function"
+        ? afGetSupplierPurchases()
+        : [];
+
+    /*
+     * OLD COMPANY PURCHASES ONLY.
+     * Ignore client material, cancelled records,
+     * records already linked to a supplier,
+     * and records already recovered.
+     */
+const oldRecords = materialRecords.filter(r => {
+
+const isClient =
+        String(r.materialSource || "")
+          .toLowerCase() === "client";
+
+const cancelled =
+        String(r.status || r.batchStatus || "")
+          .toUpperCase() === "CANCELLED";
+
+const alreadyLinked =
+        !!r.supplierId;
+
+const alreadyInHistory =
+purchases.some(p =>
+          String(p.materialRecordId || "") ===
+          String(r.id || "")
+        );
+
+      return (
+        !isClient&&
+        !cancelled &&
+        !alreadyLinked&&
+        !alreadyInHistory
+      );
+    });
+
+    if (!oldRecords.length) {
+      alert(
+        "No previous unlinked supplier purchases were found."
+      );
+      return;
+    }
+
+const existing =
+document.getElementById(
+        "afRecoverPurchasesModal"
+      );
+
+    if (existing) existing.remove();
+
+const modal =
+document.createElement("div");
+
+modal.id = "afRecoverPurchasesModal";
+
+modal.style.cssText = `
+position:fixed;
+      inset:0;
+background:rgba(0,0,0,.60);
+display:flex;
+justify-content:center;
+align-items:center;
+      z-index:100005;
+font-family:Arial,sans-serif;
+    `;
+
+const supplierOptions =
+      suppliers
+        .slice()
+        .sort((a,b) =>
+          String(a.name || "")
+            .localeCompare(String(b.name || ""))
+        )
+        .map(s =>
+          `<option value="${s.id}">
+             ${afEscape(s.name)}
+</option>`
+        )
+        .join("");
+
+modal.innerHTML = `
+<div style="
+        width:96%;
+        max-width:1150px;
+        max-height:90vh;
+overflow:auto;
+        background:#fff;
+        border-radius:14px;
+        padding:22px;
+        box-shadow:0 10px 40px rgba(0,0,0,.30);
+      ">
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:center;
+          margin-bottom:8px;
+        ">
+<div>
+<h2 style="
+              margin:0;
+              color:#0b5d3b;
+            ">
+              Recover Previous Purchases
+</h2>
+
+<div style="
+              margin-top:5px;
+              color:#666;
+              font-size:13px;
+            ">
+              Select the correct supplier for each old purchase.
+              Stock quantities will not be changed.
+</div>
+</div>
+
+<button
+            type="button"
+            id="afCloseRecovery"
+            style="
+              border:0;
+              background:#eee;
+              padding:8px 13px;
+              border-radius:7px;
+cursor:pointer;
+              font-size:18px;
+            ">
+✕
+</button>
+</div>
+
+<div style="
+          overflow-x:auto;
+          margin-top:18px;
+        ">
+
+<table style="
+            width:100%;
+border-collapse:collapse;
+            min-width:1000px;
+          ">
+
+<thead>
+<tr style="
+                background:#0b5d3b;
+color:white;
+              ">
+<th>Date</th>
+<th>Batch</th>
+<th>Material</th>
+<th>Gross kg</th>
+<th>Dirt %</th>
+<th>Accepted kg</th>
+<th>UGX/kg</th>
+<th>Total</th>
+<th>Supplier</th>
+<th>Action</th>
+</tr>
+</thead>
+
+<tbody>
+
+              ${oldRecords.map((r, index) => {
+
+const gross =
+                  Number(r.grossWeight) || 0;
+
+const dirtPercent =
+                  Number(r.dirtPercent) || 0;
+
+const dirtKg =
+                  Number(
+r.dirtWeightKg ??
+                    (gross * dirtPercent / 100)
+                  ) || 0;
+
+const accepted =
+                  Number(
+r.netWeight ??
+                    (gross - dirtKg)
+                  ) || 0;
+
+const price =
+                  Number(r.pricePerKg) || 0;
+
+const transport =
+                  Number(r.transportCost) || 0;
+
+const total =
+                  Number(
+r.totalCost ??
+                    ((accepted * price) + transport)
+                  ) || 0;
+
+                return `
+<tr
+                    data-record-index="${index}"
+                    style="
+                      border-bottom:1px solid #ddd;
+                    ">
+
+<td>
+                      ${afEscape(r.date || "-")}
+</td>
+
+<td>
+                      ${afEscape(r.batchNumber || "-")}
+</td>
+
+<td>
+                      ${afEscape(r.materialType || "-")}
+</td>
+
+<td>
+                      ${gross.toLocaleString()}
+</td>
+
+<td>
+                      ${dirtPercent.toLocaleString()}%
+</td>
+
+<td>
+                      ${accepted.toLocaleString()}
+</td>
+
+<td>
+                      ${price.toLocaleString()}
+</td>
+
+<td>
+                      UGX ${total.toLocaleString()}
+</td>
+
+<td>
+<select
+                        class="afHistoricalSupplier"
+                        style="
+                          min-width:150px;
+                          padding:7px;
+                          border:1px solid #bbb;
+                          border-radius:6px;
+                        ">
+<option value="">
+                          -- Select Supplier --
+</option>
+                        ${supplierOptions}
+</select>
+</td>
+
+<td>
+<button
+                        type="button"
+                        class="afRecoverOnePurchase"
+                        style="
+                          background:#0b5d3b;
+color:white;
+                          border:0;
+                          padding:8px 12px;
+                          border-radius:6px;
+cursor:pointer;
+font-weight:bold;
+                        ">
+                        Link
+</button>
+</td>
+
+</tr>
+                `;
+              }).join("")}
+
+</tbody>
+</table>
+
+</div>
+</div>
+    `;
+
+document.body.appendChild(modal);
+
+modal.querySelector("#afCloseRecovery")
+      .onclick = () =>modal.remove();
+
+
+modal.querySelectorAll(
+      ".afRecoverOnePurchase"
+    ).forEach(button => {
+
+button.onclick = function () {
+
+const row =
+button.closest("tr");
+
+const recordIndex =
+          Number(
+row.dataset.recordIndex
+          );
+
+const record =
+oldRecords[recordIndex];
+
+const select =
+row.querySelector(
+            ".afHistoricalSupplier"
+          );
+
+const supplierId =
+select.value;
+
+        if (!supplierId) {
+          alert(
+            "Please select the correct supplier."
+          );
+          return;
+        }
+
+const supplier =
+suppliers.find(s =>
+            String(s.id) ===
+            String(supplierId)
+          );
+
+        if (!supplier) {
+          alert("Supplier not found.");
+          return;
+        }
+
+        /*
+         * Find the ORIGINAL material record.
+         * We update it only with supplier details.
+         * No quantities are added or changed.
+         */
+const original =
+materialRecords.find(r =>
+            String(r.id) ===
+            String(record.id)
+          );
+
+        if (!original) {
+          alert(
+            "Original material record was not found."
+          );
+          return;
+        }
+
+const grossKg =
+          Number(original.grossWeight) || 0;
+
+const dirtPercent =
+          Number(original.dirtPercent) || 0;
+
+const dirtKg =
+          Number(
+original.dirtWeightKg ??
+            (grossKg * dirtPercent / 100)
+          ) || 0;
+
+const acceptedKg =
+          Number(
+original.netWeight ??
+            (grossKg - dirtKg)
+          ) || 0;
+
+const pricePerKg =
+          Number(original.pricePerKg) || 0;
+
+const transportCost =
+          Number(original.transportCost) || 0;
+
+const materialCost =
+acceptedKg * pricePerKg;
+
+const totalCost =
+          Number(
+original.totalCost ??
+            (materialCost + transportCost)
+          ) || 0;
+
+
+        /* LINK SUPPLIER TO ORIGINAL RECORD */
+
+original.supplierId =
+supplier.id;
+
+original.supplierName =
+supplier.name;
+
+localStorage.setItem(
+          "materialRecords",
+JSON.stringify(materialRecords)
+        );
+
+
+        /* ADD HISTORY ENTRY ONLY ONCE */
+
+const latestPurchases =
+afGetSupplierPurchases();
+
+const duplicate =
+latestPurchases.some(p =>
+            String(p.materialRecordId || "") ===
+            String(original.id || "")
+          );
+
+        if (!duplicate) {
+
+latestPurchases.push({
+
+            id:
+              "PUR-" +
+Date.now() +
+              "-" +
+Math.random()
+                .toString(36)
+                .slice(2,7),
+
+materialRecordId:
+original.id || "",
+
+batchNumber:
+original.batchNumber || "",
+
+supplierId:
+supplier.id,
+
+supplierName:
+supplier.name,
+
+            date:
+original.date ||
+              new Date()
+                .toISOString()
+                .slice(0,10),
+
+materialType:
+original.materialType || "",
+
+grossKg,
+dirtPercent,
+dirtKg,
+acceptedKg,
+pricePerKg,
+materialCost,
+transportCost,
+totalCost,
+
+recoveredHistoricalRecord:
+              true,
+
+createdAt:
+              new Date().toISOString()
+
+          });
+
+afSaveSupplierPurchases(
+latestPurchases
+          );
+        }
+
+        /*
+         * Remove successfully linked row
+         * from recovery screen.
+         */
+row.remove();
+
+        alert(
+          "Previous purchase linked to " +
+supplier.name +
+          " successfully."
+        );
+
+        if (
+          !modal.querySelector(
+            ".afRecoverOnePurchase"
+          )
+        ) {
+modal.remove();
+
+          alert(
+            "All previous purchases have been recovered."
+          );
+        }
+      };
+
+    });
+
+  };
+
+
+  /*
+   * ADD RECOVERY BUTTON AUTOMATICALLY
+   * whenever Supplier Management opens.
+   */
+
+document.addEventListener(
+    "click",
+    function () {
+
+setTimeout(function () {
+
+const supplierModal =
+document.getElementById(
+            "afSupplierModal"
+          );
+
+        if (!supplierModal) return;
+
+        if (
+supplierModal.querySelector(
+            "#afRecoverPreviousPurchasesBtn"
+          )
+        ) return;
+
+const historyButton =
+Array.from(
+supplierModal.querySelectorAll(
+              "button"
+            )
+          ).find(btn =>
+btn.textContent
+              .trim()
+              .includes("Purchase History")
+          );
+
+        if (!historyButton) return;
+
+const recoverButton =
+document.createElement("button");
+
+recoverButton.id =
+          "afRecoverPreviousPurchasesBtn";
+
+recoverButton.type =
+          "button";
+
+recoverButton.textContent =
+          "Recover Previous Purchases";
+
+recoverButton.style.cssText = `
+          background:#8a5a00;
+color:white;
+          border:0;
+          padding:11px 18px;
+          border-radius:7px;
+font-weight:bold;
+cursor:pointer;
+          margin-left:10px;
+        `;
+
+recoverButton.onclick =
+afRecoverPreviousPurchases;
+
+historyButton.insertAdjacentElement(
+          "afterend",
+recoverButton
+        );
+
+      }, 100);
+
+    },
+    true
+  );
+
+})();
+
