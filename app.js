@@ -75026,2349 +75026,6 @@ console.log(
 
 })();
 /* =========================================================
-   A&F CUSTOMER HISTORY + PERFORMANCE SUMMARY
-   Adds HISTORY button beside EDIT in Customer List
-
-   REPORTING ONLY
-   - Does NOT deduct stock
-   - Does NOT create sales
-   - Does NOT create payments
-   ========================================================= */
-
-(function () {
-  "use strict";
-
-  if (window.__afCustomerHistoryInstalled) return;
-  window.__afCustomerHistoryInstalled = true;
-
-const CUSTOMER_KEY = "afCustomers";
-const DELIVERY_KEY = "afDeliveryRecords";
-const PAYMENT_KEY = "afCustomerPayments";
-
-
-  /* =====================================================
-     STORAGE
-     ===================================================== */
-
-  function afReadArray(key) {
-
-    try {
-
-const value =
-JSON.parse(
-localStorage.getItem(key) || "[]"
-        );
-
-      return Array.isArray(value)
-        ? value
-        : [];
-
-    } catch (e) {
-
-      return [];
-
-    }
-
-  }
-
-
-  /* =====================================================
-     HELPERS
-     ===================================================== */
-
-  function afEsc(value) {
-
-    return String(value ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-
-  }
-
-
-  function afMoney(value) {
-
-    return (
-      "UGX " +
-Math.round(
-        Number(value) || 0
-      ).toLocaleString()
-    );
-
-  }
-
-
-  function afNumber(value) {
-
-    return (
-      Number(value) || 0
-    ).toLocaleString();
-
-  }
-
-
-  function afSaleValue(record) {
-
-    return Number(
-record.finalSaleTotal ??
-record.netSaleTotal ??
-record.saleAmount ??
-record.grossSaleTotal ??
-      0
-    ) || 0;
-
-  }
-
-
-  function afCancelled(record) {
-
-    return (
-      String(
-record.status || ""
-      ).toUpperCase() ===
-      "CANCELLED"
-    );
-
-  }
-
-
-  function afIsPoleSale(record) {
-
-const savedType =
-      String(
-record.deliveryType || ""
-      ).toLowerCase();
-
-
-    /*
-     * New records explicitly say "poles".
-     */
-    if (savedType) {
-
-      return savedType === "poles";
-
-    }
-
-
-    /*
-     * Compatibility with older pole records.
-     */
-    return (
-Array.isArray(record.items) ||
-      Number(record.totalPoles || 0) > 0
-    );
-
-  }
-
-
-  function afSameCustomer(
-    customer,
-    record
-  ) {
-
-const customerName =
-      String(
-customer.name || ""
-      )
-        .trim()
-        .toLowerCase();
-
-
-const recordName =
-      String(
-record.customerName ||
-record.clientName ||
-        ""
-      )
-        .trim()
-        .toLowerCase();
-
-
-const customerPhone =
-      String(
-customer.phone || ""
-      )
-        .replace(/\s+/g, "");
-
-
-const recordPhone =
-      String(
-record.customerPhone ||
-record.clientPhone ||
-        ""
-      )
-        .replace(/\s+/g, "");
-
-
-    return (
-
-      (
-customerPhone&&
-recordPhone&&
-customerPhone === recordPhone
-      )
-
-      ||
-
-      (
-customerName&&
-recordName&&
-customerName === recordName
-      )
-
-    );
-
-  }
-
-
-  function afFormatDate(value) {
-
-    if (!value) return "—";
-
-const parts =
-      String(value).split("-");
-
-
-    if (parts.length === 3) {
-
-      return (
-        parts[2] + "/" +
-        parts[1] + "/" +
-        parts[0]
-      );
-
-    }
-
-
-    return String(value);
-
-  }
-
-
-  /* =====================================================
-     CUSTOMER DATA
-     ===================================================== */
-
-  function afCustomerById(id) {
-
-    return afReadArray(
-      CUSTOMER_KEY
-    ).find(
-      customer =>
-        String(customer.id) ===
-        String(id)
-    );
-
-  }
-
-
-  function afCustomerPoleSales(customer) {
-
-    return afReadArray(
-      DELIVERY_KEY
-    )
-      .filter(record =>
-        !afCancelled(record) &&
-afIsPoleSale(record) &&
-afSameCustomer(
-          customer,
-          record
-        )
-      )
-      .sort(
-        (a, b) =>
-          String(b.date || "")
-            .localeCompare(
-              String(a.date || "")
-            )
-      );
-
-  }
-
-
-  function afCustomerPayments(customer) {
-
-    return afReadArray(
-      PAYMENT_KEY
-    ).filter(payment => {
-
-      /*
-       * Prefer customer ID.
-       */
-      if (
-        String(
-payment.customerId || ""
-        ) ===
-        String(
-customer.id || ""
-        )
-      ) {
-        return true;
-      }
-
-
-      /*
-       * Compatibility with older payments.
-       */
-      return afSameCustomer(
-        customer,
-        payment
-      );
-
-    });
-
-  }
-
-
-  /* =====================================================
-     CUSTOMER SUMMARY
-     ===================================================== */
-
-  function afCustomerSummary(customer) {
-
-const sales =
-afCustomerPoleSales(
-        customer
-      );
-
-
-const payments =
-afCustomerPayments(
-        customer
-      );
-
-
-    let totalPoles = 0;
-    let totalRevenue = 0;
-
-
-const poleTypes = {};
-
-
-sales.forEach(record => {
-
-      let recordPoles =
-        Number(
-record.totalPoles
-        ) || 0;
-
-
-      if (
-Array.isArray(record.items)
-      ) {
-
-const itemTotal =
-record.items.reduce(
-            (sum, item) =>
-              sum +
-              (
-                Number(
-item.quantity
-                ) || 0
-              ),
-            0
-          );
-
-
-        /*
-         * Use item quantities where available.
-         */
-        if (itemTotal> 0) {
-recordPoles =
-itemTotal;
-        }
-
-
-record.items.forEach(item => {
-
-const name =
-            String(
-item.name ||
-item.key ||
-              "Poles"
-            ).trim();
-
-
-          if (!poleTypes[name]) {
-
-poleTypes[name] = {
-              name,
-              quantity: 0,
-grossValue: 0
-            };
-
-          }
-
-
-const quantity =
-            Number(
-item.quantity
-            ) || 0;
-
-
-const lineValue =
-            Number(
-item.subtotal
-            ) ||
-
-            (
-              quantity *
-              (
-                Number(
-item.unitPrice ??
-item.standardUnitPrice ??
-                  0
-                ) || 0
-              )
-            );
-
-
-poleTypes[name].quantity +=
-            quantity;
-
-
-poleTypes[name].grossValue +=
-lineValue;
-
-        });
-
-      }
-
-
-totalPoles +=
-recordPoles;
-
-
-totalRevenue +=
-afSaleValue(
-          record
-        );
-
-    });
-
-
-const totalPaid =
-payments.reduce(
-        (sum, payment) =>
-          sum +
-          (
-            Number(
-payment.amount
-            ) || 0
-          ),
-        0
-      );
-
-
-const outstanding =
-Math.max(
-totalRevenue -
-totalPaid,
-        0
-      );
-
-
-const averageOrder =
-sales.length
-        ? totalRevenue /
-sales.length
-        : 0;
-
-
-const lastPurchase =
-sales.length
-        ? sales[0].date
-        : "";
-
-
-    return {
-
-      sales,
-      payments,
-
-totalPoles,
-totalRevenue,
-
-totalPaid,
-      outstanding,
-
-      deliveries:
-sales.length,
-
-averageOrder,
-lastPurchase,
-
-poleTypes:
-Object.values(
-poleTypes
-        )
-        .sort(
-          (a, b) =>
-b.quantity -
-a.quantity
-        )
-
-    };
-
-  }
-
-
-  /* =====================================================
-     SUMMARY CARD
-     ===================================================== */
-
-  function afSummaryCard(
-    title,
-    value
-  ) {
-
-    return `
-
-<div style="
-background:white;
-        border:1px solid #dfe7e3;
-        border-radius:9px;
-        padding:12px;
-        min-height:65px;
-box-sizing:border-box;
-      ">
-
-<div style="
-          font-size:11px;
-          color:#69756f;
-          margin-bottom:5px;
-        ">
-          ${afEsc(title)}
-</div>
-
-
-<div style="
-          font-size:16px;
-font-weight:bold;
-          color:#173027;
-word-break:break-word;
-        ">
-          ${afEsc(value)}
-</div>
-
-</div>
-
-    `;
-
-  }
-
-
-  /* =====================================================
-     OPEN CUSTOMER HISTORY
-     ===================================================== */
-
-  function afOpenCustomerHistory(
-customerId
-  ) {
-
-const customer =
-afCustomerById(
-customerId
-      );
-
-
-    if (!customer) {
-
-      alert(
-        "Customer record not found."
-      );
-
-      return;
-
-    }
-
-
-const summary =
-afCustomerSummary(
-        customer
-      );
-
-
-const old =
-document.getElementById(
-        "afCustomerHistorySummaryModal"
-      );
-
-
-    if (old) {
-old.remove();
-    }
-
-
-const modal =
-document.createElement(
-        "div"
-      );
-
-
-modal.id =
-      "afCustomerHistorySummaryModal";
-
-
-modal.style.cssText = `
-position:fixed;
-      inset:0;
-      z-index:9999999;
-background:rgba(0,0,0,.55);
-display:flex;
-justify-content:center;
-align-items:center;
-      padding:12px;
-box-sizing:border-box;
-font-family:Arial,sans-serif;
-    `;
-
-
-const box =
-document.createElement(
-        "div"
-      );
-
-
-box.style.cssText = `
-width:min(1180px,97vw);
-      max-height:94vh;
-overflow:auto;
-background:white;
-      border-radius:12px;
-      padding:18px;
-box-sizing:border-box;
-    `;
-
-
-    /* ===================================================
-       POLE TYPE BREAKDOWN
-       =================================================== */
-
-const poleRows =
-summary.poleTypes.length
-
-        ? summary.poleTypes
-            .map(type => `
-
-<tr>
-
-<td>
-                  ${afEsc(
-type.name
-                  )}
-</td>
-
-<td style="
-text-align:right;
-                ">
-                  ${afNumber(
-type.quantity
-                  )}
-</td>
-
-<td style="
-text-align:right;
-                ">
-                  ${afMoney(
-type.grossValue
-                  )}
-</td>
-
-</tr>
-
-            `)
-            .join("")
-
-        : `
-
-<tr>
-
-<td
-colspan="3"
-              style="
-text-align:center;
-                color:#777;
-                padding:15px;
-              "
->
-              No pole purchases recorded.
-</td>
-
-</tr>
-
-        `;
-
-
-    /* ===================================================
-       DELIVERY HISTORY ROWS
-       =================================================== */
-
-const historyRows =
-summary.sales.length
-
-        ? summary.sales
-            .map(record => {
-
-              let poles =
-                Number(
-record.totalPoles
-                ) || 0;
-
-
-              if (
-Array.isArray(
-record.items
-                )
-              ) {
-
-const calculated =
-record.items.reduce(
-                    (sum, item) =>
-                      sum +
-                      (
-                        Number(
-item.quantity
-                        ) || 0
-                      ),
-                    0
-                  );
-
-
-                if (calculated > 0) {
-                  poles =
-                    calculated;
-                }
-
-              }
-
-
-const details =
-Array.isArray(
-record.items
-                )
-
-                  ? record.items
-                      .map(item =>
-                        (
-item.name ||
-item.key ||
-                          "Poles"
-                        ) +
-                        " × " +
-afNumber(
-item.quantity
-                        )
-                      )
-                      .join(", ")
-
-                  : poles +
-                    " poles";
-
-
-              return `
-
-<tr>
-
-<td>
-                    ${afFormatDate(
-record.date
-                    )}
-</td>
-
-<td>
-                    ${afEsc(
-record.deliveryNumber ||
-record.reference ||
-                      "—"
-                    )}
-</td>
-
-<td>
-                    ${afEsc(
-                      details
-                    )}
-</td>
-
-<td style="
-text-align:right;
-                  ">
-                    ${afNumber(
-                      poles
-                    )}
-</td>
-
-<td style="
-text-align:right;
-                  ">
-                    ${afMoney(
-afSaleValue(
-                        record
-                      )
-                    )}
-</td>
-
-</tr>
-
-              `;
-
-            })
-            .join("")
-
-        : `
-
-<tr>
-
-<td
-colspan="5"
-              style="
-text-align:center;
-                color:#777;
-                padding:18px;
-              "
->
-              No completed pole purchases found.
-</td>
-
-</tr>
-
-        `;
-
-
-box.innerHTML = `
-
-<div style="
-display:flex;
-justify-content:space-between;
-align-items:flex-start;
-        gap:12px;
-        margin-bottom:15px;
-      ">
-
-<div>
-
-<h2 style="
-            margin:0;
-            color:#0b5d3b;
-          ">
-👤 ${afEsc(
-customer.name ||
-              "Customer"
-            )}
-</h2>
-
-<div style="
-            margin-top:5px;
-            font-size:12px;
-            color:#66736d;
-          ">
-            Customer Purchase History & Summary
-</div>
-
-<div style="
-            margin-top:5px;
-            font-size:11px;
-            color:#777;
-          ">
-
-            ${afEsc(
-customer.phone ||
-              ""
-            )}
-
-            ${
-customer.location
-                ? " • " +
-afEsc(
-customer.location
-                  )
-                : ""
-            }
-
-</div>
-
-</div>
-
-
-<button
-          id="afCloseCustomerHistorySummary"
-          type="button"
-          style="
-            border:0;
-            background:#333;
-color:white;
-            padding:9px 13px;
-            border-radius:7px;
-cursor:pointer;
-font-weight:bold;
-          "
->
-✕ Close
-</button>
-
-</div>
-
-
-<!-- CUSTOMER SUMMARY -->
-
-<div style="
-        background:#f7faf8;
-        border:1px solid #d8e6de;
-        border-radius:10px;
-        padding:12px;
-        margin-bottom:16px;
-      ">
-
-<div style="
-          font-size:14px;
-font-weight:bold;
-          color:#0b5d3b;
-          margin-bottom:10px;
-        ">
-          Customer Summary
-</div>
-
-
-<div style="
-display:grid;
-          grid-template-columns:
-            repeat(
-              auto-fit,
-minmax(145px,1fr)
-            );
-          gap:9px;
-        ">
-
-          ${afSummaryCard(
-            "Completed Purchases",
-afNumber(
-summary.deliveries
-            )
-          )}
-
-
-          ${afSummaryCard(
-            "Total Poles Purchased",
-afNumber(
-summary.totalPoles
-            ) + " pcs"
-          )}
-
-
-          ${afSummaryCard(
-            "Pole Revenue",
-afMoney(
-summary.totalRevenue
-            )
-          )}
-
-
-          ${afSummaryCard(
-            "Average Purchase",
-afMoney(
-summary.averageOrder
-            )
-          )}
-
-
-          ${afSummaryCard(
-            "Last Purchase",
-summary.lastPurchase
-              ? afFormatDate(
-summary.lastPurchase
-                )
-              : "—"
-          )}
-
-
-          ${afSummaryCard(
-            "Total Paid",
-afMoney(
-summary.totalPaid
-            )
-          )}
-
-
-          ${afSummaryCard(
-            "Outstanding Balance",
-afMoney(
-summary.outstanding
-            )
-          )}
-
-</div>
-
-</div>
-
-
-<!-- POLE TYPE BREAKDOWN -->
-
-<div style="
-        margin-bottom:18px;
-      ">
-
-<div style="
-          font-size:14px;
-font-weight:bold;
-          color:#0b5d3b;
-          margin-bottom:8px;
-        ">
-          Pole Type Breakdown
-</div>
-
-
-<div style="
-overflow:auto;
-          border:1px solid #e1e7e3;
-          border-radius:8px;
-        ">
-
-<table style="
-            width:100%;
-            min-width:520px;
-border-collapse:collapse;
-          ">
-
-<thead>
-
-<tr style="
-                background:#eaf5ee;
-text-align:left;
-              ">
-
-<th>Pole Type / Size</th>
-
-<th style="
-text-align:right;
-                ">
-                  Quantity
-</th>
-
-<th style="
-text-align:right;
-                ">
-                  Gross Value
-</th>
-
-</tr>
-
-</thead>
-
-<tbody>
-              ${poleRows}
-</tbody>
-
-</table>
-
-</div>
-
-<div style="
-          font-size:10px;
-          color:#777;
-          margin-top:5px;
-        ">
-          Pole-type value is based on the recorded
-          line value before any overall delivery discount.
-          Customer revenue above uses the final sale value.
-</div>
-
-</div>
-
-
-<!-- PURCHASE HISTORY -->
-
-<div>
-
-<div style="
-          font-size:14px;
-font-weight:bold;
-          color:#0b5d3b;
-          margin-bottom:8px;
-        ">
-          Purchase History
-</div>
-
-
-<div style="
-overflow:auto;
-          border:1px solid #e1e7e3;
-          border-radius:8px;
-        ">
-
-<table style="
-            width:100%;
-            min-width:800px;
-border-collapse:collapse;
-          ">
-
-<thead>
-
-<tr style="
-                background:#eaf5ee;
-text-align:left;
-              ">
-
-<th>Date</th>
-<th>Delivery No.</th>
-<th>Details</th>
-
-<th style="
-text-align:right;
-                ">
-                  Poles
-</th>
-
-<th style="
-text-align:right;
-                ">
-                  Revenue
-</th>
-
-</tr>
-
-</thead>
-
-<tbody>
-              ${historyRows}
-</tbody>
-
-</table>
-
-</div>
-
-</div>
-
-    `;
-
-
-    /*
-     * Clean table alignment.
-     */
-box.querySelectorAll(
-      "th,td"
-    ).forEach(cell => {
-
-cell.style.padding =
-        "9px";
-
-cell.style.borderBottom =
-        "1px solid #eee";
-
-cell.style.verticalAlign =
-        "middle";
-
-    });
-
-
-modal.appendChild(
-      box
-    );
-
-
-document.body.appendChild(
-      modal
-    );
-
-
-box.querySelector(
-      "#afCloseCustomerHistorySummary"
-    ).onclick =
-      () =>modal.remove();
-
-
-    /*
-     * Clicking dark background closes modal.
-     */
-modal.addEventListener(
-      "click",
-      event => {
-
-        if (
-event.target === modal
-        ) {
-
-modal.remove();
-
-        }
-
-      }
-    );
-
-  }
-
-
-  /* =====================================================
-     ADD HISTORY BUTTON TO CUSTOMER LIST
-     ===================================================== */
-
-  function afEnhanceCustomerList() {
-
-    /*
-     * Current Customer List may use either
-     * of these IDs depending on which existing
-     * Sales & Customers block opened it.
-     */
-const modal =
-document.getElementById(
-        "afCustomerList"
-      ) ||
-
-document.getElementById(
-        "afCustomerListModal"
-      );
-
-
-    if (!modal) return;
-
-
-const rows =
-Array.from(
-modal.querySelectorAll(
-          "tbody tr"
-        )
-      );
-
-
-const customers =
-afReadArray(
-        CUSTOMER_KEY
-      )
-        .filter(
-          customer =>
-            String(
-customer.status ||
-              "ACTIVE"
-            ).toUpperCase() !==
-            "DELETED"
-        );
-
-
-rows.forEach(
-      (row, index) => {
-
-const cells =
-row.querySelectorAll(
-            "td"
-          );
-
-
-        /*
-         * Ignore empty-table row.
-         */
-        if (cells.length< 7) {
-          return;
-        }
-
-
-const customer =
-          customers[index];
-
-
-        if (!customer) {
-          return;
-        }
-
-
-        /*
-         * Find Action cell.
-         */
-        let actionCell =
-row.querySelector(
-            "[data-af-customer-action-cell]"
-          );
-
-
-        if (!actionCell) {
-
-actionCell =
-            cells[
-cells.length - 1
-            ];
-
-        }
-
-
-        if (
-actionCell.querySelector(
-            "[data-af-customer-history]"
-          )
-        ) {
-          return;
-        }
-
-
-const button =
-document.createElement(
-            "button"
-          );
-
-
-button.type =
-          "button";
-
-
-button.textContent =
-          "History";
-
-
-button.dataset
-          .afCustomerHistory =
-customer.id;
-
-
-button.style.cssText = `
-          margin-left:6px;
-          border:0;
-          background:#1976d2;
-color:white;
-          padding:7px 11px;
-          border-radius:6px;
-          font-size:11px;
-font-weight:bold;
-cursor:pointer;
-        `;
-
-
-button.onclick =
-          function () {
-
-afOpenCustomerHistory(
-customer.id
-            );
-
-          };
-
-
-actionCell.appendChild(
-          button
-        );
-
-      }
-    );
-
-  }
-
-
-  /* =====================================================
-     WATCH FOR CUSTOMER LIST
-     ===================================================== */
-
-  let timer = null;
-
-
-  new MutationObserver(
-    function () {
-
-clearTimeout(
-        timer
-      );
-
-
-      timer =
-setTimeout(
-afEnhanceCustomerList,
-          80
-        );
-
-    }
-  ).observe(
-document.body,
-    {
-childList:true,
-subtree:true
-    }
-  );
-
-
-setTimeout(
-afEnhanceCustomerList,
-    200
-  );
-
-
-  /*
-   * Expose for later use.
-   */
-window.afOpenCustomerHistory =
-afOpenCustomerHistory;
-
-
-console.log(
-    "A&F Customer History & Summary connected."
-  );
-
-})();
-
-/* =========================================================
-   A&F CUSTOMER HISTORY BUTTON - CONNECTION FIX
-   Adds History directly beside existing Edit button
-   ========================================================= */
-
-(function () {
-  "use strict";
-
-  if (window.__afCustomerHistoryButtonFixInstalled) return;
-  window.__afCustomerHistoryButtonFixInstalled = true;
-
-
-  function readCustomers() {
-
-    try {
-
-const data =
-JSON.parse(
-localStorage.getItem("afCustomers") || "[]"
-        );
-
-      return Array.isArray(data)
-        ? data.filter(
-            customer =>
-              String(
-customer.status || "ACTIVE"
-              ).toUpperCase() !== "DELETED"
-          )
-        : [];
-
-    } catch (e) {
-
-      return [];
-
-    }
-
-  }
-
-
-  function connectHistoryButtons() {
-
-    /*
-     * Find visible customer-list tables.
-     * We deliberately do not depend on one modal ID.
-     */
-const tables =
-Array.from(
-document.querySelectorAll("table")
-      );
-
-
-tables.forEach(table => {
-
-const headings =
-Array.from(
-table.querySelectorAll("th")
-        )
-          .map(th =>
-            String(
-th.textContent || ""
-            )
-              .trim()
-              .toLowerCase()
-          );
-
-
-      /*
-       * Only work on the Customer List table.
-       */
-const isCustomerTable =
-headings.includes("name") &&
-headings.includes("phone") &&
-headings.includes("sales") &&
-headings.includes("paid") &&
-headings.includes("balance") &&
-headings.includes("action");
-
-
-      if (!isCustomerTable) {
-        return;
-      }
-
-
-const customers =
-readCustomers();
-
-
-const rows =
-Array.from(
-table.querySelectorAll("tbody tr")
-        );
-
-
-rows.forEach(
-        (row, index) => {
-
-const cells =
-Array.from(
-row.querySelectorAll("td")
-            );
-
-
-          if (cells.length< 7) {
-            return;
-          }
-
-
-const customer =
-            customers[index];
-
-
-          if (!customer) {
-            return;
-          }
-
-
-const actionCell =
-            cells[
-cells.length - 1
-            ];
-
-
-          /*
-           * Don't add twice.
-           */
-          if (
-actionCell.querySelector(
-              "[data-af-history-fix]"
-            )
-          ) {
-            return;
-          }
-
-
-const button =
-document.createElement(
-              "button"
-            );
-
-
-button.type =
-            "button";
-
-
-button.textContent =
-            "History";
-
-
-button.dataset
-            .afHistoryFix =
-            String(
-customer.id || ""
-            );
-
-
-button.style.cssText = `
-            border:0;
-            background:#1976d2;
-color:white;
-            padding:7px 10px;
-            border-radius:6px;
-            font-size:11px;
-font-weight:bold;
-cursor:pointer;
-            margin-left:6px;
-          `;
-
-
-button.onclick =
-            function () {
-
-              if (
-typeof window.afOpenCustomerHistory ===
-                "function"
-              ) {
-
-window.afOpenCustomerHistory(
-customer.id
-                );
-
-              } else {
-
-                alert(
-                  "Customer History function could not be found."
-                );
-
-              }
-
-            };
-
-
-actionCell.appendChild(
-            button
-          );
-
-        }
-      );
-
-    });
-
-  }
-
-
-  /*
-   * Customer List is created dynamically,
-   * so watch for it opening.
-   */
-  let timer;
-
-
-const observer =
-    new MutationObserver(
-      function () {
-
-clearTimeout(timer);
-
-        timer =
-setTimeout(
-connectHistoryButtons,
-            60
-          );
-
-      }
-    );
-
-
-observer.observe(
-document.body,
-    {
-childList:true,
-subtree:true
-    }
-  );
-
-
-  /*
-   * Initial check.
-   */
-setTimeout(
-connectHistoryButtons,
-    200
-  );
-
-
-window.connectAFCustomerHistoryButtons =
-connectHistoryButtons;
-
-
-console.log(
-    "A&F Customer History button fix connected."
-  );
-
-})();
-
-/* =========================================================
-   A&F CUSTOMER HISTORY - PAYMENT HISTORY
-   Adds payment transactions below Purchase History
-
-   REPORTING ONLY
-   - Does NOT create payments
-   - Does NOT change balances
-   - Does NOT affect stock
-   - Does NOT affect sales
-   ========================================================= */
-
-(function () {
-  "use strict";
-
-  if (window.__afCustomerPaymentHistoryInstalled) return;
-  window.__afCustomerPaymentHistoryInstalled = true;
-
-
-  /* ---------------------------------------------------------
-     Preserve existing working Customer History function
-     --------------------------------------------------------- */
-
-const originalCustomerHistory =
-window.afOpenCustomerHistory;
-
-
-  if (typeof originalCustomerHistory !== "function") {
-
-console.warn(
-      "A&F Payment History: Customer History function not found."
-    );
-
-    return;
-  }
-
-
-  /* ---------------------------------------------------------
-     HELPERS
-     --------------------------------------------------------- */
-
-  function readArray(key) {
-
-    try {
-
-const data =
-JSON.parse(
-localStorage.getItem(key) || "[]"
-        );
-
-      return Array.isArray(data)
-        ? data
-        : [];
-
-    } catch (e) {
-
-      return [];
-
-    }
-
-  }
-
-
-  function esc(value) {
-
-    return String(value ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-
-  }
-
-
-  function money(value) {
-
-    return (
-      "UGX " +
-Math.round(
-        Number(value) || 0
-      ).toLocaleString()
-    );
-
-  }
-
-
-  function formatDate(value) {
-
-    if (!value) return "—";
-
-const parts =
-      String(value).split("-");
-
-    if (parts.length === 3) {
-
-      return (
-        parts[2] + "/" +
-        parts[1] + "/" +
-        parts[0]
-      );
-
-    }
-
-    return String(value);
-
-  }
-
-
-  function sameCustomer(customer, record) {
-
-    /*
-     * First preference:
-     * exact customer ID.
-     */
-
-    if (
-customer.id&&
-record.customerId&&
-      String(customer.id) ===
-      String(record.customerId)
-    ) {
-
-      return true;
-
-    }
-
-
-    /*
-     * Compatibility with older records:
-     * compare phone.
-     */
-
-const customerPhone =
-      String(
-customer.phone || ""
-      )
-        .replace(/\s+/g, "");
-
-
-const recordPhone =
-      String(
-record.customerPhone || ""
-      )
-        .replace(/\s+/g, "");
-
-
-    if (
-customerPhone&&
-recordPhone&&
-customerPhone === recordPhone
-    ) {
-
-      return true;
-
-    }
-
-
-    /*
-     * Final compatibility:
-     * compare customer name.
-     */
-
-const customerName =
-      String(
-customer.name || ""
-      )
-        .trim()
-        .toLowerCase();
-
-
-const recordName =
-      String(
-record.customerName || ""
-      )
-        .trim()
-        .toLowerCase();
-
-
-    return (
-customerName&&
-recordName&&
-customerName === recordName
-    );
-
-  }
-
-
-  function saleValue(record) {
-
-    return Number(
-record.finalSaleTotal ??
-record.netSaleTotal ??
-record.saleAmount ??
-record.grossSaleTotal ??
-      0
-    ) || 0;
-
-  }
-
-
-  /* ---------------------------------------------------------
-     ADD PAYMENT HISTORY
-     --------------------------------------------------------- */
-
-  function addPaymentHistory(customerId) {
-
-const modal =
-document.getElementById(
-        "afCustomerHistorySummaryModal"
-      );
-
-
-    if (!modal) return;
-
-
-    /*
-     * Don't add twice.
-     */
-
-    if (
-modal.querySelector(
-        "#afCustomerPaymentHistorySection"
-      )
-    ) {
-
-      return;
-
-    }
-
-
-const customers =
-readArray(
-        "afCustomers"
-      );
-
-
-const customer =
-customers.find(
-        item =>
-          String(item.id) ===
-          String(customerId)
-      );
-
-
-    if (!customer) return;
-
-
-    /*
-     * CUSTOMER SALES
-     */
-
-const sales =
-readArray(
-        "afDeliveryRecords"
-      )
-        .filter(record => {
-
-          if (
-            String(
-record.status || ""
-            ).toUpperCase() ===
-            "CANCELLED"
-          ) {
-
-            return false;
-
-          }
-
-
-const deliveryType =
-            String(
-record.deliveryType || ""
-            ).toLowerCase();
-
-
-          if (
-deliveryType&&
-deliveryType !== "poles"
-          ) {
-
-            return false;
-
-          }
-
-
-          return sameCustomer(
-            customer,
-            record
-          );
-
-        });
-
-
-    /*
-     * CUSTOMER PAYMENTS
-     */
-
-const payments =
-readArray(
-        "afCustomerPayments"
-      )
-        .filter(
-          payment =>
-sameCustomer(
-              customer,
-              payment
-            )
-        )
-        .sort((a, b) => {
-
-const dateCompare =
-            String(a.date || "")
-              .localeCompare(
-                String(b.date || "")
-              );
-
-
-          if (dateCompare !== 0) {
-            return dateCompare;
-          }
-
-
-          return String(
-a.recordedAt || ""
-          ).localeCompare(
-            String(
-b.recordedAt || ""
-            )
-          );
-
-        });
-
-
-    /*
-     * Calculate running balance.
-
-     * For each payment:
-     * Sales recorded up to that date
-     * MINUS
-     * Payments recorded up to that payment.
-     */
-
-    let cumulativePayments = 0;
-
-
-const paymentRows =
-payments.length
-
-        ? payments.map(payment => {
-
-cumulativePayments +=
-              Number(
-payment.amount
-              ) || 0;
-
-
-const salesToDate =
-              sales
-                .filter(sale => {
-
-                  if (
-                    !sale.date ||
-                    !payment.date
-                  ) {
-
-                    return true;
-
-                  }
-
-
-                  return (
-                    String(sale.date) <=
-                    String(payment.date)
-                  );
-
-                })
-                .reduce(
-                  (sum, sale) =>
-                    sum +
-saleValue(sale),
-                  0
-                );
-
-
-const runningBalance =
-salesToDate -
-cumulativePayments;
-
-
-const balanceText =
-runningBalance< 0
-
-                ? "Credit " +
-                  money(
-Math.abs(
-runningBalance
-                    )
-                  )
-
-                : money(
-runningBalance
-                  );
-
-
-const balanceColor =
-runningBalance> 0
-                ? "#b42318"
-                : "#0b5d3b";
-
-
-            return `
-
-<tr>
-
-<td>
-                  ${formatDate(
-payment.date
-                  )}
-</td>
-
-
-<td>
-                  ${esc(
-payment.paymentNo ||
-                    "—"
-                  )}
-</td>
-
-
-<td>
-                  ${esc(
-payment.method ||
-                    "—"
-                  )}
-</td>
-
-
-<td>
-                  ${esc(
-payment.reference ||
-                    "—"
-                  )}
-</td>
-
-
-<td style="
-text-align:right;
-font-weight:bold;
-                ">
-                  ${money(
-payment.amount
-                  )}
-</td>
-
-
-<td style="
-text-align:right;
-font-weight:bold;
-                  color:${balanceColor};
-                ">
-                  ${balanceText}
-</td>
-
-</tr>
-
-            `;
-
-          }).join("")
-
-        : `
-
-<tr>
-
-<td
-colspan="6"
-              style="
-text-align:center;
-                color:#777;
-                padding:18px;
-              "
->
-              No customer payments recorded.
-</td>
-
-</tr>
-
-        `;
-
-
-    /*
-     * Total payment footer.
-     */
-
-const totalPaid =
-payments.reduce(
-        (sum, payment) =>
-          sum +
-          (
-            Number(
-payment.amount
-            ) || 0
-          ),
-        0
-      );
-
-
-    /*
-     * Create Payment History section.
-     */
-
-const section =
-document.createElement(
-        "div"
-      );
-
-
-section.id =
-      "afCustomerPaymentHistorySection";
-
-
-section.style.cssText = `
-      margin-top:20px;
-    `;
-
-
-section.innerHTML = `
-
-<div style="
-display:flex;
-justify-content:space-between;
-align-items:center;
-        gap:10px;
-flex-wrap:wrap;
-        margin-bottom:8px;
-      ">
-
-<div style="
-          font-size:14px;
-font-weight:bold;
-          color:#0b5d3b;
-        ">
-💳 Payment History
-</div>
-
-
-<div style="
-          font-size:12px;
-          color:#555;
-        ">
-          Total Paid:
-<b style="
-            color:#0b5d3b;
-          ">
-            ${money(totalPaid)}
-</b>
-</div>
-
-</div>
-
-
-<div style="
-overflow:auto;
-        border:1px solid #e1e7e3;
-        border-radius:8px;
-      ">
-
-<table style="
-          width:100%;
-          min-width:850px;
-border-collapse:collapse;
-        ">
-
-<thead>
-
-<tr style="
-              background:#eaf5ee;
-            ">
-
-<th>
-                Date
-</th>
-
-<th>
-                Receipt No.
-</th>
-
-<th>
-                Payment Method
-</th>
-
-<th>
-                Reference
-</th>
-
-<th style="
-text-align:right;
-              ">
-                Amount
-</th>
-
-<th style="
-text-align:right;
-              ">
-                Running Balance
-</th>
-
-</tr>
-
-</thead>
-
-
-<tbody>
-            ${paymentRows}
-</tbody>
-
-</table>
-
-</div>
-
-
-<div style="
-        margin-top:6px;
-        font-size:10px;
-        color:#777;
-      ">
-        Running Balance shows the customer's
-        outstanding account balance immediately
-        after each recorded payment.
-</div>
-
-    `;
-
-
-    /*
-     * Clean table formatting.
-     */
-
-    section
-      .querySelectorAll(
-        "th, td"
-      )
-      .forEach(cell => {
-
-cell.style.padding =
-          "9px";
-
-cell.style.borderBottom =
-          "1px solid #eee";
-
-      });
-
-
-    /*
-     * Add it at the bottom of the
-     * existing Customer History window.
-     */
-
-const historyBox =
-modal.firstElementChild;
-
-
-    if (historyBox) {
-
-historyBox.appendChild(
-        section
-      );
-
-    }
-
-  }
-
-
-  /* ---------------------------------------------------------
-     WRAP EXISTING CUSTOMER HISTORY
-     --------------------------------------------------------- */
-
-window.afOpenCustomerHistory =
-    function (customerId) {
-
-      /*
-       * Open the existing working
-       * Customer History normally.
-       */
-
-originalCustomerHistory(
-customerId
-      );
-
-
-      /*
-       * Then add Payment History.
-       */
-
-setTimeout(
-        function () {
-
-addPaymentHistory(
-customerId
-          );
-
-        },
-        80
-      );
-
-    };
-
-
-console.log(
-    "A&F Customer Payment History connected."
-  );
-
-})();
-
-/* =========================================================
    A&F CUSTOMER ACCOUNT - APPROVED DESIGN
    Final Customer History presentation
 
@@ -78192,3 +75849,1057 @@ transaction.reference
 
 <td>
                     ${esc(
+transaction.details
+                    )}
+</td>
+
+
+<td style="
+text-align:right;
+                  ">
+                    ${
+transaction.debit
+                        ? number(
+transaction.debit
+                          )
+                        : "—"
+                    }
+</td>
+
+
+<td style="
+text-align:right;
+                  ">
+                    ${
+transaction.credit
+                        ? number(
+transaction.credit
+                          )
+                        : "—"
+                    }
+</td>
+
+
+<td style="
+text-align:right;
+                    font-weight:800;
+                    color:#142342;
+                  ">
+                    ${number(
+runningBalance
+                    )}
+</td>
+
+</tr>
+
+              `;
+
+            })
+            .join("")
+
+        : `
+
+<tr>
+
+<td
+colspan="7"
+              style="
+text-align:center;
+                color:#777;
+                padding:18px;
+              "
+>
+              No customer transactions recorded.
+</td>
+
+</tr>
+
+        `;
+
+
+    /* ===================================================
+       REMOVE OLD HISTORY MODAL
+       =================================================== */
+
+const old =
+document.getElementById(
+        "afCustomerHistorySummaryModal"
+      );
+
+
+    if (old) {
+
+old.remove();
+
+    }
+
+
+    /* ===================================================
+       MODAL
+       =================================================== */
+
+const modal =
+document.createElement(
+        "div"
+      );
+
+
+modal.id =
+      "afCustomerHistorySummaryModal";
+
+
+modal.style.cssText = `
+
+position:fixed;
+      inset:0;
+      z-index:9999999 !important;
+
+      background:
+rgba(9,24,40,.72);
+
+display:flex;
+justify-content:center;
+align-items:center;
+
+      padding:14px;
+box-sizing:border-box;
+
+      font-family:
+        Arial,
+        Helvetica,
+        sans-serif;
+
+    `;
+
+
+const box =
+document.createElement(
+        "div"
+      );
+
+
+box.style.cssText = `
+
+width:min(1450px,98vw);
+      max-height:96vh;
+
+overflow:auto;
+
+      background:
+        #f8fbff;
+
+      border-radius:14px;
+
+      padding:20px;
+
+box-sizing:border-box;
+
+      box-shadow:
+        0 18px 60px
+rgba(0,0,0,.32);
+
+      color:#10213d;
+
+    `;
+
+
+box.innerHTML = `
+
+<!-- ===============================================
+           CUSTOMER HEADER
+           =============================================== -->
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:flex-start;
+        gap:15px;
+        margin-bottom:16px;
+      ">
+
+<div style="
+display:flex;
+align-items:center;
+          gap:14px;
+        ">
+
+<div style="
+            font-size:42px;
+            color:#0d477f;
+            line-height:1;
+          ">
+👤
+</div>
+
+
+<div>
+
+<div style="
+              font-size:27px;
+              font-weight:800;
+              color:#101d38;
+              margin-bottom:5px;
+            ">
+              ${esc(customer.name)}
+</div>
+
+
+<div style="
+              font-size:14px;
+              color:#243b61;
+            ">
+
+              Customer ID:
+<b>
+                ${esc(
+customer.customerNo ||
+customer.id ||
+                  "—"
+                )}
+</b>
+
+&nbsp; | &nbsp;
+
+              ${esc(
+customer.phone ||
+                "No phone"
+              )}
+
+&nbsp; | &nbsp;
+
+              ${esc(
+customer.location ||
+                "No location"
+              )}
+
+</div>
+
+</div>
+
+</div>
+
+
+<button
+          id="afApprovedCustomerClose"
+          type="button"
+          style="
+            border:0;
+            border-radius:7px;
+            padding:12px 17px;
+            background:#173c61;
+color:white;
+font-weight:bold;
+            font-size:14px;
+cursor:pointer;
+          "
+>
+✕ Close
+</button>
+
+</div>
+
+
+<!-- ===============================================
+           ACCOUNT SUMMARY
+           =============================================== -->
+
+<section style="
+        border:1px solid #aad4f4;
+        border-radius:9px;
+overflow:hidden;
+        margin-bottom:15px;
+background:white;
+      ">
+
+<div style="
+          padding:9px 14px;
+          background:
+            linear-gradient(
+              90deg,
+              #dcefff,
+              #eef8ff
+            );
+          color:#123c70;
+          font-size:19px;
+          font-weight:800;
+        ">
+💼&nbsp; ACCOUNT SUMMARY
+</div>
+
+
+<div style="
+          padding:9px 12px;
+        ">
+
+<div style="
+display:grid;
+            grid-template-columns:
+              repeat(
+                5,
+minmax(150px,1fr)
+              );
+            gap:8px;
+          ">
+
+            ${summaryCard(
+              "🛒",
+              "Total Purchases",
+              number(totalPurchases) +
+              " Orders",
+              "#edf7ff",
+              "#102b55"
+            )}
+
+
+            ${summaryCard(
+              "📦",
+              "Total Poles Purchased",
+              number(totalPoles) +
+              " pcs",
+              "#ecf9f4",
+              "#102b38"
+            )}
+
+
+            ${summaryCard(
+              "📊",
+              "Total Sales Value",
+              money(totalSales),
+              "#eaf5ff",
+              "#123e7a"
+            )}
+
+
+            ${summaryCard(
+              "💳",
+              "Total Paid",
+              money(totalPaid),
+              "#e9f8f1",
+              "#0b5139"
+            )}
+
+
+            ${summaryCard(
+              "⚖️",
+              "Outstanding Balance",
+              money(balance),
+              "#fff0f1",
+              balance > 0
+                ? "#d71920"
+                : "#0b6b3a"
+            )}
+
+</div>
+
+
+<div style="
+display:grid;
+            grid-template-columns:
+              repeat(
+                2,
+minmax(180px,1fr)
+              );
+            gap:8px;
+            margin-top:8px;
+          ">
+
+<div style="
+              background:#f1f7fc;
+              border:1px solid #d5e4f1;
+              border-radius:8px;
+              padding:10px 14px;
+            ">
+
+<div style="
+                font-size:11px;
+                color:#26476d;
+              ">
+🏷️ Average Purchase
+</div>
+
+<div style="
+                margin-top:3px;
+                font-size:16px;
+                font-weight:800;
+              ">
+                ${money(
+averagePurchase
+                )}
+</div>
+
+</div>
+
+
+<div style="
+              background:#f1f7fc;
+              border:1px solid #d5e4f1;
+              border-radius:8px;
+              padding:10px 14px;
+            ">
+
+<div style="
+                font-size:11px;
+                color:#26476d;
+              ">
+📅 Last Purchase
+</div>
+
+<div style="
+                margin-top:3px;
+                font-size:16px;
+                font-weight:800;
+              ">
+                ${formatDate(
+lastPurchase
+                )}
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</section>
+
+
+<!-- ===============================================
+           ACCOUNT TRANSACTIONS
+           =============================================== -->
+
+<section style="
+        border:1px solid #b9dfd2;
+        border-radius:9px;
+overflow:hidden;
+        margin-bottom:15px;
+background:white;
+      ">
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:center;
+          gap:12px;
+flex-wrap:wrap;
+
+          padding:9px 14px;
+
+          background:
+            linear-gradient(
+              90deg,
+              #d9f1e8,
+              #effaf6
+            );
+        ">
+
+<div style="
+            color:#103e32;
+            font-size:19px;
+            font-weight:800;
+          ">
+📊&nbsp; ACCOUNT TRANSACTIONS
+</div>
+
+
+<div style="
+            font-size:12px;
+            color:#355b50;
+          ">
+            All purchases and payments for
+            this customer in date order.
+</div>
+
+</div>
+
+
+<div style="
+overflow:auto;
+          padding:7px 12px 11px;
+        ">
+
+<table
+            id="afApprovedCustomerTransactions"
+            style="
+              width:100%;
+              min-width:1000px;
+border-collapse:collapse;
+              font-size:12px;
+            "
+>
+
+<thead>
+
+<tr style="
+                background:#eaf2f9;
+                color:#153761;
+              ">
+
+<th>
+                  Date
+</th>
+
+<th>
+                  Transaction Type
+</th>
+
+<th>
+                  Reference No.
+</th>
+
+<th>
+                  Details
+</th>
+
+<th style="
+text-align:right;
+                ">
+                  Debit (UGX)
+</th>
+
+<th style="
+text-align:right;
+                ">
+                  Credit (UGX)
+</th>
+
+<th style="
+text-align:right;
+                ">
+                  Running Balance (UGX)
+</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+              ${transactionRows}
+</tbody>
+
+</table>
+
+</div>
+
+</section>
+
+
+<!-- ===============================================
+           POLE PURCHASE BREAKDOWN
+           =============================================== -->
+
+<section style="
+        border:1px solid #efd69a;
+        border-radius:9px;
+overflow:hidden;
+        margin-bottom:15px;
+background:white;
+      ">
+
+<div style="
+          padding:9px 14px;
+
+          background:
+            linear-gradient(
+              90deg,
+              #fff0c8,
+              #fff9e9
+            );
+
+          color:#24304a;
+          font-size:19px;
+          font-weight:800;
+        ">
+📦&nbsp; POLE PURCHASE BREAKDOWN
+</div>
+
+
+<div style="
+overflow:auto;
+          padding:7px 12px 8px;
+        ">
+
+<table
+            id="afApprovedPoleBreakdown"
+            style="
+              width:100%;
+              min-width:700px;
+border-collapse:collapse;
+              font-size:12px;
+            "
+>
+
+<thead>
+
+<tr style="
+                background:#eaf2f9;
+                color:#153761;
+              ">
+
+<th>
+                  Pole Type / Size
+</th>
+
+<th>
+                  Quantity
+</th>
+
+<th>
+                  Gross Value (UGX)
+</th>
+
+<th>
+                  Notes
+</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+              ${poleRows}
+</tbody>
+
+</table>
+
+
+<div style="
+            padding-top:7px;
+            font-size:10px;
+            color:#52657d;
+          ">
+            Pole type value is based on the
+            recorded line value before any
+            overall delivery discount.
+            Customer revenue above uses the
+            final sale value.
+</div>
+
+</div>
+
+</section>
+
+
+<!-- ===============================================
+           CUSTOMER DETAILS + ACTIONS
+           =============================================== -->
+
+<div style="
+display:grid;
+        grid-template-columns:
+minmax(300px,1fr)
+minmax(420px,1fr);
+        gap:12px;
+      ">
+
+<section style="
+          border:1px solid #cbddeb;
+          border-radius:9px;
+overflow:hidden;
+background:white;
+        ">
+
+<div style="
+            padding:8px 13px;
+            background:#edf5fb;
+            color:#153761;
+            font-size:16px;
+            font-weight:800;
+          ">
+👤&nbsp; CUSTOMER DETAILS
+</div>
+
+
+<div style="
+            padding:10px 14px;
+display:grid;
+            grid-template-columns:
+              95px 1fr;
+            row-gap:6px;
+            font-size:13px;
+          ">
+
+<div>
+              Name:
+</div>
+
+<div>
+<b>
+                ${esc(customer.name)}
+</b>
+</div>
+
+
+<div>
+              Phone:
+</div>
+
+<div>
+              ${esc(
+customer.phone ||
+                "—"
+              )}
+</div>
+
+
+<div>
+              Location:
+</div>
+
+<div>
+              ${esc(
+customer.location ||
+                "—"
+              )}
+</div>
+
+</div>
+
+</section>
+
+
+<section style="
+          border:1px solid #cbddeb;
+          border-radius:9px;
+background:white;
+
+display:flex;
+justify-content:center;
+align-items:center;
+          gap:10px;
+
+          padding:15px;
+box-sizing:border-box;
+
+flex-wrap:wrap;
+        ">
+
+<button
+            id="afApprovedPrintStatement"
+            type="button"
+            style="
+              border:1px solid #b8cadb;
+background:white;
+              color:#17243e;
+              border-radius:7px;
+              padding:12px 18px;
+font-weight:bold;
+cursor:pointer;
+            "
+>
+🖨️&nbsp; Print Statement
+</button>
+
+
+<button
+            id="afApprovedViewPurchases"
+            type="button"
+            style="
+              border:1px solid #a7d1f3;
+              background:#d9efff;
+              color:#12569c;
+              border-radius:7px;
+              padding:12px 18px;
+font-weight:bold;
+cursor:pointer;
+            "
+>
+📄&nbsp; View All Purchases
+</button>
+
+
+<button
+            id="afApprovedRecordPayment"
+            type="button"
+            style="
+              border:0;
+              background:#07824f;
+color:white;
+              border-radius:7px;
+              padding:13px 19px;
+font-weight:bold;
+cursor:pointer;
+            "
+>
+💳&nbsp; Record Payment
+</button>
+
+</section>
+
+</div>
+
+    `;
+
+
+    /* ===================================================
+       TABLE FORMATTING
+       =================================================== */
+
+box.querySelectorAll(
+      "th, td"
+    ).forEach(cell => {
+
+cell.style.padding =
+        "9px 10px";
+
+cell.style.border =
+        "1px solid #d9e4ed";
+
+cell.style.verticalAlign =
+        "middle";
+
+    });
+
+
+box.querySelectorAll(
+      "th"
+    ).forEach(cell => {
+
+cell.style.fontWeight =
+        "800";
+
+    });
+
+
+modal.appendChild(
+      box
+    );
+
+
+document.body.appendChild(
+      modal
+    );
+
+
+    /* ===================================================
+       CLOSE
+       =================================================== */
+
+box.querySelector(
+      "#afApprovedCustomerClose"
+    ).onclick =
+      () =>modal.remove();
+
+
+modal.addEventListener(
+      "click",
+      event => {
+
+        if (
+event.target === modal
+        ) {
+
+modal.remove();
+
+        }
+
+      }
+    );
+
+
+    /* ===================================================
+       VIEW ALL PURCHASES
+       Scrolls directly to the combined account ledger.
+       =================================================== */
+
+box.querySelector(
+      "#afApprovedViewPurchases"
+    ).onclick =
+      function () {
+
+box.querySelector(
+          "#afApprovedCustomerTransactions"
+        )
+          ?.scrollIntoView({
+behavior:"smooth",
+block:"center"
+          });
+
+      };
+
+
+    /* ===================================================
+       PRINT STATEMENT
+
+       For now this prints this approved account screen.
+       =================================================== */
+
+box.querySelector(
+      "#afApprovedPrintStatement"
+    ).onclick =
+      function () {
+
+const printWindow =
+window.open(
+            "",
+            "_blank"
+          );
+
+
+        if (!printWindow) {
+
+          alert(
+            "Please allow pop-ups to print the customer statement."
+          );
+
+          return;
+
+        }
+
+
+printWindow.document.write(`
+
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<title>
+              Customer Statement -
+              ${esc(customer.name)}
+</title>
+
+<style>
+
+              body {
+                font-family:
+                  Arial,
+                  Helvetica,
+                  sans-serif;
+
+                margin:20px;
+                color:#10213d;
+              }
+
+              button {
+display:none !important;
+              }
+
+              table {
+page-break-inside:auto;
+              }
+
+tr {
+page-break-inside:avoid;
+              }
+
+</style>
+
+</head>
+
+<body>
+
+            ${box.innerHTML}
+
+</body>
+
+</html>
+
+        `);
+
+
+printWindow.document.close();
+
+
+setTimeout(
+          function () {
+
+printWindow.focus();
+printWindow.print();
+
+          },
+          300
+        );
+
+      };
+
+
+    /* ===================================================
+       RECORD PAYMENT
+
+       Connect to the EXISTING Record Payment button
+       in Sales & Customers rather than creating a
+       second payment system.
+       =================================================== */
+
+box.querySelector(
+      "#afApprovedRecordPayment"
+    ).onclick =
+      function () {
+
+const buttons =
+Array.from(
+document.querySelectorAll(
+              "button"
+            )
+          );
+
+
+const existingPaymentButton =
+buttons.find(button => {
+
+            if (
+button.closest(
+                "#afCustomerHistorySummaryModal"
+              )
+            ) {
+
+              return false;
+
+            }
+
+
+const text =
+              String(
+button.textContent || ""
+              )
+                .trim()
+                .toLowerCase();
+
+
+            return (
+              text ===
+              "record payment" ||
+text.includes(
+                "customer payment"
+              )
+            );
+
+          });
+
+
+        if (existingPaymentButton) {
+
+modal.remove();
+
+existingPaymentButton.click();
+
+          return;
+
+        }
+
+
+        alert(
+          "Open Sales & Customers and choose Record Payment to record this customer's payment."
+        );
+
+      };
+
+  }
+
+
+  /* =====================================================
+     MAKE THIS THE FINAL CUSTOMER HISTORY FUNCTION
+     ===================================================== */
+
+window.afOpenCustomerHistory =
+openApprovedCustomerAccount;
+
+
+console.log(
+    "A&F approved Customer Account design connected."
+  );
+
+})();
