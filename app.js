@@ -76507,9 +76507,10 @@ border-collapse:collapse;
            CUSTOMER DETAILS + ACTIONS
            =============================================== -->
 
-<div style="
+<div id="
+afCustomerDetailsActions" style="
 display:grid;
-        grid-template-columns:
+grid-template-columns:       
 minmax(300px,1fr)
 minmax(420px,1fr);
         gap:12px;
