@@ -58627,10 +58627,9 @@ display:none;
 <body>
 
 
-<h1>
-A&F Wekavera Ltd
-</h1>
-
+$
+{window.afSmartPrintHeader ?
+window.afSmartPrintHeader() : ""}
 <h2>
 Waste2Wealth Solutions
 </h2>
@@ -58796,6 +58795,9 @@ Print Receipt
 
 </div>
 
+$
+{window.afSmartPrintFooter ?
+window.afSmartPrintFooter() : ""}
 
 </body>
 
