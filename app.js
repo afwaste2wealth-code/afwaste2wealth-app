@@ -71265,6 +71265,9 @@ console.log(
   "A&F Company Profile / Print Settings connected successfully."
 );
 
+} catch (error) {
+console.error("A&F Company Profile setup error:", error);
+}
 
 })();
 
