@@ -71269,7 +71269,7 @@ console.log(
 console.error("A&F Company Profile setup error:", error);
 }
 
-})();
+
 
 /* =========================================================
    A&F SUPPLIER MANAGEMENT MODULE
