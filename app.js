@@ -71082,20 +71082,25 @@ w.focus();
 
 
 /* =========================================================
-   APPLY PROFILE TO SMART HEADER ALREADY CREATED
-   Used especially by Company Letters
+   A&F FINAL COMPANY PROFILE PRINT CONNECTION
+   One header + one footer for all print popups
    ========================================================= */
 
 function applyProfileToPopup(popup) {
+
     try {
-        if (!popup || popup.closed || !popup.document) return;
+
+        if (
+            !popup ||
+popup.closed ||
+            !popup.document ||
+            !popup.document.body
+        ) {
+            return;
+        }
 
 const doc = popup.document;
 const profile = getProfile();
-
-        // Prevent this global profile from being applied twice
-        if (doc.documentElement.dataset.afProfileApplied === "yes") return;
-doc.documentElement.dataset.afProfileApplied = "yes";
 
 const title = String(
 doc.querySelector(".af-smart-title")?.textContent ||
@@ -71103,172 +71108,245 @@ doc.title ||
             ""
         ).trim();
 
-        // -----------------------------
-        // HEADER
-        // -----------------------------
-        let header = doc.querySelector(".af-smart-header");
 
-        if (!header &&doc.body) {
-const holder = doc.createElement("div");
-holder.innerHTML = profileHeader(title);
+        /* -----------------------------------------
+           HEADER
+           ----------------------------------------- */
 
-            header = holder.firstElementChild;
+        let headers =
+doc.querySelectorAll(".af-smart-header");
 
-            if (header) {
-doc.body.insertBefore(header, doc.body.firstChild);
+        /* Keep only one header */
+        if (headers.length> 1) {
+
+            for (let i = 1; i<headers.length; i++) {
+                headers[i].remove();
             }
+
         }
 
+        let header =
+doc.querySelector(".af-smart-header");
+
+        /* Add header if document does not have one */
+        if (!header) {
+
+const holder =
+doc.createElement("div");
+
+holder.innerHTML =
+profileHeader(title);
+
+            header =
+holder.firstElementChild;
+
+            if (header) {
+
+doc.body.insertBefore(
+                    header,
+doc.body.firstChild
+                );
+
+            }
+
+        }
+
+
+        /* Update header from Company Profile */
         if (header) {
-const company = header.querySelector(".af-smart-company");
-const trading = header.querySelector(".af-smart-tag");
-const motto = header.querySelector(".af-smart-motto");
-const contact = header.querySelector(".af-smart-contact");
+
+const company =
+header.querySelector(".af-smart-company");
+
+const trading =
+header.querySelector(".af-smart-tag");
+
+const motto =
+header.querySelector(".af-smart-motto");
+
+const contact =
+header.querySelector(".af-smart-contact");
+
 
             if (company) {
-company.textContent = profile.companyName || "";
+company.textContent =
+profile.companyName || "";
             }
 
             if (trading) {
-trading.textContent = profile.tradingName || "";
+trading.textContent =
+profile.tradingName || "";
             }
 
             if (motto) {
-motto.textContent = profile.motto || "";
+motto.textContent =
+profile.motto || "";
             }
 
             if (contact) {
-contact.innerHTML = contactRows(profile, title);
+contact.innerHTML =
+contactRows(profile, title);
             }
+
         }
 
-        // -----------------------------
-        // FOOTER
-        // -----------------------------
-        let footers = doc.querySelectorAll(".af-smart-footer");
 
-        // Remove duplicate global footers if already present
+        /* -----------------------------------------
+           FOOTER
+           ----------------------------------------- */
+
+        let footers =
+doc.querySelectorAll(".af-smart-footer");
+
+        /* Keep only one footer */
         if (footers.length> 1) {
+
             for (let i = 1; i<footers.length; i++) {
                 footers[i].remove();
             }
+
         }
 
-        let footer = doc.querySelector(".af-smart-footer");
+        let footer =
+doc.querySelector(".af-smart-footer");
 
-        if (!footer &&doc.body) {
-const holder = doc.createElement("div");
-holder.innerHTML = profileFooter(title);
 
-            footer = holder.firstElementChild;
+        /* Add footer if document does not have one */
+        if (!footer) {
+
+const holder =
+doc.createElement("div");
+
+holder.innerHTML =
+profileFooter(title);
+
+            footer =
+holder.firstElementChild;
+
+            if (footer) {
+
+const printControl =
+doc.querySelector(".print-button") ||
+doc.querySelector(".print") ||
+doc.querySelector(".no-print");
+
+                if (printControl) {
+
+printControl.insertAdjacentElement(
+                        "beforebegin",
+                        footer
+                    );
+
+                } else {
+
+doc.body.appendChild(
+                        footer
+                    );
+
+                }
+
+            }
+
+        }
+
+
+        /* Mark document as successfully branded */
+doc.documentElement.dataset.afProfileApplied =
+            "yes";
+
+
+    } catch (error) {
+
+console.error(
+            "A&F Company Profile print connection error:",
+            error
+        );
+
+    }
 
 }
 
 
 /* =========================================================
    FINAL PRINT HOOK
-   Runs after existing global branding.
+   Runs after the existing global Smart Print branding
    ========================================================= */
 
-if (
-!window.__afCompanyProfilePrintHookInstalled
-) {
+if (!window.__afCompanyProfilePrintHookInstalled) {
 
-
-window.__afCompanyProfilePrintHookInstalled =
-true;
-
+    window.__afCompanyProfilePrintHookInstalled =
+        true;
 
 const previousWindowOpen =
 window.open;
 
-
 window.open =
-function() {
-
+        function () {
 
 const popup =
 previousWindowOpen.apply(
-    this,
-    arguments
-  );
+                    this,
+                    arguments
+                );
 
+            if (!popup) {
+                return popup;
+            }
 
-  if (
-    !popup
-  ) {
-
-    return popup;
-
-  }
-
-
-  try {
-
+            try {
 
 const popupDocument =
 popup.document;
 
-
 const previousClose =
 popupDocument.close.bind(
 popupDocument
-      );
-
+                    );
 
 popupDocument.close =
-function() {
-
+                    function () {
 
 const result =
 previousClose();
 
-
 setTimeout(
-  () => {
-
+                            function () {
 
 applyProfileToPopup(
-          popup
-        );
+                                    popup
+                                );
 
+                            },
+                            80
+                        );
 
-  },
-  50
-);
+                        return result;
 
+                    };
 
-      return result;
-
-    };
-
-
-  } catch (error) {
-
+            } catch (error) {
 
 console.warn(
-      "A&F Company Profile print hook could not attach:",
-      error
-    );
+                    "A&F print hook could not attach:",
+                    error
+                );
 
-  }
+            }
 
+            return popup;
 
-  return popup;
-
-};
+        };
 
 }
 
 
 console.log(
-  "A&F Company Profile / Print Settings connected successfully."
+    "A&F Company Profile / Print Settings connected successfully."
 );
 
-} catch (error) {
-console.error("A&F Company Profile setup error:", error);
-}
 
+/* Close connectAFCompanyProfileSettings */
+})();
 
 
 /* =========================================================
