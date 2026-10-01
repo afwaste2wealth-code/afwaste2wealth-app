@@ -58627,8 +58627,7 @@ display:none;
 <body>
 
 
-$
-{window.afSmartPrintHeader ?
+${window.afSmartPrintHeader ?
 window.afSmartPrintHeader() : ""}
 <h2>
 Waste2Wealth Solutions
@@ -58795,8 +58794,7 @@ Print Receipt
 
 </div>
 
-$
-{window.afSmartPrintFooter ?
+${window.afSmartPrintFooter ?
 window.afSmartPrintFooter() : ""}
 
 </body>
