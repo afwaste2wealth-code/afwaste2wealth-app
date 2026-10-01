@@ -76541,24 +76541,33 @@ background:white;
 
 <div style="
 display:grid;
-        grid-template-columns:85px minmax(0,1fr);
+    grid-template-columns:1.4fr 1fr 1.8fr;
+    gap:18px;
 align-items:start;
-        gap:7px 12px;
-    ">
+">
 
-<div>Name:</div>
-<div style="font-weight:700;">
+<div>
+<span style="color:#475569;">Name:</span>
+<strong style="margin-left:6px;">
             ${esc(customer.name || "-")}
+</strong>
 </div>
 
-<div>Phone:</div>
-<div style="font-weight:700; white-space:nowrap;">
+<div style="white-space:nowrap;">
+<span style="color:#475569;">Phone:</span>
+<strong style="margin-left:6px;">
             ${esc(customer.phone || "-")}
+</strong>
 </div>
 
-<div>Location:</div>
-<div style="font-weight:700; white-space:nowrap;">
+<div style="white-space:nowrap;">
+<span style="color:#475569;">Location:</span>
+<strong style="margin-left:6px;">
             ${esc(customer.location || "-")}
+</strong>
+</div>
+
+</div>
 </div>
 
 </div>
