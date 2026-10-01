@@ -76958,32 +76958,46 @@ section {
   max-width: 100% !important;
   overflow: visible !important;
 }
-/* CUSTOMER DETAILS - PRINT FIX */
+/* =========================================
+   CUSTOMER DETAILS - FINAL PRINT ALIGNMENT
+   ========================================= */
 
-section:last-of-type {
-  width: 100% !important;
-  max-width: 100% !important;
-}
-
-section:last-of-type div {
-  width: 100% !important;
-  max-width: 100% !important;
-}
-
-/* Customer detail rows */
-section:last-of-type p {
+#afCustomerDetailsActions {
   display: block !important;
   width: 100% !important;
-  margin: 3px 0 !important;
-  padding: 0 !important;
-  white-space: normal !important;
+  max-width: 100% !important;
 }
 
-/* Prevent customer information being squeezed into tiny columns */
-section:last-of-type span,
-section:last-of-type strong,
-section:last-of-type b {
-  display: inline !important;
+#afCustomerDetailsActions >section:first-child {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+}
+
+#afCustomerDetailsActions >section:last-child {
+  display: none !important;
+}
+
+/* Customer details information area */
+#afCustomerDetailsActions >section:first-child>div:last-child {
+  display: grid !important;
+  grid-template-columns: 85px 1fr !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  gap: 6px 12px !important;
+  padding: 10px 14px !important;
+}
+
+/* Convert each original detail group into label + value */
+#afCustomerDetailsActions >section:first-child>div:last-child> div {
+  display: contents !important;
+}
+
+/* Keep customer information readable */
+#afCustomerDetailsActions >section:first-child>div:last-child span,
+#afCustomerDetailsActions >section:first-child>div:last-child strong,
+#afCustomerDetailsActions >section:first-child>div:last-child b {
   width: auto !important;
   min-width: 0 !important;
   white-space: normal !important;
