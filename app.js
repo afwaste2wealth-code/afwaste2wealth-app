@@ -77119,3 +77119,150 @@ console.log(
   );
 
 })();
+
+/* =========================================================
+   A&F CUSTOMER HISTORY - DIRECT ACTION CONNECTION
+   Uses the existing Edit button's customer ID.
+   ========================================================= */
+
+(function () {
+  "use strict";
+
+  function connectDirectCustomerHistory() {
+
+const modal =
+document.getElementById("afCustomerList");
+
+    if (!modal) return;
+
+const editButtons =
+modal.querySelectorAll(
+        "button[data-edit-customer]"
+      );
+
+editButtons.forEach(editButton => {
+
+const customerId =
+editButton.getAttribute(
+          "data-edit-customer"
+        );
+
+      if (!customerId) return;
+
+const actionCell =
+editButton.closest("td");
+
+      if (!actionCell) return;
+
+      /* Remove any old History buttons */
+actionCell
+        .querySelectorAll(
+          "[data-af-customer-history]," +
+          "[data-af-final-history]," +
+          "[data-af-direct-history]"
+        )
+        .forEach(button =>button.remove());
+
+      /* Create ONE final History button */
+const historyButton =
+document.createElement("button");
+
+historyButton.type =
+        "button";
+
+historyButton.textContent =
+        "History";
+
+historyButton.setAttribute(
+        "data-af-direct-history",
+customerId
+      );
+
+historyButton.style.cssText = `
+        margin-left:6px;
+        border:0;
+        background:#1976d2;
+color:white;
+        padding:7px 11px;
+        border-radius:6px;
+        font-size:11px;
+font-weight:bold;
+cursor:pointer;
+      `;
+
+historyButton.onclick =
+        function (event) {
+
+event.preventDefault();
+event.stopPropagation();
+
+          if (
+typeof window.afOpenCustomerHistory !==
+            "function"
+          ) {
+
+            alert(
+              "Customer History function is not available."
+            );
+
+            return;
+          }
+
+window.afOpenCustomerHistory(
+customerId
+          );
+
+        };
+
+actionCell.appendChild(
+historyButton
+      );
+
+    });
+
+  }
+
+
+  /*
+   * Customer List is created dynamically.
+   * Watch only for it and reconnect.
+   */
+
+  let timer = null;
+
+  new MutationObserver(
+    function () {
+
+clearTimeout(timer);
+
+      timer =
+setTimeout(
+connectDirectCustomerHistory,
+          100
+        );
+
+    }
+  ).observe(
+document.body,
+    {
+childList:true,
+subtree:true
+    }
+  );
+
+
+setTimeout(
+connectDirectCustomerHistory,
+    300
+  );
+
+
+window.connectDirectCustomerHistory =
+connectDirectCustomerHistory;
+
+
+console.log(
+    "A&F direct Customer History connection ready."
+  );
+
+})();
