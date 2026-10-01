@@ -76654,3 +76654,716 @@ console.log(
   );
 
 })();
+
+/* =========================================================
+   A&F CUSTOMER HISTORY - PAYMENT HISTORY
+   Adds payment transactions below Purchase History
+
+   REPORTING ONLY
+   - Does NOT create payments
+   - Does NOT change balances
+   - Does NOT affect stock
+   - Does NOT affect sales
+   ========================================================= */
+
+(function () {
+  "use strict";
+
+  if (window.__afCustomerPaymentHistoryInstalled) return;
+  window.__afCustomerPaymentHistoryInstalled = true;
+
+
+  /* ---------------------------------------------------------
+     Preserve existing working Customer History function
+     --------------------------------------------------------- */
+
+const originalCustomerHistory =
+window.afOpenCustomerHistory;
+
+
+  if (typeof originalCustomerHistory !== "function") {
+
+console.warn(
+      "A&F Payment History: Customer History function not found."
+    );
+
+    return;
+  }
+
+
+  /* ---------------------------------------------------------
+     HELPERS
+     --------------------------------------------------------- */
+
+  function readArray(key) {
+
+    try {
+
+const data =
+JSON.parse(
+localStorage.getItem(key) || "[]"
+        );
+
+      return Array.isArray(data)
+        ? data
+        : [];
+
+    } catch (e) {
+
+      return [];
+
+    }
+
+  }
+
+
+  function esc(value) {
+
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+
+  }
+
+
+  function money(value) {
+
+    return (
+      "UGX " +
+Math.round(
+        Number(value) || 0
+      ).toLocaleString()
+    );
+
+  }
+
+
+  function formatDate(value) {
+
+    if (!value) return "—";
+
+const parts =
+      String(value).split("-");
+
+    if (parts.length === 3) {
+
+      return (
+        parts[2] + "/" +
+        parts[1] + "/" +
+        parts[0]
+      );
+
+    }
+
+    return String(value);
+
+  }
+
+
+  function sameCustomer(customer, record) {
+
+    /*
+     * First preference:
+     * exact customer ID.
+     */
+
+    if (
+customer.id&&
+record.customerId&&
+      String(customer.id) ===
+      String(record.customerId)
+    ) {
+
+      return true;
+
+    }
+
+
+    /*
+     * Compatibility with older records:
+     * compare phone.
+     */
+
+const customerPhone =
+      String(
+customer.phone || ""
+      )
+        .replace(/\s+/g, "");
+
+
+const recordPhone =
+      String(
+record.customerPhone || ""
+      )
+        .replace(/\s+/g, "");
+
+
+    if (
+customerPhone&&
+recordPhone&&
+customerPhone === recordPhone
+    ) {
+
+      return true;
+
+    }
+
+
+    /*
+     * Final compatibility:
+     * compare customer name.
+     */
+
+const customerName =
+      String(
+customer.name || ""
+      )
+        .trim()
+        .toLowerCase();
+
+
+const recordName =
+      String(
+record.customerName || ""
+      )
+        .trim()
+        .toLowerCase();
+
+
+    return (
+customerName&&
+recordName&&
+customerName === recordName
+    );
+
+  }
+
+
+  function saleValue(record) {
+
+    return Number(
+record.finalSaleTotal ??
+record.netSaleTotal ??
+record.saleAmount ??
+record.grossSaleTotal ??
+      0
+    ) || 0;
+
+  }
+
+
+  /* ---------------------------------------------------------
+     ADD PAYMENT HISTORY
+     --------------------------------------------------------- */
+
+  function addPaymentHistory(customerId) {
+
+const modal =
+document.getElementById(
+        "afCustomerHistorySummaryModal"
+      );
+
+
+    if (!modal) return;
+
+
+    /*
+     * Don't add twice.
+     */
+
+    if (
+modal.querySelector(
+        "#afCustomerPaymentHistorySection"
+      )
+    ) {
+
+      return;
+
+    }
+
+
+const customers =
+readArray(
+        "afCustomers"
+      );
+
+
+const customer =
+customers.find(
+        item =>
+          String(item.id) ===
+          String(customerId)
+      );
+
+
+    if (!customer) return;
+
+
+    /*
+     * CUSTOMER SALES
+     */
+
+const sales =
+readArray(
+        "afDeliveryRecords"
+      )
+        .filter(record => {
+
+          if (
+            String(
+record.status || ""
+            ).toUpperCase() ===
+            "CANCELLED"
+          ) {
+
+            return false;
+
+          }
+
+
+const deliveryType =
+            String(
+record.deliveryType || ""
+            ).toLowerCase();
+
+
+          if (
+deliveryType&&
+deliveryType !== "poles"
+          ) {
+
+            return false;
+
+          }
+
+
+          return sameCustomer(
+            customer,
+            record
+          );
+
+        });
+
+
+    /*
+     * CUSTOMER PAYMENTS
+     */
+
+const payments =
+readArray(
+        "afCustomerPayments"
+      )
+        .filter(
+          payment =>
+sameCustomer(
+              customer,
+              payment
+            )
+        )
+        .sort((a, b) => {
+
+const dateCompare =
+            String(a.date || "")
+              .localeCompare(
+                String(b.date || "")
+              );
+
+
+          if (dateCompare !== 0) {
+            return dateCompare;
+          }
+
+
+          return String(
+a.recordedAt || ""
+          ).localeCompare(
+            String(
+b.recordedAt || ""
+            )
+          );
+
+        });
+
+
+    /*
+     * Calculate running balance.
+
+     * For each payment:
+     * Sales recorded up to that date
+     * MINUS
+     * Payments recorded up to that payment.
+     */
+
+    let cumulativePayments = 0;
+
+
+const paymentRows =
+payments.length
+
+        ? payments.map(payment => {
+
+cumulativePayments +=
+              Number(
+payment.amount
+              ) || 0;
+
+
+const salesToDate =
+              sales
+                .filter(sale => {
+
+                  if (
+                    !sale.date ||
+                    !payment.date
+                  ) {
+
+                    return true;
+
+                  }
+
+
+                  return (
+                    String(sale.date) <=
+                    String(payment.date)
+                  );
+
+                })
+                .reduce(
+                  (sum, sale) =>
+                    sum +
+saleValue(sale),
+                  0
+                );
+
+
+const runningBalance =
+salesToDate -
+cumulativePayments;
+
+
+const balanceText =
+runningBalance< 0
+
+                ? "Credit " +
+                  money(
+Math.abs(
+runningBalance
+                    )
+                  )
+
+                : money(
+runningBalance
+                  );
+
+
+const balanceColor =
+runningBalance> 0
+                ? "#b42318"
+                : "#0b5d3b";
+
+
+            return `
+
+<tr>
+
+<td>
+                  ${formatDate(
+payment.date
+                  )}
+</td>
+
+
+<td>
+                  ${esc(
+payment.paymentNo ||
+                    "—"
+                  )}
+</td>
+
+
+<td>
+                  ${esc(
+payment.method ||
+                    "—"
+                  )}
+</td>
+
+
+<td>
+                  ${esc(
+payment.reference ||
+                    "—"
+                  )}
+</td>
+
+
+<td style="
+text-align:right;
+font-weight:bold;
+                ">
+                  ${money(
+payment.amount
+                  )}
+</td>
+
+
+<td style="
+text-align:right;
+font-weight:bold;
+                  color:${balanceColor};
+                ">
+                  ${balanceText}
+</td>
+
+</tr>
+
+            `;
+
+          }).join("")
+
+        : `
+
+<tr>
+
+<td
+colspan="6"
+              style="
+text-align:center;
+                color:#777;
+                padding:18px;
+              "
+>
+              No customer payments recorded.
+</td>
+
+</tr>
+
+        `;
+
+
+    /*
+     * Total payment footer.
+     */
+
+const totalPaid =
+payments.reduce(
+        (sum, payment) =>
+          sum +
+          (
+            Number(
+payment.amount
+            ) || 0
+          ),
+        0
+      );
+
+
+    /*
+     * Create Payment History section.
+     */
+
+const section =
+document.createElement(
+        "div"
+      );
+
+
+section.id =
+      "afCustomerPaymentHistorySection";
+
+
+section.style.cssText = `
+      margin-top:20px;
+    `;
+
+
+section.innerHTML = `
+
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:center;
+        gap:10px;
+flex-wrap:wrap;
+        margin-bottom:8px;
+      ">
+
+<div style="
+          font-size:14px;
+font-weight:bold;
+          color:#0b5d3b;
+        ">
+💳 Payment History
+</div>
+
+
+<div style="
+          font-size:12px;
+          color:#555;
+        ">
+          Total Paid:
+<b style="
+            color:#0b5d3b;
+          ">
+            ${money(totalPaid)}
+</b>
+</div>
+
+</div>
+
+
+<div style="
+overflow:auto;
+        border:1px solid #e1e7e3;
+        border-radius:8px;
+      ">
+
+<table style="
+          width:100%;
+          min-width:850px;
+border-collapse:collapse;
+        ">
+
+<thead>
+
+<tr style="
+              background:#eaf5ee;
+            ">
+
+<th>
+                Date
+</th>
+
+<th>
+                Receipt No.
+</th>
+
+<th>
+                Payment Method
+</th>
+
+<th>
+                Reference
+</th>
+
+<th style="
+text-align:right;
+              ">
+                Amount
+</th>
+
+<th style="
+text-align:right;
+              ">
+                Running Balance
+</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+            ${paymentRows}
+</tbody>
+
+</table>
+
+</div>
+
+
+<div style="
+        margin-top:6px;
+        font-size:10px;
+        color:#777;
+      ">
+        Running Balance shows the customer's
+        outstanding account balance immediately
+        after each recorded payment.
+</div>
+
+    `;
+
+
+    /*
+     * Clean table formatting.
+     */
+
+    section
+      .querySelectorAll(
+        "th, td"
+      )
+      .forEach(cell => {
+
+cell.style.padding =
+          "9px";
+
+cell.style.borderBottom =
+          "1px solid #eee";
+
+      });
+
+
+    /*
+     * Add it at the bottom of the
+     * existing Customer History window.
+     */
+
+const historyBox =
+modal.firstElementChild;
+
+
+    if (historyBox) {
+
+historyBox.appendChild(
+        section
+      );
+
+    }
+
+  }
+
+
+  /* ---------------------------------------------------------
+     WRAP EXISTING CUSTOMER HISTORY
+     --------------------------------------------------------- */
+
+window.afOpenCustomerHistory =
+    function (customerId) {
+
+      /*
+       * Open the existing working
+       * Customer History normally.
+       */
+
+originalCustomerHistory(
+customerId
+      );
+
+
+      /*
+       * Then add Payment History.
+       */
+
+setTimeout(
+        function () {
+
+addPaymentHistory(
+customerId
+          );
+
+        },
+        80
+      );
+
+    };
+
+
+console.log(
+    "A&F Customer Payment History connected."
+  );
+
+})();
