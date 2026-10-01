@@ -70953,12 +70953,128 @@ manageAFCompanyProfileSettings;
    REPLACE GLOBAL PRINT HEADER WITH DYNAMIC PROFILE HEADER
    ========================================================= */
 
-window.afSmartPrintHeader =
-profileHeader;
+window.afSmartPrintHeader = function(title = "") {
+    try {
+        return profileHeader(title) || "";
+    } catch (err) {
+console.error("Global print header error:", err);
+        return "";
+    }
+};
+
+window.afSmartPrintFooter = function(extra = "") {
+    try {
+        return profileFooter(extra) || "";
+    } catch (err) {
+console.error("Global print footer error:", err);
+        return "";
+    }
+};
+
+/* ============================================
+   A&F GLOBAL PRINT DOCUMENT
+   One company profile for ALL printouts
+   ============================================ */
+window.afBuildPrintDocument = function(options = {}) {
+
+const title = options.title || "";
+const content = options.content || "";
+const footerExtra = options.footerExtra || "";
+
+const header =
+typeof window.afSmartPrintHeader === "function"
+            ? window.afSmartPrintHeader(title)
+            : "";
+
+const footer =
+typeof window.afSmartPrintFooter === "function"
+            ? window.afSmartPrintFooter(footerExtra)
+            : "";
+
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+
+<title>${title}</title>
+
+<style>
+                * {
+                    box-sizing: border-box;
+                }
+
+                body {
+                    font-family: Arial, sans-serif;
+                    margin: 0;
+                    padding: 25px;
+                    color: #222;
+                    background: #fff;
+                }
+
+                .af-print-content {
+                    width: 100%;
+                    max-width: 1000px;
+                    margin: 0 auto;
+                }
+
+                @media print {
+                    body {
+                        margin: 0;
+                        padding: 10mm;
+                    }
+
+                    button,
+                    .print,
+                    .no-print {
+                        display: none !important;
+                    }
+                }
+</style>
+</head>
+
+<body>
+
+            ${header}
+
+<div class="af-print-content">
+                ${content}
+</div>
+
+            ${footer}
+
+</body>
+</html>
+    `;
+};
 
 
-window.afSmartPrintFooter =
-profileFooter;
+/* ============================================
+   A&F GLOBAL PRINT POPUP
+   ============================================ */
+window.afOpenPrintDocument = function(options = {}) {
+
+const w = window.open(
+        "",
+        "_blank",
+        "width=900,height=750"
+    );
+
+    if (!w) {
+        alert("Please allow pop-ups so the document can open.");
+        return null;
+    }
+
+const html =
+window.afBuildPrintDocument(options);
+
+w.document.open();
+w.document.write(html);
+w.document.close();
+w.focus();
+
+    return w;
+};
 
 
 /* =========================================================
