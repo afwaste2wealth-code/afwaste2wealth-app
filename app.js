@@ -76903,3 +76903,219 @@ console.log(
   );
 
 })();
+
+/* =========================================================
+   A&F CUSTOMER HISTORY BUTTON - FINAL RECONNECT
+   ========================================================= */
+
+(function () {
+  "use strict";
+
+  function reconnectCustomerHistoryButtons() {
+
+const customers = (() => {
+
+      try {
+
+const data =
+JSON.parse(
+localStorage.getItem("afCustomers") || "[]"
+          );
+
+        return Array.isArray(data)
+          ? data.filter(customer =>
+              String(
+customer.status || "ACTIVE"
+              ).toUpperCase() !== "DELETED"
+            )
+          : [];
+
+      } catch (e) {
+
+        return [];
+
+      }
+
+    })();
+
+
+    document
+      .querySelectorAll("table")
+      .forEach(table => {
+
+const headings =
+Array.from(
+table.querySelectorAll("th")
+          )
+            .map(th =>
+              String(
+th.textContent || ""
+              )
+                .trim()
+                .toLowerCase()
+            );
+
+
+const isCustomerTable =
+headings.includes("name") &&
+headings.includes("phone") &&
+headings.includes("sales") &&
+headings.includes("paid") &&
+headings.includes("balance") &&
+headings.includes("action");
+
+
+        if (!isCustomerTable) return;
+
+
+const rows =
+Array.from(
+table.querySelectorAll("tbodytr")
+          );
+
+
+rows.forEach((row, index) => {
+
+const cells =
+Array.from(
+row.querySelectorAll("td")
+            );
+
+
+          if (cells.length< 7) return;
+
+
+const customer =
+            customers[index];
+
+
+          if (!customer) return;
+
+
+const actionCell =
+            cells[cells.length - 1];
+
+
+          /*
+           * Do not add another History button
+           * if one already exists.
+           */
+
+          if (
+actionCell.querySelector(
+              "[data-af-final-history]"
+            )
+          ) {
+
+            return;
+
+          }
+
+
+const button =
+document.createElement("button");
+
+
+button.type =
+            "button";
+
+
+button.textContent =
+            "History";
+
+
+button.dataset.afFinalHistory =
+            String(customer.id);
+
+
+button.style.cssText = `
+            border:0;
+            background:#1976d2;
+color:white;
+            padding:7px 10px;
+            border-radius:6px;
+            font-size:11px;
+font-weight:bold;
+cursor:pointer;
+            margin-left:6px;
+          `;
+
+
+button.onclick =
+            function () {
+
+              if (
+typeof window.afOpenCustomerHistory ===
+                "function"
+              ) {
+
+window.afOpenCustomerHistory(
+customer.id
+                );
+
+              } else {
+
+                alert(
+                  "Customer History is not available."
+                );
+
+              }
+
+            };
+
+
+actionCell.appendChild(
+            button
+          );
+
+        });
+
+      });
+
+  }
+
+
+  /*
+   * Customer List is dynamically created,
+   * so reconnect whenever the screen changes.
+   */
+
+  let timer;
+
+
+  new MutationObserver(
+    function () {
+
+clearTimeout(timer);
+
+      timer =
+setTimeout(
+reconnectCustomerHistoryButtons,
+          80
+        );
+
+    }
+  ).observe(
+document.body,
+    {
+childList:true,
+subtree:true
+    }
+  );
+
+
+setTimeout(
+reconnectCustomerHistoryButtons,
+    300
+  );
+
+
+window.reconnectAFCustomerHistoryButtons =
+reconnectCustomerHistoryButtons;
+
+
+console.log(
+    "A&F Customer History buttons reconnected."
+  );
+
+})();
