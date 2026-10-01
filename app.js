@@ -69123,7 +69123,7 @@ console.log(
 
 
 /* Close connectAFCompanyProfileSettings */
-})();
+
 
 /* =========================================================
    A&F SUPPLIER MANAGEMENT MODULE
