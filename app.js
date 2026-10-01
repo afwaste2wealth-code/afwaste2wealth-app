@@ -76974,21 +76974,24 @@ display:block !important;
 display:none !important;
 }
 
-/* Customer details: Name, Phone and Location */
+/* Customer details: automatic content fitting */
 #afCustomerDetailsActions >section:first-child>div:last-child> div {
-display:grid !important;
-    grid-template-columns:1.4fr 1fr 1.8fr !important;
+display:flex !important;
+flex-direction:row !important;
+align-items:center !important;
+justify-content:flex-start !important;
+flex-wrap:wrap !important;
     width:100% !important;
     max-width:100% !important;
-    gap:14px !important;
-align-items:center !important;
+    gap:10px 28px !important;
     padding:10px 14px !important;
 box-sizing:border-box !important;
 }
 
 #afCustomerDetailsActions >section:first-child>div:last-child> div > div {
-display:block !important;
-width:auto !important;
+    flex:0 0 auto !important;
+width:max-content !important;
+    max-width:100% !important;
     min-width:0 !important;
 white-space:nowrap !important;
 }
