@@ -76892,6 +76892,71 @@ h3 {
   margin-top: 4px !important;
   margin-bottom: 4px !important;
 }
+/* =====================================================
+   FINAL A&F CUSTOMER STATEMENT PRINT CLEANUP
+   ===================================================== */
+
+/* Remove all horizontal scrolling from printed statement */
+[style*="overflow"],
+[style*="overflow-x"] {
+  overflow: visible !important;
+  overflow-x: visible !important;
+}
+
+/* Hide browser-style scrollbars */
+* {
+  scrollbar-width: none !important;
+}
+
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Keep tables completely inside printable width */
+table {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  table-layout: fixed !important;
+}
+
+th,
+td {
+  white-space: normal !important;
+  overflow: hidden !important;
+  text-overflow: clip !important;
+  overflow-wrap: anywhere !important;
+}
+
+/* Account Summary: five equal cards on first row */
+section:first-of-type div[style*="grid"] {
+  display: grid !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  width: 100% !important;
+  gap: 4px !important;
+}
+
+section:first-of-type div[style*="grid"] > div {
+  min-width: 0 !important;
+  width: auto !important;
+  padding: 6px !important;
+}
+
+/* Allow large UGX figures to fit neatly */
+section:first-of-type strong,
+section:first-of-type b {
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+}
+
+/* Keep printed sections neat */
+section {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow: visible !important;
+}
 
 </style>
 
