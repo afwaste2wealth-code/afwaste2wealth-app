@@ -7,7 +7,7 @@ function showAFLoginScreen() {
   /* Remove any existing login screen */
 const oldLogin = document.getElementById("afLoginScreen"); 
  
-  if (oldLogin) {
+  if (oldLogin) { 
 oldLogin.remove();
   }
 
