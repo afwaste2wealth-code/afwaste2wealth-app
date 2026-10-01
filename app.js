@@ -76785,27 +76785,113 @@ printWindow.document.write(`
 
 <style>
 
-              body {
-                font-family:
-                  Arial,
-                  Helvetica,
-                  sans-serif;
+             @page {
+  size: A4 portrait;
+  margin: 8mm;
+}
 
-                margin:20px;
-                color:#10213d;
-              }
+* {
+  box-sizing: border-box !important;
+}
 
-              button {
-display:none !important;
-              }
+html,
+body {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
 
-              table {
-page-break-inside:auto;
-              }
+  font-family:
+    Arial,
+    Helvetica,
+    sans-serif;
+
+  color: #10213d;
+  font-size: 10px;
+}
+
+button {
+  display: none !important;
+}
+
+/* Keep the complete statement inside A4 */
+body > div {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Remove screen scrolling from printed statement */
+div,
+section {
+  max-width: 100% !important;
+}
+
+section > div {
+  max-width: 100% !important;
+  overflow: visible !important;
+}
+
+/* Account summary cards */
+section:first-of-type div[style*="grid"] {
+  grid-template-columns:
+    repeat(5, minmax(0, 1fr)) !important;
+
+  gap: 5px !important;
+}
+
+/* Make cards compact enough for portrait A4 */
+section:first-of-type div[style*="grid"] > div {
+  min-width: 0 !important;
+  padding: 8px !important;
+}
+
+/* Tables must fit page width */
+table {
+  width: 100% !important;
+  max-width: 100% !important;
+  table-layout: fixed !important;
+  border-collapse: collapse !important;
+  page-break-inside: auto;
+}
+
+th,
+td {
+  padding: 5px 4px !important;
+  font-size: 8.5px !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+  word-break: normal !important;
+}
 
 tr {
-page-break-inside:avoid;
-              }
+  page-break-inside: avoid;
+  page-break-after: auto;
+}
+
+/* Never print horizontal scrollbars */
+[style*="overflow-x"],
+[style*="overflow:auto"],
+[style*="overflow: auto"] {
+  overflow: visible !important;
+  max-width: 100% !important;
+}
+
+/* Keep section headings with their content */
+section {
+  page-break-inside: avoid;
+  margin-bottom: 8px !important;
+}
+
+/* Slightly compact the main heading */
+h1,
+h2,
+h3 {
+  margin-top: 4px !important;
+  margin-bottom: 4px !important;
+}
 
 </style>
 
