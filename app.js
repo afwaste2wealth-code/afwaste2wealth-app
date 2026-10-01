@@ -58806,6 +58806,10 @@ window.afSmartPrintFooter() : ""}
 
 w.document.close();
 
+if (typeof applyProfileToPopup === "function") {
+applyProfileToPopup(w);
+}
+
 w.focus();
 
   }
