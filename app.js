@@ -76535,46 +76535,32 @@ background:white;
 
 
 <div style="
-            padding:10px 14px;
+    padding:12px 14px;
+    font-size:13px;
+">
+
+<div style="
 display:grid;
-            grid-template-columns:
-              95px 1fr;
-            row-gap:6px;
-            font-size:13px;
-          ">
+        grid-template-columns:85px minmax(0,1fr);
+align-items:start;
+        gap:7px 12px;
+    ">
 
-<div>
-              Name:
+<div>Name:</div>
+<div style="font-weight:700;">
+            ${esc(customer.name || "-")}
 </div>
 
-<div>
-<b>
-                ${esc(customer.name)}
-</b>
+<div>Phone:</div>
+<div style="font-weight:700; white-space:nowrap;">
+            ${esc(customer.phone || "-")}
 </div>
 
-
-<div>
-              Phone:
+<div>Location:</div>
+<div style="font-weight:700; white-space:nowrap;">
+            ${esc(customer.location || "-")}
 </div>
 
-<div>
-              ${esc(
-customer.phone ||
-                "—"
-              )}
-</div>
-
-
-<div>
-              Location:
-</div>
-
-<div>
-              ${esc(
-customer.location ||
-                "—"
-              )}
 </div>
 
 </div>
