@@ -76954,50 +76954,53 @@ section {
   overflow: visible !important;
 }
 /* =========================================
-   CUSTOMER DETAILS - FINAL PRINT ALIGNMENT
-   ========================================= */
+/* CUSTOMER DETAILS - FINAL PRINT ALIGNMENT */
 
 #afCustomerDetailsActions {
-  display: block !important;
-  width: 100% !important;
-  max-width: 100% !important;
+display:block !important;
+    width:100% !important;
+    max-width:100% !important;
 }
 
 #afCustomerDetailsActions >section:first-child {
-  display: block !important;
-  width: 100% !important;
-  max-width: 100% !important;
-  margin: 0 !important;
+display:block !important;
+    width:100% !important;
+    max-width:100% !important;
+    margin:0 !important;
 }
 
+/* Hide the action buttons when printing */
 #afCustomerDetailsActions >section:last-child {
-  display: none !important;
+display:none !important;
 }
 
-/* Customer details information area */
-#afCustomerDetailsActions >section:first-child>div:last-child {
-  display: grid !important;
-  grid-template-columns: 85px 1fr !important;
-  width: 100% !important;
-  max-width: 100% !important;
-  gap: 6px 12px !important;
-  padding: 10px 14px !important;
-}
-
-/* Convert each original detail group into label + value */
+/* Customer details: Name, Phone and Location */
 #afCustomerDetailsActions >section:first-child>div:last-child> div {
-  display: contents !important;
+display:grid !important;
+    grid-template-columns:1.4fr 1fr 1.8fr !important;
+    width:100% !important;
+    max-width:100% !important;
+    gap:14px !important;
+align-items:center !important;
+    padding:10px 14px !important;
+box-sizing:border-box !important;
 }
 
-/* Keep customer information readable */
-#afCustomerDetailsActions >section:first-child>div:last-child span,
-#afCustomerDetailsActions >section:first-child>div:last-child strong,
-#afCustomerDetailsActions >section:first-child>div:last-child b {
-  width: auto !important;
-  min-width: 0 !important;
-  white-space: normal !important;
-  word-break: normal !important;
-  overflow-wrap: normal !important;
+#afCustomerDetailsActions >section:first-child>div:last-child> div > div {
+display:block !important;
+width:auto !important;
+    min-width:0 !important;
+white-space:nowrap !important;
+}
+
+#afCustomerDetailsActions >section:first-child span,
+#afCustomerDetailsActions >section:first-child strong {
+display:inline !important;
+width:auto !important;
+    min-width:0 !important;
+white-space:nowrap !important;
+word-break:normal !important;
+overflow-wrap:normal !important;
 }
 
 </style>
