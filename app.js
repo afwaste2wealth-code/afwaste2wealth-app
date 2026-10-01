@@ -65637,7 +65637,7 @@ modal.querySelector(
 
 const headerRow =
 table.querySelector(
-        "theadtr"
+        "thead tr"
       );
 
 
