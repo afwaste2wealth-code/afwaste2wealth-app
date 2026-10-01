@@ -76970,7 +76970,7 @@ headings.includes("action");
 
 const rows =
 Array.from(
-table.querySelectorAll("tbodytr")
+table.querySelectorAll("tbody tr")
           );
 
 
