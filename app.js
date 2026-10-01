@@ -76957,6 +76957,38 @@ section {
   max-width: 100% !important;
   overflow: visible !important;
 }
+/* CUSTOMER DETAILS - PRINT FIX */
+
+section:last-of-type {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+section:last-of-type div {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* Customer detail rows */
+section:last-of-type p {
+  display: block !important;
+  width: 100% !important;
+  margin: 3px 0 !important;
+  padding: 0 !important;
+  white-space: normal !important;
+}
+
+/* Prevent customer information being squeezed into tiny columns */
+section:last-of-type span,
+section:last-of-type strong,
+section:last-of-type b {
+  display: inline !important;
+  width: auto !important;
+  min-width: 0 !important;
+  white-space: normal !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+}
 
 </style>
 
