@@ -76539,7 +76539,7 @@ background:white;
     font-size:13px;
 ">
 
-<div style="
+<div id="afCustomerPrintDetails" style="
 display:grid;
     grid-template-columns:1.4fr 1fr 1.8fr;
     gap:18px;
@@ -76974,35 +76974,53 @@ display:block !important;
 display:none !important;
 }
 
-/* Customer details: automatic content fitting */
-#afCustomerDetailsActions >section:first-child>div:last-child> div {
-display:flex !important;
-flex-direction:row !important;
-align-items:center !important;
-justify-content:flex-start !important;
-flex-wrap:wrap !important;
+/* CUSTOMER DETAILS - PRINT AUTO FIT */
+
+#afCustomerDetailsActions {
+display:block !important;
     width:100% !important;
-    max-width:100% !important;
-    gap:10px 28px !important;
-    padding:10px 14px !important;
+max-width:none !important;
+}
+
+#afCustomerDetailsActions >section:first-child {
+display:block !important;
+    width:100% !important;
+max-width:none !important;
 box-sizing:border-box !important;
 }
 
-#afCustomerDetailsActions >section:first-child>div:last-child> div > div {
+#afCustomerDetailsActions >section:last-child {
+display:none !important;
+}
+
+#afCustomerPrintDetails {
+display:flex !important;
+flex-direction:row !important;
+flex-wrap:wrap !important;
+align-items:center !important;
+justify-content:flex-start !important;
+    width:100% !important;
+max-width:none !important;
+    gap:8px 30px !important;
+box-sizing:border-box !important;
+}
+
+#afCustomerPrintDetails > div {
+display:flex !important;
     flex:0 0 auto !important;
-width:max-content !important;
-    max-width:100% !important;
-    min-width:0 !important;
+width:auto !important;
+min-width:max-content !important;
+align-items:center !important;
 white-space:nowrap !important;
 }
 
-#afCustomerDetailsActions >section:first-child span,
-#afCustomerDetailsActions >section:first-child strong {
+#afCustomerPrintDetails span,
+#afCustomerPrintDetails strong {
 display:inline !important;
 width:auto !important;
-    min-width:0 !important;
+min-width:max-content !important;
 white-space:nowrap !important;
-word-break:normal !important;
+word-break:keep-all !important;
 overflow-wrap:normal !important;
 }
 
