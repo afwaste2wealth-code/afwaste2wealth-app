@@ -77367,3 +77367,828 @@ console.log(
   );
 
 })();
+
+/* =========================================================
+   A&F CUSTOMER ACCOUNT - APPROVED DESIGN
+   Final Customer History presentation
+
+   DISPLAY / REPORTING ONLY
+   - Does NOT create sales
+   - Does NOT alter stock
+   - Does NOT alter payments
+   - Uses existing customer, delivery and payment records
+   ========================================================= */
+
+(function () {
+  "use strict";
+
+  if (window.__afApprovedCustomerAccountDesignInstalled) return;
+  window.__afApprovedCustomerAccountDesignInstalled = true;
+
+const CUSTOMER_KEY = "afCustomers";
+const DELIVERY_KEY = "afDeliveryRecords";
+const PAYMENT_KEY = "afCustomerPayments";
+
+
+  /* =====================================================
+     HELPERS
+     ===================================================== */
+
+  function readArray(key) {
+
+    try {
+
+const value =
+JSON.parse(
+localStorage.getItem(key) || "[]"
+        );
+
+      return Array.isArray(value)
+        ? value
+        : [];
+
+    } catch (e) {
+
+      return [];
+
+    }
+
+  }
+
+
+  function esc(value) {
+
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+
+  }
+
+
+  function money(value) {
+
+    return (
+      "UGX " +
+Math.round(
+        Number(value) || 0
+      ).toLocaleString()
+    );
+
+  }
+
+
+  function number(value) {
+
+    return (
+      Number(value) || 0
+    ).toLocaleString();
+
+  }
+
+
+  function formatDate(value) {
+
+    if (!value) return "—";
+
+const parts =
+      String(value).split("-");
+
+    if (parts.length === 3) {
+
+      return (
+        parts[2] + "/" +
+        parts[1] + "/" +
+        parts[0]
+      );
+
+    }
+
+    return String(value);
+
+  }
+
+
+  function sameCustomer(
+    customer,
+    record
+  ) {
+
+    if (
+customer.id&&
+record.customerId&&
+      String(customer.id) ===
+      String(record.customerId)
+    ) {
+
+      return true;
+
+    }
+
+
+const customerPhone =
+      String(
+customer.phone || ""
+      ).replace(/\s+/g, "");
+
+
+const recordPhone =
+      String(
+record.customerPhone ||
+record.clientPhone ||
+        ""
+      ).replace(/\s+/g, "");
+
+
+    if (
+customerPhone&&
+recordPhone&&
+customerPhone === recordPhone
+    ) {
+
+      return true;
+
+    }
+
+
+const customerName =
+      String(
+customer.name || ""
+      )
+        .trim()
+        .toLowerCase();
+
+
+const recordName =
+      String(
+record.customerName ||
+record.clientName ||
+        ""
+      )
+        .trim()
+        .toLowerCase();
+
+
+    return (
+customerName&&
+recordName&&
+customerName === recordName
+    );
+
+  }
+
+
+  function saleValue(record) {
+
+    return Number(
+record.finalSaleTotal ??
+record.netSaleTotal ??
+record.saleAmount ??
+record.grossSaleTotal ??
+      0
+    ) || 0;
+
+  }
+
+
+  function isCancelled(record) {
+
+    return (
+      String(
+record.status || ""
+      ).toUpperCase() ===
+      "CANCELLED"
+    );
+
+  }
+
+
+  function isPoleSale(record) {
+
+const type =
+      String(
+record.deliveryType || ""
+      ).toLowerCase();
+
+
+    if (type) {
+
+      return type === "poles";
+
+    }
+
+
+    return (
+Array.isArray(record.items) ||
+      Number(record.totalPoles || 0) > 0
+    );
+
+  }
+
+
+  function poleCount(record) {
+
+    if (
+Array.isArray(record.items)
+    ) {
+
+const calculated =
+record.items.reduce(
+          (sum, item) =>
+            sum +
+            (
+              Number(
+item.quantity
+              ) || 0
+            ),
+          0
+        );
+
+
+      if (calculated > 0) {
+
+        return calculated;
+
+      }
+
+    }
+
+
+    return (
+      Number(
+record.totalPoles
+      ) || 0
+    );
+
+  }
+
+
+  function saleDetails(record) {
+
+    if (
+      !Array.isArray(record.items) ||
+      !record.items.length
+    ) {
+
+      return "Pole Purchase";
+
+    }
+
+
+    return record.items
+      .map(item => {
+
+const name =
+item.name ||
+item.key ||
+item.size ||
+          "Poles";
+
+
+        return (
+          name +
+          " × " +
+          number(
+item.quantity
+          )
+        );
+
+      })
+      .join(", ");
+
+  }
+
+
+  /* =====================================================
+     SUMMARY CARD
+     ===================================================== */
+
+  function summaryCard(
+    icon,
+    label,
+    value,
+    background,
+valueColor
+  ) {
+
+    return `
+
+<div style="
+        background:${background};
+        border:1px solid #d7e5f2;
+        border-radius:9px;
+        padding:13px 14px;
+        min-height:76px;
+box-sizing:border-box;
+display:flex;
+align-items:center;
+        gap:12px;
+      ">
+
+<div style="
+          font-size:29px;
+          line-height:1;
+          min-width:38px;
+text-align:center;
+        ">
+          ${icon}
+</div>
+
+
+<div>
+
+<div style="
+            font-size:12px;
+            color:#18345d;
+            margin-bottom:4px;
+          ">
+            ${esc(label)}
+</div>
+
+
+<div style="
+            font-size:19px;
+            line-height:1.15;
+            font-weight:800;
+            color:${valueColor || "#102b55"};
+          ">
+            ${esc(value)}
+</div>
+
+</div>
+
+</div>
+
+    `;
+
+  }
+
+
+  /* =====================================================
+     OPEN APPROVED CUSTOMER ACCOUNT
+     ===================================================== */
+
+  function openApprovedCustomerAccount(
+customerId
+  ) {
+
+const customers =
+readArray(
+        CUSTOMER_KEY
+      );
+
+
+const customer =
+customers.find(
+        item =>
+          String(item.id) ===
+          String(customerId)
+      );
+
+
+    if (!customer) {
+
+      alert(
+        "Customer record not found."
+      );
+
+      return;
+
+    }
+
+
+    /* ---------------------------------------------------
+       SALES
+       --------------------------------------------------- */
+
+const sales =
+readArray(
+        DELIVERY_KEY
+      )
+        .filter(record =>
+          !isCancelled(record) &&
+isPoleSale(record) &&
+sameCustomer(
+            customer,
+            record
+          )
+        );
+
+
+    /* ---------------------------------------------------
+       PAYMENTS
+       --------------------------------------------------- */
+
+const payments =
+readArray(
+        PAYMENT_KEY
+      )
+        .filter(payment =>
+sameCustomer(
+            customer,
+            payment
+          )
+        );
+
+
+    /* ---------------------------------------------------
+       TOTALS
+       --------------------------------------------------- */
+
+const totalSales =
+sales.reduce(
+        (sum, record) =>
+          sum +
+saleValue(record),
+        0
+      );
+
+
+const totalPaid =
+payments.reduce(
+        (sum, payment) =>
+          sum +
+          (
+            Number(
+payment.amount
+            ) || 0
+          ),
+        0
+      );
+
+
+const balance =
+totalSales -
+totalPaid;
+
+
+const totalPoles =
+sales.reduce(
+        (sum, record) =>
+          sum +
+poleCount(record),
+        0
+      );
+
+
+const totalPurchases =
+sales.length;
+
+
+const averagePurchase =
+totalPurchases
+        ? totalSales /
+totalPurchases
+        : 0;
+
+
+const sortedSales =
+      [...sales].sort(
+        (a, b) =>
+          String(b.date || "")
+            .localeCompare(
+              String(a.date || "")
+            )
+      );
+
+
+const lastPurchase =
+sortedSales.length
+        ? sortedSales[0].date
+        : "";
+
+
+    /* ===================================================
+       POLE BREAKDOWN
+       =================================================== */
+
+const poleMap = {};
+
+
+sales.forEach(record => {
+
+      if (
+        !Array.isArray(record.items)
+      ) {
+
+        return;
+
+      }
+
+
+record.items.forEach(item => {
+
+const name =
+item.name ||
+item.key ||
+item.size ||
+          "Poles";
+
+
+        if (!poleMap[name]) {
+
+poleMap[name] = {
+            name,
+            quantity:0,
+            grossValue:0
+          };
+
+        }
+
+
+const quantity =
+          Number(
+item.quantity
+          ) || 0;
+
+
+        let grossValue =
+          Number(
+item.total ??
+item.lineTotal ??
+item.value ??
+            0
+          ) || 0;
+
+
+        if (!grossValue) {
+
+const unitPrice =
+            Number(
+item.unitPrice ??
+item.price ??
+item.sellingPrice ??
+              0
+            ) || 0;
+
+
+grossValue =
+            quantity *
+unitPrice;
+
+        }
+
+
+poleMap[name].quantity +=
+          quantity;
+
+
+poleMap[name].grossValue +=
+grossValue;
+
+      });
+
+    });
+
+
+const poleTypes =
+Object.values(
+poleMap
+      );
+
+
+const poleRows =
+poleTypes.length
+
+        ? poleTypes
+            .map(type => `
+
+<tr>
+
+<td>
+<b>
+                    ${esc(type.name)}
+</b>
+</td>
+
+<td>
+                  ${number(
+type.quantity
+                  )} pcs
+</td>
+
+<td>
+<b>
+                    ${money(
+type.grossValue
+                    )}
+</b>
+</td>
+
+<td>
+                  —
+</td>
+
+</tr>
+
+            `)
+            .join("")
+
+        : `
+
+<tr>
+
+<td
+colspan="4"
+              style="
+text-align:center;
+                color:#777;
+              "
+>
+              No pole purchases recorded.
+</td>
+
+</tr>
+
+        `;
+
+
+    /* ===================================================
+       COMBINED ACCOUNT TRANSACTIONS
+       =================================================== */
+
+const transactions = [];
+
+
+sales.forEach(record => {
+
+transactions.push({
+
+type:"sale",
+
+        date:
+record.date || "",
+
+        time:
+record.recordedAt ||
+record.createdAt ||
+          "",
+
+        reference:
+record.deliveryNumber ||
+record.deliveryNo ||
+record.reference ||
+record.orderReference ||
+          "—",
+
+        details:
+saleDetails(record),
+
+        debit:
+saleValue(record),
+
+        credit:0
+
+      });
+
+    });
+
+
+payments.forEach(payment => {
+
+transactions.push({
+
+type:"payment",
+
+        date:
+payment.date || "",
+
+        time:
+payment.recordedAt ||
+          "",
+
+        reference:
+payment.paymentNo ||
+payment.reference ||
+          "—",
+
+        details:
+payment.method ||
+          "Payment",
+
+        debit:0,
+
+        credit:
+          Number(
+payment.amount
+          ) || 0
+
+      });
+
+    });
+
+
+transactions.sort(
+      (a, b) => {
+
+const dateCompare =
+          String(a.date)
+            .localeCompare(
+              String(b.date)
+            );
+
+
+        if (dateCompare !== 0) {
+
+          return dateCompare;
+
+        }
+
+
+        /*
+         * On the same date:
+         * sale is shown before payments.
+         */
+
+        if (
+a.type !== b.type
+        ) {
+
+          return (
+a.type === "sale"
+              ? -1
+              : 1
+          );
+
+        }
+
+
+        return String(
+a.time || ""
+        ).localeCompare(
+          String(
+b.time || ""
+          )
+        );
+
+      }
+    );
+
+
+    let runningBalance = 0;
+
+
+const transactionRows =
+transactions.length
+
+        ? transactions
+            .map(transaction => {
+
+runningBalance +=
+transaction.debit;
+
+
+runningBalance -=
+transaction.credit;
+
+
+const typeHtml =
+transaction.type ===
+                "sale"
+
+                  ? `
+<span style="
+                      color:#0b6b3a;
+                      font-weight:800;
+                    ">
+🛒 Pole Purchase
+</span>
+                  `
+
+                  : `
+<span style="
+                      color:#1261b5;
+                      font-weight:800;
+                    ">
+💳 Payment
+</span>
+                  `;
+
+
+              return `
+
+<tr>
+
+<td>
+                    ${formatDate(
+transaction.date
+                    )}
+</td>
+
+
+<td>
+                    ${typeHtml}
+</td>
+
+
+<td>
+                    ${esc(
+transaction.reference
+                    )}
+</td>
+
+
+<td>
+                    ${esc(
