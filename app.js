@@ -56068,6 +56068,7 @@ totals.balance
 
 <td
   data-af-customer-action-cell="1"
+  style="white-space:nowrap;"
 >
 
 <button
@@ -56077,9 +56078,30 @@ customer.id
   )}"
   style="${btn()}"
 >
-
 Edit
+</button>
 
+<button
+  type="button"
+  data-customer-history="${esc(
+customer.id
+  )}"
+onclick="window.afOpenCustomerHistory('${esc(
+customer.id
+  )}')"
+  style="
+    margin-left:6px;
+    border:0;
+    background:#1976d2;
+color:white;
+    padding:7px 11px;
+    border-radius:6px;
+    font-size:11px;
+font-weight:bold;
+cursor:pointer;
+  "
+>
+History
 </button>
 
 </td>
