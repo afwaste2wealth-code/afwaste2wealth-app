@@ -71086,185 +71086,81 @@ w.focus();
    Used especially by Company Letters
    ========================================================= */
 
-function applyProfileToPopup(
-  popup
-) {
-
-  try {
-
-
-    if (
-      !popup ||
-popup.closed ||
-      !popup.document
-    ) {
-
-      return;
-
-    }
-
-
-const documentReference =
-popup.document;
-
-
-const profile =
-getProfile();
-
-
-const header =
-documentReference.querySelector(
-        ".af-smart-header"
-      );
-
-
-    if (
-      !header
-    ) {
-
-      return;
-
-    }
-
-
-const documentTitle =
-String(
-
-documentReference.querySelector(
-        ".af-smart-title"
-      )?.textContent ||
-
-documentReference.title ||
-
-      ""
-
-    ).trim();
-
-
-const company =
-header.querySelector(
-        ".af-smart-company"
-      );
-
-
-const trading =
-header.querySelector(
-        ".af-smart-tag"
-      );
-
-
-const motto =
-header.querySelector(
-        ".af-smart-motto"
-      );
-
-
-const contact =
-header.querySelector(
-        ".af-smart-contact"
-      );
-
-
-    if (
-company
-    ) {
-
-company.textContent =
-profile.companyName;
-
-    }
-
-
-    if (
-trading
-    ) {
-
-trading.textContent =
-profile.tradingName;
-
-    }
-
-
-    if (
-motto
-    ) {
-
-motto.textContent =
-profile.motto;
-
-    }
-
-
-    if (
-contact
-    ) {
-
-contact.innerHTML =
-contactRows(
-          profile,
-documentTitle
-        );
-
-    }
-
-
-    /*
-     * Add Director-defined receipt footer note.
-     */
-
-const footerNote =
-documentReference.querySelector(
-        ".af-smart-footer-note"
-      );
-
-
-    if (
-footerNote&&
-      /payment receipt/i.test(
-documentTitle
-      ) &&
-profile.receiptFooterNote
-    ) {
-
-
-const current =
-String(
-footerNote.textContent ||
-        ""
-      ).trim();
-
-
-      if (
-        !current.includes(
-profile.receiptFooterNote
-        )
-      ) {
-
-
-footerNote.textContent =
-
-current
-
-  ? current +
-    " • " +
-profile.receiptFooterNote
-
-  : profile.receiptFooterNote;
-
-      }
-
-    }
-
-
-  } catch (error) {
-
-
-console.error(
-      "A&F Company Profile print update error:",
-      error
-    );
-
-  }
+function applyProfileToPopup(popup) {
+    try {
+        if (!popup || popup.closed || !popup.document) return;
+
+const doc = popup.document;
+const profile = getProfile();
+
+        // Prevent this global profile from being applied twice
+        if (doc.documentElement.dataset.afProfileApplied === "yes") return;
+doc.documentElement.dataset.afProfileApplied = "yes";
+
+const title = String(
+doc.querySelector(".af-smart-title")?.textContent ||
+doc.title ||
+            ""
+        ).trim();
+
+        // -----------------------------
+        // HEADER
+        // -----------------------------
+        let header = doc.querySelector(".af-smart-header");
+
+        if (!header &&doc.body) {
+const holder = doc.createElement("div");
+holder.innerHTML = profileHeader(title);
+
+            header = holder.firstElementChild;
+
+            if (header) {
+doc.body.insertBefore(header, doc.body.firstChild);
+            }
+        }
+
+        if (header) {
+const company = header.querySelector(".af-smart-company");
+const trading = header.querySelector(".af-smart-tag");
+const motto = header.querySelector(".af-smart-motto");
+const contact = header.querySelector(".af-smart-contact");
+
+            if (company) {
+company.textContent = profile.companyName || "";
+            }
+
+            if (trading) {
+trading.textContent = profile.tradingName || "";
+            }
+
+            if (motto) {
+motto.textContent = profile.motto || "";
+            }
+
+            if (contact) {
+contact.innerHTML = contactRows(profile, title);
+            }
+        }
+
+        // -----------------------------
+        // FOOTER
+        // -----------------------------
+        let footers = doc.querySelectorAll(".af-smart-footer");
+
+        // Remove duplicate global footers if already present
+        if (footers.length> 1) {
+            for (let i = 1; i<footers.length; i++) {
+                footers[i].remove();
+            }
+        }
+
+        let footer = doc.querySelector(".af-smart-footer");
+
+        if (!footer &&doc.body) {
+const holder = doc.createElement("div");
+holder.innerHTML = profileFooter(title);
+
+            footer = holder.firstElementChild;
 
 }
 
