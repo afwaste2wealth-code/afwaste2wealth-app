@@ -69028,14 +69028,14 @@ return `
     left: 0;
     right: 0;
     bottom: 0;
-    height: 42px;
+    height: 30px;
     min-height: 0;
     background: #fff;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 12px;
-    padding: 2px 2%;
+    gap: 10px;
+    padding: 0px 2%;
     border-bottom: 3px solid #0b5d3b;
     box-shadow: inset 0 -5px 0 -3px #e3b417;
     font-size: 11px;
