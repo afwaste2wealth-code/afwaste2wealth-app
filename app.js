@@ -79698,3 +79698,1855 @@ console.log(
 );
 
 })();
+
+
+/* =========================================================
+   A&F EXPENSE PAYEE ↔ EMPLOYEE ADVANCE INTEGRATION
+   ---------------------------------------------------------
+   ONE ENTRY SYSTEM
+
+   • Payee dropdown uses active employees
+   • "Other" opens manual payee box
+   • Employee payment type appears for employees
+   • Staff Advance automatically creates payroll advance
+   • Editing expense updates linked advance
+   • Cancelling expense removes linked advance when safe
+   • Reimbursements / other staff payments do NOT become advances
+   ========================================================= */
+
+(function connectAFExpenseEmployeeAdvance() {
+"use strict";
+
+if (window.__afExpenseEmployeeAdvanceInstalled) {
+    return;
+}
+
+window.__afExpenseEmployeeAdvanceInstalled = true;
+
+
+/* =========================================================
+   HELPERS
+   ========================================================= */
+
+function afEEAEmployees() {
+
+    try {
+
+        if (
+typeof getEmployees ===
+            "function"
+        ) {
+            return getEmployees();
+        }
+
+        return JSON.parse(
+localStorage.getItem(
+                "employees"
+            ) || "[]"
+        );
+
+    } catch (error) {
+
+console.error(
+            "Could not load employees:",
+            error
+        );
+
+        return [];
+    }
+}
+
+
+function afEEAActiveEmployees() {
+
+    return afEEAEmployees()
+        .filter(employee =>
+
+            String(
+employee.employmentStatus || ""
+            ).toLowerCase() === "active"
+
+        )
+        .sort((a, b) =>
+
+            String(
+a.fullName || ""
+            ).localeCompare(
+                String(
+b.fullName || ""
+                )
+            )
+
+        );
+}
+
+
+function afEEAAdvances() {
+
+    try {
+
+        if (
+typeof getEmployeeAdvances ===
+            "function"
+        ) {
+            return getEmployeeAdvances();
+        }
+
+        return JSON.parse(
+localStorage.getItem(
+                "employeeAdvances"
+            ) || "[]"
+        );
+
+    } catch (error) {
+
+        return [];
+    }
+}
+
+
+function afEEASaveAdvances(records) {
+
+    if (
+typeof saveEmployeeAdvances ===
+        "function"
+    ) {
+
+saveEmployeeAdvances(records);
+
+        return;
+    }
+
+localStorage.setItem(
+        "employeeAdvances",
+JSON.stringify(records)
+    );
+}
+
+
+function afEEARecoveries() {
+
+    try {
+
+        if (
+typeof getAdvanceRecoveries ===
+            "function"
+        ) {
+            return getAdvanceRecoveries();
+        }
+
+        return JSON.parse(
+localStorage.getItem(
+                "advanceRecoveries"
+            ) || "[]"
+        );
+
+    } catch (error) {
+
+        return [];
+    }
+}
+
+
+function afEEAEscape(value) {
+
+    return String(
+        value ?? ""
+    )
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+}
+
+
+function afEEAExpenseRecords() {
+
+    if (
+typeof getAFExpenseRecords ===
+        "function"
+    ) {
+        return getAFExpenseRecords();
+    }
+
+    try {
+
+        return JSON.parse(
+localStorage.getItem(
+                "expenses"
+            ) || "[]"
+        );
+
+    } catch (error) {
+
+        return [];
+    }
+}
+
+
+function afEEASaveExpenseRecords(records) {
+
+    if (
+typeof saveAFExpenseRecords ===
+        "function"
+    ) {
+
+saveAFExpenseRecords(records);
+
+        return;
+    }
+
+localStorage.setItem(
+        "expenses",
+JSON.stringify(records)
+    );
+
+localStorage.setItem(
+        "expenseRecords",
+JSON.stringify(records)
+    );
+}
+
+
+function afEEAUser() {
+
+    try {
+
+        if (
+typeof getAFCurrentUser ===
+            "function"
+        ) {
+            return getAFCurrentUser();
+        }
+
+        return JSON.parse(
+localStorage.getItem(
+                "currentUser"
+            ) || "null"
+        );
+
+    } catch (error) {
+
+        return null;
+    }
+}
+
+
+/* =========================================================
+   FIND LINKED ADVANCE
+   ========================================================= */
+
+function afEEAFindAdvance(
+    expense,
+    advances
+) {
+
+    if (!expense) {
+        return null;
+    }
+
+
+    if (expense.linkedAdvanceId) {
+
+const direct =
+advances.find(item =>
+
+                String(item.id) ===
+                String(
+expense.linkedAdvanceId
+                )
+
+            );
+
+        if (direct) {
+            return direct;
+        }
+    }
+
+
+    /*
+     * Secondary lookup for records created
+     * through this integration.
+     */
+
+    return advances.find(item =>
+
+        String(
+item.sourceExpenseId || ""
+        ) ===
+        String(
+expense.id || ""
+        )
+
+    ) || null;
+}
+
+
+/* =========================================================
+   CHECK WHETHER ADVANCE HAS RECOVERIES
+   ========================================================= */
+
+function afEEAAdvanceRecoveredAmount(
+advanceId
+) {
+
+    return afEEARecoveries()
+        .filter(item =>
+
+            String(
+item.advanceId
+            ) ===
+            String(
+advanceId
+            )
+
+        )
+        .reduce(
+            (sum, item) =>
+                sum +
+                Number(
+item.amount || 0
+                ),
+            0
+        );
+}
+
+
+/* =========================================================
+   CREATE / UPDATE LINKED ADVANCE
+   ========================================================= */
+
+function afEEASyncAdvance(
+    expense,
+    employee,
+paymentType
+) {
+
+    if (
+        !expense ||
+        !employee
+    ) {
+        return;
+    }
+
+
+const advances =
+afEEAAdvances();
+
+
+    let advance =
+afEEAFindAdvance(
+            expense,
+            advances
+        );
+
+
+    /*
+     * Employee selected but payment is NOT
+     * a Staff Advance.
+     *
+     * If it used to be an advance, remove it
+     * only if payroll has not started recovering it.
+     */
+
+    if (
+paymentType !==
+        "STAFF_ADVANCE"
+    ) {
+
+        if (advance) {
+
+const recovered =
+afEEAAdvanceRecoveredAmount(
+advance.id
+                );
+
+
+            if (recovered > 0) {
+
+                alert(
+                    "This expense was previously linked " +
+                    "to a staff advance and UGX " +
+recovered.toLocaleString() +
+                    " has already been recovered through payroll.\n\n" +
+                    "The linked advance cannot be removed automatically."
+                );
+
+                return false;
+            }
+
+
+const cleaned =
+advances.filter(item =>
+
+                    String(item.id) !==
+                    String(advance.id)
+
+                );
+
+
+afEEASaveAdvances(
+                cleaned
+            );
+
+
+expense.linkedAdvanceId = "";
+        }
+
+
+        return true;
+    }
+
+
+const currentUser =
+afEEAUser() || {};
+
+
+    /*
+     * UPDATE EXISTING ADVANCE
+     */
+
+    if (advance) {
+
+const recovered =
+afEEAAdvanceRecoveredAmount(
+advance.id
+            );
+
+
+        if (
+            Number(expense.amount || 0) <
+            recovered
+        ) {
+
+            alert(
+                "This advance cannot be reduced below " +
+                "UGX " +
+recovered.toLocaleString() +
+                " because that amount has already been " +
+                "recovered through payroll."
+            );
+
+            return false;
+        }
+
+
+advance.employeeId =
+employee.employeeId;
+
+advance.employeeName =
+employee.fullName || "";
+
+advance.date =
+expense.date || "";
+
+advance.amount =
+            Number(
+expense.amount || 0
+            );
+
+advance.reason =
+expense.description ||
+            "Staff Advance";
+
+advance.approvedBy =
+currentUser.fullName ||
+currentUser.employeeName ||
+            "";
+
+advance.remarks =
+            "Automatically linked from Expense " +
+            (
+expense.expenseNumber ||
+                ""
+            );
+
+advance.source =
+            "EXPENSES";
+
+advance.sourceExpenseId =
+expense.id;
+
+advance.sourceExpenseNumber =
+expense.expenseNumber || "";
+
+advance.updatedAt =
+            new Date().toISOString();
+
+
+expense.linkedAdvanceId =
+advance.id;
+
+
+afEEASaveAdvances(
+            advances
+        );
+
+
+        return true;
+    }
+
+
+    /*
+     * CREATE NEW ADVANCE
+     */
+
+const advanceId =
+Date.now() +
+Math.floor(
+Math.random() * 1000
+        );
+
+
+    advance = {
+
+        id:
+advanceId,
+
+employeeId:
+employee.employeeId,
+
+employeeName:
+employee.fullName || "",
+
+        date:
+expense.date || "",
+
+        amount:
+            Number(
+expense.amount || 0
+            ),
+
+        reason:
+expense.description ||
+            "Staff Advance",
+
+approvedBy:
+currentUser.fullName ||
+currentUser.employeeName ||
+            "",
+
+        remarks:
+            "Automatically created from Expense " +
+            (
+expense.expenseNumber ||
+                ""
+            ),
+
+        source:
+            "EXPENSES",
+
+sourceExpenseId:
+expense.id,
+
+sourceExpenseNumber:
+expense.expenseNumber || "",
+
+createdAt:
+            new Date().toISOString()
+
+    };
+
+
+advances.push(
+        advance
+    );
+
+
+afEEASaveAdvances(
+        advances
+    );
+
+
+expense.linkedAdvanceId =
+advanceId;
+
+
+    return true;
+}
+
+
+/* =========================================================
+   REMOVE LINKED ADVANCE AFTER EXPENSE CANCELLATION
+   ========================================================= */
+
+function afEEACancelLinkedAdvance(
+    expense
+) {
+
+    if (!expense) {
+        return true;
+    }
+
+
+const advances =
+afEEAAdvances();
+
+
+const advance =
+afEEAFindAdvance(
+            expense,
+            advances
+        );
+
+
+    if (!advance) {
+        return true;
+    }
+
+
+const recovered =
+afEEAAdvanceRecoveredAmount(
+advance.id
+        );
+
+
+    /*
+     * Never silently delete an advance
+     * that payroll has already recovered.
+     */
+
+    if (recovered > 0) {
+
+        alert(
+            "IMPORTANT\n\n" +
+            "The expense has a linked staff advance, " +
+            "but UGX " +
+recovered.toLocaleString() +
+            " has already been recovered through payroll.\n\n" +
+            "The advance was NOT removed automatically. " +
+            "The Director must first correct the payroll recovery."
+        );
+
+        return false;
+    }
+
+
+const remaining =
+advances.filter(item =>
+
+            String(item.id) !==
+            String(advance.id)
+
+        );
+
+
+afEEASaveAdvances(
+        remaining
+    );
+
+
+expense.linkedAdvanceId = "";
+
+expense.advanceReversed = true;
+
+expense.advanceReversedAt =
+        new Date().toISOString();
+
+
+    return true;
+}
+
+
+/* =========================================================
+   ENHANCE EXPENSE FORM
+   ========================================================= */
+
+function afEEAEnhanceExpenseModal() {
+
+const modal =
+document.getElementById(
+            "afExpensesModal"
+        );
+
+
+    if (!modal) {
+        return;
+    }
+
+
+    if (
+modal.dataset
+            .employeePayeeConnected ===
+        "1"
+    ) {
+        return;
+    }
+
+
+modal.dataset
+        .employeePayeeConnected =
+        "1";
+
+
+const originalPayee =
+modal.querySelector(
+            "#afExpensePayee"
+        );
+
+
+    if (!originalPayee) {
+        return;
+    }
+
+
+    /*
+     * Keep the original field hidden.
+     * Existing Expenses code continues
+     * reading #afExpensePayee normally.
+     */
+
+originalPayee.type =
+        "hidden";
+
+
+const employees =
+afEEAActiveEmployees();
+
+
+const employeeOptions =
+        employees
+            .map(employee => `
+
+<option
+                    value="EMPLOYEE:${afEEAEscape(
+employee.employeeId
+                    )}"
+>
+                    ${afEEAEscape(
+employee.employeeId
+                    )}
+                    -
+                    ${afEEAEscape(
+employee.fullName
+                    )}
+</option>
+
+            `)
+            .join("");
+
+
+const controls =
+document.createElement(
+            "div"
+        );
+
+
+controls.id =
+        "afEmployeePayeeControls";
+
+
+controls.innerHTML = `
+
+<select
+            id="afExpensePayeeSelector"
+            style="
+                width:100%;
+box-sizing:border-box;
+                padding:9px;
+                margin-top:5px;
+            "
+>
+
+<option value="">
+                Select Payee
+</option>
+
+            ${employeeOptions}
+
+<option value="OTHER">
+                Other
+</option>
+
+</select>
+
+
+<div
+            id="afOtherPayeeWrap"
+            style="
+display:none;
+                margin-top:8px;
+            "
+>
+
+<label style="
+                font-size:12px;
+font-weight:bold;
+            ">
+                Specify Payee / Paid To
+</label>
+
+<input
+                id="afOtherExpensePayee"
+                type="text"
+                placeholder="Enter person, supplier or company"
+                style="
+                    width:100%;
+box-sizing:border-box;
+                    padding:9px;
+                    margin-top:5px;
+                "
+>
+
+</div>
+
+
+<div
+            id="afEmployeePaymentTypeWrap"
+            style="
+display:none;
+                margin-top:8px;
+            "
+>
+
+<label style="
+                font-size:12px;
+font-weight:bold;
+            ">
+                Employee Payment Type
+</label>
+
+<select
+                id="afEmployeePaymentType"
+                style="
+                    width:100%;
+box-sizing:border-box;
+                    padding:9px;
+                    margin-top:5px;
+                "
+>
+
+<option value="">
+                    Select Payment Type
+</option>
+
+<option value="STAFF_ADVANCE">
+                    Staff Advance
+</option>
+
+<option value="REIMBURSEMENT">
+                    Reimbursement
+</option>
+
+<option value="OTHER_STAFF_PAYMENT">
+                    Other Staff Payment
+</option>
+
+</select>
+
+
+<div
+                id="afAdvanceNotice"
+                style="
+display:none;
+                    margin-top:7px;
+                    padding:8px 10px;
+                    background:#eaf5ee;
+                    border:1px solid #c7dfcf;
+                    border-radius:6px;
+                    color:#0b5d3b;
+                    font-size:11px;
+                    line-height:1.4;
+                "
+>
+                This payment will automatically
+                create an Employee Advance and
+                link it to payroll.
+</div>
+
+</div>
+
+    `;
+
+
+originalPayee
+        .insertAdjacentElement(
+            "afterend",
+            controls
+        );
+
+
+const selector =
+modal.querySelector(
+            "#afExpensePayeeSelector"
+        );
+
+
+const otherWrap =
+modal.querySelector(
+            "#afOtherPayeeWrap"
+        );
+
+
+const otherInput =
+modal.querySelector(
+            "#afOtherExpensePayee"
+        );
+
+
+const typeWrap =
+modal.querySelector(
+            "#afEmployeePaymentTypeWrap"
+        );
+
+
+const paymentType =
+modal.querySelector(
+            "#afEmployeePaymentType"
+        );
+
+
+const advanceNotice =
+modal.querySelector(
+            "#afAdvanceNotice"
+        );
+
+
+    function selectedEmployee() {
+
+const value =
+selector.value;
+
+
+        if (
+            !value.startsWith(
+                "EMPLOYEE:"
+            )
+        ) {
+            return null;
+        }
+
+
+const employeeId =
+value.substring(
+                "EMPLOYEE:".length
+            );
+
+
+        return employees.find(
+            employee =>
+
+                String(
+employee.employeeId
+                ) ===
+                String(
+employeeId
+                )
+
+        ) || null;
+    }
+
+
+    function updatePayeeUI() {
+
+const employee =
+selectedEmployee();
+
+
+        if (employee) {
+
+otherWrap.style.display =
+                "none";
+
+typeWrap.style.display =
+                "block";
+
+otherInput.value = "";
+
+originalPayee.value =
+employee.fullName || "";
+
+        } else if (
+selector.value ===
+            "OTHER"
+        ) {
+
+otherWrap.style.display =
+                "block";
+
+typeWrap.style.display =
+                "none";
+
+paymentType.value = "";
+
+advanceNotice.style.display =
+                "none";
+
+originalPayee.value =
+otherInput.value.trim();
+
+        } else {
+
+otherWrap.style.display =
+                "none";
+
+typeWrap.style.display =
+                "none";
+
+paymentType.value = "";
+
+originalPayee.value = "";
+
+advanceNotice.style.display =
+                "none";
+        }
+    }
+
+
+selector.onchange =
+updatePayeeUI;
+
+
+otherInput.oninput =
+        function() {
+
+            if (
+selector.value ===
+                "OTHER"
+            ) {
+
+originalPayee.value =
+otherInput.value.trim();
+            }
+        };
+
+
+paymentType.onchange =
+        function() {
+
+advanceNotice.style.display =
+paymentType.value ===
+                "STAFF_ADVANCE"
+                    ? "block"
+                    : "none";
+        };
+
+
+    /* =====================================================
+       SAVE / UPDATE WRAPPER
+       ===================================================== */
+
+const saveButton =
+modal.querySelector(
+            "#afSaveExpense"
+        );
+
+
+    if (saveButton) {
+
+const originalSave =
+saveButton.onclick;
+
+
+saveButton.onclick =
+            function(event) {
+
+const employee =
+selectedEmployee();
+
+
+                /*
+                 * VALIDATE PAYEE
+                 */
+
+                if (!selector.value) {
+
+                    alert(
+                        "Please select the payee."
+                    );
+
+                    return;
+                }
+
+
+                if (
+selector.value ===
+                    "OTHER"
+                ) {
+
+const otherName =
+otherInput
+                            .value
+                            .trim();
+
+
+                    if (!otherName) {
+
+                        alert(
+                            "Please enter the person, supplier or company that was paid."
+                        );
+
+otherInput.focus();
+
+                        return;
+                    }
+
+
+originalPayee.value =
+otherName;
+
+                } else {
+
+                    if (!employee) {
+
+                        alert(
+                            "Please select a valid employee."
+                        );
+
+                        return;
+                    }
+
+
+                    if (
+                        !paymentType.value
+                    ) {
+
+                        alert(
+                            "Please select the Employee Payment Type."
+                        );
+
+                        return;
+                    }
+
+
+originalPayee.value =
+employee.fullName || "";
+                }
+
+
+const editId =
+modal.querySelector(
+                        "#afExpenseEditId"
+                    )?.value || "";
+
+
+                /*
+                 * If editing an existing linked advance,
+                 * protect already-recovered money BEFORE
+                 * allowing the expense edit.
+                 */
+
+                if (editId) {
+
+const existingExpense =
+afEEAExpenseRecords()
+                            .find(record =>
+
+                                String(
+record.id
+                                ) ===
+                                String(
+editId
+                                )
+
+                            );
+
+
+                    if (existingExpense) {
+
+const advances =
+afEEAAdvances();
+
+
+const existingAdvance =
+afEEAFindAdvance(
+existingExpense,
+                                advances
+                            );
+
+
+                        if (existingAdvance) {
+
+const recovered =
+afEEAAdvanceRecoveredAmount(
+existingAdvance.id
+                                );
+
+
+const newAmount =
+                                Number(
+modal.querySelector(
+                                        "#afExpenseAmount"
+                                    )?.value || 0
+                                );
+
+
+const removingAdvance =
+                                !employee ||
+paymentType.value !==
+                                "STAFF_ADVANCE";
+
+
+                            if (
+                                recovered > 0 &&
+removingAdvance
+                            ) {
+
+                                alert(
+                                    "This expense is linked to a staff advance and UGX " +
+recovered.toLocaleString() +
+                                    " has already been recovered through payroll.\n\n" +
+                                    "Correct the payroll recovery before changing this from Staff Advance."
+                                );
+
+                                return;
+                            }
+
+
+                            if (
+                                recovered > 0 &&
+newAmount<
+                                recovered
+                            ) {
+
+                                alert(
+                                    "The expense amount cannot be reduced below UGX " +
+recovered.toLocaleString() +
+                                    " because that amount has already been recovered through payroll."
+                                );
+
+                                return;
+                            }
+                        }
+                    }
+                }
+
+
+                /*
+                 * Let the ORIGINAL Expenses module
+                 * save/update the expense first.
+                 */
+
+                if (
+typeof originalSave ===
+                    "function"
+                ) {
+
+originalSave.call(
+saveButton,
+                        event
+                    );
+                }
+
+
+                /*
+                 * Original save reopens Expenses.
+                 * Read the newly saved record.
+                 */
+
+const records =
+afEEAExpenseRecords();
+
+
+                let expense = null;
+
+
+                if (editId) {
+
+                    expense =
+records.find(record =>
+
+                            String(
+record.id
+                            ) ===
+                            String(
+editId
+                            )
+
+                        );
+
+                } else {
+
+                    expense =
+                        records
+                            .slice()
+                            .sort(
+                                (a, b) =>
+                                    Number(
+b.id || 0
+                                    ) -
+                                    Number(
+a.id || 0
+                                    )
+                            )[0] || null;
+                }
+
+
+                if (!expense) {
+                    return;
+                }
+
+
+                /*
+                 * Save structured payee information
+                 * on the expense itself.
+                 */
+
+                if (employee) {
+
+expense.payeeType =
+                        "EMPLOYEE";
+
+expense.payeeEmployeeId =
+employee.employeeId;
+
+expense.payeeEmployeeName =
+employee.fullName || "";
+
+expense.employeePaymentType =
+paymentType.value;
+
+expense.payee =
+employee.fullName || "";
+
+                } else {
+
+expense.payeeType =
+                        "OTHER";
+
+expense.payeeEmployeeId =
+                        "";
+
+expense.payeeEmployeeName =
+                        "";
+
+expense.employeePaymentType =
+                        "";
+
+expense.payee =
+otherInput.value.trim();
+                }
+
+
+                /*
+                 * Synchronize payroll advance.
+                 */
+
+                if (employee) {
+
+afEEASyncAdvance(
+                        expense,
+                        employee,
+paymentType.value
+                    );
+
+                } else {
+
+                    /*
+                     * Editing a former employee advance
+                     * into an Other payee.
+                     */
+
+const advances =
+afEEAAdvances();
+
+
+const oldAdvance =
+afEEAFindAdvance(
+                            expense,
+                            advances
+                        );
+
+
+                    if (oldAdvance) {
+
+const recovered =
+afEEAAdvanceRecoveredAmount(
+oldAdvance.id
+                            );
+
+
+                        if (recovered === 0) {
+
+afEEASaveAdvances(
+advances.filter(
+                                    item =>
+                                        String(
+item.id
+                                        ) !==
+                                        String(
+oldAdvance.id
+                                        )
+                                )
+                            );
+
+expense.linkedAdvanceId =
+                                "";
+                        }
+                    }
+                }
+
+
+afEEASaveExpenseRecords(
+                    records
+                );
+
+
+                /*
+                 * Refresh newly opened Expenses window
+                 * so the saved link is reflected.
+                 */
+
+setTimeout(
+                    function() {
+
+                        if (
+typeof window
+                                .openAFExpenses ===
+                            "function"
+                        ) {
+
+                            window
+                                .openAFExpenses();
+                        }
+
+                    },
+                    50
+                );
+            };
+    }
+
+
+    /* =====================================================
+       EDIT BUTTON WRAPPERS
+       ===================================================== */
+
+modal.querySelectorAll(
+        "[data-expense-edit]"
+    ).forEach(button => {
+
+const originalEdit =
+button.onclick;
+
+
+button.onclick =
+            function(event) {
+
+const expenseId =
+button.getAttribute(
+                        "data-expense-edit"
+                    );
+
+
+const record =
+afEEAExpenseRecords()
+                        .find(item =>
+
+                            String(item.id) ===
+                            String(expenseId)
+
+                        );
+
+
+                /*
+                 * Let original Expenses code
+                 * load the form first.
+                 */
+
+                if (
+typeof originalEdit ===
+                    "function"
+                ) {
+
+originalEdit.call(
+                        button,
+                        event
+                    );
+                }
+
+
+                if (!record) {
+                    return;
+                }
+
+
+                /*
+                 * New structured records.
+                 */
+
+                if (
+record.payeeType ===
+                    "EMPLOYEE" &&
+record.payeeEmployeeId
+                ) {
+
+selector.value =
+                        "EMPLOYEE:" +
+record.payeeEmployeeId;
+
+updatePayeeUI();
+
+paymentType.value =
+record.employeePaymentType ||
+                        (
+record.linkedAdvanceId
+                                ? "STAFF_ADVANCE"
+                                : "OTHER_STAFF_PAYMENT"
+                        );
+
+paymentType.onchange();
+
+                    return;
+                }
+
+
+                if (
+record.payeeType ===
+                    "OTHER"
+                ) {
+
+selector.value =
+                        "OTHER";
+
+updatePayeeUI();
+
+otherInput.value =
+record.payee || "";
+
+originalPayee.value =
+record.payee || "";
+
+                    return;
+                }
+
+
+                /*
+                 * OLD EXPENSE RECORDS
+                 *
+                 * Try matching old payee text to
+                 * an active employee.
+                 */
+
+const employee =
+employees.find(item =>
+
+                        String(
+item.fullName || ""
+                        )
+                            .trim()
+                            .toLowerCase() ===
+
+                        String(
+record.payee || ""
+                        )
+                            .trim()
+                            .toLowerCase()
+
+                    );
+
+
+                if (employee) {
+
+selector.value =
+                        "EMPLOYEE:" +
+employee.employeeId;
+
+updatePayeeUI();
+
+paymentType.value =
+record.linkedAdvanceId
+                            ? "STAFF_ADVANCE"
+                            : "OTHER_STAFF_PAYMENT";
+
+paymentType.onchange();
+
+                } else {
+
+selector.value =
+                        "OTHER";
+
+updatePayeeUI();
+
+otherInput.value =
+record.payee || "";
+
+originalPayee.value =
+record.payee || "";
+                }
+            };
+    });
+
+
+    /* =====================================================
+       CANCEL / REVERSE WRAPPERS
+       ===================================================== */
+
+modal.querySelectorAll(
+        "[data-expense-cancel]"
+    ).forEach(button => {
+
+const originalCancel =
+button.onclick;
+
+
+button.onclick =
+            function(event) {
+
+const expenseId =
+button.getAttribute(
+                        "data-expense-cancel"
+                    );
+
+
+const before =
+afEEAExpenseRecords()
+                        .find(item =>
+
+                            String(item.id) ===
+                            String(expenseId)
+
+                        );
+
+
+                if (!before) {
+
+                    if (
+typeof originalCancel ===
+                        "function"
+                    ) {
+
+originalCancel.call(
+                            button,
+                            event
+                        );
+                    }
+
+                    return;
+                }
+
+
+                /*
+                 * If linked advance already has
+                 * payroll recoveries, STOP cancellation
+                 * before original expense code runs.
+                 */
+
+const advances =
+afEEAAdvances();
+
+
+const advance =
+afEEAFindAdvance(
+                        before,
+                        advances
+                    );
+
+
+                if (advance) {
+
+const recovered =
+afEEAAdvanceRecoveredAmount(
+advance.id
+                        );
+
+
+                    if (recovered > 0) {
+
+                        alert(
+                            "This expense cannot yet be cancelled.\n\n" +
+                            "It is linked to a staff advance and UGX " +
+recovered.toLocaleString() +
+                            " has already been recovered through payroll.\n\n" +
+                            "Correct/reverse the payroll recovery first, then cancel the expense."
+                        );
+
+                        return;
+                    }
+                }
+
+
+                /*
+                 * Run original Director cancellation.
+                 */
+
+                if (
+typeof originalCancel ===
+                    "function"
+                ) {
+
+originalCancel.call(
+                        button,
+                        event
+                    );
+                }
+
+
+                /*
+                 * Confirm original code really
+                 * cancelled it.
+                 */
+
+const records =
+afEEAExpenseRecords();
+
+
+const after =
+records.find(item =>
+
+                        String(item.id) ===
+                        String(expenseId)
+
+                    );
+
+
+                if (
+                    !after ||
+                    String(
+after.status || ""
+                    ).toUpperCase() !==
+                    "CANCELLED"
+                ) {
+
+                    /*
+                     * Director may have pressed Cancel
+                     * on confirm/prompt.
+                     */
+
+                    return;
+                }
+
+
+                /*
+                 * Now remove the linked payroll advance.
+                 */
+
+afEEACancelLinkedAdvance(
+                    after
+                );
+
+
+afEEASaveExpenseRecords(
+                    records
+                );
+
+
+setTimeout(
+                    function() {
+
+                        if (
+typeof window
+                                .openAFExpenses ===
+                            "function"
+                        ) {
+
+                            window
+                                .openAFExpenses();
+                        }
+
+                    },
+                    50
+                );
+            };
+    });
+
+
+    /* =====================================================
+       CLEAR BUTTON
+       ===================================================== */
+
+const clearButton =
+modal.querySelector(
+            "#afClearExpense"
+        );
+
+
+    if (clearButton) {
+
+const originalClear =
+clearButton.onclick;
+
+
+clearButton.onclick =
+            function(event) {
+
+                if (
+typeof originalClear ===
+                    "function"
+                ) {
+
+originalClear.call(
+clearButton,
+                        event
+                    );
+                }
+
+
+selector.value = "";
+
+otherInput.value = "";
+
+paymentType.value = "";
+
+updatePayeeUI();
+            };
+    }
+}
+
+
+/* =========================================================
+   CONNECT TO EXISTING EXPENSE MODULE
+   ========================================================= */
+
+const afEEAOriginalOpenExpenses =
+window.openAFExpenses;
+
+
+if (
+typeof afEEAOriginalOpenExpenses ===
+    "function"
+) {
+
+window.openAFExpenses =
+        function() {
+
+const result =
+afEEAOriginalOpenExpenses
+                    .apply(
+                        this,
+                        arguments
+                    );
+
+
+afEEAEnhanceExpenseModal();
+
+
+            return result;
+        };
+}
+
+
+/*
+ * The sidebar's openRoleModule may call the
+ * original local openAFExpenses() directly.
+ * Enhance the modal immediately after it appears.
+ */
+
+document.addEventListener(
+    "click",
+    function() {
+
+setTimeout(
+afEEAEnhanceExpenseModal,
+            20
+        );
+
+    },
+    true
+);
+
+
+/* =========================================================
+   INITIAL CHECK
+   ========================================================= */
+
+setTimeout(
+afEEAEnhanceExpenseModal,
+    300
+);
+
+
+console.log(
+    "A&F Expense ↔ Employee Advance integration connected."
+);
+
+})();
