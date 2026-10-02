@@ -69602,10 +69602,6 @@ afFinalHeader(title)
 const footerHTML =
 afFinalFooter("");
 
-
-const footerHTML =
-afFinalFooter("");
-
 target.insertAdjacentHTML(
     "beforeend",
 footerHTML
