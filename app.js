@@ -69402,7 +69402,7 @@ combined.includes("QUALITY & DISCIPLINE")
 doc.querySelector(".af-smart-header") ||
 combined.includes("COMPANY LETTER")
     ) {
-        return "";
+        return "Company Letter";
     }
 
 
