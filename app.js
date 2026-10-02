@@ -69603,21 +69603,13 @@ doc.body;
 
 afRemoveOldPrintBranding(doc); 
        
-if (title === "COMPANY LETTER") {
-Array.from(doc.querySelectorAll("h1,h2,h3,div"))
-        .filter(el =>
-el.textContent.trim().toUpperCase() === "COMPANY LETTER"
-        )
-        .forEach(el =>el.remove());
-}
-
-
+ 
          /*
          * ONE HEADER
          */
 target.insertAdjacentHTML(
             "afterbegin",
-afFinalHeader(title === "COMPANY LETTER" ? "" : title)
+afFinalHeader(String(title).trim().toUpperCase() === "COMPANY LETTER" ? "" : title)
         );
 
 
