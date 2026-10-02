@@ -69016,7 +69016,7 @@ return `
     width: 100%;
     height: auto;
     transform:
-    translateY(-10px);
+    translateY(-15px);
 }
 
 /*
