@@ -69146,12 +69146,13 @@ return `
         print-color-adjust: exact !important;
     }
     .af-smart-footer {
-        margin-top: 0mm !
+        position: fixed !
         important;
-    .af-final-footer-art {
-        width: 100%;
-        height: auto;
-        max-height: none;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        margin: 0 !important;
+        width: 100%; !important;
     }
 
     button,
