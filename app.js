@@ -69602,6 +69602,13 @@ doc.body;
 
 
 afRemoveOldPrintBranding(doc); 
+if (title === "COMPANY LETTER") {
+Array.from(doc.querySelectorAll("h1,h2,h3,div"))
+        .filter(el =>
+el.textContent.trim().toUpperCase() === "COMPANY LETTER"
+        )
+        .forEach(el =>el.remove());
+}
 
 
          /*
