@@ -76643,3 +76643,3058 @@ console.log(
   );
 
 })();
+
+/* =========================================================
+   TVSLA - TWEKEMBE VILLAGE SAVINGS AND LOAN ASSOCIATION
+   INDEPENDENT SACCO MANAGEMENT MODULE
+
+   IMPORTANT:
+   - Completely separate from A&F factory accounting.
+   - Director = full TVSLA control.
+   - Secretary = transaction entry only.
+   ========================================================= */
+
+(function connectTVSLAModule() {
+"use strict";
+
+if (window.__tvslaInstalled) return;
+window.__tvslaInstalled = true;
+
+
+/* =========================================================
+   ORGANISATION
+   ========================================================= */
+
+const TVSLA_NAME =
+    "Twekembe Village Savings and Loan Association";
+
+const TVSLA_SHORT_NAME = "TVSLA";
+
+
+/* =========================================================
+   INDEPENDENT STORAGE
+
+   These keys are deliberately separate from factory records.
+   ========================================================= */
+
+const TVSLA_KEYS = {
+    members: "tvslaMembers",
+    transactions: "tvslaTransactions",
+    loans: "tvslaLoans",
+    settings: "tvslaSettings"
+};
+
+
+/* =========================================================
+   HELPERS
+   ========================================================= */
+
+function tvslaRead(key, fallback) {
+
+    try {
+
+const value =
+JSON.parse(
+localStorage.getItem(key)
+            );
+
+        return value ?? fallback;
+
+    } catch (error) {
+
+console.error(
+            "TVSLA storage error:",
+            error
+        );
+
+        return fallback;
+    }
+}
+
+
+function tvslaWrite(key, value) {
+
+localStorage.setItem(
+        key,
+JSON.stringify(value)
+    );
+}
+
+
+function tvslaMembers() {
+
+    return tvslaRead(
+TVSLA_KEYS.members,
+        []
+    );
+}
+
+
+function tvslaTransactions() {
+
+    return tvslaRead(
+TVSLA_KEYS.transactions,
+        []
+    );
+}
+
+
+function tvslaLoans() {
+
+    return tvslaRead(
+TVSLA_KEYS.loans,
+        []
+    );
+}
+
+
+function tvslaSettings() {
+
+    return tvslaRead(
+TVSLA_KEYS.settings,
+        {
+weeklyContribution: 0,
+            currency: "UGX"
+        }
+    );
+}
+
+
+function tvslaRole() {
+
+    try {
+
+        if (
+typeof getAFCurrentRole ===
+            "function"
+        ) {
+
+            return getAFCurrentRole();
+
+        }
+
+    } catch (error) {}
+
+
+    try {
+
+const user =
+JSON.parse(
+localStorage.getItem(
+                    "currentUser"
+                ) || "{}"
+            );
+
+        return user.role || "";
+
+    } catch (error) {
+
+        return "";
+    }
+}
+
+
+function tvslaCurrentUserName() {
+
+    try {
+
+const user =
+JSON.parse(
+localStorage.getItem(
+                    "currentUser"
+                ) || "{}"
+            );
+
+        return (
+user.fullName ||
+user.name ||
+user.username ||
+user.employeeName ||
+            "System User"
+        );
+
+    } catch (error) {
+
+        return "System User";
+    }
+}
+
+
+function tvslaDirector() {
+
+    return tvslaRole() === "Director";
+}
+
+
+function tvslaSecretary() {
+
+    return tvslaRole() === "Secretary";
+}
+
+
+function tvslaAllowed() {
+
+    return (
+tvslaDirector() ||
+tvslaSecretary()
+    );
+}
+
+
+function tvslaMoney(value) {
+
+    return Number(
+        value || 0
+    ).toLocaleString(
+        "en-UG",
+        {
+maximumFractionDigits: 0
+        }
+    );
+}
+
+
+function tvslaEscape(value) {
+
+const div =
+document.createElement("div");
+
+div.textContent =
+        String(value ?? "");
+
+    return div.innerHTML;
+}
+
+
+function tvslaToday() {
+
+    return new Date()
+        .toISOString()
+        .slice(0, 10);
+}
+
+
+function tvslaID(prefix) {
+
+    return (
+        prefix +
+        "-" +
+Date.now() +
+        "-" +
+Math.random()
+            .toString(36)
+            .slice(2, 7)
+            .toUpperCase()
+    );
+}
+
+
+/* =========================================================
+   CALCULATIONS
+   ========================================================= */
+
+function tvslaTotals() {
+
+const transactions =
+tvslaTransactions();
+
+const loans =
+tvslaLoans();
+
+    let savings = 0;
+    let withdrawals = 0;
+    let repayments = 0;
+    let dividends = 0;
+    let otherIncome = 0;
+
+transactions.forEach(t => {
+
+const amount =
+            Number(t.amount || 0);
+
+        switch (t.type) {
+
+            case "Savings":
+                savings += amount;
+                break;
+
+            case "Withdrawal":
+                withdrawals += amount;
+                break;
+
+            case "Loan Repayment":
+                repayments += amount;
+                break;
+
+            case "Dividend / Interest":
+                dividends += amount;
+                break;
+
+            case "Other Income":
+otherIncome += amount;
+                break;
+        }
+
+    });
+
+
+const loansIssued =
+loans.reduce(
+            (sum, loan) =>
+                sum +
+                Number(
+loan.amount || 0
+                ),
+            0
+        );
+
+
+const outstandingLoans =
+loans.reduce(
+            (sum, loan) =>
+                sum +
+Math.max(
+                    0,
+                    Number(
+loan.balance ??
+loan.amount ??
+                        0
+                    )
+                ),
+            0
+        );
+
+
+const cashBalance =
+        savings +
+        repayments +
+otherIncome -
+        withdrawals -
+loansIssued;
+
+
+    return {
+        savings,
+        withdrawals,
+        repayments,
+        dividends,
+otherIncome,
+loansIssued,
+outstandingLoans,
+cashBalance
+    };
+}
+
+
+/* =========================================================
+   BASE MODAL
+   ========================================================= */
+
+function tvslaCloseModal() {
+
+const old =
+document.getElementById(
+            "tvslaModal"
+        );
+
+    if (old) {
+old.remove();
+    }
+}
+
+
+function tvslaModal(title, body) {
+
+tvslaCloseModal();
+
+const overlay =
+document.createElement("div");
+
+overlay.id = "tvslaModal";
+
+overlay.style.cssText = `
+position:fixed;
+        inset:0;
+        z-index:999999;
+background:rgba(0,0,0,.48);
+display:flex;
+align-items:flex-start;
+justify-content:center;
+overflow:auto;
+        padding:25px 12px;
+box-sizing:border-box;
+    `;
+
+
+overlay.innerHTML = `
+
+<div style="
+width:min(1100px,100%);
+            background:#f7faf8;
+            border-radius:14px;
+            box-shadow:
+                0 14px 40px
+rgba(0,0,0,.25);
+overflow:hidden;
+        ">
+
+<div style="
+                background:#0b5d3b;
+color:white;
+                padding:16px 18px;
+display:flex;
+justify-content:space-between;
+align-items:center;
+                gap:12px;
+            ">
+
+<div>
+
+<div style="
+                        font-size:18px;
+                        font-weight:800;
+                    ">
+                        ${tvslaEscape(title)}
+</div>
+
+<div style="
+                        font-size:11px;
+                        opacity:.85;
+                        margin-top:3px;
+                    ">
+                        ${TVSLA_NAME}
+</div>
+
+</div>
+
+<button
+                    id="tvslaCloseBtn"
+                    style="
+border:none;
+background:white;
+                        color:#0b5d3b;
+                        border-radius:8px;
+                        padding:8px 13px;
+font-weight:bold;
+cursor:pointer;
+                    "
+>
+✕ Close
+</button>
+
+</div>
+
+<div style="
+                padding:18px;
+            ">
+                ${body}
+</div>
+
+</div>
+
+    `;
+
+
+document.body.appendChild(
+        overlay
+    );
+
+
+overlay.querySelector(
+        "#tvslaCloseBtn"
+    ).onclick =
+tvslaCloseModal;
+
+
+overlay.addEventListener(
+        "click",
+        function(event) {
+
+            if (event.target === overlay) {
+tvslaCloseModal();
+            }
+
+        }
+    );
+
+
+    return overlay;
+}
+
+
+/* =========================================================
+   BUTTON STYLE
+   ========================================================= */
+
+function tvslaButton(
+    text,
+    id,
+    secondary
+) {
+
+    return `
+
+<button
+            id="${id}"
+            style="
+border:none;
+                border-radius:9px;
+                padding:11px 14px;
+cursor:pointer;
+                font-weight:700;
+                font-size:13px;
+                background:
+                    ${
+                        secondary
+                        ? "#e7f1eb"
+                        : "#0b5d3b"
+                    };
+                color:
+                    ${
+                        secondary
+                        ? "#0b5d3b"
+                        : "white"
+                    };
+            "
+>
+            ${text}
+</button>
+
+    `;
+}
+
+
+/* =========================================================
+   MAIN ENTRY
+   ========================================================= */
+
+function openTVSLA() {
+
+    if (!tvslaAllowed()) {
+
+        alert(
+            "Access Denied\n\n" +
+            "TVSLA is available only to " +
+            "the Director and Secretary."
+        );
+
+        return;
+    }
+
+
+    /*
+     * Secretary must go directly
+     * to Transaction Entry.
+     */
+
+    if (tvslaSecretary()) {
+
+openTVSLATransactionEntry();
+
+        return;
+    }
+
+
+openTVSLADashboard();
+}
+
+
+/* =========================================================
+   DIRECTOR DASHBOARD
+   ========================================================= */
+
+function openTVSLADashboard() {
+
+    if (!tvslaDirector()) {
+
+openTVSLATransactionEntry();
+        return;
+    }
+
+
+const totals =
+tvslaTotals();
+
+const members =
+tvslaMembers();
+
+const transactions =
+tvslaTransactions();
+
+
+const recent =
+        transactions
+            .slice()
+            .sort(
+                (a, b) =>
+                    Number(b.createdAt || 0) -
+                    Number(a.createdAt || 0)
+            )
+            .slice(0, 8);
+
+
+const recentRows =
+recent.length
+        ? recent.map(t => `
+
+<tr>
+
+<td>
+                    ${tvslaEscape(t.date)}
+</td>
+
+<td>
+                    ${tvslaEscape(t.memberName)}
+</td>
+
+<td>
+                    ${tvslaEscape(t.type)}
+</td>
+
+<td style="
+text-align:right;
+font-weight:bold;
+                ">
+                    ${tvslaMoney(t.amount)}
+</td>
+
+<td>
+                    ${tvslaEscape(t.enteredBy)}
+</td>
+
+</tr>
+
+        `).join("")
+        : `
+
+<tr>
+<td
+colspan="5"
+                    style="
+text-align:center;
+                        padding:18px;
+                        color:#777;
+                    "
+>
+                    No TVSLA transactions recorded yet.
+</td>
+</tr>
+
+        `;
+
+
+const modal =
+tvslaModal(
+            "TVSLA Dashboard",
+            `
+
+<div style="
+display:grid;
+                grid-template-columns:
+                    repeat(
+                        auto-fit,
+minmax(150px,1fr)
+                    );
+                gap:10px;
+                margin-bottom:16px;
+            ">
+
+                ${tvslaKPI(
+                    "Members",
+members.length
+                )}
+
+                ${tvslaKPI(
+                    "Total Savings",
+                    "UGX " +
+tvslaMoney(
+totals.savings
+                    )
+                )}
+
+                ${tvslaKPI(
+                    "Loans Issued",
+                    "UGX " +
+tvslaMoney(
+totals.loansIssued
+                    )
+                )}
+
+                ${tvslaKPI(
+                    "Outstanding Loans",
+                    "UGX " +
+tvslaMoney(
+totals.outstandingLoans
+                    )
+                )}
+
+                ${tvslaKPI(
+                    "Loan Repayments",
+                    "UGX " +
+tvslaMoney(
+totals.repayments
+                    )
+                )}
+
+                ${tvslaKPI(
+                    "TVSLA Balance",
+                    "UGX " +
+tvslaMoney(
+totals.cashBalance
+                    )
+                )}
+
+</div>
+
+
+<div style="
+background:white;
+                border:1px solid #dce7df;
+                border-radius:12px;
+                padding:14px;
+                margin-bottom:15px;
+            ">
+
+<div style="
+                    font-weight:800;
+                    margin-bottom:10px;
+                    color:#0b5d3b;
+                ">
+                    TVSLA Management
+</div>
+
+<div style="
+display:flex;
+flex-wrap:wrap;
+                    gap:8px;
+                ">
+
+                    ${tvslaButton(
+                        "Transaction Entry",
+                        "tvslaTransactionsBtn"
+                    )}
+
+                    ${tvslaButton(
+                        "Members",
+                        "tvslaMembersBtn",
+                        true
+                    )}
+
+                    ${tvslaButton(
+                        "Savings",
+                        "tvslaSavingsBtn",
+                        true
+                    )}
+
+                    ${tvslaButton(
+                        "Loans",
+                        "tvslaLoansBtn",
+                        true
+                    )}
+
+                    ${tvslaButton(
+                        "Loan Repayments",
+                        "tvslaRepaymentsBtn",
+                        true
+                    )}
+
+                    ${tvslaButton(
+                        "Member Statement",
+                        "tvslaStatementBtn",
+                        true
+                    )}
+
+                    ${tvslaButton(
+                        "Transaction History",
+                        "tvslaHistoryBtn",
+                        true
+                    )}
+
+                    ${tvslaButton(
+                        "Reports",
+                        "tvslaReportsBtn",
+                        true
+                    )}
+
+                    ${tvslaButton(
+                        "TVSLA Settings",
+                        "tvslaSettingsBtn",
+                        true
+                    )}
+
+</div>
+
+</div>
+
+
+<div style="
+                background:#fff8e8;
+                border:1px solid #f0dfb4;
+                border-radius:10px;
+                padding:11px 13px;
+                margin-bottom:15px;
+                font-size:12px;
+                color:#6b5117;
+            ">
+
+                TVSLA records are independent from
+                A&F Wekavera Ltd factory accounts.
+                They do not change factory sales,
+                expenses, cash, stock, payroll or profit.
+
+</div>
+
+
+<div style="
+background:white;
+                border:1px solid #dce7df;
+                border-radius:12px;
+                padding:14px;
+overflow:auto;
+            ">
+
+<div style="
+                    font-weight:800;
+                    color:#0b5d3b;
+                    margin-bottom:10px;
+                ">
+                    Recent Transactions
+</div>
+
+<table style="
+                    width:100%;
+border-collapse:collapse;
+                    font-size:12px;
+                ">
+
+<thead>
+
+<tr style="
+                            background:#eef7f1;
+                        ">
+
+<th style="padding:8px;text-align:left;">
+                                Date
+</th>
+
+<th style="padding:8px;text-align:left;">
+                                Member
+</th>
+
+<th style="padding:8px;text-align:left;">
+                                Transaction
+</th>
+
+<th style="padding:8px;text-align:right;">
+                                Amount
+</th>
+
+<th style="padding:8px;text-align:left;">
+                                Entered By
+</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+                        ${recentRows}
+</tbody>
+
+</table>
+
+</div>
+
+            `
+        );
+
+
+modal.querySelector(
+        "#tvslaTransactionsBtn"
+    ).onclick =
+openTVSLATransactionEntry;
+
+
+modal.querySelector(
+        "#tvslaMembersBtn"
+    ).onclick =
+openTVSLAMembers;
+
+
+modal.querySelector(
+        "#tvslaSavingsBtn"
+    ).onclick =
+        () =>
+openTVSLAHistory(
+                "Savings"
+            );
+
+
+modal.querySelector(
+        "#tvslaLoansBtn"
+    ).onclick =
+openTVSLALoans;
+
+
+modal.querySelector(
+        "#tvslaRepaymentsBtn"
+    ).onclick =
+        () =>
+openTVSLAHistory(
+                "Loan Repayment"
+            );
+
+
+modal.querySelector(
+        "#tvslaStatementBtn"
+    ).onclick =
+openTVSLAMemberStatement;
+
+
+modal.querySelector(
+        "#tvslaHistoryBtn"
+    ).onclick =
+        () =>
+openTVSLAHistory();
+
+
+modal.querySelector(
+        "#tvslaReportsBtn"
+    ).onclick =
+openTVSLAReports;
+
+
+modal.querySelector(
+        "#tvslaSettingsBtn"
+    ).onclick =
+openTVSLASettings;
+}
+
+
+function tvslaKPI(label, value) {
+
+    return `
+
+<div style="
+background:white;
+            border:1px solid #dce7df;
+            border-radius:11px;
+            padding:13px;
+        ">
+
+<div style="
+                color:#66756d;
+                font-size:10px;
+                font-weight:800;
+text-transform:uppercase;
+            ">
+                ${label}
+</div>
+
+<div style="
+                margin-top:7px;
+                color:#0b5d3b;
+                font-size:18px;
+                font-weight:800;
+            ">
+                ${value}
+</div>
+
+</div>
+
+    `;
+}
+
+
+/* =========================================================
+   TRANSACTION ENTRY
+   Director + Secretary
+   ========================================================= */
+
+function openTVSLATransactionEntry() {
+
+    if (!tvslaAllowed()) {
+
+        alert("Access Denied");
+        return;
+    }
+
+
+const members =
+tvslaMembers();
+
+
+const memberOptions =
+        members
+            .filter(
+                member =>
+member.active !== false
+            )
+            .map(
+                member => `
+
+<option
+                        value="${tvslaEscape(member.id)}"
+>
+                        ${tvslaEscape(member.name)}
+</option>
+
+                `
+            )
+            .join("");
+
+
+const modal =
+tvslaModal(
+            "TVSLA Transaction Entry",
+            `
+
+<div style="
+                background:#eef7f1;
+                border:1px solid #cfe3d6;
+                padding:11px;
+                border-radius:9px;
+                margin-bottom:14px;
+                font-size:12px;
+            ">
+
+                Logged in as:
+<b>
+                    ${tvslaEscape(
+tvslaCurrentUserName()
+                    )}
+</b>
+
+&nbsp;|&nbsp;
+
+                Role:
+<b>
+                    ${tvslaEscape(
+tvslaRole()
+                    )}
+</b>
+
+</div>
+
+
+<form id="tvslaTransactionForm">
+
+<div style="
+display:grid;
+                    grid-template-columns:
+                        repeat(
+                            auto-fit,
+minmax(210px,1fr)
+                        );
+                    gap:12px;
+                ">
+
+<label>
+                        Date
+<input
+                            id="tvslaTransactionDate"
+                            type="date"
+                            value="${tvslaToday()}"
+                            required
+                            style="${tvslaInputStyle()}"
+>
+</label>
+
+
+<label>
+                        Member
+
+<select
+                            id="tvslaTransactionMember"
+                            required
+                            style="${tvslaInputStyle()}"
+>
+
+<option value="">
+                                Select Member
+</option>
+
+                            ${memberOptions}
+
+</select>
+
+</label>
+
+
+<label>
+                        Transaction Type
+
+<select
+                            id="tvslaTransactionType"
+                            required
+                            style="${tvslaInputStyle()}"
+>
+
+<option value="">
+                                Select Transaction
+</option>
+
+<option value="Savings">
+                                Savings / Contribution
+</option>
+
+<option value="Withdrawal">
+                                Withdrawal
+</option>
+
+<option value="Loan Repayment">
+                                Loan Repayment
+</option>
+
+<option value="Dividend / Interest">
+                                Dividend / Interest
+</option>
+
+<option value="Other Income">
+                                Other Income
+</option>
+
+</select>
+
+</label>
+
+
+<label>
+                        Amount (UGX)
+
+<input
+                            id="tvslaTransactionAmount"
+                            type="number"
+                            min="1"
+                            step="1"
+                            required
+                            style="${tvslaInputStyle()}"
+>
+
+</label>
+
+
+<label>
+                        Payment Method
+
+<select
+                            id="tvslaPaymentMethod"
+                            style="${tvslaInputStyle()}"
+>
+
+<option value="Cash">
+                                Cash
+</option>
+
+<option value="Mobile Money">
+                                Mobile Money
+</option>
+
+<option value="Bank">
+                                Bank
+</option>
+
+<option value="Other">
+                                Other
+</option>
+
+</select>
+
+</label>
+
+
+<label>
+                        Receipt / Reference
+
+<input
+                            id="tvslaReference"
+                            type="text"
+                            placeholder="Optional"
+                            style="${tvslaInputStyle()}"
+>
+
+</label>
+
+</div>
+
+
+<label style="
+display:block;
+                    margin-top:12px;
+                ">
+
+                    Notes
+
+<textarea
+                        id="tvslaTransactionNotes"
+                        rows="3"
+                        style="${tvslaInputStyle()}"
+></textarea>
+
+</label>
+
+
+<div style="
+                    margin-top:15px;
+display:flex;
+                    gap:8px;
+flex-wrap:wrap;
+                ">
+
+                    ${tvslaButton(
+                        "Save Transaction",
+                        "tvslaSaveTransactionBtn"
+                    )}
+
+                    ${
+tvslaDirector()
+                        ? tvslaButton(
+                            "Back to Dashboard",
+                            "tvslaBackDashboardBtn",
+                            true
+                        )
+                        : ""
+                    }
+
+</div>
+
+</form>
+
+            `
+        );
+
+
+const form =
+modal.querySelector(
+            "#tvslaTransactionForm"
+        );
+
+
+form.onsubmit =
+        function(event) {
+
+event.preventDefault();
+
+
+const memberId =
+modal.querySelector(
+                    "#tvslaTransactionMember"
+                ).value;
+
+
+const member =
+tvslaMembers()
+                    .find(
+                        item =>
+item.id ===
+memberId
+                    );
+
+
+            if (!member) {
+
+                alert(
+                    "Please select a TVSLA member."
+                );
+
+                return;
+            }
+
+
+const amount =
+                Number(
+modal.querySelector(
+                        "#tvslaTransactionAmount"
+                    ).value
+                );
+
+
+            if (
+                !Number.isFinite(amount) ||
+                amount <= 0
+            ) {
+
+                alert(
+                    "Enter a valid transaction amount."
+                );
+
+                return;
+            }
+
+
+const transactions =
+tvslaTransactions();
+
+
+transactions.push({
+
+                id:
+tvslaID("TXN"),
+
+                date:
+modal.querySelector(
+                        "#tvslaTransactionDate"
+                    ).value,
+
+memberId:
+member.id,
+
+memberName:
+member.name,
+
+                type:
+modal.querySelector(
+                        "#tvslaTransactionType"
+                    ).value,
+
+                amount,
+
+paymentMethod:
+modal.querySelector(
+                        "#tvslaPaymentMethod"
+                    ).value,
+
+                reference:
+modal.querySelector(
+                        "#tvslaReference"
+                    ).value.trim(),
+
+                notes:
+modal.querySelector(
+                        "#tvslaTransactionNotes"
+                    ).value.trim(),
+
+enteredBy:
+tvslaCurrentUserName(),
+
+enteredByRole:
+tvslaRole(),
+
+createdAt:
+Date.now()
+
+            });
+
+
+tvslaWrite(
+TVSLA_KEYS.transactions,
+                transactions
+            );
+
+
+            alert(
+                "TVSLA transaction saved successfully.\n\n" +
+                "This transaction has NOT affected " +
+                "the factory accounts."
+            );
+
+
+            /*
+             * Secretary stays in transaction entry.
+             * Director returns to TVSLA dashboard.
+             */
+
+            if (tvslaDirector()) {
+
+openTVSLADashboard();
+
+            } else {
+
+openTVSLATransactionEntry();
+
+            }
+
+        };
+
+
+const back =
+modal.querySelector(
+            "#tvslaBackDashboardBtn"
+        );
+
+
+    if (back) {
+
+back.onclick =
+openTVSLADashboard;
+    }
+}
+
+
+/* =========================================================
+   INPUT STYLE
+   ========================================================= */
+
+function tvslaInputStyle() {
+
+    return `
+display:block;
+        width:100%;
+box-sizing:border-box;
+        margin-top:5px;
+        padding:10px;
+        border:1px solid #cbd8cf;
+        border-radius:8px;
+background:white;
+        font-size:13px;
+    `;
+}
+
+
+/* =========================================================
+   MEMBERS - DIRECTOR ONLY
+   ========================================================= */
+
+function openTVSLAMembers() {
+
+    if (!tvslaDirector()) {
+
+        alert(
+            "Director access required."
+        );
+
+        return;
+    }
+
+
+const members =
+tvslaMembers();
+
+
+const rows =
+members.length
+        ? members.map(
+            member => `
+
+<tr>
+
+<td>
+                        ${tvslaEscape(member.memberNo)}
+</td>
+
+<td>
+                        ${tvslaEscape(member.name)}
+</td>
+
+<td>
+                        ${tvslaEscape(member.phone)}
+</td>
+
+<td>
+                        ${tvslaEscape(member.joinDate)}
+</td>
+
+<td>
+                        ${
+member.active === false
+                            ? "Inactive"
+                            : "Active"
+                        }
+</td>
+
+</tr>
+
+            `
+        ).join("")
+        : `
+
+<tr>
+<td
+colspan="5"
+                    style="
+text-align:center;
+                        padding:15px;
+                    "
+>
+                    No members registered yet.
+</td>
+</tr>
+
+        `;
+
+
+const modal =
+tvslaModal(
+            "TVSLA Members",
+            `
+
+<form id="tvslaMemberForm">
+
+<div style="
+display:grid;
+                    grid-template-columns:
+                        repeat(
+                            auto-fit,
+minmax(190px,1fr)
+                        );
+                    gap:10px;
+                ">
+
+<input
+                        id="tvslaMemberNo"
+                        placeholder="Member Number"
+                        required
+                        style="${tvslaInputStyle()}"
+>
+
+<input
+                        id="tvslaMemberName"
+                        placeholder="Member Full Name"
+                        required
+                        style="${tvslaInputStyle()}"
+>
+
+<input
+                        id="tvslaMemberPhone"
+                        placeholder="Phone Number"
+                        style="${tvslaInputStyle()}"
+>
+
+<input
+                        id="tvslaMemberJoinDate"
+                        type="date"
+                        value="${tvslaToday()}"
+                        required
+                        style="${tvslaInputStyle()}"
+>
+
+</div>
+
+
+<div style="
+                    margin-top:12px;
+                ">
+
+                    ${tvslaButton(
+                        "Register Member",
+                        "tvslaSaveMemberBtn"
+                    )}
+
+                    ${tvslaButton(
+                        "Back to Dashboard",
+                        "tvslaMemberBackBtn",
+                        true
+                    )}
+
+</div>
+
+</form>
+
+
+<div style="
+                margin-top:18px;
+overflow:auto;
+            ">
+
+<table style="
+                    width:100%;
+border-collapse:collapse;
+                    font-size:12px;
+                ">
+
+<thead>
+
+<tr style="
+                            background:#eef7f1;
+                        ">
+
+<th>Member No.</th>
+<th>Name</th>
+<th>Phone</th>
+<th>Joined</th>
+<th>Status</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+                        ${rows}
+</tbody>
+
+</table>
+
+</div>
+
+            `
+        );
+
+
+modal.querySelector(
+        "#tvslaMemberForm"
+    ).onsubmit =
+        function(event) {
+
+event.preventDefault();
+
+
+const memberNo =
+modal.querySelector(
+                    "#tvslaMemberNo"
+                ).value.trim();
+
+
+const name =
+modal.querySelector(
+                    "#tvslaMemberName"
+                ).value.trim();
+
+
+            if (!memberNo || !name) {
+
+                alert(
+                    "Member number and name are required."
+                );
+
+                return;
+            }
+
+
+const list =
+tvslaMembers();
+
+
+            if (
+list.some(
+                    member =>
+                        String(
+member.memberNo
+                        ).toLowerCase() ===
+memberNo.toLowerCase()
+                )
+            ) {
+
+                alert(
+                    "That member number already exists."
+                );
+
+                return;
+            }
+
+
+list.push({
+
+                id:
+tvslaID("MEM"),
+
+memberNo,
+
+                name,
+
+                phone:
+modal.querySelector(
+                        "#tvslaMemberPhone"
+                    ).value.trim(),
+
+joinDate:
+modal.querySelector(
+                        "#tvslaMemberJoinDate"
+                    ).value,
+
+                active: true,
+
+createdAt:
+Date.now()
+
+            });
+
+
+tvslaWrite(
+TVSLA_KEYS.members,
+                list
+            );
+
+
+            alert(
+                "TVSLA member registered."
+            );
+
+
+openTVSLAMembers();
+
+        };
+
+
+modal.querySelector(
+        "#tvslaMemberBackBtn"
+    ).onclick =
+openTVSLADashboard;
+}
+
+
+/* =========================================================
+   LOANS - DIRECTOR ONLY
+   ========================================================= */
+
+function openTVSLALoans() {
+
+    if (!tvslaDirector()) {
+
+        alert(
+            "Director access required."
+        );
+
+        return;
+    }
+
+
+const members =
+tvslaMembers();
+
+
+const memberOptions =
+members.map(
+            member => `
+
+<option
+                    value="${tvslaEscape(member.id)}"
+>
+                    ${tvslaEscape(member.name)}
+</option>
+
+            `
+        ).join("");
+
+
+const loans =
+tvslaLoans();
+
+
+const rows =
+loans.length
+        ? loans.map(
+            loan => `
+
+<tr>
+
+<td>
+                        ${tvslaEscape(loan.date)}
+</td>
+
+<td>
+                        ${tvslaEscape(loan.memberName)}
+</td>
+
+<td style="text-align:right;">
+                        ${tvslaMoney(loan.amount)}
+</td>
+
+<td style="text-align:right;">
+                        ${tvslaMoney(loan.balance)}
+</td>
+
+<td>
+                        ${tvslaEscape(loan.status)}
+</td>
+
+</tr>
+
+            `
+        ).join("")
+        : `
+
+<tr>
+<td
+colspan="5"
+                    style="
+text-align:center;
+                        padding:15px;
+                    "
+>
+                    No loans recorded.
+</td>
+</tr>
+
+        `;
+
+
+const modal =
+tvslaModal(
+            "TVSLA Loans",
+            `
+
+<form id="tvslaLoanForm">
+
+<div style="
+display:grid;
+                    grid-template-columns:
+                        repeat(
+                            auto-fit,
+minmax(190px,1fr)
+                        );
+                    gap:10px;
+                ">
+
+<input
+                        id="tvslaLoanDate"
+                        type="date"
+                        value="${tvslaToday()}"
+                        required
+                        style="${tvslaInputStyle()}"
+>
+
+
+<select
+                        id="tvslaLoanMember"
+                        required
+                        style="${tvslaInputStyle()}"
+>
+
+<option value="">
+                            Select Member
+</option>
+
+                        ${memberOptions}
+
+</select>
+
+
+<input
+                        id="tvslaLoanAmount"
+                        type="number"
+                        min="1"
+                        placeholder="Loan Amount"
+                        required
+                        style="${tvslaInputStyle()}"
+>
+
+
+<input
+                        id="tvslaLoanInterest"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="Interest %"
+                        value="0"
+                        style="${tvslaInputStyle()}"
+>
+
+
+<input
+                        id="tvslaLoanDueDate"
+                        type="date"
+                        style="${tvslaInputStyle()}"
+>
+
+</div>
+
+
+<div style="
+                    margin-top:12px;
+                ">
+
+                    ${tvslaButton(
+                        "Issue Loan",
+                        "tvslaIssueLoanBtn"
+                    )}
+
+                    ${tvslaButton(
+                        "Back to Dashboard",
+                        "tvslaLoanBackBtn",
+                        true
+                    )}
+
+</div>
+
+</form>
+
+
+<div style="
+                margin-top:18px;
+overflow:auto;
+            ">
+
+<table style="
+                    width:100%;
+border-collapse:collapse;
+                    font-size:12px;
+                ">
+
+<thead>
+
+<tr style="
+                            background:#eef7f1;
+                        ">
+
+<th>Date</th>
+<th>Member</th>
+<th>Loan</th>
+<th>Balance</th>
+<th>Status</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+                        ${rows}
+</tbody>
+
+</table>
+
+</div>
+
+            `
+        );
+
+
+modal.querySelector(
+        "#tvslaLoanForm"
+    ).onsubmit =
+        function(event) {
+
+event.preventDefault();
+
+
+const memberId =
+modal.querySelector(
+                    "#tvslaLoanMember"
+                ).value;
+
+
+const member =
+tvslaMembers()
+                    .find(
+                        item =>
+item.id ===
+memberId
+                    );
+
+
+            if (!member) {
+
+                alert(
+                    "Select a member."
+                );
+
+                return;
+            }
+
+
+const principal =
+                Number(
+modal.querySelector(
+                        "#tvslaLoanAmount"
+                    ).value
+                );
+
+
+const interestRate =
+                Number(
+modal.querySelector(
+                        "#tvslaLoanInterest"
+                    ).value || 0
+                );
+
+
+const interest =
+                principal *
+interestRate /
+                100;
+
+
+const totalPayable =
+                principal +
+                interest;
+
+
+const list =
+tvslaLoans();
+
+
+list.push({
+
+                id:
+tvslaID("LOAN"),
+
+                date:
+modal.querySelector(
+                        "#tvslaLoanDate"
+                    ).value,
+
+memberId:
+member.id,
+
+memberName:
+member.name,
+
+                amount:
+                    principal,
+
+interestRate,
+
+                interest,
+
+totalPayable,
+
+                balance:
+totalPayable,
+
+dueDate:
+modal.querySelector(
+                        "#tvslaLoanDueDate"
+                    ).value,
+
+                status:
+                    "Outstanding",
+
+approvedBy:
+tvslaCurrentUserName(),
+
+createdAt:
+Date.now()
+
+            });
+
+
+tvslaWrite(
+TVSLA_KEYS.loans,
+                list
+            );
+
+
+            alert(
+                "TVSLA loan recorded.\n\n" +
+                "Factory accounts were not affected."
+            );
+
+
+openTVSLALoans();
+
+        };
+
+
+modal.querySelector(
+        "#tvslaLoanBackBtn"
+    ).onclick =
+openTVSLADashboard;
+}
+
+
+/* =========================================================
+   TRANSACTION HISTORY
+   ========================================================= */
+
+function openTVSLAHistory(filterType) {
+
+    if (!tvslaDirector()) {
+
+        alert(
+            "Director access required."
+        );
+
+        return;
+    }
+
+
+    let transactions =
+tvslaTransactions()
+            .slice()
+            .sort(
+                (a, b) =>
+                    Number(b.createdAt || 0) -
+                    Number(a.createdAt || 0)
+            );
+
+
+    if (filterType) {
+
+        transactions =
+transactions.filter(
+                transaction =>
+transaction.type ===
+filterType
+            );
+    }
+
+
+const rows =
+transactions.length
+        ? transactions.map(
+            transaction => `
+
+<tr>
+
+<td>
+                        ${tvslaEscape(transaction.date)}
+</td>
+
+<td>
+                        ${tvslaEscape(transaction.memberName)}
+</td>
+
+<td>
+                        ${tvslaEscape(transaction.type)}
+</td>
+
+<td style="
+text-align:right;
+font-weight:bold;
+                    ">
+                        ${tvslaMoney(transaction.amount)}
+</td>
+
+<td>
+                        ${tvslaEscape(
+transaction.paymentMethod
+                        )}
+</td>
+
+<td>
+                        ${tvslaEscape(
+transaction.reference
+                        )}
+</td>
+
+<td>
+                        ${tvslaEscape(
+transaction.enteredBy
+                        )}
+</td>
+
+</tr>
+
+            `
+        ).join("")
+        : `
+
+<tr>
+<td
+colspan="7"
+                    style="
+text-align:center;
+                        padding:18px;
+                    "
+>
+                    No transactions found.
+</td>
+</tr>
+
+        `;
+
+
+const modal =
+tvslaModal(
+filterType
+                ? "TVSLA - " + filterType
+                : "TVSLA Transaction History",
+            `
+
+<div style="overflow:auto;">
+
+<table style="
+                    width:100%;
+border-collapse:collapse;
+                    font-size:12px;
+                ">
+
+<thead>
+
+<tr style="
+                            background:#eef7f1;
+                        ">
+
+<th>Date</th>
+<th>Member</th>
+<th>Type</th>
+<th>Amount</th>
+<th>Method</th>
+<th>Reference</th>
+<th>Entered By</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+                        ${rows}
+</tbody>
+
+</table>
+
+</div>
+
+
+<div style="
+                margin-top:15px;
+            ">
+
+                ${tvslaButton(
+                    "Back to Dashboard",
+                    "tvslaHistoryBackBtn",
+                    true
+                )}
+
+</div>
+
+            `
+        );
+
+
+modal.querySelector(
+        "#tvslaHistoryBackBtn"
+    ).onclick =
+openTVSLADashboard;
+}
+
+
+/* =========================================================
+   MEMBER STATEMENT
+   ========================================================= */
+
+function openTVSLAMemberStatement() {
+
+    if (!tvslaDirector()) {
+
+        alert(
+            "Director access required."
+        );
+
+        return;
+    }
+
+
+const members =
+tvslaMembers();
+
+
+const options =
+members.map(
+            member => `
+
+<option
+                    value="${tvslaEscape(member.id)}"
+>
+                    ${tvslaEscape(member.name)}
+</option>
+
+            `
+        ).join("");
+
+
+const modal =
+tvslaModal(
+            "TVSLA Member Statement",
+            `
+
+<label>
+                Select Member
+
+<select
+                    id="tvslaStatementMember"
+                    style="${tvslaInputStyle()}"
+>
+
+<option value="">
+                        Select Member
+</option>
+
+                    ${options}
+
+</select>
+
+</label>
+
+
+<div style="
+                margin-top:12px;
+            ">
+
+                ${tvslaButton(
+                    "View Statement",
+                    "tvslaViewStatementBtn"
+                )}
+
+                ${tvslaButton(
+                    "Back to Dashboard",
+                    "tvslaStatementBackBtn",
+                    true
+                )}
+
+</div>
+
+
+<div
+                id="tvslaStatementResults"
+                style="
+                    margin-top:18px;
+                "
+></div>
+
+            `
+        );
+
+
+modal.querySelector(
+        "#tvslaViewStatementBtn"
+    ).onclick =
+        function() {
+
+const memberId =
+modal.querySelector(
+                    "#tvslaStatementMember"
+                ).value;
+
+
+const member =
+tvslaMembers()
+                    .find(
+                        item =>
+item.id ===
+memberId
+                    );
+
+
+            if (!member) {
+
+                alert(
+                    "Select a member."
+                );
+
+                return;
+            }
+
+
+const transactions =
+tvslaTransactions()
+                    .filter(
+                        transaction =>
+transaction.memberId ===
+memberId
+                    );
+
+
+const loans =
+tvslaLoans()
+                    .filter(
+                        loan =>
+loan.memberId ===
+memberId
+                    );
+
+
+const savings =
+                transactions
+                    .filter(
+                        transaction =>
+transaction.type ===
+                            "Savings"
+                    )
+                    .reduce(
+                        (sum, transaction) =>
+                            sum +
+                            Number(
+transaction.amount || 0
+                            ),
+                        0
+                    );
+
+
+const withdrawals =
+                transactions
+                    .filter(
+                        transaction =>
+transaction.type ===
+                            "Withdrawal"
+                    )
+                    .reduce(
+                        (sum, transaction) =>
+                            sum +
+                            Number(
+transaction.amount || 0
+                            ),
+                        0
+                    );
+
+
+const outstanding =
+loans.reduce(
+                    (sum, loan) =>
+                        sum +
+                        Number(
+loan.balance || 0
+                        ),
+                    0
+                );
+
+
+const rows =
+transactions.length
+                ? transactions.map(
+                    transaction => `
+
+<tr>
+
+<td>
+                                ${tvslaEscape(
+transaction.date
+                                )}
+</td>
+
+<td>
+                                ${tvslaEscape(
+transaction.type
+                                )}
+</td>
+
+<td style="
+text-align:right;
+                            ">
+                                ${tvslaMoney(
+transaction.amount
+                                )}
+</td>
+
+</tr>
+
+                    `
+                ).join("")
+                : `
+
+<tr>
+<td colspan="3">
+                            No transactions.
+</td>
+</tr>
+
+                `;
+
+
+modal.querySelector(
+                "#tvslaStatementResults"
+            ).innerHTML = `
+
+<div style="
+background:white;
+                    border:1px solid #dce7df;
+                    border-radius:10px;
+                    padding:14px;
+                ">
+
+<h3 style="
+                        color:#0b5d3b;
+                        margin-top:0;
+                    ">
+                        ${tvslaEscape(member.name)}
+</h3>
+
+<div>
+                        Savings:
+<b>
+                            UGX ${tvslaMoney(savings)}
+</b>
+</div>
+
+<div>
+                        Withdrawals:
+<b>
+                            UGX ${tvslaMoney(withdrawals)}
+</b>
+</div>
+
+<div>
+                        Net Savings:
+<b>
+                            UGX ${tvslaMoney(
+                                savings -
+                                withdrawals
+                            )}
+</b>
+</div>
+
+<div>
+                        Outstanding Loans:
+<b>
+                            UGX ${tvslaMoney(
+                                outstanding
+                            )}
+</b>
+</div>
+
+<table style="
+                        width:100%;
+                        margin-top:14px;
+border-collapse:collapse;
+                        font-size:12px;
+                    ">
+
+<thead>
+
+<tr style="
+                                background:#eef7f1;
+                            ">
+
+<th>Date</th>
+<th>Transaction</th>
+<th>Amount</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+                            ${rows}
+</tbody>
+
+</table>
+
+</div>
+
+            `;
+
+        };
+
+
+modal.querySelector(
+        "#tvslaStatementBackBtn"
+    ).onclick =
+openTVSLADashboard;
+}
+
+
+/* =========================================================
+   REPORTS
+   ========================================================= */
+
+function openTVSLAReports() {
+
+    if (!tvslaDirector()) {
+
+        alert(
+            "Director access required."
+        );
+
+        return;
+    }
+
+
+const totals =
+tvslaTotals();
+
+
+const modal =
+tvslaModal(
+            "TVSLA Reports",
+            `
+
+<div style="
+display:grid;
+                grid-template-columns:
+                    repeat(
+                        auto-fit,
+minmax(180px,1fr)
+                    );
+                gap:10px;
+            ">
+
+                ${tvslaKPI(
+                    "Total Savings",
+                    "UGX " +
+tvslaMoney(
+totals.savings
+                    )
+                )}
+
+                ${tvslaKPI(
+                    "Withdrawals",
+                    "UGX " +
+tvslaMoney(
+totals.withdrawals
+                    )
+                )}
+
+                ${tvslaKPI(
+                    "Loans Issued",
+                    "UGX " +
+tvslaMoney(
+totals.loansIssued
+                    )
+                )}
+
+                ${tvslaKPI(
+                    "Loan Repayments",
+                    "UGX " +
+tvslaMoney(
+totals.repayments
+                    )
+                )}
+
+                ${tvslaKPI(
+                    "Outstanding Loans",
+                    "UGX " +
+tvslaMoney(
+totals.outstandingLoans
+                    )
+                )}
+
+                ${tvslaKPI(
+                    "TVSLA Balance",
+                    "UGX " +
+tvslaMoney(
+totals.cashBalance
+                    )
+                )}
+
+</div>
+
+
+<div style="
+                margin-top:15px;
+            ">
+
+                ${tvslaButton(
+                    "Back to Dashboard",
+                    "tvslaReportsBackBtn",
+                    true
+                )}
+
+</div>
+
+            `
+        );
+
+
+modal.querySelector(
+        "#tvslaReportsBackBtn"
+    ).onclick =
+openTVSLADashboard;
+}
+
+
+/* =========================================================
+   SETTINGS - DIRECTOR ONLY
+   ========================================================= */
+
+function openTVSLASettings() {
+
+    if (!tvslaDirector()) {
+
+        alert(
+            "Director access required."
+        );
+
+        return;
+    }
+
+
+const settings =
+tvslaSettings();
+
+
+const modal =
+tvslaModal(
+            "TVSLA Settings",
+            `
+
+<label>
+                Standard Weekly Contribution (UGX)
+
+<input
+                    id="tvslaWeeklyContribution"
+                    type="number"
+                    min="0"
+                    value="${
+                        Number(
+settings.weeklyContribution ||
+                            0
+                        )
+                    }"
+                    style="${tvslaInputStyle()}"
+>
+
+</label>
+
+
+<div style="
+                margin-top:14px;
+            ">
+
+                ${tvslaButton(
+                    "Save Settings",
+                    "tvslaSaveSettingsBtn"
+                )}
+
+                ${tvslaButton(
+                    "Back to Dashboard",
+                    "tvslaSettingsBackBtn",
+                    true
+                )}
+
+</div>
+
+            `
+        );
+
+
+modal.querySelector(
+        "#tvslaSaveSettingsBtn"
+    ).onclick =
+        function() {
+
+const updated = {
+
+                ...settings,
+
+weeklyContribution:
+                    Number(
+modal.querySelector(
+                            "#tvslaWeeklyContribution"
+                        ).value || 0
+                    ),
+
+                currency:
+                    "UGX"
+
+            };
+
+
+tvslaWrite(
+TVSLA_KEYS.settings,
+                updated
+            );
+
+
+            alert(
+                "TVSLA settings saved."
+            );
+
+openTVSLADashboard();
+
+        };
+
+
+modal.querySelector(
+        "#tvslaSettingsBackBtn"
+    ).onclick =
+openTVSLADashboard;
+}
+
+
+/* =========================================================
+   DIRECTOR DASHBOARD CARD
+   ========================================================= */
+
+function renderTVSLADashboardCard() {
+
+const old =
+document.getElementById(
+            "tvslaDashboardCard"
+        );
+
+    if (old) {
+old.remove();
+    }
+
+
+    if (!tvslaDirector()) {
+        return;
+    }
+
+
+const main =
+document.querySelector("main") ||
+document.getElementById("mainContent") ||
+document.querySelector(".main-content");
+
+
+    if (!main) {
+        return;
+    }
+
+
+const totals =
+tvslaTotals();
+
+
+const card =
+document.createElement("section");
+
+
+card.id =
+        "tvslaDashboardCard";
+
+
+card.className =
+        "card";
+
+
+card.style.cssText = `
+        margin-top:12px;
+        border-top:4px solid #0b5d3b;
+    `;
+
+
+card.innerHTML = `
+
+<div style="
+display:flex;
+justify-content:space-between;
+            gap:10px;
+align-items:center;
+flex-wrap:wrap;
+        ">
+
+<div>
+
+<div style="
+                    font-weight:800;
+                    color:#0b5d3b;
+                    font-size:16px;
+                ">
+                    TVSLA SACCO
+</div>
+
+<div style="
+                    font-size:11px;
+                    color:#6d7972;
+                    margin-top:2px;
+                ">
+                    ${TVSLA_NAME}
+</div>
+
+</div>
+
+
+<button
+                id="tvslaOpenDashboardBtn"
+                style="
+border:none;
+                    background:#0b5d3b;
+color:white;
+                    border-radius:8px;
+                    padding:9px 13px;
+font-weight:bold;
+cursor:pointer;
+                "
+>
+                Open TVSLA
+</button>
+
+</div>
+
+
+<div style="
+            margin-top:12px;
+display:grid;
+            grid-template-columns:
+                repeat(
+                    auto-fit,
+minmax(130px,1fr)
+                );
+            gap:8px;
+        ">
+
+            ${tvslaKPI(
+                "Savings",
+                "UGX " +
+tvslaMoney(
+totals.savings
+                )
+            )}
+
+            ${tvslaKPI(
+                "Outstanding Loans",
+                "UGX " +
+tvslaMoney(
+totals.outstandingLoans
+                )
+            )}
+
+            ${tvslaKPI(
+                "Balance",
+                "UGX " +
+tvslaMoney(
+totals.cashBalance
+                )
+            )}
+
+</div>
+
+    `;
+
+
+main.appendChild(card);
+
+
+card.querySelector(
+        "#tvslaOpenDashboardBtn"
+    ).onclick =
+openTVSLA;
+}
+
+
+/* =========================================================
+   SECRETARY TRANSACTION BUTTON
+   ========================================================= */
+
+function renderTVSLASecretaryButton() {
+
+const old =
+document.getElementById(
+            "tvslaSecretaryCard"
+        );
+
+    if (old) {
+old.remove();
+    }
+
+
+    if (!tvslaSecretary()) {
+        return;
+    }
+
+
+const main =
+document.querySelector("main") ||
+document.getElementById("mainContent") ||
+document.querySelector(".main-content");
+
+
+    if (!main) {
+        return;
+    }
+
+
+const card =
+document.createElement("section");
+
+
+card.id =
+        "tvslaSecretaryCard";
+
+
+card.className =
+        "card";
+
+
+card.style.cssText = `
+        margin-top:12px;
+        border-left:4px solid #0b5d3b;
+    `;
+
+
+card.innerHTML = `
+
+<div style="
+            font-weight:800;
+            color:#0b5d3b;
+        ">
+            TVSLA Transaction Entry
+</div>
+
+<div style="
+            font-size:11px;
+            color:#68776f;
+            margin:5px 0 10px;
+        ">
+            ${TVSLA_NAME}
+            • Secretary Entry Access
+</div>
+
+<button
+            id="tvslaSecretaryEntryBtn"
+            style="
+border:none;
+                background:#0b5d3b;
+color:white;
+                border-radius:8px;
+                padding:10px 14px;
+cursor:pointer;
+font-weight:bold;
+            "
+>
+            Record TVSLA Transaction
+</button>
+
+    `;
+
+
+main.appendChild(card);
+
+
+card.querySelector(
+        "#tvslaSecretaryEntryBtn"
+    ).onclick =
+openTVSLATransactionEntry;
+}
+
+
+/* =========================================================
+   RENDER BY ROLE
+   ========================================================= */
+
+function renderTVSLARoleAccess() {
+
+renderTVSLADashboardCard();
+renderTVSLASecretaryButton();
+}
+
+
+/* =========================================================
+   CONNECT TO EXISTING ROLE DASHBOARD
+   ========================================================= */
+
+if (
+typeof applyAFRoleDashboard ===
+    "function"
+) {
+
+const previousTVSLARoleDashboard =
+applyAFRoleDashboard;
+
+
+applyAFRoleDashboard =
+        function() {
+
+const result =
+previousTVSLARoleDashboard
+                    .apply(
+                        this,
+                        arguments
+                    );
+
+
+setTimeout(
+renderTVSLARoleAccess,
+                80
+            );
+
+
+            return result;
+        };
+
+}
+
+
+/* =========================================================
+   EXPOSE FUNCTIONS
+   ========================================================= */
+
+window.openTVSLA =
+openTVSLA;
+
+window.openTVSLADashboard =
+openTVSLADashboard;
+
+window.openTVSLATransactionEntry =
+openTVSLATransactionEntry;
+
+window.refreshTVSLA =
+renderTVSLARoleAccess;
+
+
+/* =========================================================
+   INITIAL LOAD
+   ========================================================= */
+
+setTimeout(
+renderTVSLARoleAccess,
+    300
+);
+
+
+console.log(
+    "TVSLA independent SACCO module connected."
+);
+
+})();
