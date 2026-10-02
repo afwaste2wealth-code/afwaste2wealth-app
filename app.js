@@ -66727,7 +66727,7 @@ Print / Save as PDF
 
 
 ${smartHeader(
-  "Official Company Letter"
+  ""
 )}
 
 
@@ -69146,7 +69146,7 @@ return `
         print-color-adjust: exact !important;
     }
     .af-smart-footer {
-        margin-top: 50mm !
+        margin-top: 55mm !
         important;
     .af-final-footer-art {
         width: 100%;
@@ -69402,7 +69402,7 @@ combined.includes("QUALITY & DISCIPLINE")
 doc.querySelector(".af-smart-header") ||
 combined.includes("COMPANY LETTER")
     ) {
-        return "Official Company Letter";
+        return "";
     }
 
 
