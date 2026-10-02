@@ -69028,19 +69028,20 @@ return `
     left: 0;
     right: 0;
     bottom: 0;
-    min-height: 25%;
+    height: 42px;
+    min-height: 0;
     background: #fff;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 14px;
-    padding: 8px 2%;
-    border-bottom: 4px solid #0b5d3b;
-    box-shadow: inset 0 -7px 0 -4px #e3b417;
+    gap: 12px;
+    padding: 2px 2%;
+    border-bottom: 3px solid #0b5d3b;
+    box-shadow: inset 0 -5px 0 -3px #e3b417;
     font-size: 11px;
     color: #10233f;
     font-weight: 700;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
 }
 
 .af-final-contact-item {
