@@ -66625,7 +66625,9 @@ body{
   margin-right:32px;
 }
 
-
+.letter-subject{
+  margin-left:50px;
+  }
 .letter-meta{
 display:grid;
   grid-template-columns:1fr 1fr;
