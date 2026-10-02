@@ -69146,7 +69146,7 @@ return `
         print-color-adjust: exact !important;
     }
     .af-smart-footer {
-        margin-top: 45mm !
+        margin-top: 70mm !
         important;
     .af-final-footer-art {
         width: 100%;
@@ -69608,7 +69608,7 @@ afRemoveOldPrintBranding(doc);
          */
 target.insertAdjacentHTML(
             "afterbegin",
-afFinalHeader(title)
+afFinalHeader(title === "COMPANY LETTER" ? "" : title)
         );
 
 
