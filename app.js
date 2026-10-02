@@ -66614,6 +66614,16 @@ body{
   font-size:12.5px;
   line-height:1.55;
 }
+.letter-meta,
+.letter-to,
+.letter-subject,
+.letter-body,
+.letter-signature,
+.letter-extra,
+.draft-mark{
+  margin-left:32px;
+  margin-right:32px;
+}
 
 
 .letter-meta{
@@ -69098,8 +69108,8 @@ return `
     display: block;
     width: 100%;
     height: auto;
-    max-height: 145px;
-    object-fit: cover;
+    max-height: none;
+    object-fit: contain;
     object-position: center;
 }
 
@@ -69135,7 +69145,9 @@ return `
     }
 
     .af-final-footer-art {
-        max-height: 32mm;
+        width: 100%;
+        height: auto;
+        max-height: none;
     }
 
     button,
