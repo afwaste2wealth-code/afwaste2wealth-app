@@ -69145,7 +69145,9 @@ return `
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
     }
-
+    .af-smart-footer {
+        margin-top: 35mm !
+        important;
     .af-final-footer-art {
         width: 100%;
         height: auto;
