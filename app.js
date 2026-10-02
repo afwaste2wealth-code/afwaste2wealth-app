@@ -69587,7 +69587,7 @@ doc.body;
 afRemoveOldPrintBranding(doc);
 
 
-        /*
+         /*
          * ONE HEADER
          */
 target.insertAdjacentHTML(
@@ -69603,27 +69603,13 @@ const footerHTML =
 afFinalFooter("");
 
 
-const bottomControl =
-target.querySelector(".print-button") ||
-target.querySelector(".print-btn") ||
-target.querySelector(".print");
-
-
-        if (bottomControl) {
-
-bottomControl.insertAdjacentHTML(
-                "beforebegin",
-footerHTML
-            );
-
-        } else {
+const footerHTML =
+afFinalFooter("");
 
 target.insertAdjacentHTML(
-                "beforeend",
+    "beforeend",
 footerHTML
-            );
-
-        }
+);
 
 
 doc.documentElement.setAttribute(
