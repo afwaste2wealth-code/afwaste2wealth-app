@@ -69601,7 +69601,7 @@ doc.querySelector(".payslip") ||
 doc.body;
 
 
-afRemoveOldPrintBranding(doc);
+afRemoveOldPrintBranding(doc); 
 
 
          /*
