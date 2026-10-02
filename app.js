@@ -69146,7 +69146,7 @@ return `
         print-color-adjust: exact !important;
     }
     .af-smart-footer {
-        margin-top: 50mm !
+        margin-top: 45mm !
         important;
     .af-final-footer-art {
         width: 100%;
