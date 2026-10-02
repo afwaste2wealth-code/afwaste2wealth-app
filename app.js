@@ -9947,20 +9947,249 @@ recoveries.reduce(
     0
   );
 }
-function calculateEmployeePayroll(
+/* =========================================================
+   PAYROLL CALCULATION
+   NORMAL + FULL SETTLEMENT
+   ========================================================= */
+
+function getFullSettlementPayrollKey(
 employeeId,
   year,
   month
 ) {
-const employees = getEmployees();
-
-const employee = employees.find(
-    item =>item.employeeId === employeeId
+  return (
+    String(employeeId) +
+    "-" +
+    Number(year) +
+    "-" +
+    Number(month)
   );
+}
+
+
+/* =========================================================
+   OUTSTANDING ADVANCE FOR FULL SETTLEMENT
+
+   Important:
+   If this same settlement was already saved before,
+   its own settlement-transfer recovery is ignored while
+   recalculating. This prevents the advance from disappearing
+   when the settlement is recalculated.
+   ========================================================= */
+
+function getEmployeeAdvanceOutstandingForSettlement(
+advanceId,
+settlementKey
+) {
+const advances = getEmployeeAdvances();
+
+const advance = advances.find(
+    item =>
+      String(item.id) === String(advanceId)
+  );
+
+  if (!advance) {
+    return 0;
+  }
+
+const recoveries =
+getAdvanceRecoveries().filter(
+      item =>
+        String(item.advanceId) ===
+          String(advanceId) &&
+        String(item.sourcePayrollKey || "") !==
+          String(settlementKey || "")
+    );
+
+const recovered =
+recoveries.reduce(
+      (total, item) =>
+        total + Number(item.amount || 0),
+      0
+    );
+
+  return Math.max(
+    Number(advance.amount || 0) -
+      recovered,
+    0
+  );
+}
+
+
+/* =========================================================
+   GET ALL OUTSTANDING ADVANCES FOR EMPLOYEE
+   ========================================================= */
+
+function getEmployeeOutstandingAdvanceSnapshot(
+employeeId,
+  year,
+  month
+) {
+constsettlementKey =
+getFullSettlementPayrollKey(
+employeeId,
+      year,
+      month
+    );
+
+const advances =
+getEmployeeAdvances().filter(
+      item =>
+        String(item.employeeId) ===
+        String(employeeId)
+    );
+
+const items = advances
+    .map(advance => {
+const outstanding =
+getEmployeeAdvanceOutstandingForSettlement(
+advance.id,
+settlementKey
+        );
+
+      return {
+advanceId: advance.id,
+
+        date:
+advance.date || "",
+
+        reason:
+advance.reason || "",
+
+originalAmount:
+          Number(advance.amount || 0),
+
+        outstanding:
+          Number(outstanding || 0)
+      };
+    })
+    .filter(
+      item =>
+        Number(item.outstanding || 0) > 0
+    );
+
+const total =
+items.reduce(
+      (sum, item) =>
+        sum +
+        Number(item.outstanding || 0),
+      0
+    );
+
+  return {
+settlementKey,
+
+    items,
+
+advanceIds:
+items.map(
+        item =>item.advanceId
+      ),
+
+    total
+  };
+}
+
+
+/* =========================================================
+   PREVIOUS FULL SETTLEMENT BALANCE
+
+   We use only the most recent previous Full Settlement.
+   This prevents the same negative balance being counted
+   repeatedly every month.
+   ========================================================= */
+
+function getPreviousFullSettlementBalance(
+employeeId,
+  year,
+  month
+) {
+constcurrentPeriod =
+    Number(year) * 12 +
+    Number(month);
+
+const previous =
+getPayrollRecords()
+      .filter(item => {
+constitemPeriod =
+          Number(item.year) * 12 +
+          Number(item.month);
+
+        return (
+          String(item.employeeId) ===
+            String(employeeId) &&
+
+itemPeriod<currentPeriod&&
+
+          String(
+item.calculationMode || "NORMAL"
+          ).toUpperCase() ===
+            "FULL_SETTLEMENT"
+        );
+      })
+      .sort((a, b) => {
+constaPeriod =
+          Number(a.year) * 12 +
+          Number(a.month);
+
+constbPeriod =
+          Number(b.year) * 12 +
+          Number(b.month);
+
+        return bPeriod - aPeriod;
+      });
+
+  if (!previous.length) {
+    return 0;
+  }
+
+  return Number(
+    previous[0].balance || 0
+  );
+}
+
+
+/* =========================================================
+   CALCULATE EMPLOYEE PAYROLL
+
+calculationMode:
+   NORMAL
+   FULL_SETTLEMENT
+   ========================================================= */
+
+function calculateEmployeePayroll(
+employeeId,
+  year,
+  month,
+calculationMode = "NORMAL"
+) {
+const mode =
+    String(
+calculationMode || "NORMAL"
+    ).toUpperCase() ===
+    "FULL_SETTLEMENT"
+      ? "FULL_SETTLEMENT"
+      : "NORMAL";
+
+
+const employees =
+getEmployees();
+
+const employee =
+employees.find(
+      item =>
+        String(item.employeeId) ===
+        String(employeeId)
+    );
 
   if (!employee) {
     return null;
   }
+
+
+  /* =========================
+     ATTENDANCE
+     ========================= */
 
 const attendance =
 getEmployeeMonthlyAttendanceSummary(
@@ -9968,6 +10197,11 @@ employeeId,
       year,
       month
     );
+
+
+  /* =========================
+     BASIC ALLOWANCE
+     ========================= */
 
 const monthlyAllowance =
     Number(
@@ -9988,12 +10222,15 @@ const absentDays =
 
 const dailyAllowance =
 daysInMonth> 0
-      ? monthlyAllowance / daysInMonth
+      ? monthlyAllowance /
+daysInMonth
       : 0;
 
 const absenceDeduction =
-roundDownTo100(
-   dailyAllowance * absentDays);
+    roundDownTo100(
+dailyAllowance *
+absentDays
+    );
 
 const earnedAllowance =
 Math.max(
@@ -10002,6 +10239,755 @@ absenceDeduction,
       0
     );
 
+
+  /* =========================
+     PERFORMANCE AWARDS
+     ========================= */
+
+const performanceAwardBreakdown =
+getEmployeePerformanceAwardBreakdown(
+employeeId,
+      month,
+      year
+    );
+
+const performanceAwardTotal =
+getEmployeePerformanceAwardTotal(
+employeeId,
+      month,
+      year
+    );
+
+
+  /* =========================
+     DEDUCTIONS
+     ========================= */
+
+const adjustments =
+getEmployeePayrollAdjustments(
+employeeId,
+      year,
+      month
+    );
+
+const approvedDeductions =
+    Number(
+adjustments.deductionTotal || 0
+    );
+
+
+  /* =========================
+     NORMAL ADVANCE RECOVERY
+
+     Full-settlement transfer entries
+     are excluded from normal recovery.
+     ========================= */
+
+const scheduledAdvanceRecovery =
+    (adjustments.recoveries || [])
+      .filter(
+        item =>
+          String(
+item.recoveryType || ""
+          ) !==
+          "FULL_SETTLEMENT_TRANSFER"
+      )
+      .reduce(
+        (total, item) =>
+          total +
+          Number(item.amount || 0),
+        0
+      );
+
+
+  /* =========================
+     FULL SETTLEMENT ADVANCES
+     ========================= */
+
+const settlementSnapshot =
+    mode === "FULL_SETTLEMENT"
+      ? getEmployeeOutstandingAdvanceSnapshot(
+employeeId,
+          year,
+          month
+        )
+      : {
+settlementKey:
+getFullSettlementPayrollKey(
+employeeId,
+              year,
+              month
+            ),
+
+          items: [],
+
+advanceIds: [],
+
+          total: 0
+        };
+
+
+const advanceRecovery =
+    mode === "FULL_SETTLEMENT"
+      ? Number(
+settlementSnapshot.total || 0
+        )
+      : scheduledAdvanceRecovery;
+
+
+  /* =========================
+     PREVIOUS FULL SETTLEMENT
+
+     Negative values remain negative.
+     ========================= */
+
+const previousSettlementBalance =
+    mode === "FULL_SETTLEMENT"
+      ? getPreviousFullSettlementBalance(
+employeeId,
+          year,
+          month
+        )
+      : 0;
+
+
+  /* =========================
+     NET PAYABLE
+     ========================= */
+
+const rawNetPayable =
+earnedAllowance +
+    Number(
+performanceAwardTotal || 0
+    ) -
+approvedDeductions -
+advanceRecovery +
+previousSettlementBalance;
+
+
+  /*
+    NORMAL:
+    Never goes below zero.
+
+    FULL SETTLEMENT:
+    Negative value is allowed.
+  */
+
+const netPayable =
+    mode === "FULL_SETTLEMENT"
+      ? rawNetPayable
+      : Math.max(
+rawNetPayable,
+          0
+        );
+
+
+  /* =========================
+     OVERTIME
+     ========================= */
+
+const netOvertimeMinutes =
+    Number(
+      attendance?.netOvertimeMinutes || 0
+    );
+
+const netOvertimeHours =
+netOvertimeMinutes / 60;
+
+
+  /* =========================
+     EXISTING PAYROLL RECORD
+     ========================= */
+
+const payrollRecords =
+getPayrollRecords();
+
+const existing =
+payrollRecords.find(
+      item =>
+        String(item.employeeId) ===
+          String(employeeId) &&
+
+        Number(item.year) ===
+          Number(year) &&
+
+        Number(item.month) ===
+          Number(month)
+    );
+
+
+const amountPaid =
+    Number(
+      existing?.amountPaid || 0
+    );
+
+
+  /* =========================
+     BALANCE
+
+     Full Settlement keeps
+     negative balances.
+     ========================= */
+
+const balance =
+    mode === "FULL_SETTLEMENT"
+      ? netPayable -
+amountPaid
+
+      : Math.max(
+netPayable -
+amountPaid,
+          0
+        );
+
+
+  /* =========================
+     STATUS
+     ========================= */
+
+  let status = "UNPAID";
+
+
+  if (
+    mode === "FULL_SETTLEMENT"
+  ) {
+
+    if (balance < 0) {
+
+      status =
+        "NEGATIVE BALANCE";
+
+    } else if (
+      balance === 0
+    ) {
+
+      status =
+        "SETTLED";
+
+    } else if (
+amountPaid> 0
+    ) {
+
+      status =
+        "PARTIALLY PAID";
+
+    } else {
+
+      status =
+        "UNPAID";
+    }
+
+  } else {
+
+    if (
+      balance <= 0 &&
+netPayable> 0
+    ) {
+
+      status = "PAID";
+
+    } else if (
+amountPaid> 0
+    ) {
+
+      status =
+        "PARTIALLY PAID";
+    }
+  }
+
+
+  /* =========================
+     RETURN PAYROLL
+     ========================= */
+
+  return {
+
+employeeId,
+
+employeeName:
+employee.fullName || "",
+
+    employee,
+
+    year:
+      Number(year),
+
+    month:
+      Number(month),
+
+monthName:
+payrollMonthName(
+        year,
+        month
+      ),
+
+calculationMode:
+      mode,
+
+isFullSettlement:
+      mode ===
+      "FULL_SETTLEMENT",
+
+monthlyAllowance,
+
+daysInMonth,
+
+dailyAllowance,
+
+absentDays,
+
+absenceDeduction,
+
+earnedAllowance,
+
+performanceAwardTotal,
+
+performanceAwardBreakdown,
+
+approvedDeductions,
+
+scheduledAdvanceRecovery,
+
+advanceRecovery,
+
+fullSettlementAdvanceTotal:
+      Number(
+settlementSnapshot.total || 0
+      ),
+
+settlementAdvanceIds:
+settlementSnapshot.advanceIds || [],
+
+settlementAdvanceBreakdown:
+settlementSnapshot.items || [],
+
+previousSettlementBalance,
+
+rawNetPayable,
+
+netPayable,
+
+amountPaid,
+
+    balance,
+
+    status,
+
+totalOvertimeMinutes:
+      Number(
+        attendance?.totalOvertimeMinutes ||
+        0
+      ),
+
+totalShortfallMinutes:
+      Number(
+        attendance?.totalShortfallMinutes ||
+        0
+      ),
+
+netOvertimeMinutes,
+
+netOvertimeHours,
+
+createdAt:
+      existing?.createdAt ||
+      new Date().toISOString()
+  };
+}
+
+
+/* =========================================================
+   PREVIOUS NORMAL UNPAID PAYROLL BALANCE
+   ========================================================= */
+
+function getPreviousUnpaidPayrollBalance(
+employeeId,
+  year,
+  month
+) {
+const records =
+getPayrollRecords();
+
+  return records
+    .filter(item => {
+
+const itemPeriod =
+        Number(item.year) * 12 +
+        Number(item.month);
+
+const currentPeriod =
+        Number(year) * 12 +
+        Number(month);
+
+      return (
+        String(item.employeeId) ===
+          String(employeeId) &&
+
+itemPeriod<
+currentPeriod&&
+
+        Number(
+item.balance || 0
+        ) > 0
+      );
+    })
+    .reduce(
+      (total, item) =>
+        total +
+        Number(
+item.balance || 0
+        ),
+      0
+    );
+}
+
+
+/* =========================================================
+   FULL SETTLEMENT ADVANCE TRANSFER
+
+   Once Full Settlement is SAVED,
+   the advances included in that settlement are transferred
+   into the settlement balance.
+
+   This prevents the same advances being counted again
+   next month.
+   ========================================================= */
+
+function syncFullSettlementAdvanceTransfers(
+  payroll
+) {
+const settlementKey =
+getFullSettlementPayrollKey(
+payroll.employeeId,
+payroll.year,
+payroll.month
+    );
+
+  let recoveries =
+getAdvanceRecoveries();
+
+
+  /*
+    Remove an earlier transfer made by this
+    same payroll settlement.
+    This makes recalculation safe.
+  */
+
+  recoveries =
+recoveries.filter(
+      item =>
+        String(
+item.sourcePayrollKey || ""
+        ) !==
+        String(settlementKey)
+    );
+
+
+  /*
+    If calculation is NORMAL,
+    stop here.
+
+    This also restores advances if a previously
+    saved Full Settlement is changed back to Normal.
+  */
+
+  if (
+    String(
+payroll.calculationMode ||
+      "NORMAL"
+    ).toUpperCase() !==
+    "FULL_SETTLEMENT"
+  ) {
+
+saveAdvanceRecoveries(
+      recoveries
+    );
+
+    return;
+  }
+
+
+const employeeName =
+payroll.employeeName || "";
+
+
+const transferDate =
+    String(payroll.year) +
+    "-" +
+    String(
+      Number(payroll.month) + 1
+    ).padStart(2, "0") +
+    "-01";
+
+
+const breakdown =
+Array.isArray(
+payroll.settlementAdvanceBreakdown
+    )
+      ? payroll.settlementAdvanceBreakdown
+      : [];
+
+
+breakdown.forEach(
+    (item, index) => {
+
+const amount =
+        Number(
+item.outstanding || 0
+        );
+
+      if (amount <= 0) {
+        return;
+      }
+
+
+recoveries.push({
+
+        id:
+Date.now() +
+          index +
+          1,
+
+advanceId:
+item.advanceId,
+
+employeeId:
+payroll.employeeId,
+
+employeeName,
+
+        year:
+          Number(payroll.year),
+
+        month:
+          Number(payroll.month),
+
+        amount,
+
+        date:
+transferDate,
+
+approvedBy:
+          "Full Settlement",
+
+        remarks:
+          "Advance transferred into Full Settlement payroll balance",
+
+recoveryType:
+          "FULL_SETTLEMENT_TRANSFER",
+
+        source:
+          "PAYROLL_FULL_SETTLEMENT",
+
+sourcePayrollKey:
+settlementKey,
+
+createdAt:
+          new Date()
+            .toISOString()
+      });
+    }
+  );
+
+
+saveAdvanceRecoveries(
+    recoveries
+  );
+}
+
+
+/* =========================================================
+   SAVE CALCULATED PAYROLL
+   ========================================================= */
+
+function saveCalculatedPayroll(
+  payroll
+) {
+const records =
+getPayrollRecords();
+
+
+const index =
+records.findIndex(
+      item =>
+        String(
+item.employeeId
+        ) ===
+          String(
+payroll.employeeId
+          ) &&
+
+        Number(item.year) ===
+          Number(payroll.year) &&
+
+        Number(item.month) ===
+          Number(payroll.month)
+    );
+
+
+  /*
+Synchronise advance transfers before
+    saving the payroll record.
+  */
+
+syncFullSettlementAdvanceTransfers(
+    payroll
+  );
+
+
+const record = {
+
+    id:
+      index >= 0
+        ? records[index].id
+        : Date.now(),
+
+employeeId:
+payroll.employeeId,
+
+employeeName:
+payroll.employeeName,
+
+    year:
+payroll.year,
+
+    month:
+payroll.month,
+
+monthName:
+payroll.monthName,
+
+calculationMode:
+payroll.calculationMode ||
+      "NORMAL",
+
+isFullSettlement:
+      Boolean(
+payroll.isFullSettlement
+      ),
+
+monthlyAllowance:
+payroll.monthlyAllowance,
+
+daysInMonth:
+payroll.daysInMonth,
+
+absentDays:
+payroll.absentDays,
+
+absenceDeduction:
+payroll.absenceDeduction,
+
+earnedAllowance:
+payroll.earnedAllowance,
+
+performanceAwardTotal:
+      Number(
+payroll.performanceAwardTotal ||
+        0
+      ),
+
+performanceAwardBreakdown:
+payroll.performanceAwardBreakdown ||
+      [],
+
+approvedDeductions:
+payroll.approvedDeductions,
+
+scheduledAdvanceRecovery:
+      Number(
+payroll.scheduledAdvanceRecovery ||
+        0
+      ),
+
+advanceRecovery:
+payroll.advanceRecovery,
+
+fullSettlementAdvanceTotal:
+      Number(
+payroll.fullSettlementAdvanceTotal ||
+        0
+      ),
+
+settlementAdvanceIds:
+payroll.settlementAdvanceIds ||
+      [],
+
+settlementAdvanceBreakdown:
+payroll.settlementAdvanceBreakdown ||
+      [],
+
+previousSettlementBalance:
+      Number(
+payroll.previousSettlementBalance ||
+        0
+      ),
+
+rawNetPayable:
+      Number(
+payroll.rawNetPayable ||
+        0
+      ),
+
+netPayable:
+payroll.netPayable,
+
+amountPaid:
+payroll.amountPaid,
+
+    balance:
+payroll.balance,
+
+    status:
+payroll.status,
+
+totalOvertimeMinutes:
+payroll.totalOvertimeMinutes,
+
+totalShortfallMinutes:
+payroll.totalShortfallMinutes,
+
+netOvertimeMinutes:
+payroll.netOvertimeMinutes,
+
+netOvertimeHours:
+payroll.netOvertimeHours,
+
+paymentDate:
+      index >= 0
+        ? records[index].paymentDate ||
+          null
+        : null,
+
+createdAt:
+payroll.createdAt,
+
+updatedAt:
+      new Date()
+        .toISOString()
+  };
+
+
+  if (index >= 0) {
+
+    records[index] =
+      record;
+
+  } else {
+
+records.push(
+      record
+    );
+  }
+
+
+savePayrollRecords(
+    records
+  );
+
+
+  return record;
+}
 
   // =====================================================
   // PERFORMANCE AWARDS
