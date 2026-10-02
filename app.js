@@ -10025,7 +10025,7 @@ employeeId,
   year,
   month
 ) {
-constsettlementKey =
+const settlementKey =
 getFullSettlementPayrollKey(
 employeeId,
       year,
@@ -10104,14 +10104,14 @@ employeeId,
   year,
   month
 ) {
-constcurrentPeriod =
+const currentPeriod =
     Number(year) * 12 +
     Number(month);
 
 const previous =
 getPayrollRecords()
       .filter(item => {
-constitemPeriod =
+const itemPeriod =
           Number(item.year) * 12 +
           Number(item.month);
 
@@ -10128,11 +10128,11 @@ item.calculationMode || "NORMAL"
         );
       })
       .sort((a, b) => {
-constaPeriod =
+const aPeriod =
           Number(a.year) * 12 +
           Number(a.month);
 
-constbPeriod =
+const bPeriod =
           Number(b.year) * 12 +
           Number(b.month);
 
@@ -10989,299 +10989,7 @@ savePayrollRecords(
   return record;
 }
 
-  // =====================================================
-  // PERFORMANCE AWARDS
-  // =====================================================
-
-const performanceAwardBreakdown =
-getEmployeePerformanceAwardBreakdown(
-employeeId,
-      month,
-      year
-    );
-
-const performanceAwardTotal =
-getEmployeePerformanceAwardTotal(
-employeeId,
-      month,
-      year
-    );
-
-
-  // =====================================================
-  // DEDUCTIONS & ADVANCES
-  // =====================================================
-
-const adjustments =
-getEmployeePayrollAdjustments(
-employeeId,
-      year,
-      month
-    );
-
-const approvedDeductions =
-adjustments.deductionTotal;
-
-const advanceRecovery =
-adjustments.recoveryTotal;
-
-
-  // =====================================================
-  // NET PAYABLE
-  // =====================================================
-
-const netPayable =
-Math.max(
-earnedAllowance +
-performanceAwardTotal -
-approvedDeductions -
-advanceRecovery,
-      0
-    );
-
-
-  // =====================================================
-  // OVERTIME
-  // =====================================================
-
-const netOvertimeMinutes =
-    Number(
-      attendance?.netOvertimeMinutes || 0
-    );
-
-const netOvertimeHours =
-netOvertimeMinutes / 60;
-
-
-  // =====================================================
-  // EXISTING PAYROLL RECORD
-  // =====================================================
-
-const payrollRecords =
-getPayrollRecords();
-
-const existing =
-payrollRecords.find(
-      item =>
-item.employeeId === employeeId&&
-        Number(item.year) === Number(year) &&
-        Number(item.month) === Number(month)
-    );
-
-const amountPaid =
-    Number(
-      existing?.amountPaid || 0
-    );
-
-const balance =
-Math.max(
-netPayable - amountPaid,
-      0
-    );
-
-  let status = "UNPAID";
-
-  if (
-    balance <= 0 &&
-netPayable> 0
-  ) {
-    status = "PAID";
-
-  } else if (
-amountPaid> 0
-  ) {
-    status = "PARTIALLY PAID";
-  }
-
-
-  // =====================================================
-  // RETURN PAYROLL
-  // =====================================================
-
-  return {
-employeeId,
-
-employeeName:
-employee.fullName || "",
-
-    employee,
-
-    year:
-      Number(year),
-
-    month:
-      Number(month),
-
-monthName:
-payrollMonthName(
-        year,
-        month
-      ),
-
-monthlyAllowance,
-
-daysInMonth,
-
-dailyAllowance,
-
-absentDays,
-
-absenceDeduction,
-
-earnedAllowance,
-
-    // Performance Awards
-performanceAwardTotal,
-performanceAwardBreakdown,
-
-approvedDeductions,
-
-advanceRecovery,
-
-netPayable,
-
-amountPaid,
-
-    balance,
-
-    status,
-
-totalOvertimeMinutes:
-      Number(
-        attendance?.totalOvertimeMinutes || 0
-      ),
-
-totalShortfallMinutes:
-      Number(
-        attendance?.totalShortfallMinutes || 0
-      ),
-
-netOvertimeMinutes,
-
-netOvertimeHours,
-
-createdAt:
-      existing?.createdAt ||
-      new Date().toISOString()
-  };
-}
-function getPreviousUnpaidPayrollBalance(
-employeeId,
-  year,
-  month
-) {
-const records =
-getPayrollRecords();
-
-  return records
-    .filter(item => {
-const itemPeriod =
-        Number(item.year) * 12 +
-        Number(item.month);
-
-const currentPeriod =
-        Number(year) * 12 +
-        Number(month);
-
-      return (
-item.employeeId === employeeId&&
-itemPeriod<currentPeriod&&
-        Number(item.balance || 0) > 0
-      );
-    })
-    .reduce(
-      (total, item) =>
-        total + Number(item.balance || 0),
-      0
-    );
-}
-
-function saveCalculatedPayroll(
-  payroll
-) {
-const records =
-getPayrollRecords();
-
-const index =
-records.findIndex(
-      item =>
-item.employeeId ===
-payroll.employeeId&&
-        Number(item.year) ===
-          Number(payroll.year) &&
-        Number(item.month) ===
-          Number(payroll.month)
-    );
-
-const record = {
-    id:
-      index >= 0
-        ? records[index].id
-        : Date.now(),
-employeeId:
-payroll.employeeId,
-employeeName:
-payroll.employeeName,
-    year:
-payroll.year,
-    month:
-payroll.month,
-monthName:
-payroll.monthName,
-monthlyAllowance:
-payroll.monthlyAllowance,
-daysInMonth:
-payroll.daysInMonth,
-absentDays:
-payroll.absentDays,
-absenceDeduction:
-payroll.absenceDeduction,
-earnedAllowance:
-payroll.earnedAllowance,
-performanceAwardTotal:
-Number(
-payroll.performanceAwardTotal || 0
-),
-
-performanceAwardBreakdown:
-payroll.performanceAwardBreakdown || [],
-
-approvedDeductions:
-payroll.approvedDeductions,
-advanceRecovery:
-payroll.advanceRecovery,
-netPayable:
-payroll.netPayable,
-amountPaid:
-payroll.amountPaid,
-    balance:
-payroll.balance,
-    status:
-payroll.status,
-totalOvertimeMinutes:
-payroll.totalOvertimeMinutes,
-totalShortfallMinutes:
-payroll.totalShortfallMinutes,
-netOvertimeMinutes:
-payroll.netOvertimeMinutes,
-netOvertimeHours:
-payroll.netOvertimeHours,
-createdAt:
-payroll.createdAt,
-updatedAt:
-      new Date().toISOString()
-  };
-
-  if (index >= 0) {
-    records[index] = record;
-  } else {
-records.push(record);
-  }
-
-savePayrollRecords(records);
-
-  return record;
-}
+  
 
 
 /* =========================================================
