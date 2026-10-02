@@ -68859,11 +68859,662 @@ console.log(
 })();
 
 /* =========================================================
-   A&F FINAL COMPANY PROFILE PRINT CONNECTION
-   One header + one footer for all print popups
+   A&F WEKAVERA LTD
+   FINAL GLOBAL PRINT BRANDING + PRINT SETTINGS
+   ONE CLEAN SYSTEM — DO NOT DUPLICATE
    ========================================================= */
 
-function applyProfileToPopup(popup) {
+(function connectAFFinalPrintSystem() {
+"use strict";
+
+if (window.__afFinalPrintSystemInstalled) return;
+window.__afFinalPrintSystemInstalled = true;
+
+
+/* =========================================================
+   FIXED COMPANY INFORMATION
+   ========================================================= */
+
+const AF_COMPANY = Object.freeze({
+companyName: "A&F Wekavera Ltd",
+tradingName: "Waste2Wealth Solutions",
+    tin: "1009916263",
+    email: "afwaste2wealthsolutions@gmail.com",
+    motto: "Turning Waste into Value"
+});
+
+
+/* =========================================================
+   EDITABLE PRINT SETTINGS
+   ONLY THESE 3 ITEMS CAN BE CHANGED BY DIRECTOR
+   ========================================================= */
+
+const AF_PRINT_SETTINGS_KEY = "afPrintSettings";
+
+const AF_PRINT_DEFAULTS = {
+    phone1: "0752 128 161",
+    phone2: "",
+    website: ""
+};
+
+
+function afEscape(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+
+function afGetPrintSettings() {
+
+    let saved = {};
+
+    try {
+        saved =
+JSON.parse(
+localStorage.getItem(AF_PRINT_SETTINGS_KEY) || "{}"
+            ) || {};
+    } catch (error) {
+        saved = {};
+    }
+
+
+    /*
+     * MIGRATION:
+     * If old Company Profile settings exist,
+     * carry the old phone/website forward once.
+     */
+    try {
+
+const oldProfile =
+JSON.parse(
+localStorage.getItem("afCompanyProfile") || "{}"
+            ) || {};
+
+        if (!saved.phone1 &&oldProfile.phone) {
+            saved.phone1 = oldProfile.phone;
+        }
+
+        if (!saved.website&&oldProfile.website) {
+saved.website = oldProfile.website;
+        }
+
+    } catch (error) {}
+
+
+    return {
+        ...AF_PRINT_DEFAULTS,
+        ...saved
+    };
+}
+
+
+function afSavePrintSettings(settings) {
+
+localStorage.setItem(
+        AF_PRINT_SETTINGS_KEY,
+JSON.stringify({
+            phone1: String(settings.phone1 || "").trim(),
+            phone2: String(settings.phone2 || "").trim(),
+            website: String(settings.website || "").trim()
+        })
+    );
+}
+
+
+window.afGetCompanyProfile = function() {
+
+const settings = afGetPrintSettings();
+
+    return {
+companyName: AF_COMPANY.companyName,
+tradingName: AF_COMPANY.tradingName,
+tinNo: AF_COMPANY.tin,
+        email: AF_COMPANY.email,
+        motto: AF_COMPANY.motto,
+
+        phone: settings.phone1,
+        phone1: settings.phone1,
+        phone2: settings.phone2,
+        website: settings.website
+    };
+};
+
+
+/* =========================================================
+   GLOBAL PRINT CSS
+   ========================================================= */
+
+function afFinalPrintStyles() {
+
+return `
+
+* {
+    box-sizing: border-box;
+}
+
+.af-smart-header {
+    width: 100%;
+    margin: 0 auto 14px;
+    font-family: Arial, sans-serif;
+    background: #fff;
+    page-break-inside: avoid;
+}
+
+.af-final-header-art {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    background: #fff;
+}
+
+.af-final-header-art >img {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+/*
+ * The artwork contains the fixed company identity.
+ * This white overlay covers its temporary contact
+ * placeholders. The live Director-controlled details
+ * are then printed here.
+ */
+.af-final-contact-overlay {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    min-height: 25%;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 8px 2%;
+    border-bottom: 4px solid #0b5d3b;
+    box-shadow: inset 0 -7px 0 -4px #e3b417;
+    font-size: 11px;
+    color: #10233f;
+    font-weight: 700;
+    flex-wrap: wrap;
+}
+
+.af-final-contact-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+}
+
+.af-final-contact-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #08733f;
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    flex: 0 0 24px;
+}
+
+.af-final-contact-divider {
+    color: #d3a900;
+    font-weight: 900;
+}
+
+.af-smart-title {
+    margin: 12px auto 14px;
+    width: fit-content;
+    max-width: 95%;
+    padding: 8px 28px;
+    border-radius: 9px;
+    background: #edf8f1;
+    color: #075b36;
+    text-align: center;
+    font-size: 20px;
+    line-height: 1.2;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: .3px;
+}
+
+.af-smart-footer {
+    width: 100%;
+    margin-top: 18px;
+    page-break-inside: avoid;
+    font-family: Arial, sans-serif;
+}
+
+.af-final-footer-art {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 145px;
+    object-fit: cover;
+    object-position: center;
+}
+
+.af-smart-footer-note {
+    text-align: center;
+    margin-top: 4px;
+    font-size: 10px;
+    color: #56645d;
+}
+
+@media print {
+
+    @page {
+        size: A4;
+        margin: 8mm;
+    }
+
+    html,
+    body {
+        background: #fff !important;
+    }
+
+    body {
+        margin: 0 !important;
+    }
+
+    .af-smart-header,
+    .af-smart-footer,
+    .af-final-contact-overlay,
+    .af-smart-title {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    .af-final-footer-art {
+        max-height: 32mm;
+    }
+
+    button,
+    .print-button,
+    .print-btn,
+    .print,
+    .no-print,
+    .af-no-print {
+        display: none !important;
+    }
+}
+
+`;
+
+}
+
+
+window.afSmartPrintStyles = afFinalPrintStyles;
+
+
+/* =========================================================
+   ONE GLOBAL HEADER
+   ========================================================= */
+
+function afFinalHeader(title = "") {
+
+const settings = afGetPrintSettings();
+
+const contacts = [];
+
+
+    if (settings.phone1) {
+contacts.push(`
+<span class="af-final-contact-item">
+<span class="af-final-contact-icon">☎</span>
+                ${afEscape(settings.phone1)}
+</span>
+        `);
+    }
+
+
+    if (settings.phone2) {
+contacts.push(`
+<span class="af-final-contact-item">
+<span class="af-final-contact-icon">☎</span>
+                ${afEscape(settings.phone2)}
+</span>
+        `);
+    }
+
+
+    if (settings.website) {
+contacts.push(`
+<span class="af-final-contact-item">
+<span class="af-final-contact-icon">◎</span>
+                ${afEscape(settings.website)}
+</span>
+        `);
+    }
+
+
+contacts.push(`
+<span class="af-final-contact-item">
+<span class="af-final-contact-icon">✉</span>
+            ${afEscape(AF_COMPANY.email)}
+</span>
+    `);
+
+
+const contactHTML =
+contacts.join(
+            `<span class="af-final-contact-divider">|</span>`
+        );
+
+
+return `
+
+<div class="af-smart-header">
+
+<div class="af-final-header-art">
+
+<img
+src="af-print-header.png"
+            alt="A&F Wekavera Ltd"
+>
+
+<div class="af-final-contact-overlay">
+            ${contactHTML}
+</div>
+
+</div>
+
+    ${
+        title
+            ? `
+<div class="af-smart-title">
+                    ${afEscape(title)}
+</div>
+              `
+            : ""
+    }
+
+</div>
+
+`;
+
+}
+
+
+window.afSmartPrintHeader = afFinalHeader;
+
+
+/* =========================================================
+   ONE GLOBAL COMPACT FOOTER
+   ========================================================= */
+
+function afFinalFooter(extra = "") {
+
+return `
+
+<div class="af-smart-footer">
+
+<img
+        class="af-final-footer-art"
+src="af-print-footer.png"
+        alt="A&F Recycled Plastic Poles"
+>
+
+    ${
+        extra
+            ? `
+<div class="af-smart-footer-note">
+                    ${afEscape(extra)}
+</div>
+              `
+            : ""
+    }
+
+</div>
+
+`;
+
+}
+
+
+window.afSmartPrintFooter = afFinalFooter;
+
+
+/* =========================================================
+   DETECT OFFICIAL PRINT DOCUMENTS
+   ========================================================= */
+
+function afDetectPrintTitle(doc) {
+
+const pageTitle =
+        String(doc.title || "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .toUpperCase();
+
+
+const headingText =
+Array.from(
+doc.querySelectorAll("h1,h2,h3")
+        )
+        .map(el =>
+            String(el.textContent || "")
+                .replace(/\s+/g, " ")
+                .trim()
+                .toUpperCase()
+        )
+        .join(" | ");
+
+
+const bodyText =
+        String(doc.body?.innerText || "")
+            .replace(/\s+/g, " ")
+            .toUpperCase();
+
+
+const combined =
+pageTitle + " | " +
+headingText + " | " +
+bodyText.slice(0, 5000);
+
+
+    if (combined.includes("PAYMENT RECEIPT")) {
+        return "Payment Receipt";
+    }
+
+    if (combined.includes("DELIVERY NOTE")) {
+        return "Delivery Note";
+    }
+
+    if (combined.includes("CUSTOMER STATEMENT")) {
+        return "Customer Statement";
+    }
+
+    if (combined.includes("ACCOUNT STATEMENT")) {
+        return "Customer Statement";
+    }
+
+    if (combined.includes("QUOTATION")) {
+        return "Quotation";
+    }
+
+    if (
+pageTitle.startsWith("ORDER") ||
+headingText.includes("ORDER")
+    ) {
+        return "Order";
+    }
+
+    if (
+combined.includes("INVOICE")
+    ) {
+        return "Invoice";
+    }
+
+    if (
+pageTitle.startsWith("PAYSLIP") ||
+combined.includes("EMPLOYEE PAYSLIP")
+    ) {
+        return "Employee Payslip";
+    }
+
+    if (
+combined.includes("EMPLOYEE REGISTRATION FORM")
+    ) {
+        return "Employee Registration Form";
+    }
+
+    if (
+combined.includes("QUALITY & DISCIPLINE")
+    ) {
+        return (
+            "Employee Quality & Discipline – " +
+            "Weekly Performance Assessment"
+        );
+    }
+
+
+    /*
+     * Company Letters normally already contain
+     * the Smart Header created by printLetter().
+     */
+    if (
+doc.querySelector(".af-smart-header") ||
+combined.includes("COMPANY LETTER")
+    ) {
+        return "Official Company Letter";
+    }
+
+
+    return "";
+}
+
+
+/* =========================================================
+   REMOVE OLD / DUPLICATED PRINT BRANDING
+   ========================================================= */
+
+function afRemoveOldPrintBranding(doc) {
+
+    /*
+     * Remove every previous Smart Print header/footer.
+     * We then insert exactly ONE fresh version.
+     */
+doc.querySelectorAll(
+        ".af-smart-header, .af-smart-footer"
+    ).forEach(el =>el.remove());
+
+
+    /*
+     * Remove older company-only headers.
+     * Preserve unrelated document content.
+     */
+doc.querySelectorAll(".header")
+        .forEach(header => {
+
+const text =
+                String(header.innerText || "")
+                    .replace(/\s+/g, " ")
+                    .toUpperCase();
+
+            if (
+                !text.includes("A&F") &&
+                !text.includes("WEKAVERA") &&
+                !text.includes("WASTE2WEALTH")
+            ) {
+                return;
+            }
+
+
+            /*
+             * Preserve employee details that may live
+             * inside an older HR print header.
+             */
+const employeeArea =
+header.querySelector(".employee-area");
+
+            if (
+employeeArea&&
+header.parentNode
+            ) {
+header.parentNode.insertBefore(
+employeeArea,
+header.nextSibling
+                );
+            }
+
+header.remove();
+        });
+
+
+    /*
+     * Remove old company-only footer.
+     */
+doc.querySelectorAll(".footer")
+        .forEach(footer => {
+
+const text =
+                String(footer.innerText || "")
+                    .replace(/\s+/g, " ")
+                    .toUpperCase();
+
+            if (
+text.includes("A&F") ||
+text.includes("WEKAVERA") ||
+text.includes("GENERATED FROM") ||
+text.includes("QUALITY & DISCIPLINE RECORD")
+            ) {
+footer.remove();
+            }
+
+        });
+
+
+    /*
+     * Remove duplicated document headings only when
+     * the global title will replace them.
+     */
+const removableTitles = new Set([
+        "PAYMENT RECEIPT",
+        "DELIVERY NOTE",
+        "CUSTOMER STATEMENT",
+        "ACCOUNT STATEMENT",
+        "EMPLOYEE PAYSLIP",
+        "EMPLOYEE REGISTRATION FORM",
+        "QUOTATION",
+        "ORDER",
+        "INVOICE"
+    ]);
+
+
+doc.querySelectorAll("h1,h2")
+        .forEach(el => {
+
+const text =
+                String(el.textContent || "")
+                    .replace(/\s+/g, " ")
+                    .trim()
+                    .toUpperCase();
+
+            if (
+removableTitles.has(text) ||
+text.startsWith(
+                    "EMPLOYEE QUALITY & DISCIPLINE"
+                )
+            ) {
+el.remove();
+            }
+
+        });
+}
+
+
+/* =========================================================
+   APPLY ONE FINAL GLOBAL DESIGN
+   ========================================================= */
+
+function applyAFFinalPrintBranding(popup) {
 
     try {
 
@@ -68876,166 +69527,112 @@ popup.closed ||
             return;
         }
 
+
 const doc = popup.document;
-const profile = getProfile();
-
-const title = String(
-doc.querySelector(".af-smart-title")?.textContent ||
-doc.title ||
-            ""
-        ).trim();
 
 
-        /* -----------------------------------------
-           HEADER
-           ----------------------------------------- */
-
-        let headers =
-doc.querySelectorAll(".af-smart-header");
-
-        /* Keep only one header */
-        if (headers.length> 1) {
-
-            for (let i = 1; i<headers.length; i++) {
-                headers[i].remove();
-            }
-
-        }
-
-        let header =
-doc.querySelector(".af-smart-header");
-
-        /* Add header if document does not have one */
-        if (!header) {
-
-const holder =
-doc.createElement("div");
-
-holder.innerHTML =
-profileHeader(title);
-
-            header =
-holder.firstElementChild;
-
-            if (header) {
-
-doc.body.insertBefore(
-                    header,
-doc.body.firstChild
-                );
-
-            }
-
+        if (
+doc.documentElement
+                .getAttribute("data-af-final-print") === "1"
+        ) {
+            return;
         }
 
 
-        /* Update header from Company Profile */
-        if (header) {
-
-const company =
-header.querySelector(".af-smart-company");
-
-const trading =
-header.querySelector(".af-smart-tag");
-
-const motto =
-header.querySelector(".af-smart-motto");
-
-const contact =
-header.querySelector(".af-smart-contact");
+const title =
+afDetectPrintTitle(doc);
 
 
-            if (company) {
-company.textContent =
-profile.companyName || "";
-            }
-
-            if (trading) {
-trading.textContent =
-profile.tradingName || "";
-            }
-
-            if (motto) {
-motto.textContent =
-profile.motto || "";
-            }
-
-            if (contact) {
-contact.innerHTML =
-contactRows(profile, title);
-            }
-
+        /*
+         * Do not touch unrelated popup windows.
+         */
+        if (!title) {
+            return;
         }
 
 
-        /* -----------------------------------------
-           FOOTER
-           ----------------------------------------- */
-
-        let footers =
-doc.querySelectorAll(".af-smart-footer");
-
-        /* Keep only one footer */
-        if (footers.length> 1) {
-
-            for (let i = 1; i<footers.length; i++) {
-                footers[i].remove();
-            }
-
-        }
-
-        let footer =
-doc.querySelector(".af-smart-footer");
+        /*
+         * Add shared styles once.
+         */
+doc.querySelectorAll(
+            "style[data-af-final-print-style]"
+        ).forEach(el =>el.remove());
 
 
-        /* Add footer if document does not have one */
-        if (!footer) {
+const style =
+doc.createElement("style");
 
-const holder =
-doc.createElement("div");
+style.setAttribute(
+            "data-af-final-print-style",
+            "1"
+        );
 
-holder.innerHTML =
-profileFooter(title);
+style.textContent =
+afFinalPrintStyles();
 
-            footer =
-holder.firstElementChild;
+doc.head.appendChild(style);
 
-            if (footer) {
 
-const printControl =
-doc.querySelector(".print-button") ||
-doc.querySelector(".print") ||
-doc.querySelector(".no-print");
+        /*
+         * Payslip can have its own page container.
+         */
+const target =
+doc.querySelector(".payslip") ||
+doc.body;
 
-                if (printControl) {
 
-printControl.insertAdjacentElement(
-                        "beforebegin",
-                        footer
-                    );
+afRemoveOldPrintBranding(doc);
 
-                } else {
 
-doc.body.appendChild(
-                        footer
-                    );
+        /*
+         * ONE HEADER
+         */
+target.insertAdjacentHTML(
+            "afterbegin",
+afFinalHeader(title)
+        );
 
-                }
 
-            }
+        /*
+         * ONE FOOTER
+         */
+const footerHTML =
+afFinalFooter("");
+
+
+const bottomControl =
+target.querySelector(".print-button") ||
+target.querySelector(".print-btn") ||
+target.querySelector(".print");
+
+
+        if (bottomControl) {
+
+bottomControl.insertAdjacentHTML(
+                "beforebegin",
+footerHTML
+            );
+
+        } else {
+
+target.insertAdjacentHTML(
+                "beforeend",
+footerHTML
+            );
 
         }
 
 
-        /* Mark document as successfully branded */
-doc.documentElement.dataset.afProfileApplied =
-            "yes";
+doc.documentElement.setAttribute(
+            "data-af-final-print",
+            "1"
+        );
 
 
     } catch (error) {
 
 console.error(
-            "A&F Company Profile print connection error:",
+            "A&F final print branding error:",
             error
         );
 
@@ -69044,86 +69641,752 @@ console.error(
 }
 
 
+window.applyAFGlobalPrintBranding =
+applyAFFinalPrintBranding;
+
+
 /* =========================================================
-   FINAL PRINT HOOK
-   Runs after the existing global Smart Print branding
+   GLOBAL PRINT DOCUMENT BUILDER
    ========================================================= */
 
-if (!window.__afCompanyProfilePrintHookInstalled) {
+window.afBuildPrintDocument =
+function(options = {}) {
 
-    window.__afCompanyProfilePrintHookInstalled =
-        true;
+const title =
+        String(options.title || "");
 
-const previousWindowOpen =
-window.open;
+const content =
+        String(options.content || "");
 
-window.open =
-        function () {
+const footerExtra =
+        String(options.footerExtra || "");
+
+
+return `
+
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="UTF-8">
+
+<title>
+${afEscape(title)}
+</title>
+
+<style>
+
+${afFinalPrintStyles()}
+
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 8mm;
+    color: #222;
+    background: #fff;
+}
+
+.af-print-content {
+    width: 100%;
+    margin: 0 auto;
+}
+
+</style>
+
+</head>
+
+
+<body>
+
+${afFinalHeader(title)}
+
+<div class="af-print-content">
+${content}
+</div>
+
+${afFinalFooter(footerExtra)}
+
+</body>
+
+</html>
+
+`;
+
+};
+
+
+/* =========================================================
+   OPEN GLOBAL PRINT DOCUMENT
+   ========================================================= */
+
+window.afOpenPrintDocument =
+function(options = {}) {
 
 const popup =
-previousWindowOpen.apply(
-                    this,
-                    arguments
-                );
+window.open(
+            "",
+            "_blank",
+            "width=900,height=750"
+        );
 
-            if (!popup) {
-                return popup;
-            }
 
-            try {
+    if (!popup) {
 
-const popupDocument =
-popup.document;
+        alert(
+            "Please allow pop-ups so the document can open."
+        );
 
-const previousClose =
-popupDocument.close.bind(
-popupDocument
-                    );
+        return null;
+    }
 
-popupDocument.close =
-                    function () {
 
-const result =
-previousClose();
+popup.document.open();
 
-setTimeout(
-                            function () {
+popup.document.write(
+window.afBuildPrintDocument(options)
+    );
 
-applyProfileToPopup(
-                                    popup
-                                );
+popup.document.close();
 
-                            },
-                            80
-                        );
+popup.focus();
 
-                        return result;
+    return popup;
+};
 
-                    };
 
-            } catch (error) {
+/* =========================================================
+   CURRENT USER / DIRECTOR SECURITY
+   ========================================================= */
 
-console.warn(
-                    "A&F print hook could not attach:",
-                    error
-                );
+function afCurrentUser() {
 
-            }
+    try {
 
-            return popup;
+        if (
+typeof getAFCurrentUser === "function"
+        ) {
+            return getAFCurrentUser() || {};
+        }
+
+    } catch (error) {}
+
+
+    try {
+
+        return (
+JSON.parse(
+localStorage.getItem("currentUser") || "{}"
+            ) || {}
+        );
+
+    } catch (error) {
+
+        return {};
+
+    }
+}
+
+
+function afIsDirector() {
+
+    return (
+        String(
+afCurrentUser().role || ""
+        ).toLowerCase() === "director"
+    );
+}
+
+
+function afRequireDirector() {
+
+    if (afIsDirector()) {
+        return true;
+    }
+
+
+    alert(
+        "Access Denied\n\n" +
+        "Only the Director can change Print Settings."
+    );
+
+    return false;
+}
+
+
+/* =========================================================
+   PRINT SETTINGS SCREEN
+   ONLY PHONE 1, PHONE 2 AND WEBSITE
+   ========================================================= */
+
+function manageAFPrintSettings() {
+
+    if (!afRequireDirector()) {
+        return;
+    }
+
+
+document.getElementById(
+        "afPrintSettingsModal"
+    )?.remove();
+
+
+const settings =
+afGetPrintSettings();
+
+
+const modal =
+document.createElement("div");
+
+
+modal.id =
+        "afPrintSettingsModal";
+
+
+modal.style.cssText = `
+position:fixed;
+        inset:0;
+        z-index:1000005;
+background:rgba(0,0,0,.58);
+display:flex;
+align-items:center;
+justify-content:center;
+        padding:12px;
+box-sizing:border-box;
+font-family:Arial,sans-serif;
+    `;
+
+
+modal.innerHTML = `
+
+<div style="
+    width:650px;
+    max-width:98%;
+background:white;
+    border-radius:14px;
+overflow:hidden;
+    box-shadow:0 16px 50px rgba(0,0,0,.3);
+">
+
+<div style="
+        background:#0b5d3b;
+color:white;
+        padding:18px 20px;
+display:flex;
+justify-content:space-between;
+align-items:center;
+        gap:12px;
+    ">
+
+<div>
+<div style="
+                font-size:11px;
+font-weight:bold;
+                letter-spacing:1px;
+                opacity:.85;
+            ">
+A&amp;F WEKAVERA LTD • DIRECTOR ONLY
+</div>
+
+<h2 style="margin:5px 0 0;">
+                Print & Contact Settings
+</h2>
+</div>
+
+<button
+            id="afPrintSettingsClose"
+            style="
+                border:0;
+                background:#333;
+color:white;
+                padding:9px 13px;
+                border-radius:7px;
+font-weight:bold;
+cursor:pointer;
+            "
+>
+✕ Close
+</button>
+
+</div>
+
+
+<div style="padding:22px;">
+
+<div style="
+            padding:12px;
+            margin-bottom:18px;
+            border:1px solid #cfe6d8;
+            background:#eef8f2;
+            border-radius:8px;
+            color:#0b5d3b;
+            font-size:12px;
+            line-height:1.55;
+        ">
+
+            Company name, logo, TIN, email and motto
+            are fixed.
+
+<br><br>
+
+            The Director can update only the two
+            phone numbers and website shown on
+            official printouts.
+
+</div>
+
+
+<div style="
+display:grid;
+            grid-template-columns:1fr 1fr;
+            gap:14px;
+        ">
+
+<div>
+<label>
+<b>Phone Number 1</b>
+</label>
+
+<input
+                    id="afPrintPhone1"
+                    value="${afEscape(settings.phone1)}"
+                    placeholder="e.g. 0752 128 161"
+                    style="
+                        width:100%;
+box-sizing:border-box;
+                        margin-top:6px;
+                        padding:11px;
+                        border:1px solid #ccd5d0;
+                        border-radius:7px;
+                    "
+>
+</div>
+
+
+<div>
+<label>
+<b>Phone Number 2</b>
+</label>
+
+<input
+                    id="afPrintPhone2"
+                    value="${afEscape(settings.phone2)}"
+                    placeholder="Optional second number"
+                    style="
+                        width:100%;
+box-sizing:border-box;
+                        margin-top:6px;
+                        padding:11px;
+                        border:1px solid #ccd5d0;
+                        border-radius:7px;
+                    "
+>
+</div>
+
+
+<div style="grid-column:1/-1;">
+
+<label>
+<b>Website</b>
+</label>
+
+<input
+                    id="afPrintWebsite"
+                    value="${afEscape(settings.website)}"
+                    placeholder="e.g. www.afwekavera.co.ug"
+                    style="
+                        width:100%;
+box-sizing:border-box;
+                        margin-top:6px;
+                        padding:11px;
+                        border:1px solid #ccd5d0;
+                        border-radius:7px;
+                    "
+>
+
+</div>
+
+</div>
+
+
+<div style="
+            margin-top:18px;
+            padding:12px;
+            border-radius:8px;
+            background:#fafafa;
+            border:1px solid #e1e5e3;
+            font-size:12px;
+            line-height:1.7;
+        ">
+
+<b>Fixed company details</b><br>
+
+A&amp;FWekavera Ltd<br>
+            Waste2Wealth Solutions<br>
+            TIN: 1009916263<br>
+            Email:
+            afwaste2wealthsolutions@gmail.com<br>
+            Motto: Turning Waste into Value
+
+</div>
+
+
+<div style="
+display:flex;
+justify-content:flex-end;
+            gap:10px;
+            margin-top:20px;
+flex-wrap:wrap;
+        ">
+
+<button
+                id="afPrintSettingsBack"
+                style="
+                    border:0;
+                    background:#52625b;
+color:white;
+                    padding:10px 15px;
+                    border-radius:8px;
+font-weight:bold;
+cursor:pointer;
+                "
+>
+                ← Back
+</button>
+
+
+<button
+                id="afPrintSettingsSave"
+                style="
+                    border:0;
+                    background:#0b5d3b;
+color:white;
+                    padding:10px 15px;
+                    border-radius:8px;
+font-weight:bold;
+cursor:pointer;
+                "
+>
+💾 Save Print Settings
+</button>
+
+</div>
+
+</div>
+
+</div>
+
+`;
+
+
+document.body.appendChild(modal);
+
+
+modal.querySelector(
+        "#afPrintSettingsClose"
+    ).onclick =
+    () => {
+modal.remove();
+    };
+
+
+modal.querySelector(
+        "#afPrintSettingsBack"
+    ).onclick =
+    () => {
+
+modal.remove();
+
+        if (
+typeof systemSettings === "function"
+        ) {
+systemSettings();
+        }
+    };
+
+
+modal.querySelector(
+        "#afPrintSettingsSave"
+    ).onclick =
+    () => {
+
+const nextSettings = {
+
+            phone1:
+modal.querySelector(
+                    "#afPrintPhone1"
+                ).value.trim(),
+
+            phone2:
+modal.querySelector(
+                    "#afPrintPhone2"
+                ).value.trim(),
+
+            website:
+modal.querySelector(
+                    "#afPrintWebsite"
+                ).value.trim()
 
         };
+
+
+afSavePrintSettings(
+nextSettings
+        );
+
+
+        alert(
+            "Print Settings saved successfully.\n\n" +
+            "Future connected printouts will use " +
+            "the updated phone numbers and website."
+        );
+
+    };
 
 }
 
 
+window.manageAFPrintSettings =
+manageAFPrintSettings;
+
+
+/*
+ * Compatibility with any older button/code
+ * that still calls this function name.
+ */
+window.manageAFCompanyProfileSettings =
+manageAFPrintSettings;
+
+
+/* =========================================================
+   ADD ONE BUTTON TO SYSTEM SETTINGS
+   ========================================================= */
+
+if (
+typeof systemSettings === "function" &&
+    !window.__afFinalPrintSettingsConnected
+) {
+
+    window.__afFinalPrintSettingsConnected =
+        true;
+
+
+const originalSystemSettings =
+systemSettings;
+
+
+systemSettings =
+    function() {
+
+const result =
+originalSystemSettings.apply(
+                this,
+                arguments
+            );
+
+
+setTimeout(
+            () => {
+
+const settingsModal =
+Array.from(
+document.querySelectorAll(
+                            "body > div"
+                        )
+                    )
+                    .reverse()
+                    .find(
+                        element =>
+element.querySelector(
+                                "#closeSystemSettings"
+                            )
+                    );
+
+
+                if (!settingsModal) {
+                    return;
+                }
+
+
+                /*
+                 * Remove old duplicate Company Profile
+                 * button if one somehow remains.
+                 */
+settingsModal.querySelector(
+                    "#afCompanyProfileSettingsBtn"
+                )?.remove();
+
+
+                if (
+settingsModal.querySelector(
+                        "#afFinalPrintSettingsBtn"
+                    )
+                ) {
+                    return;
+                }
+
+
+const teamButton =
+settingsModal.querySelector(
+                        "#teamSettingsBtn"
+                    );
+
+
+const grid =
+teamButton?.parentElement;
+
+
+                if (!grid) {
+                    return;
+                }
+
+
+const button =
+document.createElement("button");
+
+
+button.id =
+                    "afFinalPrintSettingsBtn";
+
+
+button.style.cssText =
+
+typeof
+systemSettingsButtonStyle ===
+                    "function"
+
+                    ? systemSettingsButtonStyle()
+
+                    : `
+                        min-height:120px;
+                        border:1px solid #d9e5de;
+                        background:#f7fbf9;
+                        border-radius:12px;
+                        padding:15px;
+cursor:pointer;
+text-align:left;
+                    `;
+
+
+button.innerHTML = `
+
+🖨️
+
+<strong>
+                        Print & Contact Settings
+</strong>
+
+<span>
+                        Phone 1, Phone 2 and Website
+</span>
+
+                `;
+
+
+button.onclick =
+                () => {
+
+settingsModal.remove();
+
+manageAFPrintSettings();
+
+                };
+
+
+grid.appendChild(button);
+
+            },
+            0
+        );
+
+
+        return result;
+
+    };
+
+}
+
+
+/* =========================================================
+   ONE AND ONLY GLOBAL POPUP PRINT HOOK
+   ========================================================= */
+
+const afNativeWindowOpen =
+window.open;
+
+
+window.open =
+function() {
+
+const popup =
+afNativeWindowOpen.apply(
+            this,
+            arguments
+        );
+
+
+    if (!popup) {
+        return popup;
+    }
+
+
+    try {
+
+const popupDocument =
+popup.document;
+
+
+const originalClose =
+popupDocument.close.bind(
+popupDocument
+            );
+
+
+popupDocument.close =
+        function() {
+
+const result =
+originalClose();
+
+
+setTimeout(
+                () => {
+
+applyAFFinalPrintBranding(
+                        popup
+                    );
+
+                },
+                30
+            );
+
+
+            return result;
+
+        };
+
+
+    } catch (error) {
+
+console.warn(
+            "A&F print hook could not attach:",
+            error
+        );
+
+    }
+
+
+    return popup;
+
+};
+
+
 console.log(
-    "A&F Company Profile / Print Settings connected successfully."
+    "A&F FINAL Global Print System connected successfully."
 );
 
-
-/* Close connectAFCompanyProfileSettings */
-
+})();
 
 /* =========================================================
    A&F SUPPLIER MANAGEMENT MODULE
