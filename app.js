@@ -82484,3 +82484,565 @@ console.log(
 );
 
 })();
+
+/* =========================================================
+   A&F UNIFIED SALARY ↔ PAYROLL CONNECTION
+   Paste this ONE block at the very end of app.js
+   ========================================================= */
+(function () {
+  "use strict";
+  if (window.__afUnifiedSalaryPayroll) return;
+  window.__afUnifiedSalaryPayroll = true;
+
+  const SALARY = "SALARY";
+  const SALARY_CATEGORY = "Salaries & Wages";
+
+  const expenses = () => {
+    try {
+      return typeof window.getAFExpenseRecords === "function"
+        ? window.getAFExpenseRecords()
+        : JSON.parse(localStorage.getItem("expenses") || "[]");
+    } catch (_) { return []; }
+  };
+
+  const saveExpenses = records => {
+    const clean = Array.isArray(records) ? records : [];
+    localStorage.setItem("expenses", JSON.stringify(clean));
+    localStorage.setItem("expenseRecords", JSON.stringify(clean));
+  };
+
+  const payrolls = () => {
+    try {
+      return typeof getPayrollRecords === "function"
+        ? getPayrollRecords()
+        : JSON.parse(localStorage.getItem("payrollRecords") || "[]");
+    } catch (_) { return []; }
+  };
+
+  const savePayrolls = records => {
+    if (typeof savePayrollRecords === "function") savePayrollRecords(records);
+    else localStorage.setItem("payrollRecords", JSON.stringify(records));
+  };
+
+  const employee = id =>
+    (typeof getEmployees === "function" ? getEmployees() : [])
+      .find(x => String(x.employeeId) === String(id)) || null;
+
+  const esc = v => String(v ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+
+  const today = () => {
+    const d = new Date();
+    return d.getFullYear() + "-" +
+      String(d.getMonth() + 1).padStart(2, "0") + "-" +
+      String(d.getDate()).padStart(2, "0");
+  };
+
+  const periodFromDate = value => {
+    const d = new Date(String(value || "").slice(0, 10) + "T00:00:00");
+    return isNaN(d.getTime()) ? null : { year: d.getFullYear(), month: d.getMonth() };
+  };
+
+  const recordPeriod = record => {
+    if (
+      record &&
+      record.payrollYear !== undefined &&
+      record.payrollMonth !== undefined &&
+      record.payrollYear !== "" &&
+      record.payrollMonth !== ""
+    ) {
+      return { year: Number(record.payrollYear), month: Number(record.payrollMonth) };
+    }
+    return periodFromDate(record?.date);
+  };
+
+  const isSalary = record => Boolean(
+    record &&
+    record.payeeEmployeeId &&
+    String(record.employeePaymentType || "") === SALARY &&
+    String(record.status || "COMPLETED").toUpperCase() !== "CANCELLED"
+  );
+
+  const expenseNo = (date, records) => {
+    const clean = String(date || today()).replaceAll("-", "");
+    const count = records.filter(x => String(x.date || "") === String(date || "")).length;
+    return "EXP-" + clean + "-" + String(count + 1).padStart(3, "0");
+  };
+
+  function savePaymentState(payroll, paymentDate) {
+    const saved = saveCalculatedPayroll(payroll);
+    const records = payrolls();
+    const i = records.findIndex(x => String(x.id) === String(saved.id));
+    if (i < 0) return saved;
+
+    records[i].amountPaid = Number(payroll.amountPaid || 0);
+    records[i].balance = Number(payroll.balance || 0);
+    records[i].status = payroll.status || "UNPAID";
+    if (paymentDate) records[i].paymentDate = paymentDate;
+    records[i].updatedAt = new Date().toISOString();
+    savePayrolls(records);
+    return records[i];
+  }
+
+  function setPaid(employeeId, year, month, amountPaid, paymentDate) {
+    const existing = payrolls().find(x =>
+      String(x.employeeId) === String(employeeId) &&
+      Number(x.year) === Number(year) &&
+      Number(x.month) === Number(month)
+    );
+
+    if (
+      existing &&
+      String(existing.calculationMode || "NORMAL").toUpperCase() === "FULL_SETTLEMENT"
+    ) {
+      alert("This month already has a Full Settlement payroll. Handle its payment from Payroll Ledger.");
+      return null;
+    }
+
+    const p = calculateEmployeePayroll(employeeId, year, month, "NORMAL");
+    if (!p) return null;
+
+    const paid = Math.max(Number(amountPaid || 0), 0);
+    if (paid > Number(p.netPayable || 0)) {
+      alert("Payment cannot exceed Net Payable of " + formatPayrollMoney(Number(p.netPayable || 0)) + ".");
+      return null;
+    }
+
+    p.amountPaid = paid;
+    p.balance = Math.max(Number(p.netPayable || 0) - paid, 0);
+    p.status = p.balance <= 0 && Number(p.netPayable || 0) > 0
+      ? "PAID"
+      : paid > 0 ? "PARTIALLY PAID" : "UNPAID";
+
+    return savePaymentState(p, paymentDate);
+  }
+
+  function applySalaryExpense(record) {
+    if (!isSalary(record)) return null;
+    const period = recordPeriod(record);
+    if (!period) return null;
+
+    const current = calculateEmployeePayroll(
+      record.payeeEmployeeId, period.year, period.month, "NORMAL"
+    );
+    if (!current) return null;
+
+    const saved = setPaid(
+      record.payeeEmployeeId,
+      period.year,
+      period.month,
+      Number(current.amountPaid || 0) + Number(record.amount || 0),
+      record.date || today()
+    );
+    if (!saved) return null;
+
+    record.payrollYear = period.year;
+    record.payrollMonth = period.month;
+    record.linkedPayrollId = saved.id;
+    record.salaryPayrollSynced = true;
+    record.salaryPayrollAmount = Number(record.amount || 0);
+    return saved;
+  }
+
+  function reverseSalaryExpense(record) {
+    if (!record?.payeeEmployeeId) return null;
+    const period = recordPeriod(record);
+    if (!period) return null;
+
+    const current = calculateEmployeePayroll(
+      record.payeeEmployeeId, period.year, period.month, "NORMAL"
+    );
+    if (!current) return null;
+
+    const oldAmount = Number(record.salaryPayrollAmount ?? record.amount ?? 0);
+    return setPaid(
+      record.payeeEmployeeId,
+      period.year,
+      period.month,
+      Math.max(Number(current.amountPaid || 0) - oldAmount, 0),
+      current.paymentDate || null
+    );
+  }
+
+  function sameSalaryLink(a, b) {
+    if (!isSalary(a) || !isSalary(b)) return false;
+    const ap = recordPeriod(a), bp = recordPeriod(b);
+    return Boolean(
+      ap && bp &&
+      String(a.payeeEmployeeId) === String(b.payeeEmployeeId) &&
+      Number(ap.year) === Number(bp.year) &&
+      Number(ap.month) === Number(bp.month) &&
+      Number(a.amount || 0) === Number(b.amount || 0)
+    );
+  }
+
+  function createSalaryExpenseFromPayroll(record, amount, method) {
+    amount = Number(amount || 0);
+    if (!record || amount <= 0) return null;
+
+    const list = expenses();
+    const date = today();
+    const user = typeof getAFCurrentUser === "function" ? (getAFCurrentUser() || {}) : {};
+    const emp = employee(record.employeeId);
+
+    const exp = {
+      id: Date.now() + Math.floor(Math.random() * 1000),
+      expenseNumber: expenseNo(date, list),
+      date,
+      category: SALARY_CATEGORY,
+      payee: record.employeeName || emp?.fullName || "",
+      description: "Salary payment - " + (record.monthName || "Payroll"),
+      amount,
+      paymentMethod: method || "Cash",
+      reference: "",
+      notes: "Automatically created from Payroll Ledger",
+      status: "COMPLETED",
+      payeeType: "EMPLOYEE",
+      payeeEmployeeId: record.employeeId,
+      payeeEmployeeName: record.employeeName || emp?.fullName || "",
+      employeePaymentType: SALARY,
+      payrollYear: Number(record.year),
+      payrollMonth: Number(record.month),
+      linkedPayrollId: record.id,
+      salaryPayrollSynced: true,
+      salaryPayrollAmount: amount,
+      source: "PAYROLL",
+      sourcePayrollId: record.id,
+      recordedByEmployeeId: user.employeeId || "",
+      recordedByName: user.fullName || user.employeeName || "",
+      recordedByRole: user.role || "",
+      createdAt: new Date().toISOString()
+    };
+
+    list.push(exp);
+    saveExpenses(list);
+    return exp;
+  }
+
+  function enhanceExpense() {
+    const select = document.querySelector("#afEmployeePaymentType");
+    if (!select) return;
+
+    if (!select.querySelector('option[value="SALARY"]')) {
+      const option = document.createElement("option");
+      option.value = SALARY;
+      option.textContent = "Salary";
+      const advance = select.querySelector('option[value="STAFF_ADVANCE"]');
+      advance ? advance.insertAdjacentElement("afterend", option) : select.appendChild(option);
+    }
+
+    if (select.dataset.salaryLinked) return;
+    select.dataset.salaryLinked = "1";
+
+    const note = document.createElement("div");
+    note.id = "afSalaryPayrollNotice";
+    note.style.cssText = "display:none;margin-top:7px;padding:8px 10px;background:#eef4ff;border:1px solid #c9d8f2;border-radius:6px;color:#244a7c;font-size:11px;";
+    note.textContent = "Salary will automatically update Payroll History and be ready for payslip printing.";
+    select.insertAdjacentElement("afterend", note);
+
+    const periodBox = document.createElement("div");
+    periodBox.id = "afSalaryPayrollPeriod";
+    periodBox.style.cssText = "display:none;margin-top:8px;padding:9px;background:#f7f9fb;border:1px solid #dde5ec;border-radius:6px;";
+    periodBox.innerHTML = `
+      <div style="font-size:12px;font-weight:bold;margin-bottom:6px;">Salary Payroll Period</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <input id="afSalaryPayrollYear" type="number" style="width:100%;box-sizing:border-box;padding:8px;">
+        <select id="afSalaryPayrollMonth" style="width:100%;box-sizing:border-box;padding:8px;">
+          ${Array.from({length:12}, (_,i) => `<option value="${i}">${new Date(2020,i,1).toLocaleString("en-US",{month:"long"})}</option>`).join("")}
+        </select>
+      </div>`;
+    note.insertAdjacentElement("afterend", periodBox);
+
+    function setDefaultSalaryPeriod() {
+      const d = periodFromDate(document.querySelector("#afExpenseDate")?.value || today()) || periodFromDate(today());
+      if (!d) return;
+      const y = document.querySelector("#afSalaryPayrollYear");
+      const m = document.querySelector("#afSalaryPayrollMonth");
+      if (y) y.value = d.year;
+      if (m) m.value = d.month;
+    }
+
+    select.addEventListener("change", function () {
+      const category = document.querySelector("#afExpenseCategory");
+      const description = document.querySelector("#afExpenseDescription");
+      if (this.value === SALARY) {
+        if (category) category.value = SALARY_CATEGORY;
+        if (description && !description.value.trim()) description.value = "Salary payment";
+        note.style.display = "block";
+        periodBox.style.display = "block";
+        setDefaultSalaryPeriod();
+      } else {
+        note.style.display = "none";
+        periodBox.style.display = "none";
+      }
+    });
+  }
+
+  function enhancePayroll() {
+    const b = document.querySelector("#calculatePayroll");
+    if (b) b.textContent = "Calculate Payroll";
+  }
+
+  function renderPayrollCalculation(button) {
+    const panel = button.parentElement;
+    if (!panel) return;
+
+    const employeeId = panel.querySelector("#ledgerEmployee")?.value || "";
+    if (!employeeId) return alert("Please select an employee.");
+
+    const year = Number(panel.querySelector("#ledgerYear")?.value);
+    const month = Number(panel.querySelector("#ledgerMonth")?.value);
+    const p = calculateEmployeePayroll(employeeId, year, month, "NORMAL");
+    if (!p) return alert("Payroll could not be calculated.");
+
+    const result = panel.querySelector("#payrollResult");
+    if (!result) return;
+    const remaining = Number(p.balance || 0);
+
+    result.innerHTML = `
+<div style="padding:16px;background:#f8f9fa;border-radius:10px;">
+  <h3 style="margin-top:0;">${esc(p.employeeName)} — ${esc(p.monthName)}</h3>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
+    <div style="padding:10px;background:white;border-radius:7px;"><b>Actual Days Worked</b><br>${Number(p.actualDaysWorked || 0)}</div>
+    <div style="padding:10px;background:white;border-radius:7px;"><b>Earned Allowance</b><br>${formatPayrollMoney(Number(p.earnedAllowance || 0))}</div>
+    <div style="padding:10px;background:white;border-radius:7px;"><b>Advance Recovery</b><br>${formatPayrollMoney(Number(p.advanceRecovery || 0))}</div>
+    <div style="padding:10px;background:#e8f5e9;border-radius:7px;"><b>Net Payable</b><br><span style="font-size:20px;font-weight:bold;">${formatPayrollMoney(Number(p.netPayable || 0))}</span></div>
+    <div style="padding:10px;background:#fff3cd;border-radius:7px;"><b>Already Paid</b><br>${formatPayrollMoney(Number(p.amountPaid || 0))}</div>
+    <div style="padding:10px;background:#fff3cd;border-radius:7px;"><b>Balance Before This Payment</b><br>${formatPayrollMoney(remaining)}</div>
+  </div>
+
+  <div style="margin-top:16px;padding:14px;border:1px solid #cfe3d7;background:white;border-radius:9px;">
+    <label style="font-weight:bold;">Record Payment Now (UGX)</label>
+    <input id="afPayrollPaymentNow" type="number" min="0" max="${remaining}" step="100" value="${remaining}"
+      style="width:100%;box-sizing:border-box;padding:10px;margin-top:6px;">
+
+    <label style="display:block;font-weight:bold;margin-top:10px;">Payment Method</label>
+    <select id="afPayrollPaymentMethod" style="width:100%;box-sizing:border-box;padding:10px;margin-top:6px;">
+      <option>Cash</option><option>Mobile Money</option><option>Bank Transfer</option><option>Cheque</option><option>Other</option>
+    </select>
+
+    <div style="font-size:12px;color:#666;margin-top:6px;">
+      Enter the full amount or a smaller amount for an instalment. Enter 0 to save as unpaid.
+    </div>
+
+    <button id="afSavePayrollAndPayment" type="button"
+      style="margin-top:12px;background:#0b5d3b;color:white;border:0;padding:11px 18px;border-radius:7px;font-weight:bold;cursor:pointer;">
+      Save Payroll & Payment
+    </button>
+  </div>
+</div>`;
+
+    result.querySelector("#afSavePayrollAndPayment").onclick = function () {
+      const payment = Number(result.querySelector("#afPayrollPaymentNow")?.value || 0);
+      if (!Number.isFinite(payment) || payment < 0) return alert("Please enter a valid payment amount.");
+      if (payment > remaining) return alert("Payment cannot exceed the outstanding balance of " + formatPayrollMoney(remaining) + ".");
+
+      const method = result.querySelector("#afPayrollPaymentMethod")?.value || "Cash";
+      p.amountPaid = Number(p.amountPaid || 0) + payment;
+      p.balance = Math.max(Number(p.netPayable || 0) - Number(p.amountPaid || 0), 0);
+      p.status = p.balance <= 0 && Number(p.netPayable || 0) > 0
+        ? "PAID"
+        : Number(p.amountPaid || 0) > 0 ? "PARTIALLY PAID" : "UNPAID";
+
+      const saved = savePaymentState(p, payment > 0 ? new Date().toISOString() : null);
+      if (payment > 0) createSalaryExpenseFromPayroll(saved, payment, method);
+
+      alert(
+        "Payroll saved successfully.\n\nPaid: " + formatPayrollMoney(Number(saved.amountPaid || 0)) +
+        "\nBalance: " + formatPayrollMoney(Number(saved.balance || 0)) +
+        "\nStatus: " + String(saved.status || "UNPAID")
+      );
+
+      const overlay = panel.parentElement;
+      if (overlay?.parentElement === document.body) overlay.remove();
+      if (typeof managePayrollLedger === "function") managePayrollLedger();
+    };
+  }
+
+  window.recordPayrollPayment = function (payrollId) {
+    const records = payrolls();
+    const i = records.findIndex(x => String(x.id) === String(payrollId));
+    if (i < 0) return alert("Payroll record not found.");
+
+    const r = records[i];
+    const balance = Number(r.balance || 0);
+    if (balance <= 0) return alert("This payroll has no outstanding balance.");
+
+    const payment = Number(prompt("Enter amount paid in UGX:", String(balance)));
+    if (!payment || payment <= 0) return;
+    if (payment > balance) return alert("Payment cannot exceed the outstanding balance of " + formatPayrollMoney(balance) + ".");
+
+    const methodInput = prompt("Payment method: Cash, Mobile Money, Bank Transfer, Cheque or Other", "Cash");
+    if (methodInput === null) return;
+
+    r.amountPaid = Number(r.amountPaid || 0) + payment;
+    r.balance = Math.max(Number(r.netPayable || 0) - Number(r.amountPaid || 0), 0);
+    const fullSettlement = String(r.calculationMode || "NORMAL").toUpperCase() === "FULL_SETTLEMENT";
+    r.status = r.balance <= 0 ? (fullSettlement ? "SETTLED" : "PAID") : "PARTIALLY PAID";
+    r.paymentDate = new Date().toISOString();
+    r.updatedAt = new Date().toISOString();
+    records[i] = r;
+    savePayrolls(records);
+    createSalaryExpenseFromPayroll(r, payment, methodInput.trim() || "Cash");
+
+    alert("Payroll payment recorded successfully.");
+    const calc = document.querySelector("#calculatePayroll");
+    const overlay = calc?.parentElement?.parentElement;
+    if (overlay?.parentElement === document.body) overlay.remove();
+    if (typeof managePayrollLedger === "function") managePayrollLedger();
+  };
+
+  document.addEventListener("click", function (event) {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+
+    const calc = target.closest("#calculatePayroll");
+    if (calc) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      renderPayrollCalculation(calc);
+      return;
+    }
+
+    const saveExpense = target.closest("#afSaveExpense");
+    if (saveExpense) {
+      const modal = document.getElementById("afExpensesModal");
+      if (!modal) return;
+      enhanceExpense();
+
+      const type = modal.querySelector("#afEmployeePaymentType")?.value || "";
+      const selector = modal.querySelector("#afExpensePayeeSelector")?.value || "";
+      const employeeId = selector.startsWith("EMPLOYEE:") ? selector.substring(9) : "";
+      const date = modal.querySelector("#afExpenseDate")?.value || "";
+      const amount = Number(modal.querySelector("#afExpenseAmount")?.value || 0);
+      const editId = modal.querySelector("#afExpenseEditId")?.value || "";
+      const salaryYear = Number(modal.querySelector("#afSalaryPayrollYear")?.value || 0);
+      const salaryMonth = Number(modal.querySelector("#afSalaryPayrollMonth")?.value);
+      const before = expenses();
+      const beforeIds = new Set(before.map(x => String(x.id)));
+      const oldRecord = editId ? before.find(x => String(x.id) === String(editId)) || null : null;
+
+      if (type === SALARY && employeeId) {
+        const period = (
+          salaryYear > 0 && Number.isInteger(salaryMonth) && salaryMonth >= 0 && salaryMonth <= 11
+        ) ? { year: salaryYear, month: salaryMonth } : periodFromDate(date);
+
+        if (!period) {
+          alert("Please select a valid Salary Payroll Period.");
+          event.preventDefault(); event.stopImmediatePropagation(); return;
+        }
+
+        const p = calculateEmployeePayroll(employeeId, period.year, period.month, "NORMAL");
+        if (!p) {
+          alert("Payroll could not be calculated for this employee.");
+          event.preventDefault(); event.stopImmediatePropagation(); return;
+        }
+
+        let available = Number(p.balance || 0);
+        if (oldRecord && isSalary(oldRecord)) {
+          const oldPeriod = recordPeriod(oldRecord);
+          if (
+            oldPeriod &&
+            String(oldRecord.payeeEmployeeId) === String(employeeId) &&
+            Number(oldPeriod.year) === Number(period.year) &&
+            Number(oldPeriod.month) === Number(period.month)
+          ) {
+            available += Number(oldRecord.salaryPayrollAmount ?? oldRecord.amount ?? 0);
+          }
+        }
+
+        if (amount > available) {
+          alert("Salary payment cannot exceed the payroll balance of " + formatPayrollMoney(available) + ".");
+          event.preventDefault(); event.stopImmediatePropagation(); return;
+        }
+      }
+
+      setTimeout(function () {
+        const after = expenses();
+        const newRecord = editId
+          ? after.find(x => String(x.id) === String(editId)) || null
+          : after.find(x => !beforeIds.has(String(x.id))) || null;
+        if (!newRecord) return;
+
+        if (
+          type === SALARY &&
+          salaryYear > 0 &&
+          Number.isInteger(salaryMonth) &&
+          salaryMonth >= 0 &&
+          salaryMonth <= 11
+        ) {
+          newRecord.payrollYear = salaryYear;
+          newRecord.payrollMonth = salaryMonth;
+        }
+
+        if (oldRecord && isSalary(oldRecord) && !sameSalaryLink(oldRecord, newRecord)) {
+          reverseSalaryExpense(oldRecord);
+        }
+        if (isSalary(newRecord) && !sameSalaryLink(oldRecord, newRecord)) {
+          applySalaryExpense(newRecord);
+        }
+
+        const latest = expenses();
+        const j = latest.findIndex(x => String(x.id) === String(newRecord.id));
+        if (j >= 0) { latest[j] = newRecord; saveExpenses(latest); }
+      }, 80);
+      return;
+    }
+
+    const editExpense = target.closest("[data-expense-edit]");
+    if (editExpense) {
+      const id = editExpense.getAttribute("data-expense-edit");
+      setTimeout(function () {
+        enhanceExpense();
+        const rec = expenses().find(x => String(x.id) === String(id));
+        if (!rec || String(rec.employeePaymentType || "") !== SALARY) return;
+        const select = document.querySelector("#afEmployeePaymentType");
+        const box = document.querySelector("#afSalaryPayrollPeriod");
+        const note = document.querySelector("#afSalaryPayrollNotice");
+        const period = recordPeriod(rec);
+        if (select) select.value = SALARY;
+        if (box) box.style.display = "block";
+        if (note) note.style.display = "block";
+        if (period) {
+          const y = document.querySelector("#afSalaryPayrollYear");
+          const m = document.querySelector("#afSalaryPayrollMonth");
+          if (y) y.value = period.year;
+          if (m) m.value = period.month;
+        }
+      }, 40);
+      return;
+    }
+
+    const cancel = target.closest("[data-expense-cancel]");
+    if (cancel) {
+      const id = cancel.getAttribute("data-expense-cancel");
+      const before = expenses().find(x => String(x.id) === String(id));
+      if (!before || !isSalary(before)) return;
+      const snapshot = JSON.parse(JSON.stringify(before));
+
+      setTimeout(function () {
+        const list = expenses();
+        const after = list.find(x => String(x.id) === String(id));
+        if (
+          after &&
+          String(after.status || "").toUpperCase() === "CANCELLED" &&
+          !after.salaryPayrollReversed
+        ) {
+          reverseSalaryExpense(snapshot);
+          after.salaryPayrollReversed = true;
+          after.salaryPayrollReversedAt = new Date().toISOString();
+          saveExpenses(list);
+        }
+      }, 80);
+    }
+  }, true);
+
+  const refresh = () => { enhanceExpense(); enhancePayroll(); };
+  new MutationObserver(refresh).observe(document.body, { childList: true, subtree: true });
+  setTimeout(refresh, 200);
+
+  console.log("A&F Unified Salary ↔ Payroll connection installed.");
+})();
