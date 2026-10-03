@@ -11275,8 +11275,7 @@ previousBalance
         border-radius:8px;
       ">
 <b>${payroll.isFullSettlement ? "Full Settlement Amount:"
-: "Total Amount Due Including Previous
-        Unpaid Balance:"}</b>
+: "Total Amount Due Including Previous Unpaid Balance:"}</b>
         ${formatPayrollMoney( totalAmountDue )}
 </p>
     `;
