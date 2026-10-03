@@ -12746,7 +12746,7 @@ Payslip - ${record.employeeName || ""}
 
 <td>
         ${record.monthName || ""}
-        ${record.year || ""}
+      
 </td>
 </tr>
 
