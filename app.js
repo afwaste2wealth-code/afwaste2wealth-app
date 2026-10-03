@@ -10237,28 +10237,11 @@ daysInMonth> 0
     ? monthlyAllowance / daysInMonth
     : 0;
 
-const absenceDeduction =
-  roundDownTo100(
-dailyAllowance *
-absentDays
-  );
-
 const earnedAllowance =
   roundDownTo100(
 dailyAllowance *
 actualDaysWorked
   );
-const earnedAllowance =
-  roundDownTo100(
-dailyAllowance *
-actualDaysWorked
-  );
-
-const earnedAllowance =
-  mode === "FULL_SETTLEMENT"
-    ? fullSettlementEarnedAllowance
-    : normalEarnedAllowance;
-
 
   /* =========================
      PERFORMANCE AWARDS
@@ -11249,6 +11232,10 @@ payroll.absenceDeduction
 
 <div style="padding:15px;background:#f5f5f5;border-radius:8px;">
 <b>Earned Allowance (Days Worked)</b>
+<div>${formatPayrollMoney(
+payroll.earnedAllowance
+)}</div>
+</div>
 
 <div style="padding:15px;background:#f5f5f5;border-radius:8px;">
 <b>Approved Deductions</b>
