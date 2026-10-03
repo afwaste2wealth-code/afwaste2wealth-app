@@ -10236,6 +10236,11 @@ const dailyAllowance =
 daysInMonth> 0
     ? monthlyAllowance / daysInMonth
     : 0;
+const absenceDeduction =
+  roundDownTo100(
+dailyAllowance *
+absentDays
+     );
 
 const earnedAllowance =
   roundDownTo100(
