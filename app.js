@@ -12777,6 +12777,17 @@ Payslip - ${record.employeeName || ""}
           )}
 </td>
 </tr>
+<tr>
+<td>Actual Days Worked</td>
+
+<td class="amount">
+  ${Number(
+record.actualDaysWorked ??
+record.presentDays ??
+    0
+  )}
+</td>
+</tr>
 
 
 <tr>
