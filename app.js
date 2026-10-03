@@ -83052,3 +83052,1758 @@ b.textContent = "Calculate Payroll";
 
   console.log("A&F Unified Salary ↔ Payroll connection installed.");
 })();
+
+
+/* =========================================================
+   A&F STAFF & HR COMPLETION - ONE BLOCK
+   Employee Portal + Employee Documents & Records + HR Reports
+
+   INSTALL:
+   Paste this entire block ONCE at the very end of app.js.
+
+   Storage added:
+   - afEmployeeDocuments
+
+   NOTES:
+   - Existing Staff & HR buttons are reconnected automatically.
+   - Employees see their own portal/documents only.
+   - Director / HR / Secretary can manage employee documents.
+   - HR Reports uses the existing live employee, attendance,
+     payroll, advances, deductions and performance data.
+   ========================================================= */
+
+(function connectAFStaffHRCompletion() {
+  "use strict";
+
+  if (window.__afStaffHRCompletionInstalled) return;
+  window.__afStaffHRCompletionInstalled = true;
+
+  const DOC_KEY = "afEmployeeDocuments";
+  const MAX_DOCUMENT_BYTES = 2 * 1024 * 1024; // 2 MB per file
+
+  /* =======================================================
+     GENERAL HELPERS
+     ======================================================= */
+
+  function esc(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function money(value) {
+    if (typeof formatPayrollMoney === "function") {
+      return formatPayrollMoney(Number(value || 0));
+    }
+
+    return "UGX " + Number(value || 0).toLocaleString();
+  }
+
+  function currentUser() {
+    try {
+      if (typeof getAFCurrentUser === "function") {
+        return getAFCurrentUser() || null;
+      }
+
+      return JSON.parse(
+        localStorage.getItem("currentUser") || "null"
+      );
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function employees() {
+    try {
+      if (typeof getEmployees === "function") {
+        return getEmployees() || [];
+      }
+
+      return JSON.parse(
+        localStorage.getItem("employees") || "[]"
+      );
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function payrollRecords() {
+    try {
+      if (typeof getPayrollRecords === "function") {
+        return getPayrollRecords() || [];
+      }
+
+      return JSON.parse(
+        localStorage.getItem("payrollRecords") || "[]"
+      );
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function attendanceRecords() {
+    try {
+      if (typeof getAttendanceRecords === "function") {
+        return getAttendanceRecords() || [];
+      }
+
+      return JSON.parse(
+        localStorage.getItem("attendanceRecords") || "[]"
+      );
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function advances() {
+    try {
+      if (typeof getEmployeeAdvances === "function") {
+        return getEmployeeAdvances() || [];
+      }
+
+      return JSON.parse(
+        localStorage.getItem("employeeAdvances") || "[]"
+      );
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function recoveries() {
+    try {
+      if (typeof getAdvanceRecoveries === "function") {
+        return getAdvanceRecoveries() || [];
+      }
+
+      return JSON.parse(
+        localStorage.getItem("advanceRecoveries") || "[]"
+      );
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function deductions() {
+    try {
+      if (typeof getEmployeeDeductions === "function") {
+        return getEmployeeDeductions() || [];
+      }
+
+      return JSON.parse(
+        localStorage.getItem("employeeDeductions") || "[]"
+      );
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function readDocuments() {
+    try {
+      const records = JSON.parse(
+        localStorage.getItem(DOC_KEY) || "[]"
+      );
+
+      return Array.isArray(records) ? records : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function saveDocuments(records) {
+    try {
+      localStorage.setItem(
+        DOC_KEY,
+        JSON.stringify(Array.isArray(records) ? records : [])
+      );
+
+      return true;
+    } catch (error) {
+      console.error("Unable to save employee document:", error);
+
+      alert(
+        "The document could not be saved.\n\n" +
+        "The browser storage may be full. Try a smaller file or remove an old document."
+      );
+
+      return false;
+    }
+  }
+
+  function hasModulePermission(permission) {
+    if (typeof hasPermission === "function") {
+      return hasPermission(permission);
+    }
+
+    return true;
+  }
+
+  function deny(permission) {
+    if (typeof requirePermission === "function") {
+      requirePermission(permission);
+      return;
+    }
+
+    alert("Access Denied.");
+  }
+
+  function isAdminHRRole(role) {
+    return ["Director", "HR", "Secretary"].includes(role);
+  }
+
+  function employeeById(employeeId) {
+    return employees().find(
+      item => String(item.employeeId) === String(employeeId)
+    ) || null;
+  }
+
+  function localDate(value) {
+    if (!value) return "—";
+
+    if (typeof formatAFDate === "function") {
+      try {
+        return formatAFDate(value);
+      } catch (error) {}
+    }
+
+    return String(value);
+  }
+
+  function monthName(year, month) {
+    return new Date(
+      Number(year),
+      Number(month),
+      1
+    ).toLocaleString("en-US", {
+      month: "long",
+      year: "numeric"
+    });
+  }
+
+  function monthDate(year, month) {
+    return (
+      String(year) +
+      "-" +
+      String(Number(month) + 1).padStart(2, "0") +
+      "-01"
+    );
+  }
+
+  function sameMonth(dateValue, year, month) {
+    if (!dateValue) return false;
+
+    const date = new Date(
+      String(dateValue).slice(0, 10) + "T00:00:00"
+    );
+
+    if (isNaN(date.getTime())) return false;
+
+    return (
+      date.getFullYear() === Number(year) &&
+      date.getMonth() === Number(month)
+    );
+  }
+
+  function modalShell(id, width) {
+    const old = document.getElementById(id);
+    if (old) old.remove();
+
+    const modal = document.createElement("div");
+    modal.id = id;
+    modal.style.cssText = `
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,.62);
+      z-index:100020;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:16px;
+      font-family:Arial,sans-serif;
+      box-sizing:border-box;
+    `;
+
+    const box = document.createElement("div");
+    box.style.cssText = `
+      width:min(${Number(width || 1100)}px,100%);
+      max-height:94vh;
+      overflow:auto;
+      background:white;
+      border-radius:14px;
+      padding:22px;
+      box-sizing:border-box;
+      box-shadow:0 14px 45px rgba(0,0,0,.28);
+    `;
+
+    modal.appendChild(box);
+    document.body.appendChild(modal);
+
+    return { modal, box };
+  }
+
+  function closeButtonHTML(id) {
+    return `
+      <button
+        id="${id}"
+        type="button"
+        style="
+          border:0;
+          background:#eee;
+          padding:9px 14px;
+          border-radius:7px;
+          cursor:pointer;
+          font-weight:bold;
+        "
+      >
+        ✕ Close
+      </button>
+    `;
+  }
+
+  function employeeOptions(selectedId, includeAll) {
+    const list = employees()
+      .slice()
+      .sort((a, b) =>
+        String(a.fullName || "")
+          .localeCompare(String(b.fullName || ""))
+      );
+
+    return (
+      (includeAll
+        ? `<option value="ALL" ${selectedId === "ALL" ? "selected" : ""}>All Employees</option>`
+        : "") +
+      list.map(employee => `
+        <option
+          value="${esc(employee.employeeId)}"
+          ${String(selectedId) === String(employee.employeeId) ? "selected" : ""}
+        >
+          ${esc(employee.fullName || employee.employeeId)}
+          (${esc(employee.employeeId)})
+        </option>
+      `).join("")
+    );
+  }
+
+  function outstandingAdvance(advance) {
+    const recovered = recoveries()
+      .filter(item =>
+        String(item.advanceId) === String(advance.id)
+      )
+      .reduce(
+        (sum, item) => sum + Number(item.amount || 0),
+        0
+      );
+
+    return {
+      recovered,
+      outstanding: Math.max(
+        Number(advance.amount || 0) - recovered,
+        0
+      )
+    };
+  }
+
+  /* =======================================================
+     DOCUMENT VIEW / DOWNLOAD HELPERS
+     ======================================================= */
+
+  function openDocument(documentId) {
+    const record = readDocuments().find(
+      item => String(item.id) === String(documentId)
+    );
+
+    if (!record || !record.fileData) {
+      alert("No attached file is available for this record.");
+      return;
+    }
+
+    const win = window.open(record.fileData, "_blank");
+
+    if (!win) {
+      alert("Please allow pop-ups to view the document.");
+    }
+  }
+
+  function downloadDocument(documentId) {
+    const record = readDocuments().find(
+      item => String(item.id) === String(documentId)
+    );
+
+    if (!record || !record.fileData) {
+      alert("No attached file is available for this record.");
+      return;
+    }
+
+    const link = document.createElement("a");
+    link.href = record.fileData;
+    link.download = record.fileName || "employee-document";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
+  window.afOpenEmployeeDocument = openDocument;
+  window.afDownloadEmployeeDocument = downloadDocument;
+
+  /* =======================================================
+     EMPLOYEE PORTAL
+     ======================================================= */
+
+  function openAFEmployeePortal() {
+    if (!hasModulePermission("portal")) {
+      deny("portal");
+      return;
+    }
+
+    const user = currentUser();
+
+    if (!user) {
+      alert("Please log in first.");
+      return;
+    }
+
+    const role = String(user.role || "");
+    const canSelectEmployee = isAdminHRRole(role);
+
+    let selectedEmployeeId = canSelectEmployee
+      ? (employees()[0]?.employeeId || "")
+      : user.employeeId;
+
+    const now = new Date();
+
+    const { modal, box } = modalShell(
+      "afEmployeePortalModal",
+      1180
+    );
+
+    box.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+        <div>
+          <h2 style="margin:0;color:#0b5d3b;">Employee Portal</h2>
+          <div style="margin-top:5px;color:#666;font-size:13px;">
+            Personal employment, attendance, payroll, advances and documents
+          </div>
+        </div>
+        ${closeButtonHTML("closeAFEmployeePortal")}
+      </div>
+
+      <div style="
+        display:grid;
+        grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+        gap:10px;
+        margin-top:18px;
+        padding:13px;
+        background:#f7faf8;
+        border:1px solid #dce8e1;
+        border-radius:10px;
+      ">
+        ${canSelectEmployee ? `
+          <div>
+            <label><b>Employee</b></label>
+            <select id="afPortalEmployee" style="width:100%;padding:9px;margin-top:5px;">
+              ${employeeOptions(selectedEmployeeId, false)}
+            </select>
+          </div>
+        ` : `
+          <input id="afPortalEmployee" type="hidden" value="${esc(selectedEmployeeId)}">
+        `}
+
+        <div>
+          <label><b>Year</b></label>
+          <input id="afPortalYear" type="number" value="${now.getFullYear()}" style="width:100%;padding:9px;margin-top:5px;box-sizing:border-box;">
+        </div>
+
+        <div>
+          <label><b>Month</b></label>
+          <select id="afPortalMonth" style="width:100%;padding:9px;margin-top:5px;">
+            ${Array.from({ length: 12 }, (_, month) => `
+              <option value="${month}" ${month === now.getMonth() ? "selected" : ""}>
+                ${new Date(2020, month, 1).toLocaleString("en-US", { month: "long" })}
+              </option>
+            `).join("")}
+          </select>
+        </div>
+      </div>
+
+      <div id="afPortalBody" style="margin-top:16px;"></div>
+    `;
+
+    const body = box.querySelector("#afPortalBody");
+    const employeeInput = box.querySelector("#afPortalEmployee");
+    const yearInput = box.querySelector("#afPortalYear");
+    const monthInput = box.querySelector("#afPortalMonth");
+
+    function renderPortal() {
+      selectedEmployeeId = employeeInput.value;
+
+      if (!canSelectEmployee) {
+        selectedEmployeeId = user.employeeId;
+      }
+
+      const employee = employeeById(selectedEmployeeId);
+
+      if (!employee) {
+        body.innerHTML = `
+          <div style="padding:18px;background:#fff3cd;border-radius:8px;">
+            Employee account could not be found.
+          </div>
+        `;
+        return;
+      }
+
+      const year = Number(yearInput.value);
+      const month = Number(monthInput.value);
+
+      let attendance = null;
+
+      if (typeof getEmployeeMonthlyAttendanceSummary === "function") {
+        try {
+          attendance = getEmployeeMonthlyAttendanceSummary(
+            employee.employeeId,
+            year,
+            month
+          );
+        } catch (error) {
+          attendance = null;
+        }
+      }
+
+      const savedPayroll = payrollRecords().find(record =>
+        String(record.employeeId) === String(employee.employeeId) &&
+        Number(record.year) === year &&
+        Number(record.month) === month
+      );
+
+      let calculatedPayroll = null;
+
+      if (!savedPayroll && typeof calculateEmployeePayroll === "function") {
+        try {
+          calculatedPayroll = calculateEmployeePayroll(
+            employee.employeeId,
+            year,
+            month,
+            "NORMAL"
+          );
+        } catch (error) {
+          calculatedPayroll = null;
+        }
+      }
+
+      const payroll = savedPayroll || calculatedPayroll;
+
+      const employeePayrollHistory = payrollRecords()
+        .filter(record =>
+          String(record.employeeId) === String(employee.employeeId)
+        )
+        .sort((a, b) =>
+          Number(b.year) * 12 + Number(b.month) -
+          (Number(a.year) * 12 + Number(a.month))
+        );
+
+      const employeeAdvances = advances()
+        .filter(record =>
+          String(record.employeeId) === String(employee.employeeId)
+        )
+        .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+
+      const employeeDocuments = readDocuments()
+        .filter(record =>
+          String(record.employeeId) === String(employee.employeeId)
+        )
+        .sort((a, b) =>
+          String(b.uploadedAt || "").localeCompare(String(a.uploadedAt || ""))
+        );
+
+      const actualDaysWorked = Number(
+        attendance?.actualDaysWorked ??
+        payroll?.actualDaysWorked ??
+        0
+      );
+
+      const absentDays = Number(
+        attendance?.absentDays ??
+        payroll?.absentDays ??
+        0
+      );
+
+      const overtimeHours = Number(
+        attendance?.netOvertimeMinutes ??
+        payroll?.netOvertimeMinutes ??
+        0
+      ) / 60;
+
+      body.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;">
+
+          <section style="border:1px solid #dde7e1;border-radius:10px;padding:15px;background:white;">
+            <div style="display:flex;gap:12px;align-items:center;">
+              ${employee.passportPhoto ? `
+                <img src="${esc(employee.passportPhoto)}" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:50%;border:1px solid #ddd;">
+              ` : `
+                <div style="width:72px;height:72px;border-radius:50%;background:#eef5f0;display:flex;align-items:center;justify-content:center;font-size:32px;">👤</div>
+              `}
+
+              <div>
+                <div style="font-size:20px;font-weight:bold;color:#0b5d3b;">${esc(employee.fullName || "")}</div>
+                <div style="margin-top:4px;color:#555;">${esc(employee.employeeId || "")}</div>
+                <div style="margin-top:4px;color:#555;">${esc(employee.position || "")}</div>
+              </div>
+            </div>
+
+            <div style="margin-top:14px;display:grid;gap:6px;font-size:13px;">
+              <div><b>Department:</b> ${esc(employee.department || "—")}</div>
+              <div><b>Team:</b> ${esc(employee.teamName || "—")}</div>
+              <div><b>Role:</b> ${esc(employee.role || "—")}</div>
+              <div><b>Employment Type:</b> ${esc(employee.employmentType || "—")}</div>
+              <div><b>Date Joined:</b> ${esc(localDate(employee.dateJoined))}</div>
+              <div><b>Status:</b> ${esc(employee.employmentStatus || "—")}</div>
+              <div><b>Phone:</b> ${esc(employee.phone || "—")}</div>
+              <div><b>NIN:</b> ${esc(employee.nin || "—")}</div>
+              <div><b>Address:</b> ${esc(employee.residentialAddress || "—")}</div>
+            </div>
+          </section>
+
+          <section style="border:1px solid #dde7e1;border-radius:10px;padding:15px;background:#f8fbf9;">
+            <div style="font-size:16px;font-weight:bold;color:#0b5d3b;margin-bottom:10px;">
+              ${esc(monthName(year, month))} Attendance & Earnings
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;">
+              <div style="padding:9px;background:white;border-radius:7px;"><b>Actual Days Worked</b><br>${actualDaysWorked}</div>
+              <div style="padding:9px;background:white;border-radius:7px;"><b>Absent Days</b><br>${absentDays}</div>
+              <div style="padding:9px;background:white;border-radius:7px;"><b>Net Overtime</b><br>${overtimeHours.toFixed(2)} hrs</div>
+              <div style="padding:9px;background:white;border-radius:7px;"><b>Monthly Allowance</b><br>${money(employee.monthlyAllowance)}</div>
+              <div style="padding:9px;background:white;border-radius:7px;"><b>Earned Allowance</b><br>${money(payroll?.earnedAllowance || 0)}</div>
+              <div style="padding:9px;background:white;border-radius:7px;"><b>Net Payable</b><br>${money(payroll?.netPayable || 0)}</div>
+              <div style="padding:9px;background:white;border-radius:7px;"><b>Amount Paid</b><br>${money(savedPayroll?.amountPaid || 0)}</div>
+              <div style="padding:9px;background:white;border-radius:7px;"><b>Balance</b><br>${money(savedPayroll?.balance || payroll?.balance || 0)}</div>
+            </div>
+
+            <div style="margin-top:10px;font-weight:bold;">
+              Payroll Status: ${esc(savedPayroll?.status || "NOT YET SAVED")}
+            </div>
+          </section>
+
+        </div>
+
+        <section style="margin-top:14px;border:1px solid #dde7e1;border-radius:10px;padding:15px;">
+          <div style="font-size:16px;font-weight:bold;color:#0b5d3b;margin-bottom:10px;">Payroll & Payslips</div>
+
+          <div style="overflow:auto;">
+            <table style="width:100%;min-width:760px;border-collapse:collapse;font-size:12px;">
+              <thead>
+                <tr style="background:#eaf5ee;text-align:left;">
+                  <th style="padding:8px;">Period</th>
+                  <th style="padding:8px;text-align:right;">Net Payable</th>
+                  <th style="padding:8px;text-align:right;">Paid</th>
+                  <th style="padding:8px;text-align:right;">Balance</th>
+                  <th style="padding:8px;">Status</th>
+                  <th style="padding:8px;">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${employeePayrollHistory.length
+                  ? employeePayrollHistory.map(record => `
+                    <tr style="border-top:1px solid #eee;">
+                      <td style="padding:8px;">${esc(record.monthName || monthName(record.year, record.month))}</td>
+                      <td style="padding:8px;text-align:right;">${money(record.netPayable)}</td>
+                      <td style="padding:8px;text-align:right;">${money(record.amountPaid)}</td>
+                      <td style="padding:8px;text-align:right;">${money(record.balance)}</td>
+                      <td style="padding:8px;">${esc(record.status || "UNPAID")}</td>
+                      <td style="padding:8px;">
+                        <button type="button" data-portal-payslip="${esc(record.id)}" style="border:0;background:#0b5d3b;color:white;padding:7px 10px;border-radius:6px;cursor:pointer;">Print Payslip</button>
+                      </td>
+                    </tr>
+                  `).join("")
+                  : `<tr><td colspan="6" style="padding:14px;text-align:center;color:#777;">No saved payroll records yet.</td></tr>`
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section style="margin-top:14px;border:1px solid #dde7e1;border-radius:10px;padding:15px;">
+          <div style="font-size:16px;font-weight:bold;color:#0b5d3b;margin-bottom:10px;">Advances</div>
+
+          <div style="overflow:auto;">
+            <table style="width:100%;min-width:700px;border-collapse:collapse;font-size:12px;">
+              <thead>
+                <tr style="background:#fff7e6;text-align:left;">
+                  <th style="padding:8px;">Date</th>
+                  <th style="padding:8px;">Reason</th>
+                  <th style="padding:8px;text-align:right;">Advance</th>
+                  <th style="padding:8px;text-align:right;">Recovered</th>
+                  <th style="padding:8px;text-align:right;">Outstanding</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${employeeAdvances.length
+                  ? employeeAdvances.map(advance => {
+                      const totals = outstandingAdvance(advance);
+                      return `
+                        <tr style="border-top:1px solid #eee;">
+                          <td style="padding:8px;">${esc(localDate(advance.date))}</td>
+                          <td style="padding:8px;">${esc(advance.reason || "Staff Advance")}</td>
+                          <td style="padding:8px;text-align:right;">${money(advance.amount)}</td>
+                          <td style="padding:8px;text-align:right;">${money(totals.recovered)}</td>
+                          <td style="padding:8px;text-align:right;font-weight:bold;">${money(totals.outstanding)}</td>
+                        </tr>
+                      `;
+                    }).join("")
+                  : `<tr><td colspan="5" style="padding:14px;text-align:center;color:#777;">No employee advances recorded.</td></tr>`
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section style="margin-top:14px;border:1px solid #dde7e1;border-radius:10px;padding:15px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+            <div style="font-size:16px;font-weight:bold;color:#0b5d3b;">Employee Documents</div>
+            <button id="afPortalOpenDocuments" type="button" style="border:0;background:#0b5d3b;color:white;padding:8px 12px;border-radius:6px;cursor:pointer;">Open Documents</button>
+          </div>
+
+          <div style="margin-top:10px;display:grid;gap:7px;">
+            ${employeeDocuments.length
+              ? employeeDocuments.slice(0, 8).map(record => `
+                <div style="padding:9px;background:#f8f9fa;border-radius:7px;display:flex;justify-content:space-between;gap:10px;align-items:center;">
+                  <div>
+                    <b>${esc(record.title || record.documentType || "Document")}</b>
+                    <div style="font-size:11px;color:#666;margin-top:3px;">${esc(record.documentType || "")} ${record.expiryDate ? "• Expires " + esc(localDate(record.expiryDate)) : ""}</div>
+                  </div>
+                  ${record.fileData ? `<button type="button" data-portal-doc="${esc(record.id)}" style="border:0;background:#eef4ff;padding:6px 9px;border-radius:6px;cursor:pointer;">View</button>` : ""}
+                </div>
+              `).join("")
+              : `<div style="padding:12px;background:#f8f9fa;border-radius:7px;color:#777;">No documents recorded.</div>`
+            }
+          </div>
+        </section>
+      `;
+
+      body.querySelectorAll("[data-portal-payslip]").forEach(button => {
+        button.onclick = () => {
+          if (typeof printPayrollPayslip === "function") {
+            printPayrollPayslip(
+              button.getAttribute("data-portal-payslip")
+            );
+          }
+        };
+      });
+
+      body.querySelectorAll("[data-portal-doc]").forEach(button => {
+        button.onclick = () =>
+          openDocument(button.getAttribute("data-portal-doc"));
+      });
+
+      const openDocumentsButton = body.querySelector("#afPortalOpenDocuments");
+
+      if (openDocumentsButton) {
+        openDocumentsButton.onclick = () => {
+          modal.remove();
+          openAFEmployeeDocuments(employee.employeeId);
+        };
+      }
+    }
+
+    box.querySelector("#closeAFEmployeePortal").onclick = () => modal.remove();
+
+    employeeInput.onchange = renderPortal;
+    yearInput.onchange = renderPortal;
+    monthInput.onchange = renderPortal;
+
+    renderPortal();
+  }
+
+  window.openAFEmployeePortal = openAFEmployeePortal;
+
+  /* =======================================================
+     EMPLOYEE DOCUMENTS & RECORDS
+     ======================================================= */
+
+  function openAFEmployeeDocuments(preselectedEmployeeId) {
+    if (!hasModulePermission("documents")) {
+      deny("documents");
+      return;
+    }
+
+    const user = currentUser();
+
+    if (!user) {
+      alert("Please log in first.");
+      return;
+    }
+
+    const role = String(user.role || "");
+    const canManage = isAdminHRRole(role);
+
+    let selectedEmployeeId = canManage
+      ? (preselectedEmployeeId || employees()[0]?.employeeId || "")
+      : user.employeeId;
+
+    const { modal, box } = modalShell(
+      "afEmployeeDocumentsModal",
+      1120
+    );
+
+    box.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+        <div>
+          <h2 style="margin:0;color:#0b5d3b;">Employee Documents & Records</h2>
+          <div style="margin-top:5px;color:#666;font-size:13px;">
+            Contracts, identification, certificates, warnings, leave and other employee records
+          </div>
+        </div>
+        ${closeButtonHTML("closeAFEmployeeDocuments")}
+      </div>
+
+      <div style="margin-top:18px;max-width:520px;">
+        <label><b>Employee</b></label>
+        ${canManage ? `
+          <select id="afDocumentEmployee" style="width:100%;padding:9px;margin-top:5px;">
+            ${employeeOptions(selectedEmployeeId, false)}
+          </select>
+        ` : `
+          <input id="afDocumentEmployee" type="hidden" value="${esc(selectedEmployeeId)}">
+          <div style="margin-top:6px;padding:10px;background:#f5f7f6;border-radius:7px;">
+            ${esc(employeeById(selectedEmployeeId)?.fullName || selectedEmployeeId)}
+          </div>
+        `}
+      </div>
+
+      ${canManage ? `
+        <div style="margin-top:16px;padding:15px;border:1px solid #dce8e1;border-radius:10px;background:#f8fbf9;">
+          <div style="font-weight:bold;color:#0b5d3b;margin-bottom:12px;">Add Employee Document / Record</div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;">
+            <div>
+              <label>Document Type *</label>
+              <select id="afDocumentType" style="width:100%;padding:9px;margin-top:5px;">
+                <option value="">Select type</option>
+                <option>Employment Contract</option>
+                <option>Appointment Letter</option>
+                <option>National ID / NIN</option>
+                <option>Passport Photo</option>
+                <option>Certificate / Qualification</option>
+                <option>Warning / Disciplinary Record</option>
+                <option>Leave Record</option>
+                <option>Medical / Sick Leave Record</option>
+                <option>Performance Record</option>
+                <option>Other</option>
+              </select>
+            </div>
+
+            <div>
+              <label>Title *</label>
+              <input id="afDocumentTitle" type="text" placeholder="Document title" style="width:100%;padding:9px;margin-top:5px;box-sizing:border-box;">
+            </div>
+
+            <div>
+              <label>Reference No.</label>
+              <input id="afDocumentReference" type="text" placeholder="Optional" style="width:100%;padding:9px;margin-top:5px;box-sizing:border-box;">
+            </div>
+
+            <div>
+              <label>Issue Date</label>
+              <input id="afDocumentIssueDate" type="date" style="width:100%;padding:9px;margin-top:5px;box-sizing:border-box;">
+            </div>
+
+            <div>
+              <label>Expiry Date</label>
+              <input id="afDocumentExpiryDate" type="date" style="width:100%;padding:9px;margin-top:5px;box-sizing:border-box;">
+            </div>
+
+            <div>
+              <label>Attach File</label>
+              <input id="afDocumentFile" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" style="width:100%;padding:7px;margin-top:5px;box-sizing:border-box;background:white;">
+              <div style="font-size:10px;color:#777;margin-top:4px;">Maximum file size: 2 MB</div>
+            </div>
+          </div>
+
+          <div style="margin-top:10px;">
+            <label>Notes</label>
+            <textarea id="afDocumentNotes" placeholder="Optional notes" style="width:100%;min-height:65px;padding:9px;margin-top:5px;box-sizing:border-box;"></textarea>
+          </div>
+
+          <button id="afSaveEmployeeDocument" type="button" style="margin-top:11px;border:0;background:#0b5d3b;color:white;padding:10px 15px;border-radius:7px;cursor:pointer;font-weight:bold;">
+            Save Document / Record
+          </button>
+        </div>
+      ` : ""}
+
+      <div style="margin-top:18px;">
+        <div id="afDocumentEmployeeHeading" style="font-weight:bold;color:#0b5d3b;margin-bottom:10px;"></div>
+        <div id="afEmployeeDocumentsList"></div>
+      </div>
+    `;
+
+    const employeeInput = box.querySelector("#afDocumentEmployee");
+    const heading = box.querySelector("#afDocumentEmployeeHeading");
+    const list = box.querySelector("#afEmployeeDocumentsList");
+
+    function renderDocuments() {
+      selectedEmployeeId = canManage
+        ? employeeInput.value
+        : user.employeeId;
+
+      const employee = employeeById(selectedEmployeeId);
+      const records = readDocuments()
+        .filter(record =>
+          String(record.employeeId) === String(selectedEmployeeId)
+        )
+        .sort((a, b) =>
+          String(b.uploadedAt || "").localeCompare(String(a.uploadedAt || ""))
+        );
+
+      heading.textContent =
+        (employee?.fullName || selectedEmployeeId) +
+        " — Documents & Records";
+
+      list.innerHTML = `
+        <div style="overflow:auto;border:1px solid #ddd;border-radius:8px;">
+          <table style="width:100%;min-width:900px;border-collapse:collapse;font-size:12px;">
+            <thead>
+              <tr style="background:#eaf5ee;text-align:left;">
+                <th style="padding:8px;">Type</th>
+                <th style="padding:8px;">Title</th>
+                <th style="padding:8px;">Reference</th>
+                <th style="padding:8px;">Issue Date</th>
+                <th style="padding:8px;">Expiry Date</th>
+                <th style="padding:8px;">File</th>
+                <th style="padding:8px;">Notes</th>
+                <th style="padding:8px;">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${records.length
+                ? records.map(record => {
+                    const expired = record.expiryDate &&
+                      new Date(record.expiryDate + "T23:59:59").getTime() < Date.now();
+
+                    return `
+                      <tr style="border-top:1px solid #eee;${expired ? "background:#fff3f3;" : ""}">
+                        <td style="padding:8px;">${esc(record.documentType || "")}</td>
+                        <td style="padding:8px;font-weight:bold;">${esc(record.title || "")}</td>
+                        <td style="padding:8px;">${esc(record.referenceNo || "—")}</td>
+                        <td style="padding:8px;">${esc(localDate(record.issueDate))}</td>
+                        <td style="padding:8px;">${esc(localDate(record.expiryDate))}${expired ? ` <b style="color:#b00020;">EXPIRED</b>` : ""}</td>
+                        <td style="padding:8px;">${record.fileName ? esc(record.fileName) : "Record only"}</td>
+                        <td style="padding:8px;">${esc(record.notes || "")}</td>
+                        <td style="padding:8px;">
+                          <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                            ${record.fileData ? `
+                              <button type="button" data-doc-view="${esc(record.id)}" style="border:0;background:#eef4ff;padding:6px 8px;border-radius:5px;cursor:pointer;">View</button>
+                              <button type="button" data-doc-download="${esc(record.id)}" style="border:0;background:#e8f5e9;padding:6px 8px;border-radius:5px;cursor:pointer;">Download</button>
+                            ` : ""}
+                            ${canManage ? `
+                              <button type="button" data-doc-delete="${esc(record.id)}" style="border:0;background:#fdeaea;color:#a40000;padding:6px 8px;border-radius:5px;cursor:pointer;">Delete</button>
+                            ` : ""}
+                          </div>
+                        </td>
+                      </tr>
+                    `;
+                  }).join("")
+                : `<tr><td colspan="8" style="padding:16px;text-align:center;color:#777;">No documents or employee records have been added.</td></tr>`
+              }
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      list.querySelectorAll("[data-doc-view]").forEach(button => {
+        button.onclick = () =>
+          openDocument(button.getAttribute("data-doc-view"));
+      });
+
+      list.querySelectorAll("[data-doc-download]").forEach(button => {
+        button.onclick = () =>
+          downloadDocument(button.getAttribute("data-doc-download"));
+      });
+
+      list.querySelectorAll("[data-doc-delete]").forEach(button => {
+        button.onclick = () => {
+          if (!canManage) return;
+
+          const id = button.getAttribute("data-doc-delete");
+          const record = readDocuments().find(
+            item => String(item.id) === String(id)
+          );
+
+          if (!record) return;
+
+          if (!confirm(
+            "Delete this employee document / record?\n\n" +
+            (record.title || record.documentType || "Document")
+          )) {
+            return;
+          }
+
+          const updated = readDocuments().filter(
+            item => String(item.id) !== String(id)
+          );
+
+          if (saveDocuments(updated)) {
+            renderDocuments();
+          }
+        };
+      });
+    }
+
+    if (canManage) {
+      const saveButton = box.querySelector("#afSaveEmployeeDocument");
+
+      saveButton.onclick = () => {
+        const employeeId = employeeInput.value;
+        const documentType = box.querySelector("#afDocumentType").value;
+        const title = box.querySelector("#afDocumentTitle").value.trim();
+        const referenceNo = box.querySelector("#afDocumentReference").value.trim();
+        const issueDate = box.querySelector("#afDocumentIssueDate").value;
+        const expiryDate = box.querySelector("#afDocumentExpiryDate").value;
+        const notes = box.querySelector("#afDocumentNotes").value.trim();
+        const fileInput = box.querySelector("#afDocumentFile");
+        const file = fileInput.files?.[0] || null;
+
+        if (!employeeId) {
+          alert("Please select an employee.");
+          return;
+        }
+
+        if (!documentType) {
+          alert("Please select the document type.");
+          return;
+        }
+
+        if (!title) {
+          alert("Please enter the document title.");
+          return;
+        }
+
+        if (file && file.size > MAX_DOCUMENT_BYTES) {
+          alert(
+            "This file is larger than 2 MB.\n\n" +
+            "Please use a smaller PDF or image."
+          );
+          return;
+        }
+
+        function saveRecord(fileData, fileName, fileType, fileSize) {
+          const records = readDocuments();
+          const uploader = currentUser() || {};
+
+          records.push({
+            id: "DOC-" + Date.now(),
+            employeeId,
+            employeeName: employeeById(employeeId)?.fullName || "",
+            documentType,
+            title,
+            referenceNo,
+            issueDate,
+            expiryDate,
+            notes,
+            fileName: fileName || "",
+            fileType: fileType || "",
+            fileSize: Number(fileSize || 0),
+            fileData: fileData || "",
+            uploadedByEmployeeId: uploader.employeeId || "",
+            uploadedByName: uploader.fullName || uploader.employeeName || "",
+            uploadedAt: new Date().toISOString()
+          });
+
+          if (!saveDocuments(records)) return;
+
+          alert("Employee document / record saved successfully.");
+
+          box.querySelector("#afDocumentType").value = "";
+          box.querySelector("#afDocumentTitle").value = "";
+          box.querySelector("#afDocumentReference").value = "";
+          box.querySelector("#afDocumentIssueDate").value = "";
+          box.querySelector("#afDocumentExpiryDate").value = "";
+          box.querySelector("#afDocumentNotes").value = "";
+          fileInput.value = "";
+
+          renderDocuments();
+        }
+
+        if (!file) {
+          saveRecord("", "", "", 0);
+          return;
+        }
+
+        const reader = new FileReader();
+
+        reader.onload = () => {
+          saveRecord(
+            String(reader.result || ""),
+            file.name,
+            file.type,
+            file.size
+          );
+        };
+
+        reader.onerror = () => {
+          alert("The selected file could not be read.");
+        };
+
+        reader.readAsDataURL(file);
+      };
+    }
+
+    box.querySelector("#closeAFEmployeeDocuments").onclick = () => modal.remove();
+
+    if (canManage) {
+      employeeInput.onchange = renderDocuments;
+    }
+
+    renderDocuments();
+  }
+
+  window.openAFEmployeeDocuments = openAFEmployeeDocuments;
+
+  /* =======================================================
+     HR REPORTS
+     ======================================================= */
+
+  function openAFHRReports() {
+    if (!hasModulePermission("hrReports")) {
+      deny("hrReports");
+      return;
+    }
+
+    const user = currentUser();
+
+    if (!user) {
+      alert("Please log in first.");
+      return;
+    }
+
+    const now = new Date();
+
+    const { modal, box } = modalShell(
+      "afHRReportsModal",
+      1250
+    );
+
+    box.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+        <div>
+          <h2 style="margin:0;color:#0b5d3b;">HR Reports</h2>
+          <div style="margin-top:5px;color:#666;font-size:13px;">
+            Employee, attendance, allowance, advances, payroll and performance reports
+          </div>
+        </div>
+        ${closeButtonHTML("closeAFHRReports")}
+      </div>
+
+      <div style="
+        display:grid;
+        grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+        gap:10px;
+        margin-top:18px;
+        padding:13px;
+        background:#f7faf8;
+        border:1px solid #dce8e1;
+        border-radius:10px;
+      ">
+        <div>
+          <label><b>Report</b></label>
+          <select id="afHRReportType" style="width:100%;padding:9px;margin-top:5px;">
+            <option value="EMPLOYEES">Employee Register</option>
+            <option value="ATTENDANCE">Attendance, Overtime & Shortfall</option>
+            <option value="ALLOWANCE">Allowance & Monthly Earnings</option>
+            <option value="ADVANCES">Advances & Deductions</option>
+            <option value="PAYROLL">Payroll Ledger</option>
+            <option value="PERFORMANCE">Employee Performance & Rankings</option>
+          </select>
+        </div>
+
+        <div>
+          <label><b>Employee</b></label>
+          <select id="afHRReportEmployee" style="width:100%;padding:9px;margin-top:5px;">
+            ${employeeOptions("ALL", true)}
+          </select>
+        </div>
+
+        <div>
+          <label><b>Year</b></label>
+          <input id="afHRReportYear" type="number" value="${now.getFullYear()}" style="width:100%;padding:9px;margin-top:5px;box-sizing:border-box;">
+        </div>
+
+        <div>
+          <label><b>Month</b></label>
+          <select id="afHRReportMonth" style="width:100%;padding:9px;margin-top:5px;">
+            ${Array.from({ length: 12 }, (_, month) => `
+              <option value="${month}" ${month === now.getMonth() ? "selected" : ""}>
+                ${new Date(2020, month, 1).toLocaleString("en-US", { month: "long" })}
+              </option>
+            `).join("")}
+          </select>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+        <button id="afGenerateHRReport" type="button" style="border:0;background:#0b5d3b;color:white;padding:10px 15px;border-radius:7px;cursor:pointer;font-weight:bold;">Generate Report</button>
+        <button id="afPrintHRReport" type="button" style="border:0;background:#1f6f8b;color:white;padding:10px 15px;border-radius:7px;cursor:pointer;font-weight:bold;">Print Report</button>
+      </div>
+
+      <div id="afHRReportResult" style="margin-top:16px;"></div>
+    `;
+
+    const typeInput = box.querySelector("#afHRReportType");
+    const employeeInput = box.querySelector("#afHRReportEmployee");
+    const yearInput = box.querySelector("#afHRReportYear");
+    const monthInput = box.querySelector("#afHRReportMonth");
+    const result = box.querySelector("#afHRReportResult");
+
+    let currentReportTitle = "HR Report";
+
+    function selectedEmployees() {
+      const selected = employeeInput.value;
+      const list = employees();
+
+      if (selected === "ALL") {
+        return list;
+      }
+
+      return list.filter(employee =>
+        String(employee.employeeId) === String(selected)
+      );
+    }
+
+    function tableWrap(headers, rows, emptyMessage) {
+      return `
+        <div style="overflow:auto;border:1px solid #ddd;border-radius:8px;">
+          <table style="width:100%;min-width:900px;border-collapse:collapse;font-size:12px;">
+            <thead>
+              <tr style="background:#eaf5ee;text-align:left;">
+                ${headers.map(header => `<th style="padding:8px;">${header}</th>`).join("")}
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.length
+                ? rows.join("")
+                : `<tr><td colspan="${headers.length}" style="padding:16px;text-align:center;color:#777;">${esc(emptyMessage || "No records found.")}</td></tr>`
+              }
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function generateReport() {
+      const reportType = typeInput.value;
+      const year = Number(yearInput.value);
+      const month = Number(monthInput.value);
+      const selectedId = employeeInput.value;
+      const list = selectedEmployees();
+      const periodLabel = monthName(year, month);
+
+      if (reportType === "EMPLOYEES") {
+        currentReportTitle = "Employee Register";
+
+        const rows = list.map(employee => `
+          <tr style="border-top:1px solid #eee;">
+            <td style="padding:8px;">${esc(employee.employeeId || "")}</td>
+            <td style="padding:8px;font-weight:bold;">${esc(employee.fullName || "")}</td>
+            <td style="padding:8px;">${esc(employee.position || "")}</td>
+            <td style="padding:8px;">${esc(employee.department || "")}</td>
+            <td style="padding:8px;">${esc(employee.teamName || "")}</td>
+            <td style="padding:8px;">${esc(employee.employmentType || "")}</td>
+            <td style="padding:8px;">${esc(localDate(employee.dateJoined))}</td>
+            <td style="padding:8px;">${esc(employee.employmentStatus || "")}</td>
+            <td style="padding:8px;">${esc(employee.phone || "")}</td>
+          </tr>
+        `);
+
+        result.innerHTML = `
+          <h3 style="color:#0b5d3b;">Employee Register</h3>
+          ${tableWrap(
+            ["Employee ID", "Employee", "Position", "Department", "Team", "Employment Type", "Date Joined", "Status", "Phone"],
+            rows,
+            "No employees found."
+          )}
+        `;
+
+        return;
+      }
+
+      if (reportType === "ATTENDANCE") {
+        currentReportTitle = "Attendance, Overtime & Shortfall — " + periodLabel;
+
+        const rows = list.map(employee => {
+          let summary = null;
+
+          if (typeof getEmployeeMonthlyAttendanceSummary === "function") {
+            try {
+              summary = getEmployeeMonthlyAttendanceSummary(
+                employee.employeeId,
+                year,
+                month
+              );
+            } catch (error) {}
+          }
+
+          const recordedDays = Number(
+            summary?.recordedDays ??
+            attendanceRecords().filter(record =>
+              String(record.employeeId) === String(employee.employeeId) &&
+              sameMonth(record.date, year, month)
+            ).length
+          );
+
+          const worked = Number(summary?.actualDaysWorked || 0);
+          const absent = Number(summary?.absentDays || 0);
+          const overtime = Number(summary?.totalOvertimeMinutes || 0) / 60;
+          const shortfall = Number(summary?.totalShortfallMinutes || 0) / 60;
+          const net = Number(summary?.netOvertimeMinutes || 0) / 60;
+
+          return `
+            <tr style="border-top:1px solid #eee;">
+              <td style="padding:8px;">${esc(employee.employeeId)}</td>
+              <td style="padding:8px;font-weight:bold;">${esc(employee.fullName)}</td>
+              <td style="padding:8px;text-align:right;">${recordedDays}</td>
+              <td style="padding:8px;text-align:right;">${worked}</td>
+              <td style="padding:8px;text-align:right;">${absent}</td>
+              <td style="padding:8px;text-align:right;">${overtime.toFixed(2)}</td>
+              <td style="padding:8px;text-align:right;">${shortfall.toFixed(2)}</td>
+              <td style="padding:8px;text-align:right;">${net.toFixed(2)}</td>
+            </tr>
+          `;
+        });
+
+        result.innerHTML = `
+          <h3 style="color:#0b5d3b;">${esc(currentReportTitle)}</h3>
+          ${tableWrap(
+            ["Employee ID", "Employee", "Recorded Days", "Actual Days Worked", "Absent Days", "Overtime Hrs", "Shortfall Hrs", "Net Overtime Hrs"],
+            rows,
+            "No attendance records found."
+          )}
+        `;
+
+        return;
+      }
+
+      if (reportType === "ALLOWANCE") {
+        currentReportTitle = "Allowance & Monthly Earnings — " + periodLabel;
+
+        const rows = list.map(employee => {
+          let payroll = null;
+
+          if (typeof calculateEmployeePayroll === "function") {
+            try {
+              payroll = calculateEmployeePayroll(
+                employee.employeeId,
+                year,
+                month,
+                "NORMAL"
+              );
+            } catch (error) {}
+          }
+
+          return `
+            <tr style="border-top:1px solid #eee;">
+              <td style="padding:8px;">${esc(employee.employeeId)}</td>
+              <td style="padding:8px;font-weight:bold;">${esc(employee.fullName)}</td>
+              <td style="padding:8px;text-align:right;">${money(employee.monthlyAllowance)}</td>
+              <td style="padding:8px;text-align:right;">${Number(payroll?.actualDaysWorked || 0)}</td>
+              <td style="padding:8px;text-align:right;">${money(payroll?.earnedAllowance || 0)}</td>
+              <td style="padding:8px;text-align:right;">${money(payroll?.performanceAwardTotal || 0)}</td>
+              <td style="padding:8px;text-align:right;">${money(payroll?.approvedDeductions || 0)}</td>
+              <td style="padding:8px;text-align:right;">${money(payroll?.advanceRecovery || 0)}</td>
+              <td style="padding:8px;text-align:right;font-weight:bold;">${money(payroll?.netPayable || 0)}</td>
+            </tr>
+          `;
+        });
+
+        result.innerHTML = `
+          <h3 style="color:#0b5d3b;">${esc(currentReportTitle)}</h3>
+          ${tableWrap(
+            ["Employee ID", "Employee", "Monthly Allowance", "Days Worked", "Earned Allowance", "Awards", "Deductions", "Advance Recovery", "Net Payable"],
+            rows,
+            "No allowance records found."
+          )}
+        `;
+
+        return;
+      }
+
+      if (reportType === "ADVANCES") {
+        currentReportTitle = "Advances & Deductions — " + periodLabel;
+
+        const allowedIds = new Set(
+          list.map(employee => String(employee.employeeId))
+        );
+
+        const rows = [];
+
+        advances()
+          .filter(record =>
+            allowedIds.has(String(record.employeeId)) &&
+            sameMonth(record.date, year, month)
+          )
+          .forEach(record => {
+            const totals = outstandingAdvance(record);
+
+            rows.push(`
+              <tr style="border-top:1px solid #eee;">
+                <td style="padding:8px;">Advance</td>
+                <td style="padding:8px;">${esc(record.employeeName || employeeById(record.employeeId)?.fullName || record.employeeId)}</td>
+                <td style="padding:8px;">${esc(localDate(record.date))}</td>
+                <td style="padding:8px;">${esc(record.reason || "Staff Advance")}</td>
+                <td style="padding:8px;text-align:right;">${money(record.amount)}</td>
+                <td style="padding:8px;text-align:right;">${money(totals.recovered)}</td>
+                <td style="padding:8px;text-align:right;font-weight:bold;">${money(totals.outstanding)}</td>
+              </tr>
+            `);
+          });
+
+        deductions()
+          .filter(record =>
+            allowedIds.has(String(record.employeeId)) &&
+            Number(record.year) === year &&
+            Number(record.month) === month
+          )
+          .forEach(record => {
+            rows.push(`
+              <tr style="border-top:1px solid #eee;">
+                <td style="padding:8px;">Deduction</td>
+                <td style="padding:8px;">${esc(record.employeeName || employeeById(record.employeeId)?.fullName || record.employeeId)}</td>
+                <td style="padding:8px;">${esc(localDate(record.date))}</td>
+                <td style="padding:8px;">${esc(record.reason || "Deduction")}</td>
+                <td style="padding:8px;text-align:right;">${money(record.amount)}</td>
+                <td style="padding:8px;text-align:right;">—</td>
+                <td style="padding:8px;text-align:right;">${esc(record.status || "APPROVED")}</td>
+              </tr>
+            `);
+          });
+
+        result.innerHTML = `
+          <h3 style="color:#0b5d3b;">${esc(currentReportTitle)}</h3>
+          ${tableWrap(
+            ["Type", "Employee", "Date", "Reason", "Amount", "Recovered", "Outstanding / Status"],
+            rows,
+            "No advances or deductions found for this period."
+          )}
+        `;
+
+        return;
+      }
+
+      if (reportType === "PAYROLL") {
+        currentReportTitle = "Payroll Ledger — " + periodLabel;
+
+        const records = payrollRecords()
+          .filter(record =>
+            Number(record.year) === year &&
+            Number(record.month) === month &&
+            (selectedId === "ALL" ||
+              String(record.employeeId) === String(selectedId))
+          )
+          .sort((a, b) =>
+            String(a.employeeName || "")
+              .localeCompare(String(b.employeeName || ""))
+          );
+
+        const rows = records.map(record => `
+          <tr style="border-top:1px solid #eee;">
+            <td style="padding:8px;">${esc(record.employeeId)}</td>
+            <td style="padding:8px;font-weight:bold;">${esc(record.employeeName || employeeById(record.employeeId)?.fullName || "")}</td>
+            <td style="padding:8px;text-align:right;">${Number(record.actualDaysWorked || 0)}</td>
+            <td style="padding:8px;text-align:right;">${money(record.earnedAllowance)}</td>
+            <td style="padding:8px;text-align:right;">${money(record.performanceAwardTotal)}</td>
+            <td style="padding:8px;text-align:right;">${money(record.approvedDeductions)}</td>
+            <td style="padding:8px;text-align:right;">${money(record.advanceRecovery)}</td>
+            <td style="padding:8px;text-align:right;font-weight:bold;">${money(record.netPayable)}</td>
+            <td style="padding:8px;text-align:right;">${money(record.amountPaid)}</td>
+            <td style="padding:8px;text-align:right;">${money(record.balance)}</td>
+            <td style="padding:8px;">${esc(record.status || "UNPAID")}</td>
+          </tr>
+        `);
+
+        result.innerHTML = `
+          <h3 style="color:#0b5d3b;">${esc(currentReportTitle)}</h3>
+          ${tableWrap(
+            ["Employee ID", "Employee", "Days Worked", "Earned", "Awards", "Deductions", "Advance Recovery", "Net Payable", "Paid", "Balance", "Status"],
+            rows,
+            "No saved payroll records found for this period."
+          )}
+        `;
+
+        return;
+      }
+
+      if (reportType === "PERFORMANCE") {
+        currentReportTitle = "Employee Performance & Rankings — " + periodLabel;
+
+        let calculation = null;
+
+        if (typeof window.calculateAFEmployeeRankings === "function") {
+          try {
+            calculation = window.calculateAFEmployeeRankings(
+              "month",
+              monthDate(year, month)
+            );
+          } catch (error) {
+            calculation = null;
+          }
+        }
+
+        let performanceRows = Array.isArray(calculation?.results)
+          ? calculation.results
+          : [];
+
+        if (selectedId !== "ALL") {
+          performanceRows = performanceRows.filter(record =>
+            String(record.employeeId) === String(selectedId)
+          );
+        }
+
+        const component = result =>
+          result && result.applicable
+            ? Number(result.score || 0).toFixed(1) + "%"
+            : "N/A";
+
+        const rows = performanceRows.map(record => `
+          <tr style="border-top:1px solid #eee;">
+            <td style="padding:8px;text-align:right;font-weight:bold;">${esc(record.rank || "")}</td>
+            <td style="padding:8px;">${esc(record.employeeId || "")}</td>
+            <td style="padding:8px;font-weight:bold;">${esc(record.employeeName || "")}</td>
+            <td style="padding:8px;">${esc(record.teamName || "")}</td>
+            <td style="padding:8px;text-align:right;">${component(record.output)}</td>
+            <td style="padding:8px;text-align:right;">${component(record.attendance)}</td>
+            <td style="padding:8px;text-align:right;">${component(record.waste)}</td>
+            <td style="padding:8px;text-align:right;">${component(record.quality)}</td>
+            <td style="padding:8px;text-align:right;font-weight:bold;">${Number(record.finalScore || 0).toFixed(1)}%</td>
+          </tr>
+        `);
+
+        result.innerHTML = `
+          <h3 style="color:#0b5d3b;">${esc(currentReportTitle)}</h3>
+          ${tableWrap(
+            ["Rank", "Employee ID", "Employee", "Team", "Output", "Attendance", "Efficiency", "Quality", "Final Score"],
+            rows,
+            "No performance ranking data found for this period."
+          )}
+        `;
+
+        return;
+      }
+    }
+
+    function printReport() {
+      if (!result.innerHTML.trim()) {
+        generateReport();
+      }
+
+      const win = window.open(
+        "",
+        "_blank",
+        "width=1100,height=850"
+      );
+
+      if (!win) {
+        alert("Please allow pop-ups to print the report.");
+        return;
+      }
+
+      win.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>${esc(currentReportTitle)}</title>
+          <style>
+            body{font-family:Arial,sans-serif;margin:25px;color:#222;}
+            h1{margin:0;color:#0b5d3b;font-size:23px;}
+            h2{margin:5px 0 18px;font-size:17px;}
+            table{width:100%;border-collapse:collapse;font-size:11px;}
+            th,td{border:1px solid #ccc;padding:6px;text-align:left;}
+            th{background:#eaf5ee;}
+            .header{margin-bottom:18px;border-bottom:2px solid #0b5d3b;padding-bottom:10px;}
+            @media print{body{margin:10mm;}}
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>A&F Wekavera Ltd</h1>
+            <div>Waste2Wealth Solutions</div>
+            <h2>${esc(currentReportTitle)}</h2>
+          </div>
+          ${result.innerHTML}
+          <script>window.onload=function(){window.print();};<\/script>
+        </body>
+        </html>
+      `);
+
+      win.document.close();
+      win.focus();
+    }
+
+    box.querySelector("#closeAFHRReports").onclick = () => modal.remove();
+    box.querySelector("#afGenerateHRReport").onclick = generateReport;
+    box.querySelector("#afPrintHRReport").onclick = printReport;
+
+    typeInput.onchange = generateReport;
+    employeeInput.onchange = generateReport;
+    yearInput.onchange = generateReport;
+    monthInput.onchange = generateReport;
+
+    generateReport();
+  }
+
+  window.openAFHRReports = openAFHRReports;
+
+  /* =======================================================
+     CONNECT THE THREE EXISTING STAFF & HR BUTTONS
+     Replaces only their old placeholder click actions.
+     ======================================================= */
+
+  function reconnectStaffHRButtons() {
+    const connections = [
+      {
+        id: "portalHRBtn",
+        marker: "afPortalConnected",
+        permission: "portal",
+        handler: openAFEmployeePortal
+      },
+      {
+        id: "documentsHRBtn",
+        marker: "afDocumentsConnected",
+        permission: "documents",
+        handler: openAFEmployeeDocuments
+      },
+      {
+        id: "hrReportsBtn",
+        marker: "afHRReportsConnected",
+        permission: "hrReports",
+        handler: openAFHRReports
+      }
+    ];
+
+    connections.forEach(connection => {
+      const oldButton = document.getElementById(connection.id);
+
+      if (!oldButton) return;
+
+      if (oldButton.dataset[connection.marker] === "yes") {
+        return;
+      }
+
+      const button = oldButton.cloneNode(true);
+      button.dataset[connection.marker] = "yes";
+
+      oldButton.parentNode.replaceChild(
+        button,
+        oldButton
+      );
+
+      button.onclick = () => {
+        if (!hasModulePermission(connection.permission)) {
+          deny(connection.permission);
+          return;
+        }
+
+        const staffModal = button.closest(
+          'div[style*="position: fixed"], div[style*="position:fixed"]'
+        );
+
+        if (staffModal) {
+          staffModal.remove();
+        }
+
+        connection.handler();
+      };
+    });
+  }
+
+  const staffObserver = new MutationObserver(() => {
+    reconnectStaffHRButtons();
+  });
+
+  staffObserver.observe(
+    document.body,
+    {
+      childList: true,
+      subtree: true
+    }
+  );
+
+  reconnectStaffHRButtons();
+
+  /* =======================================================
+     EMPLOYEE DASHBOARD PORTAL CARD
+     Employees do not have the Staff & HR sidebar,
+     so give them a direct My Employee Portal button.
+     ======================================================= */
+
+  function renderEmployeePortalCard() {
+    const user = currentUser();
+    const old = document.getElementById("afEmployeePortalDashboardCard");
+
+    if (!user || String(user.role) !== "Employee") {
+      if (old) old.remove();
+      return;
+    }
+
+    if (old) return;
+
+    const main = document.querySelector("#mainApplication .main");
+    if (!main) return;
+
+    const card = document.createElement("section");
+    card.id = "afEmployeePortalDashboardCard";
+    card.className = "card";
+    card.style.cssText = `
+      margin-bottom:14px;
+      border:1px solid #cfe3d7;
+      border-radius:12px;
+      padding:16px;
+      background:#f7fbf8;
+    `;
+
+    card.innerHTML = `
+      <div style="font-size:17px;font-weight:bold;color:#0b5d3b;">👤 My Employee Portal</div>
+      <div style="margin-top:5px;color:#666;font-size:12px;">
+        View your employment details, attendance, payroll, payslips, advances and documents.
+      </div>
+      <button id="afOpenMyEmployeePortal" type="button" style="margin-top:11px;border:0;background:#0b5d3b;color:white;padding:9px 13px;border-radius:7px;cursor:pointer;font-weight:bold;">
+        Open My Portal
+      </button>
+    `;
+
+    const notice = document.getElementById("roleAccessNotice");
+
+    if (notice) {
+      notice.insertAdjacentElement("afterend", card);
+    } else {
+      main.prepend(card);
+    }
+
+    card.querySelector("#afOpenMyEmployeePortal").onclick =
+      openAFEmployeePortal;
+  }
+
+  let portalCardTimer = null;
+
+  const dashboardObserver = new MutationObserver(() => {
+    clearTimeout(portalCardTimer);
+    portalCardTimer = setTimeout(
+      renderEmployeePortalCard,
+      80
+    );
+  });
+
+  dashboardObserver.observe(
+    document.body,
+    {
+      childList: true,
+      subtree: true
+    }
+  );
+
+  setTimeout(renderEmployeePortalCard, 150);
+
+  console.log(
+    "A&F Staff & HR completion connected: Employee Portal, Documents & Records, HR Reports."
+  );
+
+})();
