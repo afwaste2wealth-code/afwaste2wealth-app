@@ -1544,9 +1544,13 @@ requirePermission("documents");
     return;
   }
 
-  alert(
-    "Employee Documents & Records module will be connected next."
-  );
+modal.remove();
+
+  if (typeofwindow.openAFEmployeeDocuments === "function") {
+window.openAFEmployeeDocuments();
+  } else {
+    alert("Employee Documents & Records could not be opened.");
+  }
 };
 
 modal.querySelector("#birthdayHRBtn").onclick = () => {
