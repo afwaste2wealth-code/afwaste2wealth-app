@@ -9986,7 +9986,9 @@ employeeId,
 
 function getEmployeeAdvanceOutstandingForSettlement(
 advanceId,
-settlementKey
+settlementKey,
+  year,
+  month
 ) {
 const advances = getEmployeeAdvances();
 
@@ -9999,32 +10001,94 @@ const advance = advances.find(
     return 0;
   }
 
+const selectedPeriod =
+    Number(year) * 12 +
+    Number(month);
+
 const recoveries =
-getAdvanceRecoveries().filter(
-      item =>
-        String(item.advanceId) ===
-          String(advanceId) &&
-        String(item.sourcePayrollKey || "") !==
-          String(settlementKey || "")
-    );
+getAdvanceRecoveries().filter(item => {
+
+      if (
+        String(item.advanceId) !==
+        String(advanceId)
+      ) {
+        return false;
+      }
+
+      /*
+       * Ignore the recovery created by this same
+       * Full Settlement when recalculating it.
+       */
+      if (
+        String(item.sourcePayrollKey || "") ===
+        String(settlementKey || "")
+      ) {
+        return false;
+      }
+
+      /*
+       * Do not allow a later month's recovery
+       * to change an earlier month's history.
+       */
+      if (
+item.year !== undefined &&
+item.month !== undefined
+      ) {
+const recoveryPeriod =
+          Number(item.year) * 12 +
+          Number(item.month);
+
+        return recoveryPeriod<= selectedPeriod;
+      }
+
+      /*
+       * Fallback for older recovery records
+       * that only have a date.
+       */
+      if (item.date) {
+
+const recoveryDate =
+          new Date(
+            String(item.date).slice(0, 10) +
+            "T00:00:00"
+          );
+
+const periodEnd =
+          new Date(
+            Number(year),
+            Number(month) + 1,
+            0,
+            23,
+            59,
+            59
+          );
+
+        if (!isNaN(recoveryDate.getTime())) {
+          return recoveryDate<= periodEnd;
+        }
+      }
+
+      return true;
+    });
 
 const recovered =
 recoveries.reduce(
       (total, item) =>
-        total + Number(item.amount || 0),
+        total +
+        Number(item.amount || 0),
       0
     );
 
   return Math.max(
     Number(advance.amount || 0) -
-      recovered,
+    recovered,
     0
   );
 }
 
 
 /* =========================================================
-   GET ALL OUTSTANDING ADVANCES FOR EMPLOYEE
+   GET OUTSTANDING ADVANCES AS AT SELECTED MONTH
    ========================================================= */
 
 function getEmployeeOutstandingAdvanceSnapshot(
@@ -10039,47 +10103,96 @@ employeeId,
       month
     );
 
-const advances =
-getEmployeeAdvances().filter(
-      item =>
-        String(item.employeeId) ===
-        String(employeeId)
+const periodEnd =
+    new Date(
+      Number(year),
+      Number(month) + 1,
+      0,
+      23,
+      59,
+      59
     );
 
-const items = advances
-    .map(advance => {
+const advances =
+getEmployeeAdvances().filter(item => {
+
+      if (
+        String(item.employeeId) !==
+        String(employeeId)
+      ) {
+        return false;
+      }
+
+      /*
+       * An advance must already have existed
+       * by the end of the selected month.
+       */
+      if (item.date) {
+
+const advanceDate =
+          new Date(
+            String(item.date).slice(0, 10) +
+            "T00:00:00"
+          );
+
+        if (!isNaN(advanceDate.getTime())) {
+          return advanceDate<= periodEnd;
+        }
+      }
+
+      /*
+       * Keep old undated records visible rather
+       * than silently losing an employee liability.
+       */
+      return true;
+    });
+
+const items =
+    advances
+      .map(advance => {
+
 const outstanding =
 getEmployeeAdvanceOutstandingForSettlement(
 advance.id,
-settlementKey
-        );
+settlementKey,
+            year,
+            month
+          );
 
-      return {
+        return {
 advanceId: advance.id,
 
-        date:
+          date:
 advance.date || "",
 
-        reason:
+          reason:
 advance.reason || "",
 
 originalAmount:
-          Number(advance.amount || 0),
+            Number(
+advance.amount || 0
+            ),
 
-        outstanding:
-          Number(outstanding || 0)
-      };
-    })
-    .filter(
-      item =>
-        Number(item.outstanding || 0) > 0
-    );
+          outstanding:
+            Number(
+              outstanding || 0
+            )
+        };
+      })
+      .filter(
+        item =>
+          Number(
+item.outstanding || 0
+          ) > 0
+      );
 
 const total =
 items.reduce(
       (sum, item) =>
         sum +
-        Number(item.outstanding || 0),
+        Number(
+item.outstanding || 0
+        ),
       0
     );
 
