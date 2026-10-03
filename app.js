@@ -11457,6 +11457,28 @@ cursor:pointer;
 ` : ""}
 
     `;
+   const confirmButton =
+modal.querySelector("#confirmFullSettlement");
+
+if (confirmButton) {
+confirmButton.onclick = () => {
+
+const saved =
+saveCalculatedPayroll(payroll);
+
+    alert(
+      "Full Settlement saved successfully for " +
+saved.employeeName +
+      " — " +
+saved.monthName
+    );
+
+confirmButton.disabled = true;
+confirmButton.textContent =
+      "Full Settlement Confirmed";
+  };
+}
+
   };
 
 modal.querySelector(
