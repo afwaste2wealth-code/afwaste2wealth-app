@@ -7636,6 +7636,12 @@ records.filter(
         String(record.status)
           .toLowerCase() === "absent"
     ).length;
+const actualDaysWorked =
+records.filter(
+      record =>
+        String(record.status)
+          .toLowerCase() === "present"
+    ).length;
 
 const netOvertimeMinutes =
 Math.max(
@@ -7677,6 +7683,7 @@ employeeId: employee.employeeId,
 employeeName: employee.fullName,
 monthlyAllowance,
 daysInMonth,
+actualDaysWorked,
 absentDays,
 absenceDeduction,
 earnedAllowance,
@@ -10216,28 +10223,43 @@ const daysInMonth =
     ).getDate();
 
 const absentDays =
-    Number(
-      attendance?.absentDays || 0
-    );
+  Number(
+    attendance?.absentDays || 0
+  );
+
+const actualDaysWorked =
+  Number(
+    attendance?.actualDaysWorked || 0
+  );
 
 const dailyAllowance =
 daysInMonth> 0
-      ? monthlyAllowance /
-daysInMonth
-      : 0;
+    ? monthlyAllowance / daysInMonth
+    : 0;
 
 const absenceDeduction =
-    roundDownTo100(
+  roundDownTo100(
 dailyAllowance *
 absentDays
-    );
+  );
 
-const earnedAllowance =
+const normalEarnedAllowance =
 Math.max(
 monthlyAllowance -
 absenceDeduction,
-      0
-    );
+    0
+  );
+
+const fullSettlementEarnedAllowance =
+  roundDownTo100(
+dailyAllowance *
+actualDaysWorked
+  );
+
+const earnedAllowance =
+  mode === "FULL_SETTLEMENT"
+    ? fullSettlementEarnedAllowance
+    : normalEarnedAllowance;
 
 
   /* =========================
@@ -10531,6 +10553,7 @@ isFullSettlement:
 monthlyAllowance,
 
 daysInMonth,
+actualDaysWorked,
 
 dailyAllowance,
 
@@ -10871,6 +10894,8 @@ payroll.monthlyAllowance,
 
 daysInMonth:
 payroll.daysInMonth,
+actualDaysWorked:
+Number(payroll.actualDaysWorked || 0),
 
 absentDays:
 payroll.absentDays,
@@ -11217,8 +11242,19 @@ payroll.absenceDeduction
           )}</div>
 </div>
 
+${payroll.isFullSettlement ? `
+<div style="padding:15px;background:#eef4ff;border-radius:8px;">
+<b>Actual Days Worked</b>
+<div style="font-size:20px;font-weight:bold;">
+  ${payroll.actualDaysWorked}
+</div>
+</div>
+` : ""}
+
 <div style="padding:15px;background:#f5f5f5;border-radius:8px;">
-<b>Earned Allowance</b>
+<b>${payroll.isFullSettlement
+  ? "Earned Allowance (Days Worked)"
+  : "Earned Allowance"}</b>
 <div>${formatPayrollMoney(
 payroll.earnedAllowance
           )}</div>
