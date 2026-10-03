@@ -82781,10 +82781,16 @@ console.log(
     });
   }
 
-  function enhancePayroll() {
-    const b = document.querySelector("#calculatePayroll");
-    if (b) b.textContent = "Calculate Payroll";
+ function enhancePayroll() {
+const b = document.querySelector("#calculatePayroll");
+
+  if (
+    b &&
+b.textContent.trim() !== "Calculate Payroll"
+  ) {
+b.textContent = "Calculate Payroll";
   }
+}
 
   function renderPayrollCalculation(button) {
     const panel = button.parentElement;
