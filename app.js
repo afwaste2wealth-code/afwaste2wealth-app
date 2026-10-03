@@ -11242,8 +11242,7 @@ payroll.advanceRecovery
 </div>
 
 <div style="padding:15px;background:#e8f5e9;border-radius:8px;">
-<b>$
-{payroll.isFullSettlement ? "Full Settlement Balance"
+<b>${payroll.isFullSettlement ? "Full Settlement Balance"
 : "Net Payable"}</b>
 <div style="font-size:20px;font-weight:bold;">
             ${formatPayrollMoney(
@@ -11253,8 +11252,7 @@ payroll.netPayable
 </div>
 
 <div style="padding:15px;background:#fff3cd;border-radius:8px;">
-<b>$
-{payroll.isFullSettlement ? "Previous Settlement Balance"
+<b>${payroll.isFullSettlement ? "Previous Settlement Balance"
 : "Previous Unpaid Balance"}</b>
 <div>${formatPayrollMoney(
 previousBalance
@@ -11276,12 +11274,10 @@ previousBalance
         background:#f8f9fa;
         border-radius:8px;
       ">
-<b>$
-{payroll.isFullSettlement ? "Full Settlement Amount:"
+<b>${payroll.isFullSettlement ? "Full Settlement Amount:"
 : "Total Amount Due Including Previous
         Unpaid Balance:"}</b>
-        ${formatPayrollMoney(
-totalAmountDue )}
+        ${formatPayrollMoney( totalAmountDue )}
 </p>
     `;
   };
