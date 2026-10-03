@@ -10243,14 +10243,12 @@ dailyAllowance *
 absentDays
   );
 
-const normalEarnedAllowance =
-Math.max(
-monthlyAllowance -
-absenceDeduction,
-    0
+const earnedAllowance =
+  roundDownTo100(
+dailyAllowance *
+actualDaysWorked
   );
-
-const fullSettlementEarnedAllowance =
+const earnedAllowance =
   roundDownTo100(
 dailyAllowance *
 actualDaysWorked
@@ -11242,23 +11240,15 @@ payroll.absenceDeduction
           )}</div>
 </div>
 
-${payroll.isFullSettlement ? `
 <div style="padding:15px;background:#eef4ff;border-radius:8px;">
 <b>Actual Days Worked</b>
 <div style="font-size:20px;font-weight:bold;">
   ${payroll.actualDaysWorked}
 </div>
 </div>
-` : ""}
 
 <div style="padding:15px;background:#f5f5f5;border-radius:8px;">
-<b>${payroll.isFullSettlement
-  ? "Earned Allowance (Days Worked)"
-  : "Earned Allowance"}</b>
-<div>${formatPayrollMoney(
-payroll.earnedAllowance
-          )}</div>
-</div>
+<b>Earned Allowance (Days Worked)</b>
 
 <div style="padding:15px;background:#f5f5f5;border-radius:8px;">
 <b>Approved Deductions</b>
