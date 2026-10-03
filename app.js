@@ -10984,15 +10984,9 @@ records.push(
 savePayrollRecords(
     records
   );
-
-
   return record;
 }
-
-  
-
-
-/* =========================================================
+  /* =========================================================
    EMPLOYEE ALLOWANCE
    ========================================================= */
 
@@ -11086,6 +11080,27 @@ display:grid;
 </select>
 </div>
 </div>
+<div style="
+  margin-bottom:15px;
+  max-width:350px;
+">
+<label><b>Calculation Mode</b></label>
+
+<select id="allowanceCalculationMode"
+        style="
+          width:100%;
+          padding:10px;
+          margin-top:5px;
+        ">
+<option value="NORMAL">
+  Normal Monthly Calculation
+</option>
+
+<option value="FULL_SETTLEMENT">
+  Full Settlement
+</option>
+</select>
+</div>
 
 <button id="calculateAllowance"
         style="
@@ -11140,12 +11155,14 @@ modal.querySelector(
           "#allowanceMonth"
         ).value
       );
-
+const calculationMode = modal.querySelector(
+   "#allowanceCalculationMode").value;
 const payroll =
 calculateEmployeePayroll(
 employeeId,
         year,
-        month
+        month,
+   calculationMode
       );
 
     if (!payroll) {
@@ -11156,11 +11173,21 @@ employeeId,
     }
 
 const previousBalance =
-getPreviousUnpaidPayrollBalance(
+payroll.isFullSettlement
+  ? Number(
+payroll.previousSettlementBalance || 0
+    )
+  : getPreviousUnpaidPayrollBalance(
 employeeId,
-        year,
-        month
-      );
+      year,
+      month
+    );
+
+const totalAmountDue =
+payroll.isFullSettlement
+  ? Number(payroll.netPayable || 0)
+  : previousBalance +
+    Number(payroll.netPayable || 0);
 
 modal.querySelector(
       "#allowanceResult"
@@ -11245,9 +11272,7 @@ previousBalance
 <b>Total Amount Due Including Previous
         Unpaid Balance:</b>
         ${formatPayrollMoney(
-previousBalance +
-payroll.netPayable
-        )}
+totalAmountDue )}
 </p>
     `;
   };
