@@ -10945,6 +10945,35 @@ payroll.employeeId
         Number(item.month) ===
           Number(payroll.month)
     );
+/* =====================================================
+   PROTECT SAVED FULL SETTLEMENT
+
+   A confirmed Full Settlement must never be replaced
+   later by an automatic Normal payroll calculation.
+   ===================================================== */
+
+const existingRecord =
+  index >= 0
+    ? records[index]
+    : null;
+
+const incomingMode =
+  String(
+payroll.calculationMode || "NORMAL"
+  ).toUpperCase();
+
+const existingMode =
+  String(
+existingRecord?.calculationMode || "NORMAL"
+  ).toUpperCase();
+
+if (
+existingRecord&&
+existingMode === "FULL_SETTLEMENT" &&
+incomingMode !== "FULL_SETTLEMENT"
+) {
+  return existingRecord;
+}
 
 
   /*
