@@ -11438,6 +11438,24 @@ previousBalance
 : "Total Amount Due Including Previous Unpaid Balance:"}</b>
         ${formatPayrollMoney( totalAmountDue )}
 </p>
+
+${payroll.isFullSettlement&&isAFRole("Director","Secretary") ? `
+<div style="margin-top:15px;text-align:right;">
+<button id="confirmFullSettlement"
+    style="
+      background:#0b5d3b;
+color:white;
+      border:0;
+      padding:12px 18px;
+      border-radius:7px;
+font-weight:bold;
+cursor:pointer;
+    ">
+    Save / Confirm Full Settlement
+</button>
+</div>
+` : ""}
+
     `;
   };
 
