@@ -84811,3 +84811,1999 @@ b.textContent = "Calculate Payroll";
   );
 
 })();
+
+/* =========================================================
+   A&F ACCOUNTS & REPORTS + WEEKLY STOCK TAKING
+   ONE-BLOCK ADD-ON
+   Paste ONCE at the very bottom of app.js
+
+   Adds:
+   1) 📊 Accounts & Reports sidebar button
+   2) 🧰 Weekly Stock Taking sidebar button
+   3) Weekly Items & Equipment Register + condition checks
+   4) Attention list: Missing / Damaged / Need Repair /
+      Need Attention / Not Working
+   5) Useful accounting registers built from existing A&F data
+   6) Fixed Asset Register
+   7) Manual Journal Register
+
+   IMPORTANT ACCOUNTING NOTE:
+   Profit & Loss uses the existing A&F P&L engine.
+   General Ledger, Trial Balance, Balance Sheet and formal
+   Cash Flow need the full double-entry posting engine before
+   they should be treated as final accounting statements.
+   ========================================================= */
+
+(function connectAFAccountsReportsAndWeeklyStockTaking() {
+"use strict";
+
+if (window.__afAccountsWeeklyStockInstalled) {
+    return;
+}
+window.__afAccountsWeeklyStockInstalled = true;
+
+/* =========================================================
+   STORAGE KEYS
+   ========================================================= */
+
+const AF_FACTORY_ITEMS_KEY = "afFactoryItemRegister";
+const AF_WEEKLY_CHECKS_KEY = "afWeeklyFactoryChecks";
+const AF_FIXED_ASSETS_KEY = "afFixedAssets";
+const AF_JOURNAL_KEY = "afJournalEntries";
+
+/* =========================================================
+   BASIC HELPERS
+   ========================================================= */
+
+function afARReadArray(key) {
+    try {
+        const value = JSON.parse(localStorage.getItem(key) || "[]");
+        return Array.isArray(value) ? value : [];
+    } catch (error) {
+        console.error("A&F read error:", key, error);
+        return [];
+    }
+}
+
+function afARWriteArray(key, value) {
+    localStorage.setItem(
+        key,
+        JSON.stringify(Array.isArray(value) ? value : [])
+    );
+}
+
+function afARCurrentUser() {
+    try {
+        if (typeof getAFCurrentUser === "function") {
+            return getAFCurrentUser() || {};
+        }
+    } catch (error) {}
+
+    try {
+        return JSON.parse(localStorage.getItem("currentUser") || "{}") || {};
+    } catch (error) {
+        return {};
+    }
+}
+
+function afARRole() {
+    return String(afARCurrentUser().role || "");
+}
+
+function afARUserName() {
+    const user = afARCurrentUser();
+    return (
+        user.fullName ||
+        user.employeeName ||
+        user.name ||
+        user.employeeId ||
+        "System User"
+    );
+}
+
+function afAREscape(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function afARMoney(value) {
+    return (
+        "UGX " +
+        Math.round(Number(value || 0)).toLocaleString("en-UG")
+    );
+}
+
+function afARToday() {
+    const d = new Date();
+    return (
+        d.getFullYear() +
+        "-" +
+        String(d.getMonth() + 1).padStart(2, "0") +
+        "-" +
+        String(d.getDate()).padStart(2, "0")
+    );
+}
+
+function afARDateValue(value) {
+    return String(value || "").slice(0, 10);
+}
+
+function afARFormatDate(value) {
+    const text = afARDateValue(value);
+    const m = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : (text || "—");
+}
+
+function afARUID(prefix) {
+    return (
+        prefix +
+        "-" +
+        Date.now() +
+        "-" +
+        Math.random().toString(36).slice(2, 7)
+    );
+}
+
+function afARCloseMobileMenu() {
+    try {
+        if (typeof closeAFMobileMenu === "function") {
+            closeAFMobileMenu();
+        }
+    } catch (error) {}
+}
+
+function afARButtonStyle() {
+    return `
+        width:100%;
+        min-height:92px;
+        border:1px solid #d8e4dd;
+        background:#f8fbf9;
+        border-radius:11px;
+        padding:14px;
+        text-align:left;
+        cursor:pointer;
+        box-sizing:border-box;
+    `;
+}
+
+function afARPrimaryButtonStyle() {
+    return `
+        border:0;
+        background:#0b5d3b;
+        color:white;
+        border-radius:7px;
+        padding:9px 13px;
+        font-weight:bold;
+        cursor:pointer;
+    `;
+}
+
+function afARSecondaryButtonStyle() {
+    return `
+        border:1px solid #cfd8d3;
+        background:white;
+        color:#22352a;
+        border-radius:7px;
+        padding:9px 13px;
+        font-weight:bold;
+        cursor:pointer;
+    `;
+}
+
+function afAROpenModal(id, title, subtitle, width = 1100) {
+    document.getElementById(id)?.remove();
+
+    const modal = document.createElement("div");
+    modal.id = id;
+    modal.style.cssText = `
+        position:fixed;
+        inset:0;
+        background:rgba(0,0,0,.58);
+        z-index:100080;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        padding:12px;
+        box-sizing:border-box;
+        font-family:Arial,sans-serif;
+    `;
+
+    modal.innerHTML = `
+        <div class="afARModalBox" style="
+            background:white;
+            width:min(${width}px,96vw);
+            max-height:92vh;
+            overflow:auto;
+            border-radius:14px;
+            padding:22px;
+            box-sizing:border-box;
+            box-shadow:0 18px 50px rgba(0,0,0,.28);
+        ">
+            <div style="
+                display:flex;
+                justify-content:space-between;
+                align-items:flex-start;
+                gap:12px;
+                margin-bottom:18px;
+            ">
+                <div>
+                    <h2 style="margin:0;color:#0b5d3b;">
+                        ${afAREscape(title)}
+                    </h2>
+                    <div style="margin-top:5px;font-size:12px;color:#68756e;">
+                        ${afAREscape(subtitle || "")}
+                    </div>
+                </div>
+                <button class="afARCloseBtn" type="button" style="
+                    border:0;
+                    background:#333;
+                    color:white;
+                    border-radius:7px;
+                    padding:8px 12px;
+                    cursor:pointer;
+                    font-weight:bold;
+                    flex:0 0 auto;
+                ">✕ Close</button>
+            </div>
+            <div class="afARModalBody"></div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+    modal.querySelector(".afARCloseBtn").onclick = () => modal.remove();
+
+    return {
+        modal,
+        body: modal.querySelector(".afARModalBody")
+    };
+}
+
+/* =========================================================
+   GENERIC TABLE REPORT + PRINT + CSV
+   ========================================================= */
+
+function afAROpenTableReport({
+    id,
+    title,
+    subtitle,
+    columns,
+    rows,
+    note = ""
+}) {
+    const { modal, body } = afAROpenModal(
+        id,
+        title,
+        subtitle,
+        1180
+    );
+
+    const safeRows = Array.isArray(rows) ? rows : [];
+
+    const head = columns.map(col => `
+        <th style="padding:9px;border-bottom:1px solid #dbe4df;white-space:nowrap;">
+            ${afAREscape(col.label)}
+        </th>
+    `).join("");
+
+    const tableRows = safeRows.length
+        ? safeRows.map(row => `
+            <tr>
+                ${columns.map(col => `
+                    <td style="padding:9px;border-bottom:1px solid #edf1ef;vertical-align:top;">
+                        ${col.html
+                            ? col.html(row)
+                            : afAREscape(
+                                typeof col.value === "function"
+                                    ? col.value(row)
+                                    : row[col.key]
+                              )}
+                    </td>
+                `).join("")}
+            </tr>
+        `).join("")
+        : `
+            <tr>
+                <td colspan="${columns.length}" style="padding:18px;text-align:center;color:#777;">
+                    No records available.
+                </td>
+            </tr>
+        `;
+
+    body.innerHTML = `
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+            <button id="afARPrintReport" type="button" style="${afARPrimaryButtonStyle()}">
+                🖨 Print
+            </button>
+            <button id="afARCSVReport" type="button" style="${afARSecondaryButtonStyle()}">
+                ⬇ CSV
+            </button>
+            <div style="margin-left:auto;font-size:12px;color:#666;align-self:center;">
+                ${safeRows.length.toLocaleString()} record(s)
+            </div>
+        </div>
+
+        ${note ? `
+            <div style="
+                margin-bottom:12px;
+                padding:10px 12px;
+                background:#fff7e6;
+                border:1px solid #f0dfb8;
+                border-radius:8px;
+                font-size:12px;
+                line-height:1.5;
+                color:#705800;
+            ">${note}</div>
+        ` : ""}
+
+        <div id="afARPrintableReport" style="overflow:auto;border:1px solid #dfe6e2;border-radius:9px;">
+            <table style="width:100%;min-width:850px;border-collapse:collapse;font-size:12px;">
+                <thead>
+                    <tr style="background:#eef8f2;text-align:left;">
+                        ${head}
+                    </tr>
+                </thead>
+                <tbody>${tableRows}</tbody>
+            </table>
+        </div>
+    `;
+
+    body.querySelector("#afARPrintReport").onclick = () => {
+        const popup = window.open("", "_blank");
+        if (!popup) {
+            alert("Please allow pop-ups to print this report.");
+            return;
+        }
+
+        popup.document.write(`
+            <html>
+            <head>
+                <title>${afAREscape(title)}</title>
+                <style>
+                    body{font-family:Arial,sans-serif;padding:24px;color:#222;}
+                    h1{font-size:20px;margin-bottom:4px;}
+                    h2{font-size:15px;margin-top:0;color:#555;}
+                    table{width:100%;border-collapse:collapse;font-size:11px;}
+                    th,td{border:1px solid #bbb;padding:7px;text-align:left;vertical-align:top;}
+                    th{background:#eef8f2;}
+                </style>
+            </head>
+            <body>
+                <h1>A&F Wekavera Ltd</h1>
+                <h2>${afAREscape(title)}</h2>
+                ${body.querySelector("#afARPrintableReport").innerHTML}
+            </body>
+            </html>
+        `);
+        popup.document.close();
+        popup.focus();
+        setTimeout(() => popup.print(), 250);
+    };
+
+    body.querySelector("#afARCSVReport").onclick = () => {
+        const csvEscape = value => {
+            const clean = String(value ?? "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+            return `"${clean.replace(/"/g, '""')}"`;
+        };
+
+        let csv = columns.map(col => csvEscape(col.label)).join(",") + "\n";
+
+        safeRows.forEach(row => {
+            csv += columns.map(col => {
+                let value;
+                if (typeof col.csv === "function") {
+                    value = col.csv(row);
+                } else if (typeof col.value === "function") {
+                    value = col.value(row);
+                } else {
+                    value = row[col.key];
+                }
+                return csvEscape(value);
+            }).join(",") + "\n";
+        });
+
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = title.replace(/[^a-z0-9]+/gi, "_") + ".csv";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+    };
+
+    return modal;
+}
+
+/* =========================================================
+   ACCOUNTING DATA HELPERS
+   ========================================================= */
+
+function afARExpenses() {
+    const primary = afARReadArray("expenses");
+    return primary.length ? primary : afARReadArray("expenseRecords");
+}
+
+function afARSaleValue(record) {
+    return Number(
+        record.finalSaleTotal ??
+        record.netSaleTotal ??
+        record.saleAmount ??
+        record.grossSaleTotal ??
+        record.totalValue ??
+        0
+    ) || 0;
+}
+
+function afARIsCancelled(record) {
+    return String(record.status || "").toUpperCase() === "CANCELLED";
+}
+
+function afARPaymentMethod(record) {
+    return String(record.method || record.paymentMethod || "").trim();
+}
+
+function afARPaymentBook(methodGroup) {
+    const customerPayments = afARReadArray("afCustomerPayments");
+    const expenses = afARExpenses();
+
+    const cashMethods = ["cash", "mobile money"];
+    const bankMethods = ["bank transfer", "cheque"];
+    const wanted = methodGroup === "BANK" ? bankMethods : cashMethods;
+
+    const entries = [];
+
+    customerPayments.forEach(record => {
+        const method = afARPaymentMethod(record).toLowerCase();
+        if (!wanted.includes(method)) return;
+
+        entries.push({
+            date: afARDateValue(record.date || record.recordedAt),
+            reference: record.paymentNo || record.reference || "",
+            particulars: "Receipt from " + (record.customerName || "Customer"),
+            method: afARPaymentMethod(record),
+            received: Number(record.amount || 0),
+            paid: 0
+        });
+    });
+
+    expenses.forEach(record => {
+        if (afARIsCancelled(record)) return;
+        const method = afARPaymentMethod(record).toLowerCase();
+        if (!wanted.includes(method)) return;
+
+        entries.push({
+            date: afARDateValue(record.date || record.expenseDate || record.createdAt),
+            reference: record.expenseNo || record.reference || "",
+            particulars: (record.category || "Expense") + " - " + (record.payee || ""),
+            method: afARPaymentMethod(record),
+            received: 0,
+            paid: Number(record.amount || 0)
+        });
+    });
+
+    entries.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+
+    let balance = 0;
+    entries.forEach(entry => {
+        balance += entry.received - entry.paid;
+        entry.balance = balance;
+    });
+
+    return entries;
+}
+
+function afAROpenCashBook() {
+    const rows = afARPaymentBook("CASH");
+    afAROpenTableReport({
+        id: "afCashBookModal",
+        title: "Cash Book",
+        subtitle: "Recorded Cash and Mobile Money receipts/payments",
+        note: "This book is based on customer payments and expenses already recorded in the application. Add opening cash balances and any other cash movements through the future double-entry accounting engine before treating the balance as a final accounting cash balance.",
+        columns: [
+            { label: "Date", value: r => afARFormatDate(r.date) },
+            { label: "Reference", key: "reference" },
+            { label: "Particulars", key: "particulars" },
+            { label: "Method", key: "method" },
+            { label: "Received", value: r => afARMoney(r.received), csv: r => r.received },
+            { label: "Paid", value: r => afARMoney(r.paid), csv: r => r.paid },
+            { label: "Running Balance", value: r => afARMoney(r.balance), csv: r => r.balance }
+        ],
+        rows
+    });
+}
+
+function afAROpenBankBook() {
+    const rows = afARPaymentBook("BANK");
+    afAROpenTableReport({
+        id: "afBankBookModal",
+        title: "Bank Book",
+        subtitle: "Recorded Bank Transfer and Cheque receipts/payments",
+        note: "The current book contains bank-related transactions captured in customer payments and expenses. Bank opening balances, bank charges, direct deposits/withdrawals and transfers will become fully automatic when the double-entry accounting engine is connected.",
+        columns: [
+            { label: "Date", value: r => afARFormatDate(r.date) },
+            { label: "Reference", key: "reference" },
+            { label: "Particulars", key: "particulars" },
+            { label: "Method", key: "method" },
+            { label: "Received", value: r => afARMoney(r.received), csv: r => r.received },
+            { label: "Paid", value: r => afARMoney(r.paid), csv: r => r.paid },
+            { label: "Running Balance", value: r => afARMoney(r.balance), csv: r => r.balance }
+        ],
+        rows
+    });
+}
+
+function afAROpenSalesRegister() {
+    const rows = afARReadArray("afDeliveryRecords")
+        .filter(record => !afARIsCancelled(record))
+        .slice()
+        .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+
+    afAROpenTableReport({
+        id: "afSalesRegisterModal",
+        title: "Sales Register",
+        subtitle: "Pole/pellet deliveries and saved sale values",
+        columns: [
+            { label: "Date", value: r => afARFormatDate(r.date || r.createdAt) },
+            { label: "Delivery No.", value: r => r.deliveryNumber || r.id || "" },
+            { label: "Customer", value: r => r.customerName || r.clientName || "" },
+            { label: "Type", value: r => r.deliveryType || "" },
+            {
+                label: "Quantity",
+                value: r => {
+                    const qty = Number(r.totalPoles || r.quantity || r.totalKg || 0);
+                    return qty.toLocaleString();
+                },
+                csv: r => Number(r.totalPoles || r.quantity || r.totalKg || 0)
+            },
+            { label: "Sale Value", value: r => afARMoney(afARSaleValue(r)), csv: r => afARSaleValue(r) },
+            { label: "Status", value: r => r.status || "ACTIVE" }
+        ],
+        rows
+    });
+}
+
+function afAROpenPurchasesRegister() {
+    let rows = afARReadArray("afSupplierPurchases");
+    const suppliers = afARReadArray("afSuppliers");
+
+    if (!rows.length) {
+        rows = afARReadArray("materialRecords")
+            .filter(record =>
+                String(record.materialSource || "").toLowerCase() !== "client" &&
+                !afARIsCancelled(record)
+            )
+            .map(record => ({
+                date: record.date || record.purchaseDate || record.createdAt,
+                supplierName: record.supplierName || record.supplier || "",
+                materialType: record.materialType || "Kavera",
+                grossKg: Number(record.grossKg || record.weightKg || record.quantityKg || 0),
+                acceptedKg: Number(record.acceptedKg || record.netKg || record.grossKg || 0),
+                pricePerKg: Number(record.pricePerKg || record.unitPrice || 0),
+                totalCost: Number(record.totalCost || record.purchaseCost || record.amount || 0)
+            }));
+    } else {
+        rows = rows.map(record => ({
+            ...record,
+            supplierName:
+                record.supplierName ||
+                suppliers.find(s => String(s.id) === String(record.supplierId))?.name ||
+                "Unknown Supplier"
+        }));
+    }
+
+    rows = rows.slice().sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+
+    afAROpenTableReport({
+        id: "afPurchasesRegisterModal",
+        title: "Purchases Register",
+        subtitle: "Raw material and supplier purchase history",
+        columns: [
+            { label: "Date", value: r => afARFormatDate(r.date || r.createdAt) },
+            { label: "Supplier", value: r => r.supplierName || "" },
+            { label: "Material", value: r => r.materialType || "" },
+            { label: "Gross KG", value: r => Number(r.grossKg || 0).toLocaleString(), csv: r => Number(r.grossKg || 0) },
+            { label: "Accepted KG", value: r => Number(r.acceptedKg || 0).toLocaleString(), csv: r => Number(r.acceptedKg || 0) },
+            { label: "Price/KG", value: r => afARMoney(r.pricePerKg || 0), csv: r => Number(r.pricePerKg || 0) },
+            { label: "Total Cost", value: r => afARMoney(r.totalCost || r.materialCost || 0), csv: r => Number(r.totalCost || r.materialCost || 0) }
+        ],
+        rows
+    });
+}
+
+function afAROpenExpenseRegister() {
+    const rows = afARExpenses()
+        .slice()
+        .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+
+    afAROpenTableReport({
+        id: "afExpenseRegisterModal",
+        title: "Expense Register",
+        subtitle: "All recorded operating expenses",
+        columns: [
+            { label: "Date", value: r => afARFormatDate(r.date || r.expenseDate || r.createdAt) },
+            { label: "Expense No.", value: r => r.expenseNo || r.id || "" },
+            { label: "Category", value: r => r.category || "" },
+            { label: "Payee", value: r => r.payee || r.payeeEmployeeName || "" },
+            { label: "Description", value: r => r.description || "" },
+            { label: "Amount", value: r => afARMoney(r.amount), csv: r => Number(r.amount || 0) },
+            { label: "Payment", value: r => r.paymentMethod || "" },
+            { label: "Status", value: r => r.status || "ACTIVE" }
+        ],
+        rows
+    });
+}
+
+function afAROpenDebtorsLedger() {
+    const customers = afARReadArray("afCustomers");
+    const deliveries = afARReadArray("afDeliveryRecords").filter(r => !afARIsCancelled(r));
+    const payments = afARReadArray("afCustomerPayments");
+
+    const rows = customers.map(customer => {
+        const same = record => {
+            if (record.customerId && String(record.customerId) === String(customer.id)) return true;
+            return String(record.customerName || "").trim().toLowerCase() ===
+                   String(customer.name || "").trim().toLowerCase();
+        };
+
+        const sales = deliveries.filter(same).reduce((s, r) => s + afARSaleValue(r), 0);
+        const paid = payments.filter(same).reduce((s, r) => s + Number(r.amount || 0), 0);
+
+        return {
+            customerNo: customer.customerNo || customer.id || "",
+            name: customer.name || "",
+            phone: customer.phone || "",
+            sales,
+            paid,
+            balance: Math.max(sales - paid, 0)
+        };
+    }).sort((a, b) => b.balance - a.balance || a.name.localeCompare(b.name));
+
+    afAROpenTableReport({
+        id: "afDebtorsLedgerModal",
+        title: "Customer / Debtors Ledger",
+        subtitle: "Customer sales, payments and outstanding balances",
+        columns: [
+            { label: "Customer No.", key: "customerNo" },
+            { label: "Customer", key: "name" },
+            { label: "Phone", key: "phone" },
+            { label: "Sales", value: r => afARMoney(r.sales), csv: r => r.sales },
+            { label: "Paid", value: r => afARMoney(r.paid), csv: r => r.paid },
+            { label: "Balance", value: r => afARMoney(r.balance), csv: r => r.balance }
+        ],
+        rows
+    });
+}
+
+function afAROpenCreditorsLedger() {
+    const suppliers = afARReadArray("afSuppliers");
+    const purchases = afARReadArray("afSupplierPurchases");
+
+    const rows = suppliers.map(supplier => {
+        const supplierPurchases = purchases.filter(p => String(p.supplierId) === String(supplier.id));
+        const purchasesValue = supplierPurchases.reduce(
+            (sum, p) => sum + Number(p.totalCost || p.materialCost || 0),
+            0
+        );
+
+        return {
+            supplier: supplier.name || "",
+            phone: supplier.phone || "",
+            material: supplier.material || "",
+            purchases: purchasesValue,
+            payments: "Not yet linked",
+            balance: "Pending supplier-payment posting"
+        };
+    }).sort((a, b) => b.purchases - a.purchases);
+
+    afAROpenTableReport({
+        id: "afCreditorsLedgerModal",
+        title: "Supplier / Creditors Ledger",
+        subtitle: "Supplier purchase position",
+        note: "Supplier purchases are already available. Supplier payment records are not yet posted as a separate linked accounting stream, so this screen does not invent a creditor balance. The final balance will become automatic when supplier payments are connected.",
+        columns: [
+            { label: "Supplier", key: "supplier" },
+            { label: "Phone", key: "phone" },
+            { label: "Material", key: "material" },
+            { label: "Purchase Value", value: r => afARMoney(r.purchases), csv: r => r.purchases },
+            { label: "Recorded Payments", key: "payments" },
+            { label: "Balance", key: "balance" }
+        ],
+        rows
+    });
+}
+
+function afAROpenProductionRegister() {
+    const rows = afARReadArray("productionRecords")
+        .slice()
+        .sort((a, b) => String(b.date || b.createdAt || "").localeCompare(String(a.date || a.createdAt || "")));
+
+    afAROpenTableReport({
+        id: "afProductionRegisterModal",
+        title: "Production Register",
+        subtitle: "Recorded factory production",
+        columns: [
+            { label: "Date", value: r => afARFormatDate(r.date || r.createdAt) },
+            { label: "Reference", value: r => r.productionNumber || r.productionId || r.id || "" },
+            { label: "Input KG", value: r => Number(r.inputKg || r.materialUsedKg || r.totalInputKg || 0).toLocaleString(), csv: r => Number(r.inputKg || r.materialUsedKg || r.totalInputKg || 0) },
+            { label: "Poles Produced", value: r => Number(r.totalPoles || r.quantityProduced || 0).toLocaleString(), csv: r => Number(r.totalPoles || r.quantityProduced || 0) },
+            { label: "Finished KG", value: r => Number(r.finishedKg || r.outputKg || 0).toLocaleString(), csv: r => Number(r.finishedKg || r.outputKg || 0) },
+            { label: "Loss KG", value: r => Number(r.lossKg || r.processLossKg || 0).toLocaleString(), csv: r => Number(r.lossKg || r.processLossKg || 0) },
+            { label: "Recorded By", value: r => r.recordedBy || r.createdBy || "" }
+        ],
+        rows
+    });
+}
+
+/* =========================================================
+   MANUAL JOURNAL REGISTER
+   ========================================================= */
+
+function afAROpenJournalRegister() {
+    const role = afARRole();
+    if (!["Director", "Secretary"].includes(role)) {
+        alert("Access Denied.");
+        return;
+    }
+
+    const { modal, body } = afAROpenModal(
+        "afJournalRegisterModal",
+        "Journal Register",
+        "Manual accounting adjustments and corrections",
+        1050
+    );
+
+    function render() {
+        const records = afARReadArray(AF_JOURNAL_KEY)
+            .slice()
+            .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+
+        const rows = records.length
+            ? records.map(r => `
+                <tr>
+                    <td>${afAREscape(afARFormatDate(r.date))}</td>
+                    <td>${afAREscape(r.reference || "")}</td>
+                    <td>${afAREscape(r.debitAccount || "")}</td>
+                    <td>${afAREscape(r.creditAccount || "")}</td>
+                    <td style="text-align:right;">${afARMoney(r.amount)}</td>
+                    <td>${afAREscape(r.narration || "")}</td>
+                    <td>${afAREscape(r.enteredBy || "")}</td>
+                </tr>
+            `).join("")
+            : `<tr><td colspan="7" style="padding:16px;text-align:center;color:#777;">No journal entries.</td></tr>`;
+
+        body.innerHTML = `
+            <div style="
+                padding:12px;
+                background:#fff7e6;
+                border:1px solid #efdfb7;
+                border-radius:8px;
+                font-size:12px;
+                line-height:1.5;
+                margin-bottom:14px;
+            ">
+                Use this register for genuine accounting adjustments only. Normal sales, purchases,
+                expenses and payroll should continue to be entered through their normal modules.
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:9px;margin-bottom:12px;">
+                <label>Date<input id="afJournalDate" type="date" value="${afARToday()}" style="width:100%;box-sizing:border-box;padding:8px;margin-top:4px;"></label>
+                <label>Reference<input id="afJournalRef" type="text" placeholder="JV-..." style="width:100%;box-sizing:border-box;padding:8px;margin-top:4px;"></label>
+                <label>Debit Account<input id="afJournalDebit" type="text" style="width:100%;box-sizing:border-box;padding:8px;margin-top:4px;"></label>
+                <label>Credit Account<input id="afJournalCredit" type="text" style="width:100%;box-sizing:border-box;padding:8px;margin-top:4px;"></label>
+                <label>Amount<input id="afJournalAmount" type="number" min="0" step="100" style="width:100%;box-sizing:border-box;padding:8px;margin-top:4px;"></label>
+                <label style="grid-column:span 2;">Narration<input id="afJournalNarration" type="text" style="width:100%;box-sizing:border-box;padding:8px;margin-top:4px;"></label>
+            </div>
+
+            <button id="afSaveJournal" type="button" style="${afARPrimaryButtonStyle()}">💾 Save Journal Entry</button>
+
+            <div style="overflow:auto;border:1px solid #ddd;border-radius:8px;margin-top:15px;">
+                <table style="width:100%;min-width:900px;border-collapse:collapse;font-size:12px;">
+                    <thead><tr style="background:#eef8f2;text-align:left;">
+                        <th>Date</th><th>Reference</th><th>Debit Account</th><th>Credit Account</th><th>Amount</th><th>Narration</th><th>Entered By</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        `;
+
+        body.querySelectorAll("th,td").forEach(cell => {
+            cell.style.padding = "8px";
+            cell.style.borderBottom = "1px solid #eee";
+        });
+
+        body.querySelector("#afSaveJournal").onclick = () => {
+            const date = body.querySelector("#afJournalDate").value;
+            const debitAccount = body.querySelector("#afJournalDebit").value.trim();
+            const creditAccount = body.querySelector("#afJournalCredit").value.trim();
+            const amount = Number(body.querySelector("#afJournalAmount").value || 0);
+            const narration = body.querySelector("#afJournalNarration").value.trim();
+
+            if (!date || !debitAccount || !creditAccount || amount <= 0 || !narration) {
+                alert("Please complete Date, Debit Account, Credit Account, Amount and Narration.");
+                return;
+            }
+
+            const records = afARReadArray(AF_JOURNAL_KEY);
+            records.push({
+                id: afARUID("JV"),
+                date,
+                reference: body.querySelector("#afJournalRef").value.trim() || ("JV-" + Date.now()),
+                debitAccount,
+                creditAccount,
+                amount,
+                narration,
+                enteredBy: afARUserName(),
+                enteredAt: new Date().toISOString()
+            });
+            afARWriteArray(AF_JOURNAL_KEY, records);
+            alert("Journal entry saved successfully.");
+            render();
+        };
+    }
+
+    render();
+}
+
+/* =========================================================
+   FIXED ASSET REGISTER
+   ========================================================= */
+
+function afAROpenFixedAssets() {
+    const role = afARRole();
+    const canEdit = role === "Director";
+
+    const { body } = afAROpenModal(
+        "afFixedAssetModal",
+        "Fixed Asset Register",
+        "Machines, vehicles, equipment, furniture and other company assets",
+        1120
+    );
+
+    function render() {
+        const assets = afARReadArray(AF_FIXED_ASSETS_KEY)
+            .slice()
+            .sort((a, b) => String(a.assetNo || "").localeCompare(String(b.assetNo || "")));
+
+        const rows = assets.length
+            ? assets.map(asset => `
+                <tr>
+                    <td>${afAREscape(asset.assetNo || "")}</td>
+                    <td>${afAREscape(asset.name || "")}</td>
+                    <td>${afAREscape(asset.category || "")}</td>
+                    <td>${afAREscape(afARFormatDate(asset.purchaseDate))}</td>
+                    <td style="text-align:right;">${afARMoney(asset.cost)}</td>
+                    <td>${afAREscape(asset.location || "")}</td>
+                    <td>${afAREscape(asset.condition || "")}</td>
+                    <td>${afAREscape(asset.status || "ACTIVE")}</td>
+                </tr>
+            `).join("")
+            : `<tr><td colspan="8" style="padding:16px;text-align:center;color:#777;">No fixed assets registered yet.</td></tr>`;
+
+        body.innerHTML = `
+            ${canEdit ? `
+                <button id="afAddFixedAsset" type="button" style="${afARPrimaryButtonStyle()};margin-bottom:12px;">
+                    ＋ Add Fixed Asset
+                </button>
+            ` : ""}
+
+            <div style="overflow:auto;border:1px solid #ddd;border-radius:9px;">
+                <table style="width:100%;min-width:900px;border-collapse:collapse;font-size:12px;">
+                    <thead><tr style="background:#eef8f2;text-align:left;">
+                        <th>Asset No.</th><th>Asset</th><th>Category</th><th>Purchase Date</th><th>Cost</th><th>Location</th><th>Condition</th><th>Status</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        `;
+
+        body.querySelectorAll("th,td").forEach(cell => {
+            cell.style.padding = "8px";
+            cell.style.borderBottom = "1px solid #eee";
+        });
+
+        const add = body.querySelector("#afAddFixedAsset");
+        if (add) {
+            add.onclick = () => afAROpenFixedAssetForm(render);
+        }
+    }
+
+    render();
+}
+
+function afAROpenFixedAssetForm(onSaved) {
+    const { modal, body } = afAROpenModal(
+        "afFixedAssetFormModal",
+        "Register Fixed Asset",
+        "Director entry",
+        720
+    );
+
+    body.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;">
+            <label>Asset Name<input id="afAssetName" type="text" style="width:100%;box-sizing:border-box;padding:9px;margin-top:4px;"></label>
+            <label>Category<select id="afAssetCategory" style="width:100%;box-sizing:border-box;padding:9px;margin-top:4px;">
+                <option>Machine</option><option>Vehicle</option><option>Electrical Equipment</option><option>Tool</option><option>Furniture</option><option>Computer / ICT</option><option>Building / Improvement</option><option>Other</option>
+            </select></label>
+            <label>Purchase Date<input id="afAssetDate" type="date" value="${afARToday()}" style="width:100%;box-sizing:border-box;padding:9px;margin-top:4px;"></label>
+            <label>Purchase Cost<input id="afAssetCost" type="number" min="0" step="100" style="width:100%;box-sizing:border-box;padding:9px;margin-top:4px;"></label>
+            <label>Location<input id="afAssetLocation" type="text" style="width:100%;box-sizing:border-box;padding:9px;margin-top:4px;"></label>
+            <label>Condition<select id="afAssetCondition" style="width:100%;box-sizing:border-box;padding:9px;margin-top:4px;">
+                <option>Good</option><option>Need Attention</option><option>Not Working</option>
+            </select></label>
+            <label>Status<select id="afAssetStatus" style="width:100%;box-sizing:border-box;padding:9px;margin-top:4px;">
+                <option>ACTIVE</option><option>UNDER REPAIR</option><option>DISPOSED</option>
+            </select></label>
+            <label style="grid-column:1/-1;">Notes<textarea id="afAssetNotes" rows="3" style="width:100%;box-sizing:border-box;padding:9px;margin-top:4px;"></textarea></label>
+        </div>
+        <button id="afSaveAsset" type="button" style="${afARPrimaryButtonStyle()};margin-top:12px;">💾 Save Asset</button>
+    `;
+
+    body.querySelector("#afSaveAsset").onclick = () => {
+        const name = body.querySelector("#afAssetName").value.trim();
+        if (!name) {
+            alert("Enter the asset name.");
+            return;
+        }
+
+        const assets = afARReadArray(AF_FIXED_ASSETS_KEY);
+        assets.push({
+            id: afARUID("AST"),
+            assetNo: "AST-" + String(assets.length + 1).padStart(4, "0"),
+            name,
+            category: body.querySelector("#afAssetCategory").value,
+            purchaseDate: body.querySelector("#afAssetDate").value,
+            cost: Number(body.querySelector("#afAssetCost").value || 0),
+            location: body.querySelector("#afAssetLocation").value.trim(),
+            condition: body.querySelector("#afAssetCondition").value,
+            status: body.querySelector("#afAssetStatus").value,
+            notes: body.querySelector("#afAssetNotes").value.trim(),
+            createdBy: afARUserName(),
+            createdAt: new Date().toISOString()
+        });
+        afARWriteArray(AF_FIXED_ASSETS_KEY, assets);
+        modal.remove();
+        alert("Fixed asset saved successfully.");
+        if (typeof onSaved === "function") onSaved();
+    };
+}
+
+/* =========================================================
+   ACCOUNTING ENGINE STATUS FOR STATEMENTS NOT YET SAFE
+   ========================================================= */
+
+function afAROpenAccountingEngineStatus(title) {
+    const { body } = afAROpenModal(
+        "afAccountingEngineStatusModal",
+        title,
+        "Accounting engine connection status",
+        760
+    );
+
+    body.innerHTML = `
+        <div style="padding:14px;background:#fff7e6;border:1px solid #efdfb7;border-radius:9px;line-height:1.6;font-size:13px;">
+            <b>${afAREscape(title)}</b> is now available from the Accounts & Reports hub, but it should not be calculated from incomplete assumptions.
+            <br><br>
+            The app already records sales, purchases, expenses, payroll, stock and production. The next accounting-engine stage will add a Chart of Accounts, opening balances and automatic debit/credit posting for every transaction. Once that is connected, this statement will calculate automatically and reliably.
+        </div>
+    `;
+}
+
+/* =========================================================
+   ACCOUNTS & REPORTS HUB
+   ========================================================= */
+
+function openAFAccountsReports() {
+    const role = afARRole();
+
+    if (!["Director", "Secretary"].includes(role)) {
+        alert("Access Denied\n\nOnly authorised Accounts users can open Accounts & Reports.");
+        return;
+    }
+
+    const { modal, body } = afAROpenModal(
+        "afAccountsReportsHub",
+        "📊 Accounts & Reports",
+        "Books of Accounts • Ledgers • Financial Statements • Factory Records",
+        1080
+    );
+
+    const card = (action, icon, title, text, status = "LIVE") => `
+        <button type="button" data-af-account-action="${afAREscape(action)}" style="${afARButtonStyle()}">
+            <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">
+                <div style="font-size:21px;">${icon}</div>
+                <span style="font-size:9px;font-weight:bold;padding:3px 6px;border-radius:10px;background:${status === "LIVE" ? "#e6f5eb" : "#fff0cf"};color:${status === "LIVE" ? "#0b5d3b" : "#7a5b00"};">
+                    ${afAREscape(status)}
+                </span>
+            </div>
+            <div style="font-weight:bold;color:#163a28;margin-top:6px;">${afAREscape(title)}</div>
+            <div style="font-size:11px;color:#68756e;margin-top:4px;line-height:1.4;">${afAREscape(text)}</div>
+        </button>
+    `;
+
+    body.innerHTML = `
+        <div style="font-weight:bold;color:#0b5d3b;margin:4px 0 9px;">Books of Accounts</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;">
+            ${card("cash", "💵", "Cash Book", "Cash and Mobile Money receipts/payments")}
+            ${card("bank", "🏦", "Bank Book", "Bank Transfer and Cheque movements")}
+            ${card("sales", "🧾", "Sales Register", "All saved sales and deliveries")}
+            ${card("purchases", "🛒", "Purchases Register", "Raw material and supplier purchases")}
+            ${card("expenses", "💸", "Expense Register", "All recorded operating expenses")}
+            ${card("journal", "📓", "Journal Register", "Manual adjustments and corrections")}
+        </div>
+
+        <div style="font-weight:bold;color:#0b5d3b;margin:20px 0 9px;">Ledgers</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;">
+            ${card("generalLedger", "📚", "General Ledger", "Central debit/credit ledger", "ENGINE NEXT")}
+            ${card("debtors", "👥", "Customer / Debtors Ledger", "Sales, payments and customer balances")}
+            ${card("creditors", "🤝", "Supplier / Creditors Ledger", "Purchases and supplier position")}
+            ${card("payroll", "👤", "Payroll Ledger", "Employee earnings, payments and balances")}
+            ${card("stock", "📦", "Stock / Inventory Ledger", "Live factory material and finished stock")}
+            ${card("assets", "🏭", "Fixed Asset Register", "Machines, vehicles and equipment")}
+        </div>
+
+        <div style="font-weight:bold;color:#0b5d3b;margin:20px 0 9px;">Financial Statements</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;">
+            ${card("trialBalance", "⚖️", "Trial Balance", "Debit and credit account balances", "ENGINE NEXT")}
+            ${card("profitLoss", "📈", "Profit & Loss", "Sales, COGS, expenses and net result")}
+            ${card("balanceSheet", "🏢", "Balance Sheet", "Assets, liabilities and equity", "ENGINE NEXT")}
+            ${card("cashFlow", "💰", "Cash Flow Statement", "Operating, investing and financing cash flows", "ENGINE NEXT")}
+        </div>
+
+        <div style="font-weight:bold;color:#0b5d3b;margin:20px 0 9px;">Factory Records & Export</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;">
+            ${card("production", "⚙️", "Production Register", "Recorded production and output")}
+            ${card("stockMovement", "🔄", "Stock Movement", "Open the live Stock & Inventory screen")}
+            ${card("reportsHub", "📊", "Other Reports / Export", "Operational reports and existing exports")}
+        </div>
+    `;
+
+    const actions = {
+        cash: afAROpenCashBook,
+        bank: afAROpenBankBook,
+        sales: afAROpenSalesRegister,
+        purchases: afAROpenPurchasesRegister,
+        expenses: afAROpenExpenseRegister,
+        journal: afAROpenJournalRegister,
+        generalLedger: () => afAROpenAccountingEngineStatus("General Ledger"),
+        debtors: afAROpenDebtorsLedger,
+        creditors: afAROpenCreditorsLedger,
+        payroll: () => {
+            modal.remove();
+            if (typeof managePayrollLedger === "function") managePayrollLedger();
+            else alert("Payroll Ledger could not be opened.");
+        },
+        stock: () => {
+            modal.remove();
+            if (typeof window.checkAFStockInventory === "function") window.checkAFStockInventory();
+            else alert("Stock & Inventory could not be opened.");
+        },
+        assets: afAROpenFixedAssets,
+        trialBalance: () => afAROpenAccountingEngineStatus("Trial Balance"),
+        profitLoss: () => {
+            modal.remove();
+            if (typeof window.openAFProfitLossReport === "function") window.openAFProfitLossReport();
+            else alert("Profit & Loss report could not be opened.");
+        },
+        balanceSheet: () => afAROpenAccountingEngineStatus("Balance Sheet"),
+        cashFlow: () => afAROpenAccountingEngineStatus("Cash Flow Statement"),
+        production: afAROpenProductionRegister,
+        stockMovement: () => {
+            modal.remove();
+            if (typeof window.checkAFStockInventory === "function") window.checkAFStockInventory();
+            else alert("Stock Movement could not be opened.");
+        },
+        reportsHub: () => {
+            modal.remove();
+            if (typeof window.openAFReportsHub === "function") window.openAFReportsHub();
+            else if (typeof monthlyClientSummary === "function") monthlyClientSummary();
+            else alert("Reports could not be opened.");
+        }
+    };
+
+    body.querySelectorAll("[data-af-account-action]").forEach(button => {
+        button.onclick = () => {
+            const action = button.getAttribute("data-af-account-action");
+            const fn = actions[action];
+            if (typeof fn === "function") fn();
+        };
+    });
+
+    afARCloseMobileMenu();
+}
+
+/* =========================================================
+   WEEK / DUE DATE HELPERS
+   Weekly check is due every Friday.
+   ========================================================= */
+
+function afARParseLocalDate(value) {
+    const m = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return new Date();
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+}
+
+function afARLocalDateString(date) {
+    return (
+        date.getFullYear() +
+        "-" +
+        String(date.getMonth() + 1).padStart(2, "0") +
+        "-" +
+        String(date.getDate()).padStart(2, "0")
+    );
+}
+
+function afARWeekInfo(dateValue = afARToday()) {
+    const base = afARParseLocalDate(dateValue);
+    const day = base.getDay() || 7;
+    const monday = new Date(base);
+    monday.setDate(base.getDate() - day + 1);
+
+    const friday = new Date(monday);
+    friday.setDate(monday.getDate() + 4);
+
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+
+    return {
+        key: afARLocalDateString(monday),
+        monday: afARLocalDateString(monday),
+        friday: afARLocalDateString(friday),
+        sunday: afARLocalDateString(sunday)
+    };
+}
+
+function afARFactoryItems() {
+    return afARReadArray(AF_FACTORY_ITEMS_KEY);
+}
+
+function afARWeeklyChecks() {
+    return afARReadArray(AF_WEEKLY_CHECKS_KEY);
+}
+
+function afARActiveFactoryItems() {
+    return afARFactoryItems().filter(item => item.active !== false);
+}
+
+function afARCheckAttentionItem(itemCheck) {
+    return (
+        itemCheck.condition !== "Good" ||
+        itemCheck.missing === true ||
+        itemCheck.damaged === true ||
+        itemCheck.needsRepair === true ||
+        String(itemCheck.actionRequired || "").trim() !== ""
+    );
+}
+
+function afARLatestWeeklyCheck() {
+    return afARWeeklyChecks()
+        .slice()
+        .sort((a, b) => String(b.weekKey || b.checkDate || "").localeCompare(String(a.weekKey || a.checkDate || "")))[0] || null;
+}
+
+function afARCurrentWeekCheck() {
+    const key = afARWeekInfo().key;
+    return afARWeeklyChecks().find(check => String(check.weekKey) === String(key)) || null;
+}
+
+function afARWeeklyStatus() {
+    const current = afARCurrentWeekCheck();
+    const week = afARWeekInfo();
+    const now = afARParseLocalDate(afARToday());
+    const friday = afARParseLocalDate(week.friday);
+
+    if (current) {
+        const attention = (current.items || []).filter(afARCheckAttentionItem).length;
+        return {
+            state: attention > 0 ? "ATTENTION" : "COMPLETED",
+            label: attention > 0 ? `${attention} item(s) require attention` : "This week's check completed",
+            current
+        };
+    }
+
+    if (now >= friday) {
+        return {
+            state: "DUE",
+            label: "Weekly items check is due",
+            current: null
+        };
+    }
+
+    return {
+        state: "UPCOMING",
+        label: "Next check due Friday " + afARFormatDate(week.friday),
+        current: null
+    };
+}
+
+/* =========================================================
+   FACTORY ITEM REGISTER
+   Director manages register; Manager can view.
+   ========================================================= */
+
+function afAROpenFactoryItemRegister() {
+    const canEdit = afARRole() === "Director";
+    const { body } = afAROpenModal(
+        "afFactoryItemRegisterModal",
+        "Factory Items & Equipment Register",
+        canEdit ? "Director can register and maintain factory items" : "Manager view",
+        1120
+    );
+
+    function render() {
+        const items = afARFactoryItems()
+            .slice()
+            .sort((a, b) => String(a.itemName || "").localeCompare(String(b.itemName || "")));
+
+        const rows = items.length
+            ? items.map(item => `
+                <tr style="${item.active === false ? "opacity:.55;" : ""}">
+                    <td>${afAREscape(item.itemCode || "")}</td>
+                    <td>${afAREscape(item.itemName || "")}</td>
+                    <td>${afAREscape(item.category || "")}</td>
+                    <td>${Number(item.quantity || 0).toLocaleString()} ${afAREscape(item.unit || "")}</td>
+                    <td>${afAREscape(item.location || "")}</td>
+                    <td>${afAREscape(item.responsiblePerson || "")}</td>
+                    <td>${item.active === false ? "Inactive" : "Active"}</td>
+                    ${canEdit ? `
+                        <td>
+                            <button type="button" data-af-edit-item="${afAREscape(item.id)}" style="${afARSecondaryButtonStyle()};padding:6px 9px;">Edit</button>
+                        </td>
+                    ` : ""}
+                </tr>
+            `).join("")
+            : `<tr><td colspan="${canEdit ? 8 : 7}" style="padding:16px;text-align:center;color:#777;">No factory items registered yet.</td></tr>`;
+
+        body.innerHTML = `
+            ${canEdit ? `<button id="afAddFactoryItem" type="button" style="${afARPrimaryButtonStyle()};margin-bottom:12px;">＋ Register Factory Item</button>` : ""}
+            <div style="overflow:auto;border:1px solid #ddd;border-radius:9px;">
+                <table style="width:100%;min-width:900px;border-collapse:collapse;font-size:12px;">
+                    <thead><tr style="background:#eef8f2;text-align:left;">
+                        <th>Item Code</th><th>Item / Equipment</th><th>Category</th><th>Quantity</th><th>Location</th><th>Responsible Person</th><th>Status</th>${canEdit ? "<th>Action</th>" : ""}
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        `;
+
+        body.querySelectorAll("th,td").forEach(cell => {
+            cell.style.padding = "8px";
+            cell.style.borderBottom = "1px solid #eee";
+        });
+
+        if (canEdit) {
+            body.querySelector("#afAddFactoryItem").onclick = () => afAROpenFactoryItemForm(null, render);
+            body.querySelectorAll("[data-af-edit-item]").forEach(btn => {
+                btn.onclick = () => {
+                    const item = afARFactoryItems().find(x => String(x.id) === String(btn.getAttribute("data-af-edit-item")));
+                    if (item) afAROpenFactoryItemForm(item, render);
+                };
+            });
+        }
+    }
+
+    render();
+}
+
+function afAROpenFactoryItemForm(existing, onSaved) {
+    const { modal, body } = afAROpenModal(
+        "afFactoryItemFormModal",
+        existing ? "Edit Factory Item" : "Register Factory Item",
+        "Item will appear in the weekly physical stock-taking checklist",
+        760
+    );
+
+    body.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;">
+            <label>Item / Equipment Name<input id="afItemName" type="text" value="${afAREscape(existing?.itemName || "")}" style="width:100%;box-sizing:border-box;padding:9px;margin-top:4px;"></label>
+            <label>Category<select id="afItemCategory" style="width:100%;box-sizing:border-box;padding:9px;margin-top:4px;">
+                ${["Machine","Tool","Electrical","Safety / PPE","Vehicle / Transport","Office","Furniture","Spare / Critical Part","Other"].map(v => `<option ${existing?.category === v ? "selected" : ""}>${afAREscape(v)}</option>`).join("")}
+            </select></label>
+            <label>Quantity<input id="afItemQty" type="number" min="0" step="1" value="${Number(existing?.quantity || 1)}" style="width:100%;box-sizing:border-box;padding:9px;margin-top:4px;"></label>
+            <label>Unit<input id="afItemUnit" type="text" value="${afAREscape(existing?.unit || "pcs")}" style="width:100%;box-sizing:border-box;padding:9px;margin-top:4px;"></label>
+            <label>Factory Location<input id="afItemLocation" type="text" value="${afAREscape(existing?.location || "")}" placeholder="Production, Store, Office..." style="width:100%;box-sizing:border-box;padding:9px;margin-top:4px;"></label>
+            <label>Responsible Person<input id="afItemResponsible" type="text" value="${afAREscape(existing?.responsiblePerson || "")}" style="width:100%;box-sizing:border-box;padding:9px;margin-top:4px;"></label>
+            <label>Status<select id="afItemActive" style="width:100%;box-sizing:border-box;padding:9px;margin-top:4px;">
+                <option value="true" ${existing?.active !== false ? "selected" : ""}>Active</option>
+                <option value="false" ${existing?.active === false ? "selected" : ""}>Inactive</option>
+            </select></label>
+            <label style="grid-column:1/-1;">Notes<textarea id="afItemNotes" rows="3" style="width:100%;box-sizing:border-box;padding:9px;margin-top:4px;">${afAREscape(existing?.notes || "")}</textarea></label>
+        </div>
+        <button id="afSaveFactoryItem" type="button" style="${afARPrimaryButtonStyle()};margin-top:12px;">💾 Save Item</button>
+    `;
+
+    body.querySelector("#afSaveFactoryItem").onclick = () => {
+        const name = body.querySelector("#afItemName").value.trim();
+        if (!name) {
+            alert("Enter the item/equipment name.");
+            return;
+        }
+
+        const items = afARFactoryItems();
+
+        if (existing) {
+            const index = items.findIndex(x => String(x.id) === String(existing.id));
+            if (index >= 0) {
+                items[index] = {
+                    ...items[index],
+                    itemName: name,
+                    category: body.querySelector("#afItemCategory").value,
+                    quantity: Number(body.querySelector("#afItemQty").value || 0),
+                    unit: body.querySelector("#afItemUnit").value.trim(),
+                    location: body.querySelector("#afItemLocation").value.trim(),
+                    responsiblePerson: body.querySelector("#afItemResponsible").value.trim(),
+                    active: body.querySelector("#afItemActive").value === "true",
+                    notes: body.querySelector("#afItemNotes").value.trim(),
+                    updatedBy: afARUserName(),
+                    updatedAt: new Date().toISOString()
+                };
+            }
+        } else {
+            const number = items.length + 1;
+            items.push({
+                id: afARUID("ITEM"),
+                itemCode: "ITM-" + String(number).padStart(4, "0"),
+                itemName: name,
+                category: body.querySelector("#afItemCategory").value,
+                quantity: Number(body.querySelector("#afItemQty").value || 0),
+                unit: body.querySelector("#afItemUnit").value.trim(),
+                location: body.querySelector("#afItemLocation").value.trim(),
+                responsiblePerson: body.querySelector("#afItemResponsible").value.trim(),
+                active: body.querySelector("#afItemActive").value === "true",
+                notes: body.querySelector("#afItemNotes").value.trim(),
+                createdBy: afARUserName(),
+                createdAt: new Date().toISOString()
+            });
+        }
+
+        afARWriteArray(AF_FACTORY_ITEMS_KEY, items);
+        modal.remove();
+        alert("Factory item saved successfully.");
+        if (typeof onSaved === "function") onSaved();
+        afARRenderWeeklyStockDashboardCard();
+    };
+}
+
+/* =========================================================
+   WEEKLY CHECK FORM
+   Conditions:
+   Good / Need Attention / Not Working
+   Separate flags:
+   Missing / Damaged / Needs Repair
+   ========================================================= */
+
+function afAROpenWeeklyCheckForm() {
+    const role = afARRole();
+    if (!["Director", "Manager"].includes(role)) {
+        alert("Access Denied.");
+        return;
+    }
+
+    const items = afARActiveFactoryItems();
+    if (!items.length) {
+        alert(
+            role === "Director"
+                ? "Register factory items first before starting the weekly stock taking."
+                : "No active factory items have been registered. Ask the Director to register them first."
+        );
+        return;
+    }
+
+    const week = afARWeekInfo();
+    const existing = afARCurrentWeekCheck();
+    const previousById = {};
+    (existing?.items || []).forEach(item => {
+        previousById[String(item.itemId)] = item;
+    });
+
+    const { modal, body } = afAROpenModal(
+        "afWeeklyCheckFormModal",
+        existing ? "Update This Week's Stock Taking" : "Weekly Stock Taking",
+        `Week ${afARFormatDate(week.monday)} to ${afARFormatDate(week.sunday)} • Due Friday ${afARFormatDate(week.friday)}`,
+        1280
+    );
+
+    const rows = items.map(item => {
+        const old = previousById[String(item.id)] || {};
+        const condition = old.condition || "";
+
+        return `
+            <tr data-af-check-row="${afAREscape(item.id)}">
+                <td>
+                    <b>${afAREscape(item.itemName)}</b>
+                    <div style="font-size:10px;color:#777;">${afAREscape(item.itemCode || "")} • ${afAREscape(item.location || "")}</div>
+                </td>
+                <td>${Number(item.quantity || 0).toLocaleString()} ${afAREscape(item.unit || "")}</td>
+                <td>
+                    <select class="afCheckCondition" style="padding:7px;width:145px;">
+                        <option value="">-- Condition --</option>
+                        <option value="Good" ${condition === "Good" ? "selected" : ""}>Good</option>
+                        <option value="Need Attention" ${condition === "Need Attention" ? "selected" : ""}>Need Attention</option>
+                        <option value="Not Working" ${condition === "Not Working" ? "selected" : ""}>Not Working</option>
+                    </select>
+                </td>
+                <td style="text-align:center;"><input class="afCheckMissing" type="checkbox" ${old.missing ? "checked" : ""}></td>
+                <td style="text-align:center;"><input class="afCheckDamaged" type="checkbox" ${old.damaged ? "checked" : ""}></td>
+                <td style="text-align:center;"><input class="afCheckRepair" type="checkbox" ${old.needsRepair ? "checked" : ""}></td>
+                <td><input class="afCheckRemarks" type="text" value="${afAREscape(old.remarks || "")}" style="width:180px;padding:7px;box-sizing:border-box;"></td>
+                <td><input class="afCheckAction" type="text" value="${afAREscape(old.actionRequired || "")}" placeholder="Repair / replace / follow up" style="width:190px;padding:7px;box-sizing:border-box;"></td>
+            </tr>
+        `;
+    }).join("");
+
+    body.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:12px;">
+            <label>Check Date<input id="afWeeklyCheckDate" type="date" value="${existing?.checkDate || afARToday()}" style="width:100%;box-sizing:border-box;padding:9px;margin-top:4px;"></label>
+            <label>Checked By<input id="afWeeklyCheckedBy" type="text" value="${afAREscape(existing?.checkedBy || afARUserName())}" style="width:100%;box-sizing:border-box;padding:9px;margin-top:4px;"></label>
+            <label>General Notes<input id="afWeeklyGeneralNotes" type="text" value="${afAREscape(existing?.generalNotes || "")}" style="width:100%;box-sizing:border-box;padding:9px;margin-top:4px;"></label>
+        </div>
+
+        <div style="padding:10px 12px;background:#eef8f2;border-radius:8px;margin-bottom:12px;font-size:12px;line-height:1.5;">
+            Check each physical item. Condition must be <b>Good</b>, <b>Need Attention</b> or <b>Not Working</b>.
+            Also tick <b>Missing</b>, <b>Damaged</b> or <b>Needs Repair</b> where applicable.
+        </div>
+
+        <div style="overflow:auto;border:1px solid #ddd;border-radius:9px;">
+            <table style="width:100%;min-width:1180px;border-collapse:collapse;font-size:12px;">
+                <thead><tr style="background:#eef8f2;text-align:left;">
+                    <th>Item / Equipment</th><th>Qty</th><th>Condition</th><th>Missing</th><th>Damaged</th><th>Need Repair</th><th>Remarks</th><th>Action Required</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+
+        <button id="afSaveWeeklyCheck" type="button" style="${afARPrimaryButtonStyle()};margin-top:14px;">
+            💾 Save Weekly Stock Taking
+        </button>
+    `;
+
+    body.querySelectorAll("th,td").forEach(cell => {
+        cell.style.padding = "8px";
+        cell.style.borderBottom = "1px solid #eee";
+        cell.style.verticalAlign = "middle";
+    });
+
+    body.querySelectorAll("[data-af-check-row]").forEach(row => {
+        const condition = row.querySelector(".afCheckCondition");
+        const flagInputs = [
+            row.querySelector(".afCheckMissing"),
+            row.querySelector(".afCheckDamaged"),
+            row.querySelector(".afCheckRepair")
+        ];
+
+        flagInputs.forEach(input => {
+            input.onchange = () => {
+                if (input.checked && condition.value === "Good") {
+                    condition.value = "Need Attention";
+                }
+            };
+        });
+    });
+
+    body.querySelector("#afSaveWeeklyCheck").onclick = () => {
+        const itemChecks = [];
+        let missingCondition = false;
+
+        body.querySelectorAll("[data-af-check-row]").forEach(row => {
+            const itemId = row.getAttribute("data-af-check-row");
+            const item = items.find(x => String(x.id) === String(itemId));
+            let condition = row.querySelector(".afCheckCondition").value;
+            const missing = row.querySelector(".afCheckMissing").checked;
+            const damaged = row.querySelector(".afCheckDamaged").checked;
+            const needsRepair = row.querySelector(".afCheckRepair").checked;
+
+            if (!condition) {
+                missingCondition = true;
+                return;
+            }
+
+            if ((missing || damaged || needsRepair) && condition === "Good") {
+                condition = "Need Attention";
+            }
+
+            itemChecks.push({
+                itemId,
+                itemCode: item?.itemCode || "",
+                itemName: item?.itemName || "",
+                category: item?.category || "",
+                quantity: Number(item?.quantity || 0),
+                unit: item?.unit || "",
+                location: item?.location || "",
+                responsiblePerson: item?.responsiblePerson || "",
+                condition,
+                missing,
+                damaged,
+                needsRepair,
+                remarks: row.querySelector(".afCheckRemarks").value.trim(),
+                actionRequired: row.querySelector(".afCheckAction").value.trim()
+            });
+        });
+
+        if (missingCondition) {
+            alert("Please select a condition for every factory item before saving.");
+            return;
+        }
+
+        const checkedBy = body.querySelector("#afWeeklyCheckedBy").value.trim();
+        if (!checkedBy) {
+            alert("Enter who performed the stock taking.");
+            return;
+        }
+
+        const checks = afARWeeklyChecks();
+        const summary = {
+            itemsChecked: itemChecks.length,
+            good: itemChecks.filter(x => x.condition === "Good").length,
+            needAttention: itemChecks.filter(x => x.condition === "Need Attention").length,
+            notWorking: itemChecks.filter(x => x.condition === "Not Working").length,
+            missing: itemChecks.filter(x => x.missing).length,
+            damaged: itemChecks.filter(x => x.damaged).length,
+            needRepair: itemChecks.filter(x => x.needsRepair).length,
+            requiringAttention: itemChecks.filter(afARCheckAttentionItem).length
+        };
+
+        const record = {
+            id: existing?.id || afARUID("WSC"),
+            weekKey: week.key,
+            weekStart: week.monday,
+            dueFriday: week.friday,
+            weekEnd: week.sunday,
+            checkDate: body.querySelector("#afWeeklyCheckDate").value || afARToday(),
+            checkedBy,
+            checkedByRole: role,
+            generalNotes: body.querySelector("#afWeeklyGeneralNotes").value.trim(),
+            items: itemChecks,
+            summary,
+            createdAt: existing?.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+
+        const index = checks.findIndex(x => String(x.weekKey) === String(week.key));
+        if (index >= 0) checks[index] = record;
+        else checks.push(record);
+
+        afARWriteArray(AF_WEEKLY_CHECKS_KEY, checks);
+        modal.remove();
+        alert(
+            "Weekly stock taking saved successfully.\n\n" +
+            "Items Checked: " + summary.itemsChecked + "\n" +
+            "Good: " + summary.good + "\n" +
+            "Need Attention: " + summary.needAttention + "\n" +
+            "Not Working: " + summary.notWorking + "\n" +
+            "Missing: " + summary.missing + "\n" +
+            "Damaged: " + summary.damaged + "\n" +
+            "Need Repair: " + summary.needRepair
+        );
+        openAFWeeklyStockTaking();
+        afARRenderWeeklyStockDashboardCard();
+        afAREnsureNavigation();
+    };
+}
+
+/* =========================================================
+   WEEKLY CHECK HISTORY / DETAIL
+   ========================================================= */
+
+function afAROpenWeeklyCheckHistory() {
+    const checks = afARWeeklyChecks()
+        .slice()
+        .sort((a, b) => String(b.weekKey || "").localeCompare(String(a.weekKey || "")));
+
+    const { body } = afAROpenModal(
+        "afWeeklyCheckHistoryModal",
+        "Weekly Stock Taking History",
+        "Past weekly physical checks and exceptions",
+        1150
+    );
+
+    const rows = checks.length
+        ? checks.map(check => `
+            <tr>
+                <td>${afAREscape(afARFormatDate(check.weekStart))} - ${afAREscape(afARFormatDate(check.weekEnd))}</td>
+                <td>${afAREscape(afARFormatDate(check.checkDate))}</td>
+                <td>${afAREscape(check.checkedBy || "")}</td>
+                <td>${Number(check.summary?.itemsChecked || 0)}</td>
+                <td>${Number(check.summary?.missing || 0)}</td>
+                <td>${Number(check.summary?.damaged || 0)}</td>
+                <td>${Number(check.summary?.needRepair || 0)}</td>
+                <td>${Number(check.summary?.requiringAttention || 0)}</td>
+                <td><button type="button" data-af-view-check="${afAREscape(check.id)}" style="${afARSecondaryButtonStyle()};padding:6px 9px;">View</button></td>
+            </tr>
+        `).join("")
+        : `<tr><td colspan="9" style="padding:16px;text-align:center;color:#777;">No weekly stock-taking records yet.</td></tr>`;
+
+    body.innerHTML = `
+        <div style="overflow:auto;border:1px solid #ddd;border-radius:9px;">
+            <table style="width:100%;min-width:950px;border-collapse:collapse;font-size:12px;">
+                <thead><tr style="background:#eef8f2;text-align:left;">
+                    <th>Week</th><th>Check Date</th><th>Checked By</th><th>Checked</th><th>Missing</th><th>Damaged</th><th>Need Repair</th><th>Attention</th><th>Action</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+    `;
+
+    body.querySelectorAll("th,td").forEach(cell => {
+        cell.style.padding = "8px";
+        cell.style.borderBottom = "1px solid #eee";
+    });
+
+    body.querySelectorAll("[data-af-view-check]").forEach(btn => {
+        btn.onclick = () => {
+            const check = checks.find(x => String(x.id) === String(btn.getAttribute("data-af-view-check")));
+            if (check) afAROpenWeeklyCheckDetail(check);
+        };
+    });
+}
+
+function afAROpenWeeklyCheckDetail(check) {
+    const { body } = afAROpenModal(
+        "afWeeklyCheckDetailModal",
+        "Weekly Items & Equipment Report",
+        `Week ${afARFormatDate(check.weekStart)} to ${afARFormatDate(check.weekEnd)}`,
+        1200
+    );
+
+    const rows = (check.items || []).map(item => {
+        const attention = afARCheckAttentionItem(item);
+        return `
+            <tr style="${attention ? "background:#fff8e6;" : ""}">
+                <td>${afAREscape(item.itemName || "")}</td>
+                <td>${afAREscape(item.location || "")}</td>
+                <td><b>${afAREscape(item.condition || "")}</b></td>
+                <td>${item.missing ? "YES" : "—"}</td>
+                <td>${item.damaged ? "YES" : "—"}</td>
+                <td>${item.needsRepair ? "YES" : "—"}</td>
+                <td>${afAREscape(item.remarks || "")}</td>
+                <td>${afAREscape(item.actionRequired || "")}</td>
+            </tr>
+        `;
+    }).join("");
+
+    body.innerHTML = `
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+            <button id="afPrintWeeklyDetail" type="button" style="${afARPrimaryButtonStyle()}">🖨 Print Report</button>
+            <div style="margin-left:auto;font-size:12px;line-height:1.5;">
+                <b>Checked:</b> ${afAREscape(check.checkedBy || "")}<br>
+                <b>Date:</b> ${afAREscape(afARFormatDate(check.checkDate))}
+            </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px;">
+            ${[
+                ["Items Checked", check.summary?.itemsChecked || 0],
+                ["Good", check.summary?.good || 0],
+                ["Need Attention", check.summary?.needAttention || 0],
+                ["Not Working", check.summary?.notWorking || 0],
+                ["Missing", check.summary?.missing || 0],
+                ["Damaged", check.summary?.damaged || 0],
+                ["Need Repair", check.summary?.needRepair || 0]
+            ].map(([label, value]) => `
+                <div style="padding:10px;background:#f7faf8;border:1px solid #e1e8e4;border-radius:8px;">
+                    <div style="font-size:10px;color:#666;">${afAREscape(label)}</div>
+                    <div style="font-size:18px;font-weight:bold;margin-top:3px;">${Number(value)}</div>
+                </div>
+            `).join("")}
+        </div>
+
+        <div id="afWeeklyPrintable" style="overflow:auto;border:1px solid #ddd;border-radius:9px;">
+            <table style="width:100%;min-width:1000px;border-collapse:collapse;font-size:12px;">
+                <thead><tr style="background:#eef8f2;text-align:left;">
+                    <th>Item / Equipment</th><th>Location</th><th>Condition</th><th>Missing</th><th>Damaged</th><th>Need Repair</th><th>Remarks</th><th>Action Required</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+
+        ${check.generalNotes ? `<div style="margin-top:12px;padding:10px;background:#f7f7f7;border-radius:8px;"><b>General Notes:</b> ${afAREscape(check.generalNotes)}</div>` : ""}
+    `;
+
+    body.querySelectorAll("th,td").forEach(cell => {
+        cell.style.padding = "8px";
+        cell.style.borderBottom = "1px solid #eee";
+    });
+
+    body.querySelector("#afPrintWeeklyDetail").onclick = () => {
+        const popup = window.open("", "_blank");
+        if (!popup) {
+            alert("Please allow pop-ups to print the weekly report.");
+            return;
+        }
+
+        popup.document.write(`
+            <html><head><title>Weekly Stock Taking</title>
+            <style>
+                body{font-family:Arial,sans-serif;padding:26px;color:#222;}
+                table{width:100%;border-collapse:collapse;font-size:11px;}
+                th,td{border:1px solid #bbb;padding:7px;text-align:left;}
+                th{background:#eef8f2;}
+            </style></head><body>
+            <h1 style="margin-bottom:4px;">A&F Wekavera Ltd</h1>
+            <h2 style="margin-top:0;">Weekly Items & Equipment Register</h2>
+            <p><b>Week:</b> ${afAREscape(afARFormatDate(check.weekStart))} - ${afAREscape(afARFormatDate(check.weekEnd))}<br>
+            <b>Checked By:</b> ${afAREscape(check.checkedBy || "")}<br>
+            <b>Check Date:</b> ${afAREscape(afARFormatDate(check.checkDate))}</p>
+            ${body.querySelector("#afWeeklyPrintable").innerHTML}
+            </body></html>
+        `);
+        popup.document.close();
+        popup.focus();
+        setTimeout(() => popup.print(), 250);
+    };
+}
+
+/* =========================================================
+   WEEKLY STOCK TAKING MAIN SCREEN
+   ========================================================= */
+
+function openAFWeeklyStockTaking() {
+    const role = afARRole();
+    if (!["Director", "Manager"].includes(role)) {
+        alert("Access Denied\n\nWeekly Stock Taking is available to the Director and Manager.");
+        return;
+    }
+
+    const { body } = afAROpenModal(
+        "afWeeklyStockTakingModal",
+        "🧰 Weekly Stock Taking",
+        "Weekly Items & Equipment Register • Physical condition • Attention tracking",
+        1100
+    );
+
+    const latest = afARLatestWeeklyCheck();
+    const status = afARWeeklyStatus();
+    const activeItems = afARActiveFactoryItems();
+    const attentionItems = latest
+        ? (latest.items || []).filter(afARCheckAttentionItem)
+        : [];
+
+    const statusBackground =
+        status.state === "ATTENTION" || status.state === "DUE"
+            ? "#fff0f0"
+            : status.state === "COMPLETED"
+                ? "#eaf7ef"
+                : "#fff7e6";
+
+    const attentionRows = attentionItems.length
+        ? attentionItems.map(item => `
+            <tr>
+                <td><b>${afAREscape(item.itemName || "")}</b></td>
+                <td>${afAREscape(item.location || "")}</td>
+                <td>${afAREscape(item.condition || "")}</td>
+                <td>${item.missing ? "Missing " : ""}${item.damaged ? "Damaged " : ""}${item.needsRepair ? "Need Repair" : ""}</td>
+                <td>${afAREscape(item.actionRequired || item.remarks || "Follow up")}</td>
+            </tr>
+        `).join("")
+        : `<tr><td colspan="5" style="padding:14px;text-align:center;color:#667;">No items currently require attention.</td></tr>`;
+
+    body.innerHTML = `
+        <div style="padding:14px;background:${statusBackground};border-radius:10px;margin-bottom:14px;">
+            <div style="font-size:12px;color:#666;">Weekly Status</div>
+            <div style="font-size:18px;font-weight:bold;margin-top:4px;">${afAREscape(status.label)}</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:9px;margin-bottom:14px;">
+            <div style="padding:12px;background:#f7faf8;border-radius:8px;"><div style="font-size:10px;color:#666;">Registered Active Items</div><b style="font-size:20px;">${activeItems.length}</b></div>
+            <div style="padding:12px;background:#f7faf8;border-radius:8px;"><div style="font-size:10px;color:#666;">Last Check</div><b>${latest ? afAREscape(afARFormatDate(latest.checkDate)) : "Not yet"}</b></div>
+            <div style="padding:12px;background:#f7faf8;border-radius:8px;"><div style="font-size:10px;color:#666;">Checked By</div><b>${latest ? afAREscape(latest.checkedBy || "") : "—"}</b></div>
+            <div style="padding:12px;background:#f7faf8;border-radius:8px;"><div style="font-size:10px;color:#666;">Items Checked</div><b style="font-size:20px;">${Number(latest?.summary?.itemsChecked || 0)}</b></div>
+            <div style="padding:12px;background:#fff7e6;border-radius:8px;"><div style="font-size:10px;color:#666;">Missing</div><b style="font-size:20px;">${Number(latest?.summary?.missing || 0)}</b></div>
+            <div style="padding:12px;background:#fff7e6;border-radius:8px;"><div style="font-size:10px;color:#666;">Damaged</div><b style="font-size:20px;">${Number(latest?.summary?.damaged || 0)}</b></div>
+            <div style="padding:12px;background:#fff7e6;border-radius:8px;"><div style="font-size:10px;color:#666;">Need Repair</div><b style="font-size:20px;">${Number(latest?.summary?.needRepair || 0)}</b></div>
+        </div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;">
+            <button id="afOpenItemRegister" type="button" style="${afARSecondaryButtonStyle()}">📋 Items & Equipment Register</button>
+            <button id="afStartWeeklyCheck" type="button" style="${afARPrimaryButtonStyle()}">✅ ${afARCurrentWeekCheck() ? "Update This Week's Check" : "Start This Week's Check"}</button>
+            <button id="afWeeklyHistory" type="button" style="${afARSecondaryButtonStyle()}">🕘 Weekly History</button>
+            ${latest ? `<button id="afPrintLatestWeekly" type="button" style="${afARSecondaryButtonStyle()}">🖨 View / Print Latest</button>` : ""}
+        </div>
+
+        <div style="font-weight:bold;color:#0b5d3b;margin-bottom:8px;">Items Requiring Attention</div>
+        <div style="overflow:auto;border:1px solid #ddd;border-radius:9px;">
+            <table style="width:100%;min-width:800px;border-collapse:collapse;font-size:12px;">
+                <thead><tr style="background:#eef8f2;text-align:left;">
+                    <th>Item</th><th>Location</th><th>Condition</th><th>Issue</th><th>Action Required</th>
+                </tr></thead>
+                <tbody>${attentionRows}</tbody>
+            </table>
+        </div>
+    `;
+
+    body.querySelectorAll("th,td").forEach(cell => {
+        cell.style.padding = "8px";
+        cell.style.borderBottom = "1px solid #eee";
+    });
+
+    body.querySelector("#afOpenItemRegister").onclick = afAROpenFactoryItemRegister;
+    body.querySelector("#afStartWeeklyCheck").onclick = afAROpenWeeklyCheckForm;
+    body.querySelector("#afWeeklyHistory").onclick = afAROpenWeeklyCheckHistory;
+
+    const printLatest = body.querySelector("#afPrintLatestWeekly");
+    if (printLatest && latest) {
+        printLatest.onclick = () => afAROpenWeeklyCheckDetail(latest);
+    }
+
+    afARCloseMobileMenu();
+}
+
+/* =========================================================
+   DASHBOARD CARD - DIRECTOR / MANAGER
+   Mirrors agreed Weekly Items & Equipment Register summary.
+   ========================================================= */
+
+function afARRenderWeeklyStockDashboardCard() {
+    const role = afARRole();
+    const existing = document.getElementById("afWeeklyItemsDashboardCard");
+
+    if (!["Director", "Manager"].includes(role)) {
+        existing?.remove();
+        return;
+    }
+
+    const main =
+        document.getElementById("mainContent") ||
+        document.querySelector("main") ||
+        document.getElementById("dashboardMain");
+
+    if (!main) return;
+
+    const latest = afARLatestWeeklyCheck();
+    const status = afARWeeklyStatus();
+
+    let card = existing;
+    if (!card) {
+        card = document.createElement("section");
+        card.id = "afWeeklyItemsDashboardCard";
+        card.className = "card";
+        card.style.cssText = "margin-top:14px;";
+
+        const quick = document.getElementById("quickActionsCard");
+        if (quick && quick.parentElement === main) {
+            quick.insertAdjacentElement("afterend", card);
+        } else {
+            main.appendChild(card);
+        }
+    }
+
+    const attention = Number(latest?.summary?.requiringAttention || 0);
+
+    card.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
+            <div>
+                <div class="title" style="font-weight:bold;color:#0b5d3b;">🧰 Weekly Items & Equipment Register</div>
+                <div class="sub" style="font-size:11px;color:#667;margin-top:3px;">${afAREscape(status.label)}</div>
+            </div>
+            <button id="afDashboardWeeklyOpen" type="button" style="${afARPrimaryButtonStyle()};padding:7px 10px;">View Register →</button>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:8px;margin-top:11px;">
+            <div style="padding:9px;background:#f7faf8;border-radius:7px;"><div style="font-size:9px;color:#666;">Last Check</div><b>${latest ? afAREscape(afARFormatDate(latest.checkDate)) : "Not yet"}</b></div>
+            <div style="padding:9px;background:#f7faf8;border-radius:7px;"><div style="font-size:9px;color:#666;">By</div><b>${latest ? afAREscape(latest.checkedBy || "") : "—"}</b></div>
+            <div style="padding:9px;background:#f7faf8;border-radius:7px;"><div style="font-size:9px;color:#666;">Items Checked</div><b>${Number(latest?.summary?.itemsChecked || 0)}</b></div>
+            <div style="padding:9px;background:#fff7e6;border-radius:7px;"><div style="font-size:9px;color:#666;">Missing</div><b>${Number(latest?.summary?.missing || 0)}</b></div>
+            <div style="padding:9px;background:#fff7e6;border-radius:7px;"><div style="font-size:9px;color:#666;">Damaged</div><b>${Number(latest?.summary?.damaged || 0)}</b></div>
+            <div style="padding:9px;background:#fff7e6;border-radius:7px;"><div style="font-size:9px;color:#666;">Need Repair</div><b>${Number(latest?.summary?.needRepair || 0)}</b></div>
+            <div style="padding:9px;background:${attention ? "#fff0f0" : "#eaf7ef"};border-radius:7px;"><div style="font-size:9px;color:#666;">Attention</div><b>${attention}</b></div>
+        </div>
+    `;
+
+    card.querySelector("#afDashboardWeeklyOpen").onclick = openAFWeeklyStockTaking;
+}
+
+/* =========================================================
+   SIDEBAR BUTTONS
+   Accounts: Director + Secretary
+   Weekly Stock Taking: Director + Manager
+   ========================================================= */
+
+function afARBuildSidebarButton(base, id, icon, label) {
+    const button = base.cloneNode(true);
+    button.id = id;
+    button.removeAttribute("onclick");
+    button.innerHTML = `<span style="margin-right:7px;">${icon}</span><span>${afAREscape(label)}</span>`;
+    button.title = label;
+    return button;
+}
+
+function afAREnsureNavigation() {
+    const role = afARRole();
+
+    const reports = document.getElementById("navReports");
+    const settings = document.getElementById("navSystemSettings");
+    const stock = document.getElementById("navStockInventory");
+    const staff = document.getElementById("navStaffHR");
+
+    let accounts = document.getElementById("navAccountsReports");
+    if (!accounts) {
+        const base = reports || settings || staff || stock;
+        if (base && base.parentElement) {
+            accounts = afARBuildSidebarButton(base, "navAccountsReports", "📊", "Accounts & Reports");
+            if (settings && settings.parentElement === base.parentElement) {
+                settings.parentElement.insertBefore(accounts, settings);
+            } else if (reports) {
+                reports.insertAdjacentElement("afterend", accounts);
+            } else {
+                base.insertAdjacentElement("afterend", accounts);
+            }
+            accounts.onclick = openAFAccountsReports;
+        }
+    }
+
+    let weekly = document.getElementById("navWeeklyStockTaking");
+    if (!weekly) {
+        const base = stock || reports || staff;
+        if (base && base.parentElement) {
+            weekly = afARBuildSidebarButton(base, "navWeeklyStockTaking", "🧰", "Weekly Stock Taking");
+            base.insertAdjacentElement("afterend", weekly);
+            weekly.onclick = openAFWeeklyStockTaking;
+        }
+    }
+
+    if (accounts) {
+        accounts.style.display = ["Director", "Secretary"].includes(role) ? "" : "none";
+    }
+
+    if (weekly) {
+        weekly.style.display = ["Director", "Manager"].includes(role) ? "" : "none";
+
+        if (["Director", "Manager"].includes(role)) {
+            const status = afARWeeklyStatus();
+            const icon = status.state === "DUE" || status.state === "ATTENTION" ? "⚠️" : "🧰";
+            const label = status.state === "DUE" ? "Weekly Stock Taking - DUE" : "Weekly Stock Taking";
+            const expected = `${icon} ${label}`;
+            if (weekly.textContent.trim() !== expected) {
+                weekly.innerHTML = `<span style="margin-right:7px;">${icon}</span><span>${afAREscape(label)}</span>`;
+            }
+        }
+    }
+}
+
+/* =========================================================
+   CONNECT EXISTING QUICK ACTION: CHECK STOCK
+   Keep existing live Stock & Inventory action untouched.
+   Weekly Stock Taking is a separate physical-register button.
+   ========================================================= */
+
+/* =========================================================
+   EXPOSE PUBLIC FUNCTIONS
+   ========================================================= */
+
+window.openAFAccountsReports = openAFAccountsReports;
+window.openAFWeeklyStockTaking = openAFWeeklyStockTaking;
+window.openAFFactoryItemRegister = afAROpenFactoryItemRegister;
+window.openAFWeeklyCheckHistory = afAROpenWeeklyCheckHistory;
+window.refreshAFWeeklyItemsDashboard = afARRenderWeeklyStockDashboardCard;
+
+/* =========================================================
+   CONNECT TO ROLE DASHBOARD WITHOUT A MUTATION LOOP
+   ========================================================= */
+
+if (typeof applyAFRoleDashboard === "function") {
+    const previousAFAccountsRoleDashboard = applyAFRoleDashboard;
+
+    applyAFRoleDashboard = function() {
+        const result = previousAFAccountsRoleDashboard.apply(this, arguments);
+
+        setTimeout(() => {
+            afAREnsureNavigation();
+            afARRenderWeeklyStockDashboardCard();
+        }, 60);
+
+        return result;
+    };
+}
+
+/* Initial connection for already logged-in session */
+setTimeout(() => {
+    afAREnsureNavigation();
+    afARRenderWeeklyStockDashboardCard();
+}, 350);
+
+console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
+
+})();
