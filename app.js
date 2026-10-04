@@ -16062,6 +16062,48 @@ cursor:pointer;
 </option>
 </select>
 
+<label>Service Charge (UGX)</label>
+<input
+  id="clientServiceCharge"
+  type="number"
+  min="0"
+  value="0"
+  placeholder="Total agreed service charge"
+  style="width:100%;padding:10px;margin:6px 0 14px"
+>
+
+<label>Amount Paid Now (UGX)</label>
+<input
+  id="clientAmountPaid"
+  type="number"
+  min="0"
+  value="0"
+  placeholder="Amount received from client"
+  style="width:100%;padding:10px;margin:6px 0 14px"
+>
+
+<label>Payment Method</label>
+<select
+  id="clientPaymentMethod"
+  style="width:100%;padding:10px;margin:6px 0 14px"
+>
+<option value="">-- Select Payment Method --</option>
+<option value="Cash">Cash</option>
+<option value="Mobile Money">Mobile Money</option>
+<option value="Bank">Bank</option>
+<option value="Other">Other</option>
+</select>
+
+<div style="
+  background:#eef8f2;
+  padding:12px;
+  border-radius:8px;
+  margin:4px 0 14px;
+">
+<b>Outstanding Balance:</b>
+<span id="clientServiceBalance">UGX 0</span>
+</div>
+
 </div>
 
 <label>Date</label>
