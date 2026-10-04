@@ -91465,3 +91465,2977 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
     "A&F Go Live / Security / Install / Update connected."
   );
 })();
+
+/* =========================================================
+   A&F WEKAVERA LTD - CLOUD SYNC STAGE 1
+   Supabase secure multi-device Expenses bridge
+
+   Supabase project configuration is already included below.
+   First-time Director/Secretary activation uses a one-time
+   server enrollment code; no service-role secret is in app.js.
+
+   Stage 1 result:
+   - Director and Secretary authenticate against Supabase
+   - Server membership controls employee ID + role
+   - Expenses save locally first (offline-friendly)
+   - New expenses are pushed to the central database
+   - Director phone receives Secretary laptop changes
+   - Director corrections sync back to all connected devices
+   - Pending changes retry automatically after internet returns
+
+   IMPORTANT SECURITY:
+   - Only use a Supabase PUBLISHABLE key here.
+   - NEVER put a service_role key in app.js.
+   ========================================================= */
+
+(function connectAFCloudSyncStage1() {
+  "use strict";
+
+  if (window.__afCloudSyncStage1Installed) return;
+  window.__afCloudSyncStage1Installed = true;
+
+  /* =======================================================
+     PROJECT CONFIGURATION
+     Public browser configuration for the A&F Supabase project.
+     The private service-role key is NEVER included here.
+     ======================================================= */
+
+  const DEFAULT_SUPABASE_URL =
+    "https://ggxsrjcuncflogjxnznn.supabase.co";
+
+  const DEFAULT_SUPABASE_PUBLISHABLE_KEY =
+    "sb_publishable_N3PJjp8VPyiAVX3ZD9s-uQ_BgVAnhqw";
+
+  const COMPANY_ID =
+    "a4f00000-0000-4000-8000-000000000001";
+
+  const SDK_URL =
+    "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
+
+  const CONFIG_KEY =
+    "afCloudSupabaseConfig";
+
+  const CLOUD_STATUS_KEY =
+    "afCloudSyncStatus";
+
+  const CLOUD_ACTIVATED_AT_KEY =
+    "afCloudExpensesActivatedAt";
+
+  const CLOUD_SYNCED_IDS_KEY =
+    "afCloudExpenseSyncedIds";
+
+  const CLOUD_PENDING_IDS_KEY =
+    "afCloudExpensePendingIds";
+
+  const CLOUD_LAST_PULL_KEY =
+    "afCloudExpensesLastPullAt";
+
+  let supabaseClient = null;
+  let realtimeChannel = null;
+  let applyingRemoteExpenses = false;
+  let expenseSyncTimer = null;
+  let retryTimer = null;
+
+  const originalStorageSetItem =
+    Storage.prototype.setItem;
+
+  /* =======================================================
+     BASIC HELPERS
+     ======================================================= */
+
+  function esc(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function readJSON(key, fallback) {
+    try {
+      const value =
+        JSON.parse(
+          localStorage.getItem(key) ||
+          "null"
+        );
+
+      return value ?? fallback;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  function writeJSON(key, value) {
+    originalStorageSetItem.call(
+      localStorage,
+      key,
+      JSON.stringify(value)
+    );
+  }
+
+  function currentLocalUser() {
+    try {
+      if (
+        typeof getAFCurrentUser ===
+        "function"
+      ) {
+        return getAFCurrentUser() || null;
+      }
+    } catch (_) {}
+
+    return readJSON(
+      "currentUser",
+      null
+    );
+  }
+
+  function currentRole() {
+    return String(
+      currentLocalUser()?.role || ""
+    );
+  }
+
+  function allowedStage1Role() {
+    return [
+      "Director",
+      "Secretary"
+    ].includes(currentRole());
+  }
+
+  function normaliseEmployeeId(value) {
+    return String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  }
+
+  function cloudEmailForEmployeeId(
+    employeeId
+  ) {
+    return (
+      normaliseEmployeeId(employeeId) +
+      "@users.afwekavera.app"
+    );
+  }
+
+  function configuredValue(value) {
+    const clean =
+      String(value || "").trim();
+
+    return (
+      clean &&
+      !clean.startsWith("PASTE_")
+    );
+  }
+
+  function getCloudConfig() {
+    const saved =
+      readJSON(
+        CONFIG_KEY,
+        {}
+      );
+
+    const url =
+      configuredValue(
+        DEFAULT_SUPABASE_URL
+      )
+        ? DEFAULT_SUPABASE_URL
+        : String(
+            saved.url || ""
+          ).trim();
+
+    const key =
+      configuredValue(
+        DEFAULT_SUPABASE_PUBLISHABLE_KEY
+      )
+        ? DEFAULT_SUPABASE_PUBLISHABLE_KEY
+        : String(
+            saved.publishableKey || ""
+          ).trim();
+
+    return {
+      url,
+      publishableKey: key,
+      ready:
+        /^https:\/\/.+\.supabase\.co\/?$/i
+          .test(url) &&
+        key.length > 20
+    };
+  }
+
+  function setStatus(
+    state,
+    message,
+    extra = {}
+  ) {
+    const status = {
+      state,
+      message,
+      at: new Date().toISOString(),
+      ...extra
+    };
+
+    writeJSON(
+      CLOUD_STATUS_KEY,
+      status
+    );
+
+    renderCloudStatusCard();
+
+    return status;
+  }
+
+  function getStatus() {
+    return readJSON(
+      CLOUD_STATUS_KEY,
+      {
+        state: "NOT_CONNECTED",
+        message:
+          "Cloud sync is not connected."
+      }
+    );
+  }
+
+  function syncedIds() {
+    const list =
+      readJSON(
+        CLOUD_SYNCED_IDS_KEY,
+        []
+      );
+
+    return new Set(
+      Array.isArray(list)
+        ? list.map(String)
+        : []
+    );
+  }
+
+  function saveSyncedIds(set) {
+    writeJSON(
+      CLOUD_SYNCED_IDS_KEY,
+      Array.from(set)
+        .slice(-5000)
+    );
+  }
+
+  function pendingIds() {
+    const list =
+      readJSON(
+        CLOUD_PENDING_IDS_KEY,
+        []
+      );
+
+    return new Set(
+      Array.isArray(list)
+        ? list.map(String)
+        : []
+    );
+  }
+
+  function savePendingIds(set) {
+    writeJSON(
+      CLOUD_PENDING_IDS_KEY,
+      Array.from(set)
+        .slice(-5000)
+    );
+  }
+
+  function markPending(id) {
+    const set = pendingIds();
+    set.add(String(id));
+    savePendingIds(set);
+  }
+
+  function clearPending(id) {
+    const set = pendingIds();
+    set.delete(String(id));
+    savePendingIds(set);
+  }
+
+  function markSynced(id) {
+    const set = syncedIds();
+    set.add(String(id));
+    saveSyncedIds(set);
+    clearPending(id);
+  }
+
+  /* =======================================================
+     SUPABASE SDK + CLIENT
+     ======================================================= */
+
+  function loadSupabaseSDK() {
+    return new Promise(
+      (resolve, reject) => {
+        if (
+          window.supabase &&
+          typeof window.supabase
+            .createClient === "function"
+        ) {
+          resolve(
+            window.supabase
+          );
+          return;
+        }
+
+        const existing =
+          document.querySelector(
+            'script[data-af-supabase-sdk="yes"]'
+          );
+
+        if (existing) {
+          existing.addEventListener(
+            "load",
+            () =>
+              resolve(
+                window.supabase
+              ),
+            { once: true }
+          );
+
+          existing.addEventListener(
+            "error",
+            () =>
+              reject(
+                new Error(
+                  "Unable to load Supabase library."
+                )
+              ),
+            { once: true }
+          );
+
+          return;
+        }
+
+        const script =
+          document.createElement(
+            "script"
+          );
+
+        script.src = SDK_URL;
+        script.async = true;
+        script.dataset.afSupabaseSdk =
+          "yes";
+
+        script.onload = () => {
+          if (
+            window.supabase &&
+            typeof window.supabase
+              .createClient === "function"
+          ) {
+            resolve(
+              window.supabase
+            );
+          } else {
+            reject(
+              new Error(
+                "Supabase library loaded incorrectly."
+              )
+            );
+          }
+        };
+
+        script.onerror = () =>
+          reject(
+            new Error(
+              "Unable to load Supabase library."
+            )
+          );
+
+        document.head.appendChild(
+          script
+        );
+      }
+    );
+  }
+
+  async function getSupabase() {
+    const config =
+      getCloudConfig();
+
+    if (!config.ready) {
+      throw new Error(
+        "Cloud Sync has not yet been configured."
+      );
+    }
+
+    if (supabaseClient) {
+      return supabaseClient;
+    }
+
+    const sdk =
+      await loadSupabaseSDK();
+
+    supabaseClient =
+      sdk.createClient(
+        config.url,
+        config.publishableKey,
+        {
+          auth: {
+            persistSession: true,
+            autoRefreshToken: true,
+            detectSessionInUrl: false
+          }
+        }
+      );
+
+    return supabaseClient;
+  }
+
+  /* =======================================================
+     CLOUD MEMBER / SERVER ROLE
+     ======================================================= */
+
+  async function getCloudSession() {
+    const client =
+      await getSupabase();
+
+    const {
+      data,
+      error
+    } =
+      await client.auth.getSession();
+
+    if (error) throw error;
+
+    return (
+      data?.session || null
+    );
+  }
+
+  async function getCloudMembership(
+    userId
+  ) {
+    const client =
+      await getSupabase();
+
+    const {
+      data,
+      error
+    } =
+      await client
+        .from(
+          "af_company_members"
+        )
+        .select(
+          "user_id,company_id,employee_id,full_name,role,active"
+        )
+        .eq(
+          "user_id",
+          userId
+        )
+        .eq(
+          "company_id",
+          COMPANY_ID
+        )
+        .maybeSingle();
+
+    if (error) throw error;
+
+    if (
+      !data ||
+      data.active !== true
+    ) {
+      throw new Error(
+        "This cloud account is not an active A&F company member."
+      );
+    }
+
+    return data;
+  }
+
+  async function verifyCurrentCloudIdentity() {
+    const session =
+      await getCloudSession();
+
+    if (!session?.user?.id) {
+      return null;
+    }
+
+    const membership =
+      await getCloudMembership(
+        session.user.id
+      );
+
+    const local =
+      currentLocalUser();
+
+    if (
+      local?.employeeId &&
+      String(
+        local.employeeId
+      ) !==
+      String(
+        membership.employee_id
+      )
+    ) {
+      throw new Error(
+        "Cloud account does not match the logged-in A&F employee."
+      );
+    }
+
+    if (
+      local?.role &&
+      String(local.role) !==
+      String(membership.role)
+    ) {
+      /*
+       * The server role is authoritative.
+       * Correct local cache rather than trusting
+       * a locally edited role.
+       */
+      originalStorageSetItem.call(
+        localStorage,
+        "currentUser",
+        JSON.stringify({
+          employeeId:
+            membership.employee_id,
+          fullName:
+            membership.full_name,
+          role:
+            membership.role
+        })
+      );
+
+      if (
+        typeof updateLoggedInUserHeader ===
+        "function"
+      ) {
+        updateLoggedInUserHeader();
+      }
+
+      if (
+        typeof applyAFRoleDashboard ===
+        "function"
+      ) {
+        applyAFRoleDashboard();
+      }
+    }
+
+    return {
+      session,
+      membership
+    };
+  }
+
+  /* =======================================================
+     FIRST CLOUD LOGIN FROM EXISTING A&F LOGIN SCREEN
+     ======================================================= */
+
+  async function sha256Text(value) {
+    const bytes =
+      new TextEncoder().encode(
+        String(value || "")
+      );
+
+    const digest =
+      await crypto.subtle.digest(
+        "SHA-256",
+        bytes
+      );
+
+    return Array.from(
+      new Uint8Array(digest)
+    )
+      .map(byte =>
+        byte
+          .toString(16)
+          .padStart(2, "0")
+      )
+      .join("");
+  }
+
+  function cacheCloudEmployeeLocally(
+    membership,
+    password
+  ) {
+    const employees =
+      readJSON(
+        "employees",
+        []
+      );
+
+    const list =
+      Array.isArray(employees)
+        ? employees
+        : [];
+
+    let employee =
+      list.find(item =>
+        String(item.employeeId) ===
+        String(
+          membership.employee_id
+        )
+      );
+
+    if (!employee) {
+      employee = {
+        employeeId:
+          membership.employee_id,
+        fullName:
+          membership.full_name,
+        role:
+          membership.role,
+        accountStatus:
+          "activated",
+        employmentStatus:
+          "Active",
+        createdAt:
+          new Date()
+            .toISOString()
+      };
+
+      list.push(employee);
+    }
+
+    employee.fullName =
+      membership.full_name;
+
+    employee.role =
+      membership.role;
+
+    employee.accountStatus =
+      "activated";
+
+    /*
+     * Cache a local password hash only so the same
+     * authorised user may still log in on this device
+     * if the internet is temporarily unavailable.
+     * The cloud database remains authoritative online.
+     */
+    return sha256Text(password)
+      .then(hash => {
+        employee.passwordHash =
+          hash;
+
+        originalStorageSetItem.call(
+          localStorage,
+          "employees",
+          JSON.stringify(list)
+        );
+      });
+  }
+
+  function openDashboardAfterCloudLogin(
+    membership,
+    messageElement
+  ) {
+    originalStorageSetItem.call(
+      localStorage,
+      "currentUser",
+      JSON.stringify({
+        employeeId:
+          membership.employee_id,
+        fullName:
+          membership.full_name,
+        role:
+          membership.role
+      })
+    );
+
+    originalStorageSetItem.call(
+      localStorage,
+      CLOUD_ACTIVATED_AT_KEY,
+      localStorage.getItem(
+        CLOUD_ACTIVATED_AT_KEY
+      ) ||
+      new Date().toISOString()
+    );
+
+    if (messageElement) {
+      messageElement.style.color =
+        "#0b5d3b";
+
+      messageElement.textContent =
+        "Cloud login successful. Opening dashboard...";
+    }
+
+    setTimeout(() => {
+      document.getElementById(
+        "afLoginScreen"
+      )?.remove();
+
+      const dashboard =
+        document.getElementById(
+          "mainApplication"
+        );
+
+      if (dashboard) {
+        dashboard.style.display =
+          "";
+      }
+
+      if (
+        typeof updateLoggedInUserHeader ===
+        "function"
+      ) {
+        updateLoggedInUserHeader();
+      }
+
+      if (
+        typeof applyAFRoleDashboard ===
+        "function"
+      ) {
+        applyAFRoleDashboard();
+      }
+
+      startCloudSync()
+        .catch(error =>
+          console.warn(
+            "A&F Cloud Sync startup:",
+            error
+          )
+        );
+    }, 350);
+  }
+
+  function getLocalEmployeeForCloudActivation(
+    employeeId
+  ) {
+    let employees = [];
+
+    try {
+      if (
+        typeof getEmployees ===
+        "function"
+      ) {
+        employees =
+          getEmployees() || [];
+      } else {
+        employees =
+          readJSON(
+            "employees",
+            []
+          );
+      }
+    } catch (_) {
+      employees =
+        readJSON(
+          "employees",
+          []
+        );
+    }
+
+    return (
+      Array.isArray(employees)
+        ? employees
+        : []
+    ).find(item =>
+      normaliseEmployeeId(
+        item?.employeeId
+      ) ===
+      normaliseEmployeeId(
+        employeeId
+      )
+    ) || null;
+  }
+
+  async function verifyLocalEmployeeForCloudActivation(
+    employee,
+    password
+  ) {
+    if (!employee) {
+      return {
+        valid: false,
+        reason:
+          "This cloud account has not yet been activated. First activate it on the factory laptop where this employee is already registered."
+      };
+    }
+
+    if (
+      ![
+        "Director",
+        "Secretary"
+      ].includes(
+        String(
+          employee.role || ""
+        )
+      )
+    ) {
+      return {
+        valid: false,
+        reason:
+          "Stage 1 cloud activation is currently limited to the Director and Secretary."
+      };
+    }
+
+    if (
+      String(
+        employee.accountStatus || ""
+      ) !== "activated"
+    ) {
+      return {
+        valid: false,
+        reason:
+          "Activate this employee account in the A&F application before activating Cloud Sync."
+      };
+    }
+
+    if (!employee.passwordHash) {
+      return {
+        valid: false,
+        reason:
+          "Create this employee's A&F login password first, then activate Cloud Sync."
+      };
+    }
+
+    const hash =
+      await sha256Text(
+        password
+      );
+
+    if (
+      hash !==
+      employee.passwordHash
+    ) {
+      return {
+        valid: false,
+        reason:
+          "Incorrect A&F application password."
+      };
+    }
+
+    return {
+      valid: true
+    };
+  }
+
+  async function activateFirstCloudAccount(
+    client,
+    employee,
+    password,
+    message
+  ) {
+    const role =
+      String(
+        employee.role || ""
+      );
+
+    const enrollmentCode =
+      window.prompt(
+        "FIRST-TIME A&F CLOUD ACTIVATION\n\n" +
+        role +
+        " - " +
+        String(
+          employee.fullName ||
+          employee.employeeId ||
+          ""
+        ) +
+        "\n\nEnter the one-time Cloud Activation Code supplied by the Director."
+      );
+
+    if (
+      !enrollmentCode ||
+      !String(
+        enrollmentCode
+      ).trim()
+    ) {
+      throw new Error(
+        "Cloud activation was cancelled."
+      );
+    }
+
+    if (message) {
+      message.style.color =
+        "#555";
+
+      message.textContent =
+        "Activating this A&F Cloud account securely...";
+    }
+
+    const {
+      data,
+      error
+    } =
+      await client.functions.invoke(
+        "af-cloud-enroll",
+        {
+          body: {
+            employeeId:
+              employee.employeeId,
+            fullName:
+              employee.fullName ||
+              employee.employeeName ||
+              employee.employeeId,
+            password,
+            enrollmentCode:
+              String(
+                enrollmentCode
+              ).trim()
+          }
+        }
+      );
+
+    if (error) {
+      throw new Error(
+        error.message ||
+        "Cloud activation failed."
+      );
+    }
+
+    if (
+      data &&
+      data.error
+    ) {
+      throw new Error(
+        String(data.error)
+      );
+    }
+
+    if (
+      !data ||
+      data.success !== true
+    ) {
+      throw new Error(
+        "Cloud activation could not be completed."
+      );
+    }
+
+    return true;
+  }
+
+  function enhanceCloudLoginScreen() {
+    const config =
+      getCloudConfig();
+
+    if (!config.ready) {
+      return;
+    }
+
+    const screen =
+      document.getElementById(
+        "afLoginScreen"
+      );
+
+    if (!screen) return;
+
+    const button =
+      screen.querySelector(
+        "#afLoginButton"
+      );
+
+    const idInput =
+      screen.querySelector(
+        "#afLoginEmployeeId"
+      );
+
+    const passwordInput =
+      screen.querySelector(
+        "#afLoginPassword"
+      );
+
+    const message =
+      screen.querySelector(
+        "#afLoginMessage"
+      );
+
+    if (
+      !button ||
+      !idInput ||
+      !passwordInput ||
+      button.dataset.afCloudLogin ===
+        "yes"
+    ) {
+      return;
+    }
+
+    button.dataset.afCloudLogin =
+      "yes";
+
+    const originalLogin =
+      button.onclick;
+
+    button.onclick =
+      async function(event) {
+        const employeeId =
+          idInput.value.trim();
+
+        const password =
+          passwordInput.value;
+
+        if (
+          !employeeId ||
+          !password
+        ) {
+          if (
+            typeof originalLogin ===
+            "function"
+          ) {
+            return originalLogin.call(
+              this,
+              event
+            );
+          }
+
+          return;
+        }
+
+        /*
+         * Offline:
+         * use the authorised local cache.
+         * New phones must first complete at least one
+         * successful online cloud login.
+         */
+        if (!navigator.onLine) {
+          if (message) {
+            message.style.color =
+              "#8a5a00";
+
+            message.textContent =
+              "Internet unavailable. Using authorised offline login on this device.";
+          }
+
+          if (
+            typeof originalLogin ===
+            "function"
+          ) {
+            return originalLogin.call(
+              this,
+              event
+            );
+          }
+
+          return;
+        }
+
+        event?.preventDefault?.();
+
+        button.disabled = true;
+
+        window.__afCloudLoginInProgress =
+          true;
+
+        if (message) {
+          message.style.color =
+            "#555";
+
+          message.textContent =
+            "Connecting securely to A&F Cloud...";
+        }
+
+        try {
+          const client =
+            await getSupabase();
+
+          const cloudEmail =
+            cloudEmailForEmployeeId(
+              employeeId
+            );
+
+          let signInResult =
+            await client.auth
+              .signInWithPassword({
+                email: cloudEmail,
+                password
+              });
+
+          /*
+           * First activation:
+           * If no cloud login exists yet, verify the
+           * employee against the existing factory-laptop
+           * Employee Account and its existing password.
+           * Then require the one-time server activation code.
+           *
+           * A new phone cannot self-create a Director or
+           * Secretary account merely by knowing EMP005/EMP006.
+           */
+          if (signInResult.error) {
+            const localEmployee =
+              getLocalEmployeeForCloudActivation(
+                employeeId
+              );
+
+            const localCheck =
+              await verifyLocalEmployeeForCloudActivation(
+                localEmployee,
+                password
+              );
+
+            if (!localCheck.valid) {
+              throw new Error(
+                localCheck.reason ||
+                signInResult.error.message
+              );
+            }
+
+            await activateFirstCloudAccount(
+              client,
+              localEmployee,
+              password,
+              message
+            );
+
+            if (message) {
+              message.style.color =
+                "#555";
+
+              message.textContent =
+                "Activation successful. Signing in to A&F Cloud...";
+            }
+
+            signInResult =
+              await client.auth
+                .signInWithPassword({
+                  email: cloudEmail,
+                  password
+                });
+          }
+
+          if (signInResult.error) {
+            throw signInResult.error;
+          }
+
+          const data =
+            signInResult.data;
+
+          if (!data?.user?.id) {
+            throw new Error(
+              "Cloud login did not return a valid user session."
+            );
+          }
+
+          const membership =
+            await getCloudMembership(
+              data.user.id
+            );
+
+          if (
+            normaliseEmployeeId(
+              membership.employee_id
+            ) !==
+            normaliseEmployeeId(
+              employeeId
+            )
+          ) {
+            await client.auth
+              .signOut();
+
+            throw new Error(
+              "Cloud account does not match this Employee ID."
+            );
+          }
+
+          await cacheCloudEmployeeLocally(
+            membership,
+            password
+          );
+
+          setStatus(
+            "CONNECTED",
+            "Connected securely to A&F Cloud.",
+            {
+              employeeId:
+                membership.employee_id,
+              role:
+                membership.role
+            }
+          );
+
+          openDashboardAfterCloudLogin(
+            membership,
+            message
+          );
+        } catch (error) {
+          console.error(
+            "A&F Cloud login:",
+            error
+          );
+
+          if (message) {
+            message.style.color =
+              "#b00020";
+
+            message.textContent =
+              "Cloud login failed: " +
+              String(
+                error?.message ||
+                "Check Employee ID, password, activation code and internet connection."
+              );
+          }
+        } finally {
+          window.__afCloudLoginInProgress =
+            false;
+
+          button.disabled = false;
+        }
+      };
+  }
+
+  if (
+    typeof showAFLoginScreen ===
+    "function"
+  ) {
+    const previousShowLogin =
+      showAFLoginScreen;
+
+    showAFLoginScreen =
+      function() {
+        const result =
+          previousShowLogin.apply(
+            this,
+            arguments
+          );
+
+        setTimeout(
+          enhanceCloudLoginScreen,
+          50
+        );
+
+        return result;
+      };
+  }
+
+  setTimeout(
+    enhanceCloudLoginScreen,
+    250
+  );
+
+  /* =======================================================
+     EXPENSE LOCAL DATA
+     ======================================================= */
+
+  function localExpenses() {
+    try {
+      if (
+        typeof getAFExpenseRecords ===
+        "function"
+      ) {
+        const records =
+          getAFExpenseRecords();
+
+        return Array.isArray(records)
+          ? records
+          : [];
+      }
+    } catch (_) {}
+
+    const primary =
+      readJSON(
+        "expenses",
+        []
+      );
+
+    const legacy =
+      readJSON(
+        "expenseRecords",
+        []
+      );
+
+    if (
+      Array.isArray(primary) &&
+      primary.length
+    ) {
+      return primary;
+    }
+
+    return Array.isArray(legacy)
+      ? legacy
+      : [];
+  }
+
+  function writeLocalExpenses(
+    records
+  ) {
+    const clean =
+      Array.isArray(records)
+        ? records
+        : [];
+
+    applyingRemoteExpenses =
+      true;
+
+    try {
+      originalStorageSetItem.call(
+        localStorage,
+        "expenses",
+        JSON.stringify(clean)
+      );
+
+      originalStorageSetItem.call(
+        localStorage,
+        "expenseRecords",
+        JSON.stringify(clean)
+      );
+    } finally {
+      applyingRemoteExpenses =
+        false;
+    }
+  }
+
+  function sourceId(record) {
+    return String(
+      record?.id ??
+      record?.expenseNumber ??
+      ""
+    );
+  }
+
+  function recordTime(record) {
+    const value =
+      record?.editedAt ||
+      record?.updatedAt ||
+      record?.createdAt ||
+      record?.date ||
+      "";
+
+    const ms =
+      new Date(value).getTime();
+
+    return Number.isFinite(ms)
+      ? ms
+      : 0;
+  }
+
+  function activatedAtMs() {
+    const value =
+      localStorage.getItem(
+        CLOUD_ACTIVATED_AT_KEY
+      );
+
+    const ms =
+      new Date(value || 0)
+        .getTime();
+
+    return Number.isFinite(ms)
+      ? ms
+      : Date.now();
+  }
+
+  function shouldSyncLocalRecord(
+    record
+  ) {
+    const id =
+      sourceId(record);
+
+    if (!id) return false;
+
+    if (
+      pendingIds().has(id)
+    ) {
+      return true;
+    }
+
+    /*
+     * Only automatically upload records created/edited
+     * after Cloud Sync was activated on the device.
+     * Historical data is migrated only by the Director
+     * using the explicit migration button.
+     */
+    return (
+      recordTime(record) >=
+      activatedAtMs()
+    );
+  }
+
+  function expenseCloudRow(
+    record,
+    identity
+  ) {
+    const id =
+      sourceId(record);
+
+    const date =
+      String(
+        record.date || ""
+      )
+        .slice(0, 10) ||
+      null;
+
+    const created =
+      record.createdAt
+        ? new Date(
+            record.createdAt
+          ).toISOString()
+        : null;
+
+    const updatedRaw =
+      record.editedAt ||
+      record.updatedAt ||
+      record.createdAt ||
+      null;
+
+    let updated = null;
+
+    try {
+      updated =
+        updatedRaw
+          ? new Date(
+              updatedRaw
+            ).toISOString()
+          : null;
+    } catch (_) {}
+
+    return {
+      company_id:
+        COMPANY_ID,
+
+      source_record_id:
+        id,
+
+      expense_number:
+        record.expenseNumber ||
+        null,
+
+      expense_date:
+        date,
+
+      category:
+        record.category || null,
+
+      payee:
+        record.payee || null,
+
+      description:
+        record.description ||
+        null,
+
+      amount:
+        Number(
+          record.amount || 0
+        ),
+
+      payment_method:
+        record.paymentMethod ||
+        null,
+
+      reference:
+        record.reference || null,
+
+      notes:
+        record.notes || null,
+
+      status:
+        record.status ||
+        "COMPLETED",
+
+      recorded_by_user:
+        identity.session.user.id,
+
+      recorded_by_employee_id:
+        identity.membership
+          .employee_id,
+
+      recorded_by_name:
+        identity.membership
+          .full_name,
+
+      recorded_by_role:
+        identity.membership.role,
+
+      payload:
+        record,
+
+      client_created_at:
+        created,
+
+      client_updated_at:
+        updated
+    };
+  }
+
+  async function auditCloud(
+    action,
+    recordId,
+    details
+  ) {
+    try {
+      const identity =
+        await verifyCurrentCloudIdentity();
+
+      if (!identity) return;
+
+      const client =
+        await getSupabase();
+
+      await client
+        .from(
+          "af_cloud_audit"
+        )
+        .insert({
+          company_id:
+            COMPANY_ID,
+          user_id:
+            identity.session
+              .user.id,
+          employee_id:
+            identity.membership
+              .employee_id,
+          role:
+            identity.membership
+              .role,
+          module:
+            "Expenses",
+          action,
+          record_id:
+            String(
+              recordId || ""
+            ),
+          details:
+            details || {}
+        });
+    } catch (_) {
+      /*
+       * Audit failure must never block
+       * the actual factory transaction.
+       */
+    }
+  }
+
+  /* =======================================================
+     PUSH ONE EXPENSE
+     ======================================================= */
+
+  async function pushExpense(
+    record,
+    identity
+  ) {
+    const id =
+      sourceId(record);
+
+    if (!id) return false;
+
+    const client =
+      await getSupabase();
+
+    const {
+      data: existing,
+      error: lookupError
+    } =
+      await client
+        .from(
+          "af_expenses"
+        )
+        .select(
+          "id,source_record_id,payload,updated_at"
+        )
+        .eq(
+          "company_id",
+          COMPANY_ID
+        )
+        .eq(
+          "source_record_id",
+          id
+        )
+        .maybeSingle();
+
+    if (lookupError) {
+      throw lookupError;
+    }
+
+    const row =
+      expenseCloudRow(
+        record,
+        identity
+      );
+
+    if (!existing) {
+      const {
+        error
+      } =
+        await client
+          .from(
+            "af_expenses"
+          )
+          .insert(row);
+
+      if (error) throw error;
+
+      markSynced(id);
+
+      auditCloud(
+        "INSERT",
+        id,
+        {
+          expenseNumber:
+            record.expenseNumber ||
+            "",
+          amount:
+            Number(
+              record.amount || 0
+            )
+        }
+      );
+
+      return true;
+    }
+
+    /*
+     * Secretary is intentionally not allowed
+     * to modify a saved expense.
+     * If it already exists centrally, treat the
+     * retry as complete.
+     */
+    if (
+      identity.membership.role !==
+      "Director"
+    ) {
+      markSynced(id);
+      return true;
+    }
+
+    const currentPayload =
+      existing.payload || {};
+
+    const same =
+      JSON.stringify(
+        currentPayload
+      ) ===
+      JSON.stringify(
+        record
+      );
+
+    if (same) {
+      markSynced(id);
+      return true;
+    }
+
+    const updateRow = {
+      expense_number:
+        row.expense_number,
+      expense_date:
+        row.expense_date,
+      category:
+        row.category,
+      payee:
+        row.payee,
+      description:
+        row.description,
+      amount:
+        row.amount,
+      payment_method:
+        row.payment_method,
+      reference:
+        row.reference,
+      notes:
+        row.notes,
+      status:
+        row.status,
+      payload:
+        row.payload,
+      client_updated_at:
+        row.client_updated_at
+    };
+
+    const {
+      error: updateError
+    } =
+      await client
+        .from(
+          "af_expenses"
+        )
+        .update(updateRow)
+        .eq(
+          "company_id",
+          COMPANY_ID
+        )
+        .eq(
+          "source_record_id",
+          id
+        );
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    markSynced(id);
+
+    auditCloud(
+      "UPDATE",
+      id,
+      {
+        expenseNumber:
+          record.expenseNumber ||
+          "",
+        amount:
+          Number(
+            record.amount || 0
+          ),
+        status:
+          record.status ||
+          ""
+      }
+    );
+
+    return true;
+  }
+
+  /* =======================================================
+     PROCESS LOCAL EXPENSE CHANGES
+     ======================================================= */
+
+  async function syncLocalExpenses(
+    includeHistorical = false
+  ) {
+    if (
+      applyingRemoteExpenses ||
+      !navigator.onLine
+    ) {
+      return;
+    }
+
+    let identity;
+
+    try {
+      identity =
+        await verifyCurrentCloudIdentity();
+    } catch (error) {
+      setStatus(
+        "AUTH_REQUIRED",
+        "Cloud authentication is required."
+      );
+      return;
+    }
+
+    if (!identity) return;
+
+    if (
+      ![
+        "Director",
+        "Secretary"
+      ].includes(
+        identity.membership.role
+      )
+    ) {
+      return;
+    }
+
+    const records =
+      localExpenses();
+
+    const target =
+      includeHistorical
+        ? records
+        : records.filter(
+            shouldSyncLocalRecord
+          );
+
+    if (!target.length) {
+      setStatus(
+        "CONNECTED",
+        "Cloud Sync connected.",
+        {
+          pending:
+            pendingIds().size
+        }
+      );
+      return;
+    }
+
+    setStatus(
+      "SYNCING",
+      "Synchronising Expenses...",
+      {
+        pending:
+          target.length
+      }
+    );
+
+    for (
+      const record of target
+    ) {
+      const id =
+        sourceId(record);
+
+      if (!id) continue;
+
+      markPending(id);
+
+      try {
+        await pushExpense(
+          record,
+          identity
+        );
+      } catch (error) {
+        console.warn(
+          "A&F expense sync failed:",
+          id,
+          error
+        );
+
+        markPending(id);
+      }
+    }
+
+    const stillPending =
+      pendingIds().size;
+
+    setStatus(
+      stillPending
+        ? "PENDING"
+        : "CONNECTED",
+      stillPending
+        ? (
+            stillPending +
+            " cloud change(s) waiting for internet/server."
+          )
+        : "Cloud Sync connected. Expenses are up to date.",
+      {
+        pending:
+          stillPending,
+        lastSyncAt:
+          new Date()
+            .toISOString()
+      }
+    );
+  }
+
+  function scheduleExpenseSync() {
+    clearTimeout(
+      expenseSyncTimer
+    );
+
+    expenseSyncTimer =
+      setTimeout(
+        () =>
+          syncLocalExpenses(
+            false
+          ).catch(error =>
+            console.warn(
+              "A&F scheduled expense sync:",
+              error
+            )
+          ),
+        500
+      );
+  }
+
+  /*
+   * Catch ALL current expense writers, including the
+   * base Expense module and the later Salary/Advance
+   * integration blocks that write localStorage directly.
+   */
+  Storage.prototype.setItem =
+    function(key, value) {
+      const result =
+        originalStorageSetItem.apply(
+          this,
+          arguments
+        );
+
+      if (
+        this === localStorage &&
+        !applyingRemoteExpenses &&
+        (
+          key === "expenses" ||
+          key === "expenseRecords"
+        )
+      ) {
+        scheduleExpenseSync();
+      }
+
+      return result;
+    };
+
+  /* =======================================================
+     REMOTE -> LOCAL
+     ======================================================= */
+
+  function mergeRemoteExpense(
+    row
+  ) {
+    const id =
+      String(
+        row?.source_record_id ||
+        ""
+      );
+
+    if (!id) return;
+
+    const remoteRecord =
+      row?.payload &&
+      typeof row.payload ===
+        "object"
+        ? {
+            ...row.payload
+          }
+        : {};
+
+    remoteRecord.id =
+      remoteRecord.id ??
+      row.source_record_id;
+
+    remoteRecord.expenseNumber =
+      remoteRecord.expenseNumber ??
+      row.expense_number ??
+      "";
+
+    remoteRecord.date =
+      remoteRecord.date ??
+      row.expense_date ??
+      "";
+
+    remoteRecord.category =
+      remoteRecord.category ??
+      row.category ??
+      "";
+
+    remoteRecord.payee =
+      remoteRecord.payee ??
+      row.payee ??
+      "";
+
+    remoteRecord.description =
+      remoteRecord.description ??
+      row.description ??
+      "";
+
+    remoteRecord.amount =
+      Number(
+        remoteRecord.amount ??
+        row.amount ??
+        0
+      );
+
+    remoteRecord.paymentMethod =
+      remoteRecord.paymentMethod ??
+      row.payment_method ??
+      "";
+
+    remoteRecord.reference =
+      remoteRecord.reference ??
+      row.reference ??
+      "";
+
+    remoteRecord.notes =
+      remoteRecord.notes ??
+      row.notes ??
+      "";
+
+    remoteRecord.status =
+      remoteRecord.status ??
+      row.status ??
+      "COMPLETED";
+
+    const records =
+      localExpenses();
+
+    const index =
+      records.findIndex(item =>
+        sourceId(item) === id
+      );
+
+    if (index >= 0) {
+      records[index] =
+        remoteRecord;
+    } else {
+      records.push(
+        remoteRecord
+      );
+    }
+
+    writeLocalExpenses(
+      records
+    );
+
+    markSynced(id);
+
+    refreshAfterRemoteExpense();
+  }
+
+  function removeRemoteExpense(
+    row
+  ) {
+    const id =
+      String(
+        row?.source_record_id ||
+        ""
+      );
+
+    if (!id) return;
+
+    const records =
+      localExpenses()
+        .filter(item =>
+          sourceId(item) !== id
+        );
+
+    writeLocalExpenses(
+      records
+    );
+
+    refreshAfterRemoteExpense();
+  }
+
+  function refreshAfterRemoteExpense() {
+    try {
+      if (
+        typeof window
+          .refreshAFTodaysChecklist ===
+        "function"
+      ) {
+        window
+          .refreshAFTodaysChecklist();
+      }
+    } catch (_) {}
+
+    try {
+      if (
+        currentRole() ===
+          "Director" &&
+        typeof refreshAFDirectorDashboard ===
+          "function"
+      ) {
+        refreshAFDirectorDashboard();
+      }
+    } catch (_) {}
+
+    try {
+      if (
+        currentRole() ===
+          "Secretary" &&
+        typeof renderAFSecretaryDashboard ===
+          "function"
+      ) {
+        renderAFSecretaryDashboard();
+      }
+    } catch (_) {}
+
+    /*
+     * If Expenses is currently open,
+     * refresh it so the new remote record is visible.
+     */
+    if (
+      document.getElementById(
+        "afExpensesModal"
+      ) &&
+      typeof openAFExpenses ===
+        "function"
+    ) {
+      setTimeout(
+        openAFExpenses,
+        120
+      );
+    }
+
+    window.dispatchEvent(
+      new CustomEvent(
+        "af-cloud-expenses-updated"
+      )
+    );
+  }
+
+  async function pullCloudExpenses() {
+    const identity =
+      await verifyCurrentCloudIdentity();
+
+    if (!identity) return;
+
+    const client =
+      await getSupabase();
+
+    const {
+      data,
+      error
+    } =
+      await client
+        .from(
+          "af_expenses"
+        )
+        .select("*")
+        .eq(
+          "company_id",
+          COMPANY_ID
+        )
+        .order(
+          "expense_date",
+          {
+            ascending: true,
+            nullsFirst: true
+          }
+        );
+
+    if (error) throw error;
+
+    const rows =
+      Array.isArray(data)
+        ? data
+        : [];
+
+    /*
+     * Cloud is authoritative for records that
+     * already exist in cloud.
+     * Local-only historical records are not deleted.
+     */
+    rows.forEach(
+      mergeRemoteExpense
+    );
+
+    originalStorageSetItem.call(
+      localStorage,
+      CLOUD_LAST_PULL_KEY,
+      new Date().toISOString()
+    );
+
+    return rows.length;
+  }
+
+  /* =======================================================
+     REALTIME SUBSCRIPTION
+     ======================================================= */
+
+  async function subscribeExpenses() {
+    const identity =
+      await verifyCurrentCloudIdentity();
+
+    if (!identity) return;
+
+    const client =
+      await getSupabase();
+
+    if (realtimeChannel) {
+      try {
+        await client
+          .removeChannel(
+            realtimeChannel
+          );
+      } catch (_) {}
+    }
+
+    realtimeChannel =
+      client
+        .channel(
+          "af-expenses-" +
+          COMPANY_ID
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table:
+              "af_expenses",
+            filter:
+              "company_id=eq." +
+              COMPANY_ID
+          },
+          payload => {
+            if (
+              payload.eventType ===
+              "DELETE"
+            ) {
+              removeRemoteExpense(
+                payload.old
+              );
+            } else {
+              mergeRemoteExpense(
+                payload.new
+              );
+            }
+
+            setStatus(
+              "CONNECTED",
+              "Live Cloud Sync connected.",
+              {
+                lastRealtimeAt:
+                  new Date()
+                    .toISOString(),
+                pending:
+                  pendingIds().size
+              }
+            );
+          }
+        )
+        .subscribe(status => {
+          if (
+            status ===
+            "SUBSCRIBED"
+          ) {
+            setStatus(
+              "CONNECTED",
+              "Live Cloud Sync connected.",
+              {
+                pending:
+                  pendingIds().size
+              }
+            );
+          }
+        });
+  }
+
+  /* =======================================================
+     START / RETRY
+     ======================================================= */
+
+  async function startCloudSync() {
+    const config =
+      getCloudConfig();
+
+    if (!config.ready) {
+      setStatus(
+        "NOT_CONFIGURED",
+        "Cloud Sync setup is required."
+      );
+      return false;
+    }
+
+    if (!navigator.onLine) {
+      setStatus(
+        "OFFLINE",
+        "Offline. Local work will sync when internet returns.",
+        {
+          pending:
+            pendingIds().size
+        }
+      );
+      return false;
+    }
+
+    let identity;
+
+    try {
+      identity =
+        await verifyCurrentCloudIdentity();
+    } catch (error) {
+      setStatus(
+        "AUTH_REQUIRED",
+        "Cloud login required."
+      );
+      return false;
+    }
+
+    if (!identity) {
+      setStatus(
+        "AUTH_REQUIRED",
+        "Cloud login required."
+      );
+      return false;
+    }
+
+    await pullCloudExpenses();
+
+    await syncLocalExpenses(
+      false
+    );
+
+    await subscribeExpenses();
+
+    if (!retryTimer) {
+      retryTimer =
+        setInterval(
+          () => {
+            if (
+              navigator.onLine
+            ) {
+              syncLocalExpenses(
+                false
+              ).catch(() => {});
+            }
+          },
+          30000
+        );
+    }
+
+    return true;
+  }
+
+  window.addEventListener(
+    "online",
+    () => {
+      startCloudSync()
+        .catch(() => {});
+    }
+  );
+
+  window.addEventListener(
+    "offline",
+    () => {
+      setStatus(
+        "OFFLINE",
+        "Offline. New entries remain safely on this device and will sync later.",
+        {
+          pending:
+            pendingIds().size
+        }
+      );
+    }
+  );
+
+  /* =======================================================
+     CLOUD STATUS CARD
+     Director + Secretary during Stage 1
+     ======================================================= */
+
+  function statusColour(state) {
+    switch (state) {
+      case "CONNECTED":
+        return "#0b5d3b";
+
+      case "SYNCING":
+        return "#175f9b";
+
+      case "PENDING":
+      case "OFFLINE":
+        return "#8a5a00";
+
+      default:
+        return "#b42318";
+    }
+  }
+
+  function renderCloudStatusCard() {
+    const role =
+      currentRole();
+
+    const old =
+      document.getElementById(
+        "afCloudSyncStage1Card"
+      );
+
+    if (
+      ![
+        "Director",
+        "Secretary"
+      ].includes(role)
+    ) {
+      old?.remove();
+      return;
+    }
+
+    const main =
+      document.querySelector(
+        "#mainApplication .main"
+      );
+
+    if (!main) return;
+
+    let card = old;
+
+    if (!card) {
+      card =
+        document.createElement(
+          "section"
+        );
+
+      card.id =
+        "afCloudSyncStage1Card";
+
+      card.className =
+        "card";
+
+      const notice =
+        document.getElementById(
+          "roleAccessNotice"
+        );
+
+      if (
+        notice &&
+        notice.parentElement ===
+          main
+      ) {
+        notice.insertAdjacentElement(
+          "afterend",
+          card
+        );
+      } else {
+        main.prepend(card);
+      }
+    }
+
+    const status =
+      getStatus();
+
+    const config =
+      getCloudConfig();
+
+    const colour =
+      statusColour(
+        status.state
+      );
+
+    card.style.cssText = `
+      margin:10px 0;
+      padding:10px 12px;
+      border:1px solid #d6e4db;
+      border-left:4px solid ${colour};
+      border-radius:9px;
+      background:#f8fbf9;
+      box-sizing:border-box;
+    `;
+
+    card.innerHTML = `
+      <div style="
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:10px;
+        flex-wrap:wrap;
+      ">
+        <div style="
+          min-width:180px;
+          flex:1;
+        ">
+          <div style="
+            font-size:12px;
+            font-weight:bold;
+            color:#173d2b;
+          ">
+            ☁ A&F Cloud Sync
+          </div>
+
+          <div style="
+            margin-top:3px;
+            font-size:10px;
+            color:${colour};
+            line-height:1.45;
+          ">
+            ${esc(
+              status.message ||
+              "Cloud status unavailable."
+            )}
+          </div>
+        </div>
+
+        <div style="
+          display:flex;
+          gap:7px;
+          flex-wrap:wrap;
+        ">
+          ${
+            !config.ready
+              ? `
+                <button
+                  type="button"
+                  id="afCloudSetupBtn"
+                  style="
+                    border:0;
+                    border-radius:7px;
+                    padding:7px 10px;
+                    background:#0b5d3b;
+                    color:white;
+                    font-size:10px;
+                    font-weight:bold;
+                    cursor:pointer;
+                  "
+                >
+                  Setup Cloud
+                </button>
+              `
+              : `
+                <button
+                  type="button"
+                  id="afCloudSyncNowBtn"
+                  style="
+                    border:1px solid #b7c8bf;
+                    border-radius:7px;
+                    padding:7px 10px;
+                    background:white;
+                    color:#173d2b;
+                    font-size:10px;
+                    font-weight:bold;
+                    cursor:pointer;
+                  "
+                >
+                  Sync Now
+                </button>
+              `
+          }
+
+          ${
+            role === "Director" &&
+            config.ready
+              ? `
+                <button
+                  type="button"
+                  id="afCloudMigrateExpensesBtn"
+                  style="
+                    border:1px solid #b7c8bf;
+                    border-radius:7px;
+                    padding:7px 10px;
+                    background:white;
+                    color:#173d2b;
+                    font-size:10px;
+                    font-weight:bold;
+                    cursor:pointer;
+                  "
+                >
+                  Migrate Old Expenses
+                </button>
+              `
+              : ""
+          }
+        </div>
+      </div>
+    `;
+
+    card.querySelector(
+      "#afCloudSetupBtn"
+    )?.addEventListener(
+      "click",
+      openCloudSetup
+    );
+
+    card.querySelector(
+      "#afCloudSyncNowBtn"
+    )?.addEventListener(
+      "click",
+      () => {
+        startCloudSync()
+          .catch(error => {
+            alert(
+              "Cloud Sync failed.\n\n" +
+              String(
+                error?.message ||
+                error
+              )
+            );
+          });
+      }
+    );
+
+    card.querySelector(
+      "#afCloudMigrateExpensesBtn"
+    )?.addEventListener(
+      "click",
+      async () => {
+        const ok =
+          confirm(
+            "Migrate existing local Expense History to the central A&F Cloud database?\n\n" +
+            "Do this only once, after Stage 1 live sync has been tested."
+          );
+
+        if (!ok) return;
+
+        await syncLocalExpenses(
+          true
+        );
+
+        alert(
+          "Existing Expense migration attempt completed.\n\n" +
+          "Check the Cloud Sync status for any pending records."
+        );
+      }
+    );
+  }
+
+  /* =======================================================
+     CLOUD SETUP MODAL
+     URL + Publishable key are PUBLIC client configuration.
+     Never accept service_role keys here.
+     ======================================================= */
+
+  function openCloudSetup() {
+    document.getElementById(
+      "afCloudSetupModal"
+    )?.remove();
+
+    const config =
+      getCloudConfig();
+
+    const modal =
+      document.createElement(
+        "div"
+      );
+
+    modal.id =
+      "afCloudSetupModal";
+
+    modal.style.cssText = `
+      position:fixed;
+      inset:0;
+      z-index:1000000;
+      background:rgba(0,0,0,.58);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:12px;
+      box-sizing:border-box;
+      font-family:Arial,sans-serif;
+    `;
+
+    modal.innerHTML = `
+      <div style="
+        width:650px;
+        max-width:96%;
+        max-height:92vh;
+        overflow:auto;
+        background:white;
+        border-radius:13px;
+        padding:18px;
+        box-sizing:border-box;
+      ">
+        <div style="
+          display:flex;
+          justify-content:space-between;
+          align-items:flex-start;
+          gap:12px;
+        ">
+          <div>
+            <h2 style="
+              margin:0;
+              color:#0b5d3b;
+            ">
+              ☁ A&F Cloud Sync Setup
+            </h2>
+
+            <div style="
+              margin-top:5px;
+              color:#68756e;
+              font-size:11px;
+              line-height:1.5;
+            ">
+              Connect this device to the central A&F Wekavera database.
+            </div>
+          </div>
+
+          <button
+            id="afCloseCloudSetup"
+            type="button"
+            style="
+              border:0;
+              border-radius:7px;
+              padding:8px 10px;
+              cursor:pointer;
+            "
+          >
+            ✕
+          </button>
+        </div>
+
+        <div style="
+          margin-top:13px;
+          padding:10px;
+          background:#fff7e6;
+          border:1px solid #efdfb7;
+          border-radius:8px;
+          font-size:10px;
+          line-height:1.6;
+        ">
+          Use only the Supabase <b>Project URL</b> and
+          <b>Publishable key</b>.
+          Never paste a service_role or other secret server key here.
+        </div>
+
+        <label style="
+          display:block;
+          margin-top:13px;
+          font-size:11px;
+          font-weight:bold;
+        ">
+          Supabase Project URL
+
+          <input
+            id="afCloudProjectUrl"
+            type="url"
+            value="${esc(
+              config.url || ""
+            )}"
+            placeholder="https://xxxxxxxx.supabase.co"
+            style="
+              display:block;
+              width:100%;
+              box-sizing:border-box;
+              margin-top:5px;
+              padding:10px;
+              border:1px solid #ccd7d1;
+              border-radius:7px;
+            "
+          >
+        </label>
+
+        <label style="
+          display:block;
+          margin-top:11px;
+          font-size:11px;
+          font-weight:bold;
+        ">
+          Supabase Publishable Key
+
+          <textarea
+            id="afCloudPublishableKey"
+            rows="4"
+            placeholder="sb_publishable_..."
+            style="
+              display:block;
+              width:100%;
+              box-sizing:border-box;
+              margin-top:5px;
+              padding:10px;
+              border:1px solid #ccd7d1;
+              border-radius:7px;
+              font-family:monospace;
+              font-size:10px;
+            "
+          >${esc(
+            config.publishableKey ||
+            ""
+          )}</textarea>
+        </label>
+
+        <div
+          id="afCloudSetupMessage"
+          style="
+            min-height:20px;
+            margin-top:10px;
+            font-size:11px;
+          "
+        ></div>
+
+        <div style="
+          display:flex;
+          justify-content:flex-end;
+          gap:8px;
+          flex-wrap:wrap;
+          margin-top:12px;
+        ">
+          <button
+            id="afSaveCloudConfig"
+            type="button"
+            style="
+              border:0;
+              border-radius:8px;
+              padding:9px 13px;
+              background:#0b5d3b;
+              color:white;
+              font-weight:bold;
+              cursor:pointer;
+            "
+          >
+            Save & Test Connection
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(
+      modal
+    );
+
+    modal.querySelector(
+      "#afCloseCloudSetup"
+    ).onclick =
+      () => modal.remove();
+
+    modal.querySelector(
+      "#afSaveCloudConfig"
+    ).onclick =
+      async () => {
+        const url =
+          modal.querySelector(
+            "#afCloudProjectUrl"
+          ).value.trim();
+
+        const publishableKey =
+          modal.querySelector(
+            "#afCloudPublishableKey"
+          ).value.trim();
+
+        const message =
+          modal.querySelector(
+            "#afCloudSetupMessage"
+          );
+
+        if (
+          !/^https:\/\/.+\.supabase\.co\/?$/i
+            .test(url)
+        ) {
+          message.style.color =
+            "#b42318";
+          message.textContent =
+            "Enter a valid Supabase Project URL.";
+          return;
+        }
+
+        if (
+          publishableKey.length <
+          20
+        ) {
+          message.style.color =
+            "#b42318";
+          message.textContent =
+            "Enter the Supabase Publishable key.";
+          return;
+        }
+
+        /*
+         * Reject obvious service-role legacy JWT usage.
+         * This cannot detect every secret key format,
+         * but it prevents the most common accidental leak.
+         */
+        if (
+          /service[_-]?role/i
+            .test(publishableKey)
+        ) {
+          message.style.color =
+            "#b42318";
+          message.textContent =
+            "Do not use a service_role key in the browser.";
+          return;
+        }
+
+        writeJSON(
+          CONFIG_KEY,
+          {
+            url,
+            publishableKey
+          }
+        );
+
+        supabaseClient =
+          null;
+
+        message.style.color =
+          "#555";
+        message.textContent =
+          "Testing Supabase connection...";
+
+        try {
+          await getSupabase();
+
+          setStatus(
+            "AUTH_REQUIRED",
+            "Cloud configured. Log in with your A&F Employee ID and password."
+          );
+
+          message.style.color =
+            "#0b5d3b";
+          message.textContent =
+            "Cloud project connection is valid. Please log out and log in again so your cloud identity can be verified.";
+
+          setTimeout(
+            renderCloudStatusCard,
+            100
+          );
+        } catch (error) {
+          message.style.color =
+            "#b42318";
+          message.textContent =
+            "Connection failed: " +
+            String(
+              error?.message ||
+              error
+            );
+        }
+      };
+  }
+
+  /* =======================================================
+     ROLE DASHBOARD CONNECTION
+     ======================================================= */
+
+  if (
+    typeof applyAFRoleDashboard ===
+    "function"
+  ) {
+    const previousApply =
+      applyAFRoleDashboard;
+
+    applyAFRoleDashboard =
+      function() {
+        const result =
+          previousApply.apply(
+            this,
+            arguments
+          );
+
+        setTimeout(
+          renderCloudStatusCard,
+          120
+        );
+
+        if (
+          allowedStage1Role()
+        ) {
+          setTimeout(
+            () => {
+              startCloudSync()
+                .catch(() => {});
+            },
+            350
+          );
+        }
+
+        return result;
+      };
+  }
+
+  /* =======================================================
+     LOGOUT
+     ======================================================= */
+
+  if (
+    typeof logoutAFUser ===
+    "function"
+  ) {
+    const previousLogout =
+      logoutAFUser;
+
+    logoutAFUser =
+      function() {
+        try {
+          if (supabaseClient) {
+            supabaseClient
+              .auth
+              .signOut()
+              .catch(() => {});
+          }
+        } catch (_) {}
+
+        if (
+          realtimeChannel &&
+          supabaseClient
+        ) {
+          try {
+            supabaseClient
+              .removeChannel(
+                realtimeChannel
+              );
+          } catch (_) {}
+        }
+
+        realtimeChannel =
+          null;
+
+        return previousLogout.apply(
+          this,
+          arguments
+        );
+      };
+  }
+
+  /* =======================================================
+     EXISTING SESSION
+     ======================================================= */
+
+  setTimeout(
+    renderCloudStatusCard,
+    600
+  );
+
+  if (
+    allowedStage1Role()
+  ) {
+    setTimeout(
+      () =>
+        startCloudSync()
+          .catch(() => {}),
+      900
+    );
+  }
+
+  /* =======================================================
+     PUBLIC HELPERS
+     ======================================================= */
+
+  window.openAFCloudSyncSetup =
+    openCloudSetup;
+
+  window.startAFCloudSync =
+    startCloudSync;
+
+  window.syncAFCloudExpenses =
+    () =>
+      syncLocalExpenses(
+        false
+      );
+
+  window.migrateAFExistingExpensesToCloud =
+    () =>
+      syncLocalExpenses(
+        true
+      );
+
+  console.log(
+    "A&F Cloud Sync Stage 1 loaded."
+  );
+})();
