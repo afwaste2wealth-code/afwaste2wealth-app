@@ -100058,3 +100058,1055 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
     "A&F Production Go-Live Reset guard connected."
   );
 })();
+
+/* =========================================================
+   A&F SOCIAL MEDIA + UPCOMING EVENTS
+   Director: full control
+   Secretary: view events + WhatsApp access
+   ========================================================= */
+
+(() => {
+  "use strict";
+
+  if (window.__afSocialMarketingCentreInstalled) return;
+  window.__afSocialMarketingCentreInstalled = true;
+
+const EVENTS_KEY = "afUpcomingEvents";
+
+  function afSMRole() {
+    try {
+      if (typeofgetAFCurrentRole === "function") {
+        return String(getAFCurrentRole() || "").trim();
+      }
+    } catch (e) {}
+
+    try {
+const user = JSON.parse(localStorage.getItem("currentUser") || "{}");
+      return String(user.role || "").trim();
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function afSMUserName() {
+    try {
+      if (typeofgetAFCurrentUser === "function") {
+const u = getAFCurrentUser();
+        return String(
+          u?.fullName ||
+u?.name ||
+          u?.employeeName ||
+          u?.employeeId ||
+          "Unknown User"
+        );
+      }
+    } catch (e) {}
+
+    try {
+const u = JSON.parse(localStorage.getItem("currentUser") || "{}");
+      return String(
+u.fullName ||
+u.name ||
+u.employeeName ||
+u.employeeId ||
+        "Unknown User"
+      );
+    } catch (e) {
+      return "Unknown User";
+    }
+  }
+
+  function afSMIsDirector() {
+    return afSMRole().toLowerCase() === "director";
+  }
+
+  function afSMCanView() {
+const role = afSMRole().toLowerCase();
+    return role === "director" || role === "secretary";
+  }
+
+  function afSMEscape(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function afSMGetEvents() {
+    try {
+const data = JSON.parse(localStorage.getItem(EVENTS_KEY) || "[]");
+      return Array.isArray(data) ? data : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function afSMSaveEvents(events) {
+localStorage.setItem(EVENTS_KEY, JSON.stringify(events || []));
+
+    try {
+window.dispatchEvent(
+        new CustomEvent("af-upcoming-events-updated", {
+          detail: { key: EVENTS_KEY }
+        })
+      );
+    } catch (e) {}
+
+setTimeout(afSMRenderDashboardCard, 50);
+  }
+
+  function afSMEventDateValue(event) {
+    if (!event?.date) return Number.MAX_SAFE_INTEGER;
+
+const time = event.time || "23:59";
+const value = new Date(`${event.date}T${time}`).getTime();
+
+    return Number.isFinite(value)
+      ? value
+      : Number.MAX_SAFE_INTEGER;
+  }
+
+  function afSMUpcomingEvents() {
+const today = new Date();
+today.setHours(0, 0, 0, 0);
+
+    return afSMGetEvents()
+      .filter(event => {
+        if (!event?.date) return false;
+const d = new Date(`${event.date}T00:00:00`);
+        return !Number.isNaN(d.getTime()) && d >= today;
+      })
+      .sort((a, b) =>afSMEventDateValue(a) - afSMEventDateValue(b));
+  }
+
+  function afSMFormatDate(dateString) {
+    if (!dateString) return "No date";
+
+const d = new Date(`${dateString}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return dateString;
+
+    return d.toLocaleDateString("en-UG", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric"
+    });
+  }
+
+  function afSMModal(title, bodyHTML, width = "900px") {
+document.getElementById("afSocialMarketingModal")?.remove();
+
+const overlay = document.createElement("div");
+overlay.id = "afSocialMarketingModal";
+
+overlay.style.cssText = `
+position:fixed;
+      inset:0;
+background:rgba(0,0,0,.58);
+      z-index:2147483000;
+display:flex;
+align-items:flex-start;
+justify-content:center;
+overflow:auto;
+      padding:30px 14px;
+box-sizing:border-box;
+    `;
+
+overlay.innerHTML = `
+<div style="
+width:min(${width},96vw);
+        background:#fff;
+        border-radius:16px;
+        box-shadow:0 18px 60px rgba(0,0,0,.28);
+overflow:hidden;
+margin:auto;
+      ">
+<div style="
+          padding:16px 18px;
+          background:#0b5d34;
+color:white;
+display:flex;
+justify-content:space-between;
+align-items:center;
+          gap:15px;
+        ">
+<div style="font-size:19px;font-weight:800;">
+            ${afSMEscape(title)}
+</div>
+
+<button
+            type="button"
+            onclick="document.getElementById('afSocialMarketingModal')?.remove()"
+            style="
+              border:0;
+              background:#fff;
+              color:#0b5d34;
+              width:36px;
+              height:36px;
+              border-radius:50%;
+cursor:pointer;
+              font-size:20px;
+              font-weight:900;
+            "
+>×</button>
+</div>
+
+<div style="padding:18px;">
+          ${bodyHTML}
+</div>
+</div>
+    `;
+
+document.body.appendChild(overlay);
+
+overlay.addEventListener("click", event => {
+      if (event.target === overlay) overlay.remove();
+    });
+
+    return overlay;
+  }
+
+  function afSMOpenWhatsApp() {
+    if (!afSMCanView()) {
+      alert("This section is available to the Director and Secretary.");
+      return;
+    }
+
+    let phone = "";
+
+    try {
+const profile = JSON.parse(
+localStorage.getItem("afCompanyProfile") || "{}"
+      );
+
+      phone =
+profile.whatsapp ||
+profile.whatsApp ||
+        profile.phone1 ||
+profile.phone ||
+        "";
+    } catch (e) {}
+
+    phone = String(phone || "").replace(/\D/g, "");
+
+    if (phone.startsWith("0")) {
+      phone = "256" + phone.substring(1);
+    }
+
+    if (!phone) {
+      alert(
+        "Please first enter the company WhatsApp/phone number in Company Profile settings."
+      );
+      return;
+    }
+
+window.open(`https://wa.me/${phone}`, "_blank", "noopener,noreferrer");
+  }
+
+  function afSMOpenTikTokPostingCentre() {
+    if (!afSMIsDirector()) {
+      alert("TikTok posting is controlled by the Director.");
+      return;
+    }
+
+afSMModal(
+      "TikTok Posting Centre",
+      `
+<div style="
+          padding:12px 14px;
+          background:#f5f7f6;
+          border:1px solid #dde6e1;
+          border-radius:12px;
+          margin-bottom:16px;
+        ">
+<div style="font-weight:800;margin-bottom:4px;">
+TikTok Account
+</div>
+<div>A&amp;F waste2wealth solutions</div>
+</div>
+
+<label style="display:block;font-weight:800;margin-bottom:6px;">
+          Select photo or video
+</label>
+
+<input
+          id="afTikTokMedia"
+          type="file"
+          accept="image/*,video/*"
+          style="
+            width:100%;
+            padding:10px;
+            border:1px solid #ccd6d0;
+            border-radius:10px;
+box-sizing:border-box;
+            margin-bottom:16px;
+          "
+>
+
+<label style="display:block;font-weight:800;margin-bottom:6px;">
+          Caption
+</label>
+
+<textarea
+          id="afTikTokCaption"
+          rows="6"
+          placeholder="Write the TikTok caption here..."
+          style="
+            width:100%;
+            padding:12px;
+            border:1px solid #ccd6d0;
+            border-radius:10px;
+resize:vertical;
+box-sizing:border-box;
+            margin-bottom:12px;
+          "
+></textarea>
+
+<div style="
+display:flex;
+flex-wrap:wrap;
+          gap:10px;
+          margin-top:8px;
+        ">
+<button
+            type="button"
+            id="afCopyTikTokCaption"
+            style="
+              padding:11px 15px;
+              border:0;
+              border-radius:10px;
+              background:#e8efe9;
+              color:#173f29;
+              font-weight:800;
+cursor:pointer;
+            "
+>
+            Copy Caption
+</button>
+
+<button
+            type="button"
+            id="afContinueTikTok"
+            style="
+              padding:11px 15px;
+              border:0;
+              border-radius:10px;
+              background:#111;
+              color:#fff;
+              font-weight:800;
+cursor:pointer;
+            "
+>
+            Continue to TikTok Upload
+</button>
+</div>
+
+<div style="
+          margin-top:16px;
+          padding:12px;
+          border-left:4px solid #0b5d34;
+          background:#f8faf9;
+          line-height:1.5;
+          font-size:13px;
+        ">
+          For security, A&amp;F does not store your TikTok password.
+          The selected media remains on this device. When TikTok opens,
+          select the same photo/video there, paste the prepared caption,
+          review it, and publish from TikTok.
+</div>
+      `,
+      "720px"
+    );
+
+    document.getElementById("afCopyTikTokCaption")?.addEventListener(
+      "click",
+async () => {
+const caption =
+document.getElementById("afTikTokCaption")?.value || "";
+
+        if (!caption.trim()) {
+          alert("Please write a caption first.");
+          return;
+        }
+
+        try {
+          await navigator.clipboard.writeText(caption);
+          alert("Caption copied.");
+        } catch (e) {
+const area = document.getElementById("afTikTokCaption");
+area?.focus();
+area?.select();
+document.execCommand("copy");
+          alert("Caption copied.");
+        }
+      }
+    );
+
+document.getElementById("afContinueTikTok")?.addEventListener(
+      "click",
+      () => {
+const media =
+document.getElementById("afTikTokMedia")?.files?.[0];
+
+        if (!media) {
+const go = confirm(
+            "No photo or video has been selected in A&F. Continue to TikTok anyway?"
+          );
+          if (!go) return;
+        }
+
+window.open(
+          "https://www.tiktok.com/upload",
+          "_blank",
+          "noopener,noreferrer"
+        );
+      }
+    );
+  }
+
+  function afSMOpenEventForm(existingId = "") {
+    if (!afSMIsDirector()) {
+      alert("Only the Director can add or edit upcoming events.");
+      return;
+    }
+
+const events = afSMGetEvents();
+const existing = events.find(
+      event => String(event.id) === String(existingId)
+    ) || {};
+
+constisEdit = !!existingId;
+
+afSMModal(
+isEdit ? "Edit Upcoming Event" : "Add Upcoming Event",
+      `
+<div style="
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+          gap:14px;
+        ">
+<div style="grid-column:1/-1;">
+<label style="display:block;font-weight:800;margin-bottom:5px;">
+              Event / Purpose
+</label>
+<input
+              id="afEventTitle"
+              type="text"
+              value="${afSMEscape(existing.title || "")}"
+              placeholder="e.g. Marketing visit - Mukono High School"
+              style="
+                width:100%;
+                padding:11px;
+                border:1px solid #ccd6d0;
+                border-radius:9px;
+box-sizing:border-box;
+              "
+>
+</div>
+
+<div>
+<label style="display:block;font-weight:800;margin-bottom:5px;">
+              Date
+</label>
+<input
+              id="afEventDate"
+              type="date"
+              value="${afSMEscape(existing.date || "")}"
+              style="
+                width:100%;
+                padding:11px;
+                border:1px solid #ccd6d0;
+                border-radius:9px;
+box-sizing:border-box;
+              "
+>
+</div>
+
+<div>
+<label style="display:block;font-weight:800;margin-bottom:5px;">
+              Time
+</label>
+<input
+              id="afEventTime"
+              type="time"
+              value="${afSMEscape(existing.time || "")}"
+              style="
+                width:100%;
+                padding:11px;
+                border:1px solid #ccd6d0;
+                border-radius:9px;
+box-sizing:border-box;
+              "
+>
+</div>
+
+<div style="grid-column:1/-1;">
+<label style="display:block;font-weight:800;margin-bottom:5px;">
+              Location
+</label>
+<input
+              id="afEventLocation"
+              type="text"
+              value="${afSMEscape(existing.location || "")}"
+              placeholder="School, customer, district or meeting location"
+              style="
+                width:100%;
+                padding:11px;
+                border:1px solid #ccd6d0;
+                border-radius:9px;
+box-sizing:border-box;
+              "
+>
+</div>
+
+<div style="grid-column:1/-1;">
+<label style="display:block;font-weight:800;margin-bottom:5px;">
+              Notes
+</label>
+<textarea
+              id="afEventNotes"
+              rows="4"
+              placeholder="Purpose, people to meet, items to carry, follow-up notes..."
+              style="
+                width:100%;
+                padding:11px;
+                border:1px solid #ccd6d0;
+                border-radius:9px;
+box-sizing:border-box;
+resize:vertical;
+              "
+>${afSMEscape(existing.notes || "")}</textarea>
+</div>
+</div>
+
+<div style="
+display:flex;
+justify-content:flex-end;
+          gap:10px;
+          margin-top:18px;
+        ">
+<button
+            type="button"
+            onclick="document.getElementById('afSocialMarketingModal')?.remove()"
+            style="
+              padding:10px 15px;
+              border:1px solid #cbd5cf;
+              border-radius:9px;
+              background:#fff;
+cursor:pointer;
+              font-weight:700;
+            "
+>
+            Cancel
+</button>
+
+<button
+            type="button"
+            id="afSaveUpcomingEvent"
+            style="
+              padding:10px 17px;
+              border:0;
+              border-radius:9px;
+              background:#0b5d34;
+color:white;
+cursor:pointer;
+              font-weight:800;
+            "
+>
+            ${isEdit ? "Update Event" : "Save Event"}
+</button>
+</div>
+      `,
+      "760px"
+    );
+
+    document.getElementById("afSaveUpcomingEvent")?.addEventListener(
+      "click",
+      () => {
+const title =
+document.getElementById("afEventTitle")?.value.trim() || "";
+const date =
+document.getElementById("afEventDate")?.value || "";
+const time =
+document.getElementById("afEventTime")?.value || "";
+const location =
+document.getElementById("afEventLocation")?.value.trim() || "";
+const notes =
+document.getElementById("afEventNotes")?.value.trim() || "";
+
+        if (!title) {
+          alert("Please enter the event or purpose.");
+          return;
+        }
+
+        if (!date) {
+          alert("Please select the event date.");
+          return;
+        }
+
+const now = new Date().toISOString();
+const user = afSMUserName();
+
+        if (isEdit) {
+const index = events.findIndex(
+            event => String(event.id) === String(existingId)
+          );
+
+          if (index === -1) {
+            alert("The event could not be found.");
+            return;
+          }
+
+          events[index] = {
+            ...events[index],
+            title,
+            date,
+            time,
+            location,
+            notes,
+            status: events[index].status || "Upcoming",
+updatedAt: now,
+updatedBy: user
+          };
+        } else {
+events.push({
+            id:
+              "EVT-" +
+Date.now() +
+              "-" +
+Math.random().toString(36).slice(2, 7).toUpperCase(),
+            title,
+            date,
+            time,
+            location,
+            notes,
+            status: "Upcoming",
+createdAt: now,
+createdBy: user
+          });
+        }
+
+afSMSaveEvents(events);
+document.getElementById("afSocialMarketingModal")?.remove();
+
+setTimeout(() =>afSMOpenUpcomingEvents(), 70);
+      }
+    );
+  }
+
+  function afSMDeleteEvent(id) {
+    if (!afSMIsDirector()) {
+      alert("Only the Director can delete upcoming events.");
+      return;
+    }
+
+const events = afSMGetEvents();
+const event = events.find(
+      item => String(item.id) === String(id)
+    );
+
+    if (!event) {
+      alert("Event not found.");
+      return;
+    }
+
+    if (!confirm(`Delete "${event.title}"?`)) return;
+
+afSMSaveEvents(
+events.filter(item => String(item.id) !== String(id))
+    );
+
+afSMOpenUpcomingEvents();
+  }
+
+  function afSMOpenUpcomingEvents() {
+    if (!afSMCanView()) {
+      alert("Upcoming Events are available to the Director and Secretary.");
+      return;
+    }
+
+const events = afSMGetEvents()
+      .slice()
+      .sort((a, b) =>afSMEventDateValue(a) - afSMEventDateValue(b));
+
+const director = afSMIsDirector();
+
+const rows = events.length
+      ? events.map(event => `
+<tr>
+<td style="padding:10px;border-bottom:1px solid #e5ebe7;">
+<strong>${afSMEscape(event.title || "")}</strong>
+              ${
+event.notes
+                  ? `<div style="font-size:12px;color:#66736b;margin-top:4px;">
+                      ${afSMEscape(event.notes)}
+</div>`
+                  : ""
+              }
+</td>
+
+<td style="padding:10px;border-bottom:1px solid #e5ebe7;white-space:nowrap;">
+              ${afSMEscape(afSMFormatDate(event.date))}
+              ${
+event.time
+                  ? `<div style="font-size:12px;color:#66736b;">
+                      ${afSMEscape(event.time)}
+</div>`
+                  : ""
+              }
+</td>
+
+<td style="padding:10px;border-bottom:1px solid #e5ebe7;">
+              ${afSMEscape(event.location || "—")}
+</td>
+
+<td style="padding:10px;border-bottom:1px solid #e5ebe7;">
+              ${
+                director
+                  ? `
+<div style="display:flex;gap:6px;flex-wrap:wrap;">
+<button
+                        type="button"
+                        onclick="window.__afEditUpcomingEvent('${afSMEscape(event.id)}')"
+                        style="
+                          border:0;
+                          border-radius:7px;
+                          padding:7px 10px;
+                          background:#e9f2ec;
+cursor:pointer;
+                          font-weight:700;
+                        "
+>Edit</button>
+
+<button
+                        type="button"
+                        onclick="window.__afDeleteUpcomingEvent('${afSMEscape(event.id)}')"
+                        style="
+                          border:0;
+                          border-radius:7px;
+                          padding:7px 10px;
+                          background:#f8e8e8;
+                          color:#8a1f1f;
+cursor:pointer;
+                          font-weight:700;
+                        "
+>Delete</button>
+</div>
+                  `
+                  : `<span style="color:#69766f;font-size:12px;">View only</span>`
+              }
+</td>
+</tr>
+        `).join("")
+      : `
+<tr>
+<td colspan="4" style="
+              padding:24px;
+text-align:center;
+              color:#6b756f;
+            ">
+              No upcoming events have been recorded.
+</td>
+</tr>
+        `;
+
+afSMModal(
+      "Upcoming Events",
+      `
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:center;
+          gap:12px;
+flex-wrap:wrap;
+          margin-bottom:15px;
+        ">
+<div style="color:#5d6962;">
+            Marketing visits, meetings, school visits and other planned activities.
+</div>
+
+          ${
+            director
+              ? `
+<button
+                  type="button"
+                  id="afAddUpcomingEvent"
+                  style="
+                    border:0;
+                    border-radius:9px;
+                    padding:10px 14px;
+                    background:#0b5d34;
+color:white;
+cursor:pointer;
+                    font-weight:800;
+                  "
+>
+                  + Add Event
+</button>
+              `
+              : ""
+          }
+</div>
+
+<div style="overflow:auto;">
+<table style="
+            width:100%;
+border-collapse:collapse;
+            min-width:680px;
+          ">
+<thead>
+<tr style="background:#f2f6f3;text-align:left;">
+<th style="padding:10px;">Event / Purpose</th>
+<th style="padding:10px;">Date & Time</th>
+<th style="padding:10px;">Location</th>
+<th style="padding:10px;">Action</th>
+</tr>
+</thead>
+<tbody>${rows}</tbody>
+</table>
+</div>
+      `,
+      "980px"
+    );
+
+document.getElementById("afAddUpcomingEvent")?.addEventListener(
+      "click",
+      () =>afSMOpenEventForm()
+    );
+  }
+
+  function afSMCardHTML() {
+const upcoming = afSMUpcomingEvents().slice(0, 3);
+const director = afSMIsDirector();
+
+consteventPreview = upcoming.length
+      ? upcoming.map(event => `
+<div style="
+            padding:8px 0;
+            border-bottom:1px solid #e6ece8;
+          ">
+<div style="font-weight:800;">
+              ${afSMEscape(event.title)}
+</div>
+
+<div style="
+              font-size:12px;
+              color:#647169;
+              margin-top:2px;
+            ">
+              ${afSMEscape(afSMFormatDate(event.date))}
+              ${event.time ? " • " + afSMEscape(event.time) : ""}
+              ${event.location ? " • " + afSMEscape(event.location) : ""}
+</div>
+</div>
+        `).join("")
+      : `
+<div style="
+            padding:10px 0;
+            color:#6b756f;
+            font-size:13px;
+          ">
+            No upcoming events.
+</div>
+        `;
+
+    return `
+<div id="afSocialMarketingDashboardCard" style="
+        background:#fff;
+        border:1px solid #dce5df;
+        border-radius:14px;
+        padding:16px;
+        box-shadow:0 3px 12px rgba(0,0,0,.06);
+        margin:14px 0;
+      ">
+<div style="
+display:flex;
+justify-content:space-between;
+align-items:center;
+          gap:10px;
+flex-wrap:wrap;
+          margin-bottom:10px;
+        ">
+<div>
+<div style="
+              font-size:17px;
+              font-weight:900;
+              color:#163c28;
+            ">
+              Social Media & Upcoming Events
+</div>
+
+<div style="
+              font-size:12px;
+              color:#6c786f;
+              margin-top:2px;
+            ">
+              Marketing communication and planned activities
+</div>
+</div>
+</div>
+
+<div style="
+display:flex;
+          gap:8px;
+flex-wrap:wrap;
+          margin-bottom:12px;
+        ">
+<button
+            type="button"
+onclick="window.openAFWhatsAppCentre()"
+            style="
+              border:0;
+              border-radius:9px;
+              padding:9px 12px;
+              background:#e9f6ed;
+              color:#165c31;
+              font-weight:800;
+cursor:pointer;
+            "
+>
+            WhatsApp
+</button>
+
+          ${
+            director
+              ? `
+<button
+                  type="button"
+onclick="window.openAFTikTokPostingCentre()"
+                  style="
+                    border:0;
+                    border-radius:9px;
+                    padding:9px 12px;
+                    background:#111;
+                    color:#fff;
+                    font-weight:800;
+cursor:pointer;
+                  "
+>
+TikTok
+</button>
+              `
+              : ""
+          }
+
+<button
+            type="button"
+onclick="window.openAFUpcomingEvents()"
+            style="
+              border:0;
+              border-radius:9px;
+              padding:9px 12px;
+              background:#0b5d34;
+              color:#fff;
+              font-weight:800;
+cursor:pointer;
+            "
+>
+            Upcoming Events
+</button>
+</div>
+
+<div style="
+          border-top:1px solid #e6ece8;
+          padding-top:5px;
+        ">
+          ${eventPreview}
+</div>
+</div>
+    `;
+  }
+
+  function afSMFindDashboardHost() {
+    return (
+document.querySelector("#mainApplication .main") ||
+document.querySelector("#mainApplication") ||
+document.querySelector(".main")
+    );
+  }
+
+  function afSMRenderDashboardCard() {
+const existing =
+document.getElementById("afSocialMarketingDashboardCard");
+
+    if (!afSMCanView()) {
+existing?.remove();
+      return;
+    }
+
+const host = afSMFindDashboardHost();
+    if (!host) return;
+
+const wrapper = document.createElement("div");
+wrapper.innerHTML = afSMCardHTML();
+
+const fresh = wrapper.firstElementChild;
+    if (!fresh) return;
+
+    if (existing) {
+existing.replaceWith(fresh);
+    } else {
+host.appendChild(fresh);
+    }
+  }
+
+window.openAFUpcomingEvents = afSMOpenUpcomingEvents;
+window.openAFTikTokPostingCentre = afSMOpenTikTokPostingCentre;
+window.openAFWhatsAppCentre = afSMOpenWhatsApp;
+
+  window.__afEditUpcomingEvent = afSMOpenEventForm;
+  window.__afDeleteUpcomingEvent = afSMDeleteEvent;
+
+window.renderAFSocialMarketingDashboardCard =
+afSMRenderDashboardCard;
+
+window.addEventListener(
+    "af-upcoming-events-updated",
+afSMRenderDashboardCard
+  );
+
+window.addEventListener(
+    "af-cloud-master-updated",
+afSMRenderDashboardCard
+  );
+
+document.addEventListener(
+    "DOMContentLoaded",
+    () => {
+setTimeout(afSMRenderDashboardCard, 500);
+setTimeout(afSMRenderDashboardCard, 1500);
+    }
+  );
+
+const observer = new MutationObserver(() => {
+clearTimeout(window.__afSMRenderTimer);
+
+    window.__afSMRenderTimer = setTimeout(
+afSMRenderDashboardCard,
+      180
+    );
+  });
+
+conststartObserver = () => {
+    if (!document.body) return;
+
+observer.observe(document.body, {
+childList: true,
+      subtree: true
+    });
+
+setTimeout(afSMRenderDashboardCard, 300);
+setTimeout(afSMRenderDashboardCard, 1200);
+  };
+
+  if (document.readyState === "loading") {
+document.addEventListener("DOMContentLoaded", startObserver);
+  } else {
+startObserver();
+  }
+
+console.log(
+    "A&F Social Media + Upcoming Events connected."
+  );
+})();
