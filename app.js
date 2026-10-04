@@ -88881,27 +88881,332 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
     );
   }
 
-  function downloadBackup(reason) {
+  async function saveTextFileToChosenLocation(
+    fileName,
+    text,
+    mime = "application/json"
+  ) {
+    /*
+     * Desktop Chrome/Edge and other supported browsers:
+     * open a real Save As picker so the Director chooses
+     * the storage folder and file name.
+     */
+    if (
+      typeof window.showSaveFilePicker ===
+      "function"
+    ) {
+      try {
+        const extension =
+          fileName.toLowerCase().endsWith(".csv")
+            ? ".csv"
+            : ".json";
+
+        const description =
+          extension === ".csv"
+            ? "CSV File"
+            : "A&F Wekavera Backup";
+
+        const pickerOptions = {
+          suggestedName: fileName,
+          types: [
+            {
+              description,
+              accept: {
+                [mime]: [extension]
+              }
+            }
+          ]
+        };
+
+        const fileHandle =
+          await window.showSaveFilePicker(
+            pickerOptions
+          );
+
+        const writable =
+          await fileHandle.createWritable();
+
+        await writable.write(text);
+        await writable.close();
+
+        return {
+          saved: true,
+          method: "SAVE_PICKER",
+          fileName:
+            fileHandle.name || fileName
+        };
+      } catch (error) {
+        if (
+          error &&
+          (
+            error.name === "AbortError" ||
+            error.name === "NotAllowedError"
+          )
+        ) {
+          return {
+            saved: false,
+            cancelled: true,
+            method: "SAVE_PICKER"
+          };
+        }
+
+        console.warn(
+          "A&F Save As picker:",
+          error
+        );
+      }
+    }
+
+    /*
+     * Android and browsers without showSaveFilePicker:
+     * fall back to the browser/device download-save flow.
+     * The phone can then choose Downloads, Files, Drive, etc.
+     * depending on its browser and Android version.
+     */
+    downloadTextFile(
+      fileName,
+      text,
+      mime
+    );
+
+    return {
+      saved: true,
+      fallback: true,
+      method: "DOWNLOAD"
+    };
+  }
+
+  async function saveBackupToChosenLocation(
+    reason
+  ) {
     const backup =
       buildBackupObject(reason);
 
-    downloadTextFile(
+    const fileName =
       "AF-Wekavera-Backup-" +
       todayFileStamp() +
-      ".json",
-      JSON.stringify(
-        backup,
-        null,
-        2
-      )
-    );
+      ".json";
+
+    const result =
+      await saveTextFileToChosenLocation(
+        fileName,
+        JSON.stringify(
+          backup,
+          null,
+          2
+        ),
+        "application/json"
+      );
+
+    if (!result.saved) {
+      audit(
+        "BACKUP_CANCELLED",
+        reason || "Manual Backup"
+      );
+
+      return {
+        ...result,
+        backup: null
+      };
+    }
 
     audit(
       "BACKUP_CREATED",
-      reason || "Manual Backup"
+      (reason || "Manual Backup") +
+      " | " +
+      String(
+        result.method || ""
+      )
     );
 
-    return backup;
+    return {
+      ...result,
+      backup
+    };
+  }
+
+  function requireSafetyBackup(
+    reason,
+    continueLabel
+  ) {
+    return new Promise(resolve => {
+      const { modal, body } =
+        openModal(
+          "afSafetyBackupGate",
+          "💾 Safety Backup Required",
+          "Choose where to save the backup before continuing.",
+          650
+        );
+
+      let backupSaved = false;
+
+      body.innerHTML = `
+        <div style="
+          padding:12px;
+          border:1px solid #dbe7e0;
+          border-radius:9px;
+          background:#f8fbf9;
+          font-size:12px;
+          line-height:1.6;
+          margin-bottom:12px;
+        ">
+          Before this action continues, save a fresh
+          A&F Wekavera backup in a location you can find later.
+          <br><br>
+          On supported desktop browsers, a
+          <b>Save As</b> window will let you choose the exact folder.
+          On Android or unsupported browsers, the normal phone/browser
+          save or download process will be used.
+        </div>
+
+        <div
+          id="afSafetyBackupStatus"
+          style="
+            min-height:22px;
+            padding:9px 10px;
+            margin-bottom:12px;
+            border-radius:7px;
+            background:#fff7e6;
+            color:#725400;
+            font-size:11px;
+          "
+        >
+          Backup not yet saved.
+        </div>
+
+        <div style="
+          display:flex;
+          justify-content:flex-end;
+          gap:9px;
+          flex-wrap:wrap;
+        ">
+          <button
+            id="afSafetyBackupCancel"
+            type="button"
+            style="${secondaryButtonStyle()}"
+          >
+            Cancel
+          </button>
+
+          <button
+            id="afSafetyBackupSave"
+            type="button"
+            style="${primaryButtonStyle()}"
+          >
+            📁 Choose Location & Save Backup
+          </button>
+
+          <button
+            id="afSafetyBackupContinue"
+            type="button"
+            disabled
+            style="
+              ${primaryButtonStyle()}
+              opacity:.45;
+              cursor:not-allowed;
+            "
+          >
+            ${esc(
+              continueLabel ||
+              "Continue"
+            )}
+          </button>
+        </div>
+      `;
+
+      const status =
+        body.querySelector(
+          "#afSafetyBackupStatus"
+        );
+
+      const saveButton =
+        body.querySelector(
+          "#afSafetyBackupSave"
+        );
+
+      const continueButton =
+        body.querySelector(
+          "#afSafetyBackupContinue"
+        );
+
+      body.querySelector(
+        "#afSafetyBackupCancel"
+      ).onclick = () => {
+        modal.remove();
+        resolve(false);
+      };
+
+      saveButton.onclick =
+        async () => {
+          saveButton.disabled = true;
+          saveButton.textContent =
+            "Saving...";
+
+          status.style.background =
+            "#eef5ff";
+          status.style.color =
+            "#294f7a";
+          status.textContent =
+            "Choose the storage location for the backup.";
+
+          const result =
+            await saveBackupToChosenLocation(
+              reason
+            );
+
+          saveButton.disabled = false;
+          saveButton.textContent =
+            "📁 Choose Location & Save Backup";
+
+          if (!result.saved) {
+            backupSaved = false;
+
+            status.style.background =
+              "#fff4e5";
+            status.style.color =
+              "#8a5a00";
+            status.textContent =
+              "Backup was cancelled. The action cannot continue until a backup is saved.";
+
+            continueButton.disabled =
+              true;
+            continueButton.style.opacity =
+              ".45";
+            continueButton.style.cursor =
+              "not-allowed";
+
+            return;
+          }
+
+          backupSaved = true;
+
+          status.style.background =
+            "#eaf7ef";
+          status.style.color =
+            "#0b5d3b";
+
+          status.textContent =
+            result.fallback
+              ? "Backup sent to your device's save/download area successfully."
+              : "Backup saved successfully in the location you selected.";
+
+          continueButton.disabled =
+            false;
+          continueButton.style.opacity =
+            "1";
+          continueButton.style.cursor =
+            "pointer";
+        };
+
+      continueButton.onclick = () => {
+        if (!backupSaved) {
+          return;
+        }
+
+        modal.remove();
+        resolve(true);
+      };
+    });
   }
 
   /* =======================================================
@@ -89065,6 +89370,23 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
       return;
     }
 
+    /*
+     * Step 1:
+     * The Director must deliberately choose/save a backup.
+     * Cancelling the backup stops the reset.
+     */
+    const backupReady =
+      await requireSafetyBackup(
+        "Pre-operational-reset backup",
+        "Continue to Reset"
+      );
+
+    if (!backupReady) return;
+
+    /*
+     * Step 2:
+     * Verify Director password + typed phrase.
+     */
     const confirmed =
       await protectedConfirm(
         "Reset Operational / Test Data",
@@ -89073,13 +89395,6 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
       );
 
     if (!confirmed) return;
-
-    /*
-     * Mandatory backup immediately before reset.
-     */
-    downloadBackup(
-      "Automatic pre-operational-reset backup"
-    );
 
     OPERATIONAL_RESET_KEYS.forEach(
       key =>
@@ -89112,6 +89427,14 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
       return;
     }
 
+    const backupReady =
+      await requireSafetyBackup(
+        "Pre-full-factory-reset backup",
+        "Continue to Full Reset"
+      );
+
+    if (!backupReady) return;
+
     const confirmed =
       await protectedConfirm(
         "FULL FACTORY RESET",
@@ -89120,10 +89443,6 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
       );
 
     if (!confirmed) return;
-
-    downloadBackup(
-      "Automatic pre-full-factory-reset backup"
-    );
 
     const tvsla = {};
 
@@ -90135,9 +90454,13 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
       return;
     }
 
-    downloadBackup(
-      "Automatic pre-update backup"
-    );
+    const backupReady =
+      await requireSafetyBackup(
+        "Pre-update backup",
+        "Continue to Update"
+      );
+
+    if (!backupReady) return;
 
     const remoteHash =
       localStorage.getItem(
@@ -90393,7 +90716,7 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
       openModal(
         "afGoLiveSettingsModal",
         "🛡️ Data, Security & Installation",
-        "Backup • Reset • Login Security • Desktop/Mobile Installation • Updates",
+        "Choose Backup Location • Reset • Login Security • Desktop/Mobile Installation • Updates",
         980
       );
 
@@ -90511,7 +90834,7 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
           type="button"
           style="${primaryButtonStyle()}"
         >
-          ⬇ Backup Company Data
+          📁 Backup Company Data
         </button>
 
         <button
@@ -90571,7 +90894,7 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
         line-height:1.55;
         margin-bottom:18px;
       ">
-        <b>Operational Reset keeps:</b>
+        <b>Backup location:</b> supported desktop browsers open a Save As window so you choose the folder and filename. Android/unsupported browsers use the device's normal save/download flow.<br><br><b>Operational Reset keeps:</b>
         company profile, employees, permissions, teams, shifts,
         pole prices/weights, customers, suppliers, factory item
         register, fixed assets, employee documents and TVSLA.
@@ -90825,16 +91148,26 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
 
     body.querySelector(
       "#afBackupNow"
-    ).onclick = () => {
-      downloadBackup(
-        "Manual Backup"
-      );
+    ).onclick =
+      async () => {
+        const result =
+          await saveBackupToChosenLocation(
+            "Manual Backup"
+          );
 
-      alert(
-        "Backup created successfully.\n\n" +
-        "Keep the downloaded JSON file in a safe location."
-      );
-    };
+        if (!result.saved) {
+          alert(
+            "Backup was cancelled.\n\nNo backup file was created."
+          );
+          return;
+        }
+
+        alert(
+          result.fallback
+            ? "Backup created successfully.\n\nYour browser/device used its normal save or download area."
+            : "Backup created successfully.\n\nIt was saved in the location you selected."
+        );
+      };
 
     const restoreInput =
       body.querySelector(
@@ -90879,18 +91212,22 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
           return;
         }
 
+        const backupReady =
+          await requireSafetyBackup(
+            "Pre-restore backup of current data",
+            "Continue to Restore"
+          );
+
+        if (!backupReady) return;
+
         const confirmed =
           await protectedConfirm(
             "Restore Company Backup",
-            "The current application data will be replaced by the selected backup. A fresh backup of the current data will be downloaded first.",
+            "The current application data will be replaced by the selected backup. Your current data has already been backed up to the location you selected.",
             "RESTORE BACKUP"
           );
 
         if (!confirmed) return;
-
-        downloadBackup(
-          "Automatic pre-restore backup"
-        );
 
         try {
           await restoreBackupObject(
@@ -91054,7 +91391,7 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
       </strong>
 
       <span>
-        Backup, reset, security, install & updates
+        Choose backup location, reset, security, install & updates
       </span>
     `;
 
@@ -91113,7 +91450,7 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
 
   window.backupAFCompanyData =
     () =>
-      downloadBackup(
+      saveBackupToChosenLocation(
         "Manual Backup"
       );
 
