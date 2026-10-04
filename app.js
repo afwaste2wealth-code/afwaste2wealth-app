@@ -91845,7 +91845,7 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
     afCompanyLetters: {
       label: "Company Letters",
       kind: "array"
-    }
+    },
     afUpcomingEvents: {
       label: "Upcoming Events",
       kind: "array"
