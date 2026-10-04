@@ -86451,6 +86451,115 @@ function afAROpenWeeklyCheckForm() {
 }
 
 /* =========================================================
+   WEEKLY STOCK QUICK-FILTER HELPERS
+   ========================================================= */
+
+function afARWeeklyFilterMatch(item, filterKey) {
+    const itemData = item || {};
+    const filter = String(filterKey || "all");
+    const condition = String(itemData.condition || "").trim();
+    const status = String(itemData.status || "").trim();
+
+    const missing =
+        itemData.missing === true ||
+        itemData.missing === 1 ||
+        String(itemData.missing || "").toLowerCase() === "true" ||
+        String(itemData.missing || "").toLowerCase() === "yes";
+
+    switch (filter) {
+        case "all":
+            return true;
+
+        case "good":
+            return condition === "Good";
+
+        case "fair":
+            return condition === "Fair";
+
+        case "needsAttention":
+            return condition === "Needs Attention" || condition === "Need Attention";
+
+        case "poor":
+            return condition === "Poor";
+
+        case "active":
+            return status === "Active";
+
+        case "inactive":
+            return status === "Inactive";
+
+        case "damaged":
+            return status === "Damaged";
+
+        case "needsReplacement":
+            return status === "Needs Replacement" || status === "Need Repair";
+
+        case "repaired":
+            return status === "Repaired";
+
+        case "missing":
+            return missing;
+
+        case "attention":
+            return typeof afARCheckAttentionItem === "function"
+                ? afARCheckAttentionItem(itemData)
+                : (
+                    missing ||
+                    condition === "Needs Attention" ||
+                    condition === "Need Attention" ||
+                    condition === "Poor" ||
+                    status === "Damaged" ||
+                    status === "Needs Replacement" ||
+                    status === "Need Repair"
+                );
+
+        default:
+            return true;
+    }
+}
+
+function afARWeeklyFilteredItems(items, filterKey) {
+    return (Array.isArray(items) ? items : [])
+        .filter(item => afARWeeklyFilterMatch(item, filterKey));
+}
+
+function afARWeeklyFilterLabel(filterKey) {
+    const labels = {
+        all: "Items Checked / Show All",
+        good: "Good",
+        fair: "Fair",
+        needsAttention: "Needs Attention",
+        poor: "Poor",
+        active: "Active",
+        inactive: "Inactive",
+        damaged: "Damaged",
+        needsReplacement: "Needs Replacement",
+        repaired: "Repaired",
+        missing: "Missing",
+        attention: "Needs Follow-up"
+    };
+
+    return labels[String(filterKey || "all")] || "Items Checked / Show All";
+}
+
+function afARWeeklyFilterCardStyle(selected, background) {
+    return [
+        "width:100%",
+        "box-sizing:border-box",
+        "padding:10px",
+        "border-radius:8px",
+        "text-align:left",
+        "cursor:pointer",
+        "font:inherit",
+        "background:" + (background || "#f7faf8"),
+        "color:#173027",
+        selected
+            ? "border:2px solid #0b5d3b;box-shadow:0 0 0 2px rgba(11,93,59,.08)"
+            : "border:1px solid #dfe7e2"
+    ].join(";");
+}
+
+/* =========================================================
    WEEKLY CHECK HISTORY / DETAIL
    ========================================================= */
 
