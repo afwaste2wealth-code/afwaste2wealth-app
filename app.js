@@ -88118,3 +88118,3013 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
     "A&F Uganda Environmental News scrolling ticker connected."
   );
 })();
+
+/* =========================================================
+   A&F WEKAVERA LTD - GO LIVE / SECURITY / INSTALL / UPDATE
+   ONE-BLOCK ADD-ON
+
+   Paste ONCE at the very bottom of app.js.
+
+   Includes:
+   1) Director-only Data, Security & Installation settings
+   2) Full JSON backup
+   3) Restore backup
+   4) Safe Operational/Test Data reset
+   5) Protected Full Factory Reset
+   6) Login failure lockout
+   7) Automatic session timeout
+   8) Security audit trail
+   9) Desktop / Android install support
+   10) App update checker + Update Now
+
+   IMPORTANT:
+   - Factory Operational Reset NEVER clears the independent TVSLA data.
+   - This improves protection against ordinary misuse.
+   - Because the present app stores data in browser localStorage,
+     it is not equivalent to server-side security against a person
+     who has full device/browser developer access.
+   ========================================================= */
+
+(function connectAFGoLiveSecurity() {
+  "use strict";
+
+  if (window.__afGoLiveSecurityInstalled) return;
+  window.__afGoLiveSecurityInstalled = true;
+
+  const APP_NAME = "A&F Wekavera Factory Management";
+  const APP_VERSION = "1.0.0";
+  const BACKUP_FORMAT = "AF_WEKAVERA_BACKUP_V1";
+
+  const SECURITY_SETTINGS_KEY = "afSecuritySettings";
+  const LOGIN_STATE_KEY = "afSecurityLoginState";
+  const AUDIT_KEY = "afSecurityAuditLog";
+  const LAST_ACTIVITY_KEY = "afSecurityLastActivity";
+  const CURRENT_CODE_HASH_KEY = "afCurrentAppCodeHash";
+  const REMOTE_CODE_HASH_KEY = "afRemoteAppCodeHash";
+
+  /*
+   * Normal operational/test reset:
+   * Clear transaction/activity records while preserving:
+   * - Company profile / print settings
+   * - Employee accounts
+   * - Roles & permissions
+   * - Teams / shifts
+   * - Pole prices / standards
+   * - Customers / Suppliers master lists
+   * - Factory Items Register / Fixed Assets
+   * - Employee Documents
+   * - TVSLA data
+   */
+  const OPERATIONAL_RESET_KEYS = [
+    "materialRecords",
+    "clientMaterialRecords",
+    "washingShiftRecords",
+    "washingCycles",
+    "washedKaveraStock",
+    "companyWashedKaveraStock",
+    "clientWashedKaveraStock",
+    "productionRecords",
+    "salesRecords",
+    "afSalesOrders",
+    "afDeliveryRecords",
+    "afCustomerPayments",
+    "afCustomerFollowups",
+    "expenses",
+    "expenseRecords",
+    "afSupplierPurchases",
+    "supplierPayments",
+    "attendanceRecords",
+    "employeeAdvances",
+    "employeeDeductions",
+    "advanceRecoveries",
+    "payrollRecords",
+    "afPerformanceAwards",
+    "afMonthEndPrizePlans",
+    "afMonthEndWinners",
+    "afQualityDisciplineRecords",
+    "clientPerformance",
+    "afWeeklyFactoryChecks",
+    "afJournalEntries",
+    "afDailyDashboardChecklist",
+    "afProductionTargets",
+    "afMonthlyBusinessTargets",
+    "afCompanyPelletRecords",
+    "teamTransferHistory"
+  ];
+
+  /*
+   * Independent SACCO data.
+   * NEVER cleared by Factory Operational Reset or Full Factory Reset.
+   */
+  const TVSLA_KEYS = [
+    "tvslaMembers",
+    "tvslaTransactions",
+    "tvslaLoans",
+    "tvslaSettings"
+  ];
+
+  const TRANSIENT_KEYS = [
+    "currentUser",
+    LOGIN_STATE_KEY,
+    LAST_ACTIVITY_KEY,
+    "afUgandaEnvironmentalNewsCache",
+    REMOTE_CODE_HASH_KEY
+  ];
+
+  let deferredInstallPrompt = null;
+  let activityWriteTimer = 0;
+
+  /* =======================================================
+     BASIC HELPERS
+     ======================================================= */
+
+  function currentUser() {
+    try {
+      if (typeof getAFCurrentUser === "function") {
+        return getAFCurrentUser() || {};
+      }
+    } catch (_) {}
+
+    try {
+      return JSON.parse(
+        localStorage.getItem("currentUser") || "{}"
+      ) || {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function currentRole() {
+    return String(currentUser().role || "");
+  }
+
+  function isDirector() {
+    return currentRole() === "Director";
+  }
+
+  function esc(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function uid(prefix) {
+    return (
+      prefix +
+      "-" +
+      Date.now() +
+      "-" +
+      Math.random().toString(36).slice(2, 8)
+    );
+  }
+
+  function nowISO() {
+    return new Date().toISOString();
+  }
+
+  function todayFileStamp() {
+    const d = new Date();
+
+    return (
+      d.getFullYear() +
+      String(d.getMonth() + 1).padStart(2, "0") +
+      String(d.getDate()).padStart(2, "0") +
+      "-" +
+      String(d.getHours()).padStart(2, "0") +
+      String(d.getMinutes()).padStart(2, "0")
+    );
+  }
+
+  function readJSON(key, fallback) {
+    try {
+      const value = JSON.parse(
+        localStorage.getItem(key) || "null"
+      );
+
+      return value ?? fallback;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  function writeJSON(key, value) {
+    localStorage.setItem(
+      key,
+      JSON.stringify(value)
+    );
+  }
+
+  function money(value) {
+    return (
+      "UGX " +
+      Number(value || 0).toLocaleString("en-UG")
+    );
+  }
+
+  /* =======================================================
+     SECURITY SETTINGS
+     ======================================================= */
+
+  function getSecuritySettings() {
+    const saved = readJSON(
+      SECURITY_SETTINGS_KEY,
+      {}
+    );
+
+    return {
+      sessionTimeoutMinutes:
+        Number(
+          saved.sessionTimeoutMinutes ?? 30
+        ) || 30,
+
+      maxLoginAttempts:
+        Number(
+          saved.maxLoginAttempts ?? 5
+        ) || 5,
+
+      lockoutMinutes:
+        Number(
+          saved.lockoutMinutes ?? 15
+        ) || 15
+    };
+  }
+
+  function saveSecuritySettings(settings) {
+    writeJSON(
+      SECURITY_SETTINGS_KEY,
+      settings
+    );
+  }
+
+  /* =======================================================
+     SECURITY AUDIT TRAIL
+     ======================================================= */
+
+  function audit(action, details) {
+    const user = currentUser();
+    const records = readJSON(
+      AUDIT_KEY,
+      []
+    );
+
+    records.unshift({
+      id: uid("AUD"),
+      timestamp: nowISO(),
+      action: String(action || ""),
+      details: String(details || ""),
+      employeeId: user.employeeId || "",
+      userName: user.fullName || "",
+      role: user.role || "",
+      userAgent:
+        String(navigator.userAgent || "")
+          .slice(0, 220)
+    });
+
+    /*
+     * Keep the newest 600 security events.
+     */
+    writeJSON(
+      AUDIT_KEY,
+      records.slice(0, 600)
+    );
+  }
+
+  window.afAuditLogAction = audit;
+
+  /* =======================================================
+     DIRECTOR PASSWORD VERIFICATION
+     Uses the same SHA-256 password method already used
+     by the existing A&F login.
+     ======================================================= */
+
+  async function sha256Text(value) {
+    const data =
+      new TextEncoder().encode(
+        String(value || "")
+      );
+
+    const hash =
+      await crypto.subtle.digest(
+        "SHA-256",
+        data
+      );
+
+    return Array.from(
+      new Uint8Array(hash)
+    )
+      .map(byte =>
+        byte
+          .toString(16)
+          .padStart(2, "0")
+      )
+      .join("");
+  }
+
+  async function verifyDirectorPassword(password) {
+    const user = currentUser();
+
+    if (
+      !user ||
+      user.role !== "Director" ||
+      !user.employeeId
+    ) {
+      return false;
+    }
+
+    let employees = [];
+
+    try {
+      if (typeof getEmployees === "function") {
+        employees = getEmployees() || [];
+      } else {
+        employees = readJSON(
+          "employees",
+          []
+        );
+      }
+    } catch (_) {
+      employees = readJSON(
+        "employees",
+        []
+      );
+    }
+
+    const employee =
+      employees.find(item =>
+        String(item.employeeId) ===
+        String(user.employeeId)
+      );
+
+    if (
+      !employee ||
+      !employee.passwordHash
+    ) {
+      return false;
+    }
+
+    const hash =
+      await sha256Text(password);
+
+    return (
+      hash ===
+      employee.passwordHash
+    );
+  }
+
+  /* =======================================================
+     GENERAL MODAL
+     ======================================================= */
+
+  function openModal(
+    id,
+    title,
+    subtitle,
+    width = 900
+  ) {
+    document.getElementById(id)?.remove();
+
+    const modal =
+      document.createElement("div");
+
+    modal.id = id;
+
+    modal.style.cssText = `
+      position:fixed;
+      inset:0;
+      z-index:1000000;
+      background:rgba(0,0,0,.60);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:12px;
+      box-sizing:border-box;
+      font-family:Arial,sans-serif;
+    `;
+
+    modal.innerHTML = `
+      <div style="
+        width:${width}px;
+        max-width:96%;
+        max-height:94vh;
+        overflow:auto;
+        background:white;
+        border-radius:14px;
+        padding:20px;
+        box-sizing:border-box;
+        box-shadow:0 14px 44px rgba(0,0,0,.30);
+      ">
+        <div style="
+          display:flex;
+          align-items:flex-start;
+          justify-content:space-between;
+          gap:12px;
+          margin-bottom:16px;
+        ">
+          <div>
+            <h2 style="
+              margin:0;
+              color:#0b5d3b;
+              font-size:22px;
+            ">
+              ${esc(title)}
+            </h2>
+
+            <div style="
+              margin-top:5px;
+              color:#68756e;
+              font-size:12px;
+              line-height:1.5;
+            ">
+              ${esc(subtitle || "")}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            data-af-close-modal
+            style="
+              border:0;
+              border-radius:7px;
+              background:#eee;
+              padding:8px 11px;
+              cursor:pointer;
+              font-weight:bold;
+            "
+          >
+            ✕ Close
+          </button>
+        </div>
+
+        <div data-af-modal-body></div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal.querySelector(
+      "[data-af-close-modal]"
+    ).onclick = () => modal.remove();
+
+    return {
+      modal,
+      body:
+        modal.querySelector(
+          "[data-af-modal-body]"
+        )
+    };
+  }
+
+  function primaryButtonStyle() {
+    return `
+      border:0;
+      border-radius:8px;
+      padding:10px 14px;
+      background:#0b5d3b;
+      color:white;
+      font-weight:bold;
+      cursor:pointer;
+    `;
+  }
+
+  function secondaryButtonStyle() {
+    return `
+      border:1px solid #b7c8bf;
+      border-radius:8px;
+      padding:10px 14px;
+      background:white;
+      color:#173d2b;
+      font-weight:bold;
+      cursor:pointer;
+    `;
+  }
+
+  function dangerButtonStyle() {
+    return `
+      border:0;
+      border-radius:8px;
+      padding:10px 14px;
+      background:#b42318;
+      color:white;
+      font-weight:bold;
+      cursor:pointer;
+    `;
+  }
+
+  /* =======================================================
+     PROTECTED CONFIRMATION
+     ======================================================= */
+
+  function protectedConfirm(
+    title,
+    warning,
+    phrase
+  ) {
+    return new Promise(resolve => {
+      const { modal, body } =
+        openModal(
+          "afProtectedSecurityConfirm",
+          title,
+          warning,
+          620
+        );
+
+      body.innerHTML = `
+        <div style="
+          background:#fff4e5;
+          border:1px solid #f0d3a1;
+          border-radius:9px;
+          padding:12px;
+          font-size:12px;
+          line-height:1.6;
+          margin-bottom:14px;
+        ">
+          This action requires the
+          <b>Director's current password</b>.
+        </div>
+
+        <label style="
+          display:block;
+          font-size:12px;
+          font-weight:bold;
+          margin-bottom:12px;
+        ">
+          Director Password
+
+          <input
+            id="afProtectedPassword"
+            type="password"
+            autocomplete="current-password"
+            style="
+              display:block;
+              width:100%;
+              box-sizing:border-box;
+              margin-top:6px;
+              padding:11px;
+              border:1px solid #ccd7d1;
+              border-radius:8px;
+            "
+          >
+        </label>
+
+        <label style="
+          display:block;
+          font-size:12px;
+          font-weight:bold;
+        ">
+          Type exactly:
+          <span style="color:#b42318;">
+            ${esc(phrase)}
+          </span>
+
+          <input
+            id="afProtectedPhrase"
+            type="text"
+            autocomplete="off"
+            style="
+              display:block;
+              width:100%;
+              box-sizing:border-box;
+              margin-top:6px;
+              padding:11px;
+              border:1px solid #ccd7d1;
+              border-radius:8px;
+            "
+          >
+        </label>
+
+        <div
+          id="afProtectedMessage"
+          style="
+            min-height:20px;
+            margin-top:10px;
+            font-size:12px;
+            text-align:center;
+          "
+        ></div>
+
+        <div style="
+          display:flex;
+          justify-content:flex-end;
+          gap:9px;
+          flex-wrap:wrap;
+          margin-top:14px;
+        ">
+          <button
+            id="afProtectedCancel"
+            type="button"
+            style="${secondaryButtonStyle()}"
+          >
+            Cancel
+          </button>
+
+          <button
+            id="afProtectedProceed"
+            type="button"
+            style="${dangerButtonStyle()}"
+          >
+            Confirm Action
+          </button>
+        </div>
+      `;
+
+      let finished = false;
+
+      function finish(value) {
+        if (finished) return;
+        finished = true;
+        modal.remove();
+        resolve(value);
+      }
+
+      body.querySelector(
+        "#afProtectedCancel"
+      ).onclick = () =>
+        finish(false);
+
+      body.querySelector(
+        "#afProtectedProceed"
+      ).onclick = async () => {
+        const password =
+          body.querySelector(
+            "#afProtectedPassword"
+          ).value;
+
+        const typed =
+          body.querySelector(
+            "#afProtectedPhrase"
+          ).value.trim();
+
+        const message =
+          body.querySelector(
+            "#afProtectedMessage"
+          );
+
+        if (typed !== phrase) {
+          message.style.color =
+            "#b42318";
+
+          message.textContent =
+            "The confirmation phrase does not match.";
+
+          return;
+        }
+
+        if (!password) {
+          message.style.color =
+            "#b42318";
+
+          message.textContent =
+            "Enter the Director password.";
+
+          return;
+        }
+
+        message.style.color =
+          "#666";
+
+        message.textContent =
+          "Verifying Director password...";
+
+        const valid =
+          await verifyDirectorPassword(
+            password
+          );
+
+        if (!valid) {
+          audit(
+            "SECURITY_CONFIRM_FAILED",
+            title
+          );
+
+          message.style.color =
+            "#b42318";
+
+          message.textContent =
+            "Director password is incorrect.";
+
+          return;
+        }
+
+        finish(true);
+      };
+    });
+  }
+
+  /* =======================================================
+     BACKUP
+     ======================================================= */
+
+  function buildBackupObject(reason) {
+    const data = {};
+
+    for (
+      let i = 0;
+      i < localStorage.length;
+      i++
+    ) {
+      const key =
+        localStorage.key(i);
+
+      if (
+        !key ||
+        TRANSIENT_KEYS.includes(key)
+      ) {
+        continue;
+      }
+
+      data[key] =
+        localStorage.getItem(key);
+    }
+
+    return {
+      format: BACKUP_FORMAT,
+      appName: APP_NAME,
+      appVersion: APP_VERSION,
+      createdAt: nowISO(),
+      reason:
+        String(reason || "Manual Backup"),
+      data
+    };
+  }
+
+  function downloadTextFile(
+    fileName,
+    text,
+    mime = "application/json"
+  ) {
+    const blob =
+      new Blob(
+        [text],
+        { type: mime }
+      );
+
+    const url =
+      URL.createObjectURL(blob);
+
+    const a =
+      document.createElement("a");
+
+    a.href = url;
+    a.download = fileName;
+
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    setTimeout(
+      () =>
+        URL.revokeObjectURL(url),
+      1000
+    );
+  }
+
+  function downloadBackup(reason) {
+    const backup =
+      buildBackupObject(reason);
+
+    downloadTextFile(
+      "AF-Wekavera-Backup-" +
+      todayFileStamp() +
+      ".json",
+      JSON.stringify(
+        backup,
+        null,
+        2
+      )
+    );
+
+    audit(
+      "BACKUP_CREATED",
+      reason || "Manual Backup"
+    );
+
+    return backup;
+  }
+
+  /* =======================================================
+     RESTORE BACKUP
+     ======================================================= */
+
+  function isAppOwnedKey(key) {
+    if (!key) return false;
+
+    if (
+      key.startsWith("af") ||
+      key.startsWith("tvsla")
+    ) {
+      return true;
+    }
+
+    return [
+      "employees",
+      "factoryTeams",
+      "shiftSettings",
+      "poleStandardWeights",
+      "poleSellingPrices",
+      "teamPerformanceSettings",
+      "materialRecords",
+      "clientMaterialRecords",
+      "washingShiftRecords",
+      "washingCycles",
+      "washedKaveraStock",
+      "companyWashedKaveraStock",
+      "clientWashedKaveraStock",
+      "productionRecords",
+      "salesRecords",
+      "supplierPayments",
+      "attendanceRecords",
+      "employeeAdvances",
+      "employeeDeductions",
+      "advanceRecoveries",
+      "payrollRecords",
+      "expenses",
+      "expenseRecords",
+      "clientPerformance",
+      "teamTransferHistory",
+      "currentUser"
+    ].includes(key);
+  }
+
+  function clearAppOwnedStorage() {
+    const keys = [];
+
+    for (
+      let i = 0;
+      i < localStorage.length;
+      i++
+    ) {
+      const key =
+        localStorage.key(i);
+
+      if (
+        key &&
+        isAppOwnedKey(key)
+      ) {
+        keys.push(key);
+      }
+    }
+
+    keys.forEach(key =>
+      localStorage.removeItem(key)
+    );
+  }
+
+  async function restoreBackupObject(
+    backup
+  ) {
+    if (
+      !backup ||
+      backup.format !== BACKUP_FORMAT ||
+      !backup.data ||
+      typeof backup.data !== "object"
+    ) {
+      throw new Error(
+        "This is not a valid A&F Wekavera backup file."
+      );
+    }
+
+    /*
+     * Preserve TVSLA from the CURRENT device if the
+     * backup does not contain it.
+     */
+    const existingTVSLA = {};
+
+    TVSLA_KEYS.forEach(key => {
+      const value =
+        localStorage.getItem(key);
+
+      if (value !== null) {
+        existingTVSLA[key] = value;
+      }
+    });
+
+    clearAppOwnedStorage();
+
+    Object.entries(
+      backup.data
+    ).forEach(([key, value]) => {
+      if (
+        key === "currentUser" ||
+        TRANSIENT_KEYS.includes(key)
+      ) {
+        return;
+      }
+
+      if (
+        typeof value === "string"
+      ) {
+        localStorage.setItem(
+          key,
+          value
+        );
+      }
+    });
+
+    TVSLA_KEYS.forEach(key => {
+      if (
+        localStorage.getItem(key) === null &&
+        existingTVSLA[key] !== undefined
+      ) {
+        localStorage.setItem(
+          key,
+          existingTVSLA[key]
+        );
+      }
+    });
+
+    localStorage.removeItem(
+      "currentUser"
+    );
+
+    localStorage.setItem(
+      LAST_ACTIVITY_KEY,
+      String(Date.now())
+    );
+
+    audit(
+      "BACKUP_RESTORED",
+      "Backup created " +
+      String(
+        backup.createdAt || "unknown"
+      )
+    );
+  }
+
+  /* =======================================================
+     OPERATIONAL RESET
+     ======================================================= */
+
+  async function resetOperationalData() {
+    if (!isDirector()) {
+      alert(
+        "Access Denied\n\nOnly the Director can reset operational data."
+      );
+      return;
+    }
+
+    const confirmed =
+      await protectedConfirm(
+        "Reset Operational / Test Data",
+        "This clears testing and transaction records but keeps employees, company profile, settings, customers, suppliers, factory item register, fixed assets, and all TVSLA records.",
+        "RESET OPERATIONAL DATA"
+      );
+
+    if (!confirmed) return;
+
+    /*
+     * Mandatory backup immediately before reset.
+     */
+    downloadBackup(
+      "Automatic pre-operational-reset backup"
+    );
+
+    OPERATIONAL_RESET_KEYS.forEach(
+      key =>
+        localStorage.removeItem(key)
+    );
+
+    audit(
+      "OPERATIONAL_DATA_RESET",
+      OPERATIONAL_RESET_KEYS.join(", ")
+    );
+
+    alert(
+      "Operational/test data has been reset successfully.\n\n" +
+      "Master settings and TVSLA data were preserved.\n\n" +
+      "The application will now reload."
+    );
+
+    location.reload();
+  }
+
+  /* =======================================================
+     FULL FACTORY RESET
+     ======================================================= */
+
+  async function fullFactoryReset() {
+    if (!isDirector()) {
+      alert(
+        "Access Denied\n\nOnly the Director can perform a Full Factory Reset."
+      );
+      return;
+    }
+
+    const confirmed =
+      await protectedConfirm(
+        "FULL FACTORY RESET",
+        "This removes factory employees, company settings, customers, suppliers, transactions, factory item records and other factory data. TVSLA remains untouched.",
+        "FULL FACTORY RESET"
+      );
+
+    if (!confirmed) return;
+
+    downloadBackup(
+      "Automatic pre-full-factory-reset backup"
+    );
+
+    const tvsla = {};
+
+    TVSLA_KEYS.forEach(key => {
+      const value =
+        localStorage.getItem(key);
+
+      if (value !== null) {
+        tvsla[key] = value;
+      }
+    });
+
+    const keysToRemove = [];
+
+    for (
+      let i = 0;
+      i < localStorage.length;
+      i++
+    ) {
+      const key =
+        localStorage.key(i);
+
+      if (
+        key &&
+        !TVSLA_KEYS.includes(key)
+      ) {
+        keysToRemove.push(key);
+      }
+    }
+
+    keysToRemove.forEach(
+      key =>
+        localStorage.removeItem(key)
+    );
+
+    Object.entries(tvsla)
+      .forEach(([key, value]) => {
+        localStorage.setItem(
+          key,
+          value
+        );
+      });
+
+    /*
+     * Audit cannot survive a full factory reset if
+     * all factory data is intentionally removed.
+     */
+
+    alert(
+      "Full Factory Reset completed.\n\n" +
+      "Factory records were removed.\n" +
+      "TVSLA data was preserved.\n\n" +
+      "The application will reload to a fresh factory setup."
+    );
+
+    location.reload();
+  }
+
+  /* =======================================================
+     LOGIN ATTEMPT LOCKOUT
+     ======================================================= */
+
+  function getLoginState() {
+    return readJSON(
+      LOGIN_STATE_KEY,
+      {}
+    );
+  }
+
+  function saveLoginState(state) {
+    writeJSON(
+      LOGIN_STATE_KEY,
+      state
+    );
+  }
+
+  function normalizeLoginId(value) {
+    return String(value || "")
+      .trim()
+      .toLowerCase();
+  }
+
+  function loginStateFor(employeeId) {
+    const key =
+      normalizeLoginId(employeeId);
+
+    const state =
+      getLoginState();
+
+    return {
+      key,
+      all: state,
+      record:
+        state[key] || {
+          failures: 0,
+          lockedUntil: 0
+        }
+    };
+  }
+
+  function lockoutRemainingMs(employeeId) {
+    const { record } =
+      loginStateFor(employeeId);
+
+    return Math.max(
+      0,
+      Number(record.lockedUntil || 0) -
+      Date.now()
+    );
+  }
+
+  function clearLoginFailures(employeeId) {
+    const {
+      key,
+      all
+    } = loginStateFor(employeeId);
+
+    if (!key) return;
+
+    delete all[key];
+    saveLoginState(all);
+  }
+
+  function registerLoginFailure(employeeId) {
+    const settings =
+      getSecuritySettings();
+
+    const {
+      key,
+      all,
+      record
+    } = loginStateFor(employeeId);
+
+    if (!key) return;
+
+    record.failures =
+      Number(record.failures || 0) + 1;
+
+    if (
+      record.failures >=
+      settings.maxLoginAttempts
+    ) {
+      record.lockedUntil =
+        Date.now() +
+        (
+          settings.lockoutMinutes *
+          60 *
+          1000
+        );
+
+      record.failures = 0;
+
+      audit(
+        "LOGIN_LOCKED",
+        "Employee ID: " +
+        employeeId
+      );
+    }
+
+    all[key] = record;
+    saveLoginState(all);
+  }
+
+  function enhanceLoginScreen() {
+    const screen =
+      document.getElementById(
+        "afLoginScreen"
+      );
+
+    if (!screen) return;
+
+    const button =
+      screen.querySelector(
+        "#afLoginButton"
+      );
+
+    const idInput =
+      screen.querySelector(
+        "#afLoginEmployeeId"
+      );
+
+    const passwordInput =
+      screen.querySelector(
+        "#afLoginPassword"
+      );
+
+    const message =
+      screen.querySelector(
+        "#afLoginMessage"
+      );
+
+    if (
+      !button ||
+      !idInput ||
+      !passwordInput ||
+      button.dataset.afSecurityEnhanced ===
+        "yes"
+    ) {
+      return;
+    }
+
+    button.dataset.afSecurityEnhanced =
+      "yes";
+
+    button.addEventListener(
+      "click",
+      function(event) {
+        const employeeId =
+          idInput.value.trim();
+
+        const password =
+          passwordInput.value;
+
+        if (
+          !employeeId ||
+          !password
+        ) {
+          return;
+        }
+
+        const remaining =
+          lockoutRemainingMs(
+            employeeId
+          );
+
+        if (remaining > 0) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+
+          const minutes =
+            Math.ceil(
+              remaining / 60000
+            );
+
+          if (message) {
+            message.style.color =
+              "#b42318";
+
+            message.textContent =
+              "Login temporarily locked. Try again in about " +
+              minutes +
+              " minute(s).";
+          }
+
+          return;
+        }
+
+        const attemptedId =
+          normalizeLoginId(
+            employeeId
+          );
+
+        setTimeout(() => {
+          const user =
+            currentUser();
+
+          const success =
+            user &&
+            normalizeLoginId(
+              user.employeeId
+            ) === attemptedId;
+
+          if (success) {
+            clearLoginFailures(
+              employeeId
+            );
+
+            localStorage.setItem(
+              LAST_ACTIVITY_KEY,
+              String(Date.now())
+            );
+
+            audit(
+              "LOGIN_SUCCESS",
+              "Employee ID: " +
+              employeeId
+            );
+          } else {
+            registerLoginFailure(
+              employeeId
+            );
+
+            const afterRemaining =
+              lockoutRemainingMs(
+                employeeId
+              );
+
+            audit(
+              "LOGIN_FAILED",
+              "Employee ID: " +
+              employeeId
+            );
+
+            if (
+              afterRemaining > 0 &&
+              message
+            ) {
+              message.style.color =
+                "#b42318";
+
+              message.textContent =
+                "Too many failed login attempts. Login is temporarily locked.";
+            }
+          }
+        }, 900);
+      },
+      true
+    );
+  }
+
+  /*
+   * Wrap the existing login-screen builder.
+   */
+  if (
+    typeof showAFLoginScreen ===
+    "function"
+  ) {
+    const previousLoginScreen =
+      showAFLoginScreen;
+
+    showAFLoginScreen =
+      function() {
+        const result =
+          previousLoginScreen.apply(
+            this,
+            arguments
+          );
+
+        setTimeout(
+          enhanceLoginScreen,
+          0
+        );
+
+        return result;
+      };
+  }
+
+  setTimeout(
+    enhanceLoginScreen,
+    100
+  );
+
+  /* =======================================================
+     SESSION TIMEOUT
+     ======================================================= */
+
+  function markActivity() {
+    if (!currentUser()?.employeeId) {
+      return;
+    }
+
+    const now = Date.now();
+
+    /*
+     * Limit storage writes to once per minute.
+     */
+    if (
+      now - activityWriteTimer <
+      60000
+    ) {
+      return;
+    }
+
+    activityWriteTimer = now;
+
+    localStorage.setItem(
+      LAST_ACTIVITY_KEY,
+      String(now)
+    );
+  }
+
+  [
+    "mousedown",
+    "keydown",
+    "touchstart",
+    "scroll"
+  ].forEach(eventName => {
+    window.addEventListener(
+      eventName,
+      markActivity,
+      { passive: true }
+    );
+  });
+
+  function enforceSessionTimeout() {
+    const user =
+      currentUser();
+
+    if (
+      !user ||
+      !user.employeeId
+    ) {
+      return;
+    }
+
+    const settings =
+      getSecuritySettings();
+
+    const last =
+      Number(
+        localStorage.getItem(
+          LAST_ACTIVITY_KEY
+        ) || Date.now()
+      );
+
+    const timeoutMs =
+      settings.sessionTimeoutMinutes *
+      60 *
+      1000;
+
+    if (
+      Date.now() - last >=
+      timeoutMs
+    ) {
+      audit(
+        "SESSION_TIMEOUT",
+        "Automatic logout after " +
+        settings.sessionTimeoutMinutes +
+        " minutes of inactivity."
+      );
+
+      if (
+        typeof logoutAFUser ===
+        "function"
+      ) {
+        logoutAFUser();
+      } else {
+        localStorage.removeItem(
+          "currentUser"
+        );
+
+        location.reload();
+      }
+    }
+  }
+
+  if (
+    currentUser()?.employeeId &&
+    !localStorage.getItem(
+      LAST_ACTIVITY_KEY
+    )
+  ) {
+    localStorage.setItem(
+      LAST_ACTIVITY_KEY,
+      String(Date.now())
+    );
+  }
+
+  setInterval(
+    enforceSessionTimeout,
+    30000
+  );
+
+  document.addEventListener(
+    "visibilitychange",
+    () => {
+      if (
+        document.visibilityState ===
+        "visible"
+      ) {
+        enforceSessionTimeout();
+      }
+    }
+  );
+
+  /*
+   * Audit normal logout.
+   */
+  if (
+    typeof logoutAFUser ===
+    "function"
+  ) {
+    const previousLogout =
+      logoutAFUser;
+
+    logoutAFUser =
+      function() {
+        if (
+          currentUser()?.employeeId
+        ) {
+          audit(
+            "LOGOUT",
+            "User logged out."
+          );
+        }
+
+        return previousLogout.apply(
+          this,
+          arguments
+        );
+      };
+  }
+
+  /* =======================================================
+     INSTALLABLE WEB APP SUPPORT
+     ======================================================= */
+
+  function makeIconDataURL(size) {
+    try {
+      const canvas =
+        document.createElement(
+          "canvas"
+        );
+
+      canvas.width = size;
+      canvas.height = size;
+
+      const ctx =
+        canvas.getContext("2d");
+
+      ctx.fillStyle =
+        "#0b5d3b";
+
+      ctx.fillRect(
+        0,
+        0,
+        size,
+        size
+      );
+
+      ctx.fillStyle =
+        "#ffffff";
+
+      ctx.font =
+        "bold " +
+        Math.round(size * 0.28) +
+        "px Arial";
+
+      ctx.textAlign =
+        "center";
+
+      ctx.textBaseline =
+        "middle";
+
+      ctx.fillText(
+        "A&F",
+        size / 2,
+        size * 0.46
+      );
+
+      ctx.font =
+        "bold " +
+        Math.round(size * 0.08) +
+        "px Arial";
+
+      ctx.fillText(
+        "WEKAVERA",
+        size / 2,
+        size * 0.70
+      );
+
+      return canvas.toDataURL(
+        "image/png"
+      );
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function installDynamicManifest() {
+    if (
+      document.querySelector(
+        'link[rel="manifest"]'
+      )
+    ) {
+      return;
+    }
+
+    const start =
+      new URL(
+        window.location.href
+      );
+
+    start.search = "";
+    start.hash = "";
+
+    const scope =
+      new URL(
+        "./",
+        start.href
+      ).href;
+
+    const icon192 =
+      makeIconDataURL(192);
+
+    const icon512 =
+      makeIconDataURL(512);
+
+    const manifest = {
+      name:
+        "A&F Wekavera Factory Management",
+      short_name:
+        "A&F Wekavera",
+      description:
+        "Factory accounting, production, HR and management system.",
+      id: start.href,
+      start_url: start.href,
+      scope,
+      display: "standalone",
+      background_color: "#ffffff",
+      theme_color: "#0b5d3b",
+      icons: [
+        {
+          src: icon192,
+          sizes: "192x192",
+          type: "image/png"
+        },
+        {
+          src: icon512,
+          sizes: "512x512",
+          type: "image/png"
+        }
+      ]
+    };
+
+    const href =
+      "data:application/manifest+json;charset=utf-8," +
+      encodeURIComponent(
+        JSON.stringify(manifest)
+      );
+
+    const link =
+      document.createElement("link");
+
+    link.rel = "manifest";
+    link.href = href;
+
+    document.head.appendChild(link);
+
+    let theme =
+      document.querySelector(
+        'meta[name="theme-color"]'
+      );
+
+    if (!theme) {
+      theme =
+        document.createElement(
+          "meta"
+        );
+
+      theme.name =
+        "theme-color";
+
+      document.head.appendChild(
+        theme
+      );
+    }
+
+    theme.content =
+      "#0b5d3b";
+  }
+
+  installDynamicManifest();
+
+  window.addEventListener(
+    "beforeinstallprompt",
+    event => {
+      event.preventDefault();
+      deferredInstallPrompt =
+        event;
+
+      const status =
+        document.getElementById(
+          "afInstallStatus"
+        );
+
+      if (status) {
+        status.textContent =
+          "Ready to install on this device.";
+      }
+    }
+  );
+
+  window.addEventListener(
+    "appinstalled",
+    () => {
+      deferredInstallPrompt = null;
+
+      audit(
+        "APP_INSTALLED",
+        navigator.userAgent
+      );
+
+      const status =
+        document.getElementById(
+          "afInstallStatus"
+        );
+
+      if (status) {
+        status.textContent =
+          "Installed successfully.";
+      }
+    }
+  );
+
+  function isStandalone() {
+    return (
+      window.matchMedia &&
+      window.matchMedia(
+        "(display-mode: standalone)"
+      ).matches
+    );
+  }
+
+  async function installApp() {
+    if (isStandalone()) {
+      alert(
+        "The A&F application is already running as an installed app on this device."
+      );
+      return;
+    }
+
+    if (deferredInstallPrompt) {
+      const result =
+        await deferredInstallPrompt.prompt();
+
+      audit(
+        "INSTALL_PROMPT",
+        "Outcome: " +
+        String(
+          result?.outcome || ""
+        )
+      );
+
+      deferredInstallPrompt =
+        null;
+
+      return;
+    }
+
+    const ua =
+      String(
+        navigator.userAgent || ""
+      ).toLowerCase();
+
+    if (
+      /android/.test(ua)
+    ) {
+      alert(
+        "Installation is available from your browser menu.\n\n" +
+        "On Android Chrome:\n" +
+        "1. Tap the ⋮ menu.\n" +
+        "2. Choose Install app or Add to Home screen.\n" +
+        "3. Confirm Install."
+      );
+    } else {
+      alert(
+        "Installation is available from your browser.\n\n" +
+        "On Chrome/Edge desktop:\n" +
+        "1. Open the browser menu.\n" +
+        "2. Choose Install A&F Wekavera / Install this site as an app.\n" +
+        "3. Confirm Install.\n\n" +
+        "If the Install option is not yet shown, reload the page once."
+      );
+    }
+  }
+
+  /* =======================================================
+     UPDATE CHECKER
+     ======================================================= */
+
+  function findAppScriptURL() {
+    const scripts =
+      Array.from(
+        document.scripts || []
+      );
+
+    const match =
+      scripts
+        .map(script =>
+          script.src || ""
+        )
+        .filter(Boolean)
+        .reverse()
+        .find(src =>
+          /\/app(?:\.min)?\.js(?:[?#]|$)/i
+            .test(src)
+        );
+
+    return match || "";
+  }
+
+  async function hashText(text) {
+    if (
+      !crypto?.subtle
+    ) {
+      return "";
+    }
+
+    const data =
+      new TextEncoder().encode(
+        String(text || "")
+      );
+
+    const digest =
+      await crypto.subtle.digest(
+        "SHA-256",
+        data
+      );
+
+    return Array.from(
+      new Uint8Array(digest)
+    )
+      .map(byte =>
+        byte
+          .toString(16)
+          .padStart(2, "0")
+      )
+      .join("");
+  }
+
+  async function fetchRemoteCodeHash() {
+    const scriptURL =
+      findAppScriptURL();
+
+    if (!scriptURL) {
+      throw new Error(
+        "app.js script URL could not be detected."
+      );
+    }
+
+    const url =
+      new URL(
+        scriptURL,
+        location.href
+      );
+
+    url.searchParams.set(
+      "afUpdateCheck",
+      String(Date.now())
+    );
+
+    const response =
+      await fetch(
+        url.href,
+        {
+          cache: "no-store"
+        }
+      );
+
+    if (!response.ok) {
+      throw new Error(
+        "Update check failed: " +
+        response.status
+      );
+    }
+
+    const text =
+      await response.text();
+
+    const hash =
+      await hashText(text);
+
+    if (!hash) {
+      throw new Error(
+        "Unable to calculate application code hash."
+      );
+    }
+
+    return {
+      hash,
+      scriptURL
+    };
+  }
+
+  async function checkForUpdates(
+    showMessage = true
+  ) {
+    const status =
+      document.getElementById(
+        "afUpdateStatus"
+      );
+
+    const updateButton =
+      document.getElementById(
+        "afUpdateNowButton"
+      );
+
+    if (status) {
+      status.textContent =
+        "Checking for updates...";
+    }
+
+    try {
+      const remote =
+        await fetchRemoteCodeHash();
+
+      localStorage.setItem(
+        REMOTE_CODE_HASH_KEY,
+        remote.hash
+      );
+
+      const current =
+        localStorage.getItem(
+          CURRENT_CODE_HASH_KEY
+        );
+
+      /*
+       * First run establishes the reference.
+       */
+      if (!current) {
+        localStorage.setItem(
+          CURRENT_CODE_HASH_KEY,
+          remote.hash
+        );
+
+        if (status) {
+          status.textContent =
+            "Application is up to date.";
+        }
+
+        if (updateButton) {
+          updateButton.style.display =
+            "none";
+        }
+
+        if (showMessage) {
+          alert(
+            "A&F Wekavera is up to date."
+          );
+        }
+
+        return false;
+      }
+
+      const available =
+        current !== remote.hash;
+
+      if (available) {
+        if (status) {
+          status.textContent =
+            "New update available.";
+        }
+
+        if (updateButton) {
+          updateButton.style.display =
+            "";
+        }
+
+        audit(
+          "UPDATE_AVAILABLE",
+          "New app.js code detected."
+        );
+
+        if (showMessage) {
+          alert(
+            "A new application update is available.\n\n" +
+            "Use Update Now to back up your data and reload the latest version."
+          );
+        }
+
+        return true;
+      }
+
+      if (status) {
+        status.textContent =
+          "Application is up to date.";
+      }
+
+      if (updateButton) {
+        updateButton.style.display =
+          "none";
+      }
+
+      if (showMessage) {
+        alert(
+          "A&F Wekavera is up to date."
+        );
+      }
+
+      return false;
+    } catch (error) {
+      console.warn(
+        "A&F update check:",
+        error
+      );
+
+      if (status) {
+        status.textContent =
+          "Unable to check updates right now.";
+      }
+
+      if (showMessage) {
+        alert(
+          "Unable to check for updates right now.\n\n" +
+          "Please confirm that the device is connected to the internet and try again."
+        );
+      }
+
+      return false;
+    }
+  }
+
+  async function updateNow() {
+    if (!isDirector()) {
+      alert(
+        "Only the Director can install an application update."
+      );
+      return;
+    }
+
+    const available =
+      await checkForUpdates(false);
+
+    if (!available) {
+      alert(
+        "No newer application version was detected."
+      );
+      return;
+    }
+
+    downloadBackup(
+      "Automatic pre-update backup"
+    );
+
+    const remoteHash =
+      localStorage.getItem(
+        REMOTE_CODE_HASH_KEY
+      );
+
+    if (remoteHash) {
+      localStorage.setItem(
+        CURRENT_CODE_HASH_KEY,
+        remoteHash
+      );
+    }
+
+    audit(
+      "APP_UPDATE_STARTED",
+      "Reloading latest application code."
+    );
+
+    /*
+     * Ask browser to refresh the remote script cache,
+     * then reload the page using a cache-busting URL.
+     */
+    try {
+      const scriptURL =
+        findAppScriptURL();
+
+      if (scriptURL) {
+        await fetch(
+          scriptURL,
+          { cache: "reload" }
+        );
+      }
+    } catch (_) {}
+
+    const pageURL =
+      new URL(
+        location.href
+      );
+
+    pageURL.searchParams.set(
+      "afUpdated",
+      String(Date.now())
+    );
+
+    location.replace(
+      pageURL.href
+    );
+  }
+
+  /*
+   * Quiet update check at startup.
+   */
+  setTimeout(
+    () =>
+      checkForUpdates(false),
+    5000
+  );
+
+  /* =======================================================
+     SECURITY AUDIT VIEW
+     ======================================================= */
+
+  function openAuditLog() {
+    if (!isDirector()) {
+      alert(
+        "Only the Director can view the Security Audit Trail."
+      );
+      return;
+    }
+
+    const records =
+      readJSON(
+        AUDIT_KEY,
+        []
+      );
+
+    const { body } =
+      openModal(
+        "afSecurityAuditModal",
+        "🛡️ Security Audit Trail",
+        "Login, backup, restore, reset, installation and update activity",
+        1050
+      );
+
+    const rows =
+      records.length
+        ? records
+            .slice(0, 300)
+            .map(record => `
+              <tr>
+                <td>${esc(
+                  new Date(
+                    record.timestamp
+                  ).toLocaleString(
+                    "en-UG"
+                  )
+                )}</td>
+
+                <td>
+                  <b>${esc(
+                    record.action
+                  )}</b>
+                </td>
+
+                <td>${esc(
+                  record.userName ||
+                  record.employeeId ||
+                  ""
+                )}</td>
+
+                <td>${esc(
+                  record.role || ""
+                )}</td>
+
+                <td>${esc(
+                  record.details || ""
+                )}</td>
+              </tr>
+            `)
+            .join("")
+        : `
+          <tr>
+            <td
+              colspan="5"
+              style="
+                padding:16px;
+                text-align:center;
+                color:#777;
+              "
+            >
+              No security events recorded yet.
+            </td>
+          </tr>
+        `;
+
+    body.innerHTML = `
+      <div style="
+        display:flex;
+        justify-content:flex-end;
+        margin-bottom:10px;
+      ">
+        <button
+          id="afDownloadAudit"
+          type="button"
+          style="${secondaryButtonStyle()}"
+        >
+          ⬇ Download Audit CSV
+        </button>
+      </div>
+
+      <div style="
+        overflow:auto;
+        border:1px solid #ddd;
+        border-radius:9px;
+      ">
+        <table style="
+          width:100%;
+          min-width:850px;
+          border-collapse:collapse;
+          font-size:11px;
+        ">
+          <thead>
+            <tr style="
+              background:#eef8f2;
+              text-align:left;
+            ">
+              <th>Date / Time</th>
+              <th>Event</th>
+              <th>User</th>
+              <th>Role</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    body.querySelectorAll(
+      "th,td"
+    ).forEach(cell => {
+      cell.style.padding =
+        "8px";
+
+      cell.style.borderBottom =
+        "1px solid #eee";
+    });
+
+    body.querySelector(
+      "#afDownloadAudit"
+    ).onclick = () => {
+      const header =
+        [
+          "Timestamp",
+          "Action",
+          "Employee ID",
+          "User",
+          "Role",
+          "Details"
+        ];
+
+      const csvEscape = value =>
+        '"' +
+        String(value ?? "")
+          .replace(/"/g, '""') +
+        '"';
+
+      const lines = [
+        header.map(csvEscape).join(","),
+        ...records.map(record =>
+          [
+            record.timestamp,
+            record.action,
+            record.employeeId,
+            record.userName,
+            record.role,
+            record.details
+          ]
+            .map(csvEscape)
+            .join(",")
+        )
+      ];
+
+      downloadTextFile(
+        "AF-Security-Audit-" +
+        todayFileStamp() +
+        ".csv",
+        lines.join("\n"),
+        "text/csv"
+      );
+    };
+  }
+
+  /* =======================================================
+     MAIN DATA / SECURITY / INSTALLATION SETTINGS
+     ======================================================= */
+
+  function openGoLiveSettings() {
+    if (!isDirector()) {
+      alert(
+        "Access Denied\n\nOnly the Director can open Data, Security & Installation settings."
+      );
+      return;
+    }
+
+    const settings =
+      getSecuritySettings();
+
+    const { modal, body } =
+      openModal(
+        "afGoLiveSettingsModal",
+        "🛡️ Data, Security & Installation",
+        "Backup • Reset • Login Security • Desktop/Mobile Installation • Updates",
+        980
+      );
+
+    body.innerHTML = `
+      <div style="
+        padding:12px;
+        border:1px solid #efdfb7;
+        border-radius:9px;
+        background:#fff7e6;
+        font-size:11px;
+        line-height:1.6;
+        margin-bottom:15px;
+      ">
+        <b>Security note:</b>
+        this version stores factory records in this browser.
+        Login controls, lockout, session timeout and audit logs
+        protect normal staff use, but a person with unrestricted
+        access to the device and browser developer tools can still
+        manipulate local browser storage. A server/database will be
+        required later for stronger multi-device security.
+      </div>
+
+      <div style="
+        display:grid;
+        grid-template-columns:
+          repeat(auto-fit,minmax(220px,1fr));
+        gap:11px;
+        margin-bottom:18px;
+      ">
+        <div style="
+          padding:12px;
+          border:1px solid #dbe7e0;
+          border-radius:9px;
+          background:#f8fbf9;
+        ">
+          <div style="
+            font-size:10px;
+            color:#667;
+          ">
+            APP VERSION
+          </div>
+
+          <div style="
+            margin-top:4px;
+            font-size:18px;
+            font-weight:bold;
+            color:#0b5d3b;
+          ">
+            ${esc(APP_VERSION)}
+          </div>
+        </div>
+
+        <div style="
+          padding:12px;
+          border:1px solid #dbe7e0;
+          border-radius:9px;
+          background:#f8fbf9;
+        ">
+          <div style="
+            font-size:10px;
+            color:#667;
+          ">
+            SESSION TIMEOUT
+          </div>
+
+          <div style="
+            margin-top:4px;
+            font-size:18px;
+            font-weight:bold;
+          ">
+            ${settings.sessionTimeoutMinutes} min
+          </div>
+        </div>
+
+        <div style="
+          padding:12px;
+          border:1px solid #dbe7e0;
+          border-radius:9px;
+          background:#f8fbf9;
+        ">
+          <div style="
+            font-size:10px;
+            color:#667;
+          ">
+            LOGIN PROTECTION
+          </div>
+
+          <div style="
+            margin-top:4px;
+            font-size:13px;
+            font-weight:bold;
+          ">
+            ${settings.maxLoginAttempts}
+            failed attempts →
+            ${settings.lockoutMinutes} min lock
+          </div>
+        </div>
+      </div>
+
+      <h3 style="
+        color:#0b5d3b;
+        margin:0 0 9px;
+      ">
+        💾 Backup & Restore
+      </h3>
+
+      <div style="
+        display:flex;
+        flex-wrap:wrap;
+        gap:9px;
+        margin-bottom:18px;
+      ">
+        <button
+          id="afBackupNow"
+          type="button"
+          style="${primaryButtonStyle()}"
+        >
+          ⬇ Backup Company Data
+        </button>
+
+        <button
+          id="afRestoreBackup"
+          type="button"
+          style="${secondaryButtonStyle()}"
+        >
+          ⬆ Restore Backup
+        </button>
+
+        <input
+          id="afRestoreFile"
+          type="file"
+          accept=".json,application/json"
+          style="display:none;"
+        >
+      </div>
+
+      <h3 style="
+        color:#0b5d3b;
+        margin:0 0 9px;
+      ">
+        ♻ Reset for Live Use
+      </h3>
+
+      <div style="
+        display:flex;
+        flex-wrap:wrap;
+        gap:9px;
+        margin-bottom:18px;
+      ">
+        <button
+          id="afOperationalReset"
+          type="button"
+          style="${dangerButtonStyle()}"
+        >
+          Reset Operational / Test Data
+        </button>
+
+        <button
+          id="afFullReset"
+          type="button"
+          style="
+            ${dangerButtonStyle()}
+            background:#641e16;
+          "
+        >
+          FULL Factory Reset
+        </button>
+      </div>
+
+      <div style="
+        padding:10px;
+        background:#f7faf8;
+        border-radius:8px;
+        font-size:10px;
+        line-height:1.55;
+        margin-bottom:18px;
+      ">
+        <b>Operational Reset keeps:</b>
+        company profile, employees, permissions, teams, shifts,
+        pole prices/weights, customers, suppliers, factory item
+        register, fixed assets, employee documents and TVSLA.
+        It clears testing/transaction history.
+      </div>
+
+      <h3 style="
+        color:#0b5d3b;
+        margin:0 0 9px;
+      ">
+        🔐 Login Security
+      </h3>
+
+      <div style="
+        display:grid;
+        grid-template-columns:
+          repeat(auto-fit,minmax(190px,1fr));
+        gap:10px;
+        margin-bottom:10px;
+      ">
+        <label style="
+          font-size:11px;
+          font-weight:bold;
+        ">
+          Auto Logout After
+
+          <select
+            id="afSessionTimeout"
+            style="
+              display:block;
+              width:100%;
+              margin-top:5px;
+              padding:9px;
+              border:1px solid #ccd7d1;
+              border-radius:7px;
+            "
+          >
+            ${[
+              15,
+              30,
+              60,
+              120
+            ].map(value => `
+              <option
+                value="${value}"
+                ${
+                  Number(
+                    settings.sessionTimeoutMinutes
+                  ) === value
+                    ? "selected"
+                    : ""
+                }
+              >
+                ${value} minutes
+              </option>
+            `).join("")}
+          </select>
+        </label>
+
+        <label style="
+          font-size:11px;
+          font-weight:bold;
+        ">
+          Failed Attempts Before Lock
+
+          <select
+            id="afMaxLoginAttempts"
+            style="
+              display:block;
+              width:100%;
+              margin-top:5px;
+              padding:9px;
+              border:1px solid #ccd7d1;
+              border-radius:7px;
+            "
+          >
+            ${[
+              3,
+              5,
+              7
+            ].map(value => `
+              <option
+                value="${value}"
+                ${
+                  Number(
+                    settings.maxLoginAttempts
+                  ) === value
+                    ? "selected"
+                    : ""
+                }
+              >
+                ${value} attempts
+              </option>
+            `).join("")}
+          </select>
+        </label>
+
+        <label style="
+          font-size:11px;
+          font-weight:bold;
+        ">
+          Lockout Period
+
+          <select
+            id="afLockoutMinutes"
+            style="
+              display:block;
+              width:100%;
+              margin-top:5px;
+              padding:9px;
+              border:1px solid #ccd7d1;
+              border-radius:7px;
+            "
+          >
+            ${[
+              5,
+              15,
+              30,
+              60
+            ].map(value => `
+              <option
+                value="${value}"
+                ${
+                  Number(
+                    settings.lockoutMinutes
+                  ) === value
+                    ? "selected"
+                    : ""
+                }
+              >
+                ${value} minutes
+              </option>
+            `).join("")}
+          </select>
+        </label>
+      </div>
+
+      <div style="
+        display:flex;
+        flex-wrap:wrap;
+        gap:9px;
+        margin-bottom:18px;
+      ">
+        <button
+          id="afSaveSecuritySettings"
+          type="button"
+          style="${primaryButtonStyle()}"
+        >
+          💾 Save Security Settings
+        </button>
+
+        <button
+          id="afViewAudit"
+          type="button"
+          style="${secondaryButtonStyle()}"
+        >
+          🛡️ View Security Audit
+        </button>
+      </div>
+
+      <h3 style="
+        color:#0b5d3b;
+        margin:0 0 9px;
+      ">
+        📱💻 Install Application
+      </h3>
+
+      <div style="
+        padding:11px;
+        border:1px solid #dbe7e0;
+        border-radius:9px;
+        background:#f8fbf9;
+        margin-bottom:10px;
+      ">
+        <div
+          id="afInstallStatus"
+          style="
+            font-size:11px;
+            line-height:1.5;
+          "
+        >
+          ${
+            isStandalone()
+              ? "Installed app mode is active on this device."
+              : "Install on a desktop/laptop or Android phone for app-like access."
+          }
+        </div>
+
+        <button
+          id="afInstallAppButton"
+          type="button"
+          style="
+            ${primaryButtonStyle()}
+            margin-top:9px;
+          "
+        >
+          📲 Install on This Device
+        </button>
+      </div>
+
+      <h3 style="
+        color:#0b5d3b;
+        margin:16px 0 9px;
+      ">
+        🔄 Application Updates
+      </h3>
+
+      <div style="
+        padding:11px;
+        border:1px solid #dbe7e0;
+        border-radius:9px;
+        background:#f8fbf9;
+      ">
+        <div
+          id="afUpdateStatus"
+          style="
+            font-size:11px;
+            line-height:1.5;
+          "
+        >
+          Check whether a newer app.js has been published.
+        </div>
+
+        <div style="
+          display:flex;
+          gap:9px;
+          flex-wrap:wrap;
+          margin-top:9px;
+        ">
+          <button
+            id="afCheckUpdates"
+            type="button"
+            style="${secondaryButtonStyle()}"
+          >
+            Check for Updates
+          </button>
+
+          <button
+            id="afUpdateNowButton"
+            type="button"
+            style="
+              ${primaryButtonStyle()}
+              display:none;
+            "
+          >
+            ⬆ Update Now
+          </button>
+        </div>
+      </div>
+    `;
+
+    body.querySelector(
+      "#afBackupNow"
+    ).onclick = () => {
+      downloadBackup(
+        "Manual Backup"
+      );
+
+      alert(
+        "Backup created successfully.\n\n" +
+        "Keep the downloaded JSON file in a safe location."
+      );
+    };
+
+    const restoreInput =
+      body.querySelector(
+        "#afRestoreFile"
+      );
+
+    body.querySelector(
+      "#afRestoreBackup"
+    ).onclick = () => {
+      restoreInput.value = "";
+      restoreInput.click();
+    };
+
+    restoreInput.onchange =
+      async () => {
+        const file =
+          restoreInput.files?.[0];
+
+        if (!file) return;
+
+        let backup;
+
+        try {
+          backup =
+            JSON.parse(
+              await file.text()
+            );
+        } catch (_) {
+          alert(
+            "The selected file is not valid JSON."
+          );
+          return;
+        }
+
+        if (
+          backup?.format !==
+          BACKUP_FORMAT
+        ) {
+          alert(
+            "This is not a valid A&F Wekavera backup file."
+          );
+          return;
+        }
+
+        const confirmed =
+          await protectedConfirm(
+            "Restore Company Backup",
+            "The current application data will be replaced by the selected backup. A fresh backup of the current data will be downloaded first.",
+            "RESTORE BACKUP"
+          );
+
+        if (!confirmed) return;
+
+        downloadBackup(
+          "Automatic pre-restore backup"
+        );
+
+        try {
+          await restoreBackupObject(
+            backup
+          );
+
+          alert(
+            "Backup restored successfully.\n\n" +
+            "For security, you will be returned to the login screen."
+          );
+
+          location.reload();
+        } catch (error) {
+          console.error(error);
+
+          alert(
+            "Restore failed.\n\n" +
+            String(
+              error?.message ||
+              error
+            )
+          );
+        }
+      };
+
+    body.querySelector(
+      "#afOperationalReset"
+    ).onclick =
+      resetOperationalData;
+
+    body.querySelector(
+      "#afFullReset"
+    ).onclick =
+      fullFactoryReset;
+
+    body.querySelector(
+      "#afSaveSecuritySettings"
+    ).onclick = () => {
+      const updated = {
+        sessionTimeoutMinutes:
+          Number(
+            body.querySelector(
+              "#afSessionTimeout"
+            ).value
+          ),
+
+        maxLoginAttempts:
+          Number(
+            body.querySelector(
+              "#afMaxLoginAttempts"
+            ).value
+          ),
+
+        lockoutMinutes:
+          Number(
+            body.querySelector(
+              "#afLockoutMinutes"
+            ).value
+          )
+      };
+
+      saveSecuritySettings(
+        updated
+      );
+
+      localStorage.setItem(
+        LAST_ACTIVITY_KEY,
+        String(Date.now())
+      );
+
+      audit(
+        "SECURITY_SETTINGS_UPDATED",
+        JSON.stringify(updated)
+      );
+
+      alert(
+        "Security settings saved successfully."
+      );
+
+      modal.remove();
+      openGoLiveSettings();
+    };
+
+    body.querySelector(
+      "#afViewAudit"
+    ).onclick =
+      openAuditLog;
+
+    body.querySelector(
+      "#afInstallAppButton"
+    ).onclick =
+      installApp;
+
+    body.querySelector(
+      "#afCheckUpdates"
+    ).onclick =
+      () =>
+        checkForUpdates(true);
+
+    body.querySelector(
+      "#afUpdateNowButton"
+    ).onclick =
+      updateNow;
+  }
+
+  /* =======================================================
+     CONNECT TO SYSTEM SETTINGS
+     ======================================================= */
+
+  function injectGoLiveSettingsButton() {
+    if (!isDirector()) return;
+
+    const teamButton =
+      document.getElementById(
+        "teamSettingsBtn"
+      );
+
+    if (!teamButton) return;
+
+    const grid =
+      teamButton.parentElement;
+
+    if (
+      !grid ||
+      document.getElementById(
+        "afGoLiveSettingsBtn"
+      )
+    ) {
+      return;
+    }
+
+    const button =
+      document.createElement(
+        "button"
+      );
+
+    button.id =
+      "afGoLiveSettingsBtn";
+
+    if (
+      typeof systemSettingsButtonStyle ===
+      "function"
+    ) {
+      button.style.cssText =
+        systemSettingsButtonStyle();
+    } else {
+      button.style.cssText = `
+        padding:16px;
+        border:1px solid #ddd;
+        border-radius:10px;
+        background:white;
+        cursor:pointer;
+        text-align:left;
+      `;
+    }
+
+    button.innerHTML = `
+      🛡️
+      <strong>
+        Data, Security & Installation
+      </strong>
+
+      <span>
+        Backup, reset, security, install & updates
+      </span>
+    `;
+
+    button.onclick = () => {
+      const settingsModal =
+        teamButton.closest(
+          'div[style*="position: fixed"], div[style*="position:fixed"]'
+        );
+
+      settingsModal?.remove();
+
+      openGoLiveSettings();
+    };
+
+    grid.appendChild(button);
+  }
+
+  if (
+    typeof systemSettings ===
+    "function"
+  ) {
+    const previousSystemSettings =
+      systemSettings;
+
+    systemSettings =
+      function() {
+        const result =
+          previousSystemSettings.apply(
+            this,
+            arguments
+          );
+
+        setTimeout(
+          injectGoLiveSettingsButton,
+          0
+        );
+
+        return result;
+      };
+  }
+
+  /*
+   * In case Settings is already open.
+   */
+  setTimeout(
+    injectGoLiveSettingsButton,
+    300
+  );
+
+  /* =======================================================
+     PUBLIC FUNCTIONS
+     ======================================================= */
+
+  window.openAFGoLiveSecuritySettings =
+    openGoLiveSettings;
+
+  window.backupAFCompanyData =
+    () =>
+      downloadBackup(
+        "Manual Backup"
+      );
+
+  window.checkAFAppUpdates =
+    () =>
+      checkForUpdates(true);
+
+  window.installAFApp =
+    installApp;
+
+  console.log(
+    "A&F Go Live / Security / Install / Update connected."
+  );
+})();
