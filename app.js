@@ -91467,32 +91467,37 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
 })();
 
 /* =========================================================
-   A&F WEKAVERA LTD - CLOUD SYNC STAGE 1
-   Supabase secure multi-device Expenses bridge
+   A&F WEKAVERA LTD - CLOUD SYNC MASTER (STAGES 1 - 5)
+   Supabase secure multi-device master data bridge
 
    Supabase project configuration is already included below.
-   First-time Director/Secretary activation uses a one-time
+   First-time staff activation uses a Director-authorised one-time
    server enrollment code; no service-role secret is in app.js.
 
-   Stage 1 result:
-   - Director and Secretary authenticate against Supabase
-   - Server membership controls employee ID + role
-   - Expenses save locally first (offline-friendly)
-   - New expenses are pushed to the central database
-   - Director phone receives Secretary laptop changes
-   - Director corrections sync back to all connected devices
+   MASTER result:
+   - Stage 1: Expenses
+   - Stage 2: Suppliers, Purchases, Customers, Orders, Payments,
+     Follow-ups and Deliveries
+   - Stage 3: Material In, Washing, Pellets, Production and Stock
+   - Stage 4: Employees, Teams, Attendance, Advances, Deductions,
+     Payroll, Performance and Employee Documents
+   - Stage 5: Weekly Stock, Assets, Journals, Targets, Settings
+     and the data feeding Accounts & Reports
+   - Director can prepare one-time cloud activation for staff
+   - Local browser storage remains the offline cache
    - Pending changes retry automatically after internet returns
+
 
    IMPORTANT SECURITY:
    - Only use a Supabase PUBLISHABLE key here.
    - NEVER put a service_role key in app.js.
    ========================================================= */
 
-(function connectAFCloudSyncStage1() {
+(function connectAFCloudSyncMaster() {
   "use strict";
 
-  if (window.__afCloudSyncStage1Installed) return;
-  window.__afCloudSyncStage1Installed = true;
+  if (window.__afCloudSyncMasterInstalled) return;
+  window.__afCloudSyncMasterInstalled = true;
 
   /* =======================================================
      PROJECT CONFIGURATION
@@ -91530,11 +91535,336 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
   const CLOUD_LAST_PULL_KEY =
     "afCloudExpensesLastPullAt";
 
+  /* =======================================================
+     STAGE 2 COMMERCIAL MODULE CONFIG
+     ======================================================= */
+
+  const STAGE2_PENDING_KEY =
+    "afCloudStage2Pending";
+
+  const STAGE2_DELETED_KEY =
+    "afCloudStage2Deleted";
+
+  const STAGE2_LAST_PULL_KEY =
+    "afCloudStage2LastPullAt";
+
+  const STAGE2_MODULES = {
+    suppliers: {
+      label: "Suppliers",
+      key: "afSuppliers",
+      table: "af_suppliers",
+      secretaryCanUpdate: false
+    },
+
+    supplierPurchases: {
+      label: "Supplier Purchases",
+      key: "afSupplierPurchases",
+      table: "af_supplier_purchases",
+      secretaryCanUpdate: false
+    },
+
+    customers: {
+      label: "Customers",
+      key: "afCustomers",
+      table: "af_customers",
+      secretaryCanUpdate: false
+    },
+
+    orders: {
+      label: "Orders & Quotations",
+      key: "afSalesOrders",
+      table: "af_sales_orders",
+      secretaryCanUpdate: true
+    },
+
+    payments: {
+      label: "Customer Payments",
+      key: "afCustomerPayments",
+      table: "af_customer_payments",
+      secretaryCanUpdate: false
+    },
+
+    followups: {
+      label: "Customer Follow-ups",
+      key: "afCustomerFollowups",
+      table: "af_customer_followups",
+      secretaryCanUpdate: true
+    },
+
+    deliveries: {
+      label: "Deliveries",
+      key: "afDeliveryRecords",
+      table: "af_deliveries",
+      secretaryCanUpdate: false
+    }
+  };
+
+  const STAGE2_KEY_TO_MODULE =
+    Object.fromEntries(
+      Object.entries(
+        STAGE2_MODULES
+      ).map(
+        ([moduleName, config]) => [
+          config.key,
+          moduleName
+        ]
+      )
+    );
+
+  /* =======================================================
+     MASTER STAGES 3 - 5 MODULE CONFIG
+     These are stored in public.af_module_records.
+     Expenses and commercial records keep their dedicated
+     Stage 1/2 tables above.
+     ======================================================= */
+
+  const MASTER_PENDING_KEY =
+    "afCloudMasterPending";
+
+  const MASTER_DELETED_KEY =
+    "afCloudMasterDeleted";
+
+  const MASTER_LAST_PULL_KEY =
+    "afCloudMasterLastPullAt";
+
+  const MASTER_MODULES = {
+    materialRecords: {
+      label: "Material In",
+      kind: "array"
+    },
+
+    clientMaterialRecords: {
+      label: "Client Material",
+      kind: "array"
+    },
+
+    washingShiftRecords: {
+      label: "Washing Records",
+      kind: "array"
+    },
+
+    washingCycles: {
+      label: "Washing Cycles",
+      kind: "array"
+    },
+
+    washedKaveraStock: {
+      label: "Washed Kavera Stock",
+      kind: "scalar",
+      defaultValue: 0
+    },
+
+    companyWashedKaveraStock: {
+      label: "Company Washed Kavera Stock",
+      kind: "scalar",
+      defaultValue: 0
+    },
+
+    clientWashedKaveraStock: {
+      label: "Client Washed Kavera Stock",
+      kind: "scalar",
+      defaultValue: 0
+    },
+
+    productionRecords: {
+      label: "Production Records",
+      kind: "array"
+    },
+
+    afCompanyPelletRecords: {
+      label: "Company Pellet Records",
+      kind: "array"
+    },
+
+    salesRecords: {
+      label: "Legacy Sales Records",
+      kind: "array"
+    },
+
+    supplierPayments: {
+      label: "Supplier Payments",
+      kind: "array"
+    },
+
+    employees: {
+      label: "Employees",
+      kind: "array",
+      sensitiveEmployeeData: true
+    },
+
+    factoryTeams: {
+      label: "Teams",
+      kind: "array"
+    },
+
+    shiftSettings: {
+      label: "Shift Settings",
+      kind: "array"
+    },
+
+    attendanceRecords: {
+      label: "Attendance",
+      kind: "array"
+    },
+
+    employeeAdvances: {
+      label: "Employee Advances",
+      kind: "array"
+    },
+
+    employeeDeductions: {
+      label: "Employee Deductions",
+      kind: "array"
+    },
+
+    advanceRecoveries: {
+      label: "Advance Recoveries",
+      kind: "array"
+    },
+
+    payrollRecords: {
+      label: "Payroll",
+      kind: "array"
+    },
+
+    afPerformanceAwards: {
+      label: "Performance Awards",
+      kind: "array"
+    },
+
+    afPerformanceAwardSettings: {
+      label: "Performance Award Settings",
+      kind: "object"
+    },
+
+    afQualityDisciplineRecords: {
+      label: "Quality & Discipline",
+      kind: "array"
+    },
+
+    teamTransferHistory: {
+      label: "Team Transfer History",
+      kind: "array"
+    },
+
+    employeeChangeHistory: {
+      label: "Employee Change History",
+      kind: "array"
+    },
+
+    teamPerformanceSettings: {
+      label: "Team Performance Settings",
+      kind: "object"
+    },
+
+    afMonthEndPrizePlans: {
+      label: "Month End Prize Plans",
+      kind: "array"
+    },
+
+    afMonthEndWinners: {
+      label: "Month End Winners",
+      kind: "array"
+    },
+
+    clientPerformance: {
+      label: "Client Performance",
+      kind: "object"
+    },
+
+    afEmployeeDocuments: {
+      label: "Employee Documents",
+      kind: "array"
+    },
+
+    afDailyDashboardChecklist: {
+      label: "Today's Checklist",
+      kind: "object"
+    },
+
+    afFactoryItemRegister: {
+      label: "Factory Item Register",
+      kind: "array"
+    },
+
+    afWeeklyFactoryChecks: {
+      label: "Weekly Stock Taking",
+      kind: "array"
+    },
+
+    afFixedAssets: {
+      label: "Fixed Assets",
+      kind: "array"
+    },
+
+    afJournalEntries: {
+      label: "Journal Entries",
+      kind: "array"
+    },
+
+    afProductionTargets: {
+      label: "Production Targets",
+      kind: "array"
+    },
+
+    afMonthlyBusinessTargets: {
+      label: "Monthly Business Targets",
+      kind: "object"
+    },
+
+    afCompanyProfile: {
+      label: "Company Profile",
+      kind: "object"
+    },
+
+    afPrintSettings: {
+      label: "Print Settings",
+      kind: "object"
+    },
+
+    afSystemSettings: {
+      label: "System Settings",
+      kind: "object"
+    },
+
+    poleSellingPrices: {
+      label: "Pole Selling Prices",
+      kind: "object"
+    },
+
+    poleStandardWeights: {
+      label: "Pole Standard Weights",
+      kind: "object"
+    },
+
+    afRolePermissions: {
+      label: "Roles & Permissions",
+      kind: "object"
+    },
+
+    afCompanyLetters: {
+      label: "Company Letters",
+      kind: "array"
+    }
+  };
+
   let supabaseClient = null;
   let realtimeChannel = null;
+  let realtimeStage2Channel = null;
+  let realtimeMasterChannel = null;
   let applyingRemoteExpenses = false;
+  let applyingRemoteStage2 = false;
+  let applyingRemoteMaster = false;
   let expenseSyncTimer = null;
+  let stage2SyncTimer = null;
+  let masterSyncTimer = null;
   let retryTimer = null;
+
+  const stage2Snapshots =
+    new Map();
+
+  const masterSnapshots =
+    new Map();
 
   const originalStorageSetItem =
     Storage.prototype.setItem;
@@ -91596,10 +91926,14 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
     );
   }
 
-  function allowedStage1Role() {
+  function allowedCloudRole() {
     return [
       "Director",
-      "Secretary"
+      "Manager",
+      "HR",
+      "Secretary",
+      "Team Leader",
+      "Employee"
     ].includes(currentRole());
   }
 
@@ -92246,7 +92580,11 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
     if (
       ![
         "Director",
-        "Secretary"
+        "Manager",
+        "HR",
+        "Secretary",
+        "Team Leader",
+        "Employee"
       ].includes(
         String(
           employee.role || ""
@@ -92256,7 +92594,7 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
       return {
         valid: false,
         reason:
-          "Stage 1 cloud activation is currently limited to the Director and Secretary."
+          "This employee does not have a valid A&F application role for cloud activation."
       };
     }
 
@@ -92352,6 +92690,8 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
         "af-cloud-enroll",
         {
           body: {
+            action:
+              "enroll",
             employeeId:
               employee.employeeId,
             fullName:
@@ -93216,7 +93556,7 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
         "Cloud Sync connected.",
         {
           pending:
-            pendingIds().size
+            totalCloudPendingCount()
         }
       );
       return;
@@ -93300,6 +93640,3687 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
       );
   }
 
+
+  /* =======================================================
+     STAGE 2 - LOCAL STORAGE SNAPSHOTS
+     Detect exactly which records changed so historical
+     records are NOT uploaded automatically.
+     ======================================================= */
+
+  function stage2ReadModule(
+    moduleName
+  ) {
+    const config =
+      STAGE2_MODULES[
+        moduleName
+      ];
+
+    if (!config) return [];
+
+    const value =
+      readJSON(
+        config.key,
+        []
+      );
+
+    return Array.isArray(value)
+      ? value
+      : [];
+  }
+
+  function stage2SourceId(
+    moduleName,
+    record
+  ) {
+    if (!record) return "";
+
+    const candidates = [
+      record.id,
+      record.customerNo,
+      record.supplierNo,
+      record.purchaseNo,
+      record.paymentNo,
+      record.deliveryNumber,
+      record.orderNumber,
+      record.orderNo,
+      record.reference,
+      record.followupNo
+    ];
+
+    const value =
+      candidates.find(
+        item =>
+          item !== undefined &&
+          item !== null &&
+          String(item).trim() !== ""
+      );
+
+    return value === undefined
+      ? ""
+      : String(value);
+  }
+
+  function stage2RecordTimestamp(
+    record
+  ) {
+    const candidates = [
+      record?.editedAt,
+      record?.updatedAt,
+      record?.customerUpdatedAt,
+      record?.confirmedAt,
+      record?.completedAt,
+      record?.cancelledAt,
+      record?.reversedAt,
+      record?.recordedAt,
+      record?.createdAt,
+      record?.date,
+      record?.orderDate,
+      record?.paymentDate,
+      record?.deliveryDate,
+      record?.dateRegistered
+    ];
+
+    for (const value of candidates) {
+      if (!value) continue;
+
+      const ms =
+        new Date(value)
+          .getTime();
+
+      if (Number.isFinite(ms)) {
+        return ms;
+      }
+    }
+
+    return 0;
+  }
+
+  function stage2DateOnly(
+    value
+  ) {
+    if (!value) return null;
+
+    const text =
+      String(value);
+
+    const direct =
+      text.match(
+        /^(\d{4}-\d{2}-\d{2})/
+      );
+
+    if (direct) {
+      return direct[1];
+    }
+
+    const date =
+      new Date(value);
+
+    if (
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
+      return null;
+    }
+
+    return date
+      .toISOString()
+      .slice(0, 10);
+  }
+
+  function stage2ISO(
+    value
+  ) {
+    if (!value) return null;
+
+    try {
+      const date =
+        new Date(value);
+
+      if (
+        Number.isNaN(
+          date.getTime()
+        )
+      ) {
+        return null;
+      }
+
+      return date.toISOString();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function stage2SnapshotFor(
+    moduleName,
+    records
+  ) {
+    const snapshot =
+      new Map();
+
+    (
+      Array.isArray(records)
+        ? records
+        : []
+    ).forEach(record => {
+      const id =
+        stage2SourceId(
+          moduleName,
+          record
+        );
+
+      if (!id) return;
+
+      snapshot.set(
+        id,
+        JSON.stringify(record)
+      );
+    });
+
+    return snapshot;
+  }
+
+  function initializeStage2Snapshots() {
+    Object.keys(
+      STAGE2_MODULES
+    ).forEach(moduleName => {
+      stage2Snapshots.set(
+        moduleName,
+        stage2SnapshotFor(
+          moduleName,
+          stage2ReadModule(
+            moduleName
+          )
+        )
+      );
+    });
+  }
+
+  function stage2PendingState() {
+    const value =
+      readJSON(
+        STAGE2_PENDING_KEY,
+        {}
+      );
+
+    return (
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value)
+    )
+      ? value
+      : {};
+  }
+
+  function stage2DeletedState() {
+    const value =
+      readJSON(
+        STAGE2_DELETED_KEY,
+        {}
+      );
+
+    return (
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value)
+    )
+      ? value
+      : {};
+  }
+
+  function stage2MarkPending(
+    moduleName,
+    id
+  ) {
+    if (!id) return;
+
+    const state =
+      stage2PendingState();
+
+    const current =
+      new Set(
+        Array.isArray(
+          state[moduleName]
+        )
+          ? state[moduleName]
+              .map(String)
+          : []
+      );
+
+    current.add(
+      String(id)
+    );
+
+    state[moduleName] =
+      Array.from(current)
+        .slice(-5000);
+
+    writeJSON(
+      STAGE2_PENDING_KEY,
+      state
+    );
+  }
+
+  function stage2ClearPending(
+    moduleName,
+    id
+  ) {
+    const state =
+      stage2PendingState();
+
+    const current =
+      new Set(
+        Array.isArray(
+          state[moduleName]
+        )
+          ? state[moduleName]
+              .map(String)
+          : []
+      );
+
+    current.delete(
+      String(id)
+    );
+
+    state[moduleName] =
+      Array.from(current);
+
+    writeJSON(
+      STAGE2_PENDING_KEY,
+      state
+    );
+  }
+
+  function stage2MarkDeleted(
+    moduleName,
+    id
+  ) {
+    if (!id) return;
+
+    const state =
+      stage2DeletedState();
+
+    const current =
+      new Set(
+        Array.isArray(
+          state[moduleName]
+        )
+          ? state[moduleName]
+              .map(String)
+          : []
+      );
+
+    current.add(
+      String(id)
+    );
+
+    state[moduleName] =
+      Array.from(current)
+        .slice(-5000);
+
+    writeJSON(
+      STAGE2_DELETED_KEY,
+      state
+    );
+
+    stage2ClearPending(
+      moduleName,
+      id
+    );
+  }
+
+  function stage2ClearDeleted(
+    moduleName,
+    id
+  ) {
+    const state =
+      stage2DeletedState();
+
+    const current =
+      new Set(
+        Array.isArray(
+          state[moduleName]
+        )
+          ? state[moduleName]
+              .map(String)
+          : []
+      );
+
+    current.delete(
+      String(id)
+    );
+
+    state[moduleName] =
+      Array.from(current);
+
+    writeJSON(
+      STAGE2_DELETED_KEY,
+      state
+    );
+  }
+
+  function stage2PendingCount() {
+    const pending =
+      stage2PendingState();
+
+    const deleted =
+      stage2DeletedState();
+
+    let count = 0;
+
+    Object.keys(
+      STAGE2_MODULES
+    ).forEach(moduleName => {
+      count +=
+        Array.isArray(
+          pending[moduleName]
+        )
+          ? pending[moduleName]
+              .length
+          : 0;
+
+      count +=
+        Array.isArray(
+          deleted[moduleName]
+        )
+          ? deleted[moduleName]
+              .length
+          : 0;
+    });
+
+    return count;
+  }
+
+  function captureStage2StorageChange(
+    moduleName,
+    rawValue
+  ) {
+    if (
+      applyingRemoteStage2
+    ) {
+      return;
+    }
+
+    let records = [];
+
+    try {
+      const parsed =
+        JSON.parse(
+          String(
+            rawValue ?? "[]"
+          )
+        );
+
+      records =
+        Array.isArray(parsed)
+          ? parsed
+          : [];
+    } catch (_) {
+      return;
+    }
+
+    const before =
+      stage2Snapshots.get(
+        moduleName
+      ) ||
+      new Map();
+
+    const after =
+      stage2SnapshotFor(
+        moduleName,
+        records
+      );
+
+    after.forEach(
+      (serialized, id) => {
+        if (
+          before.get(id) !==
+          serialized
+        ) {
+          stage2MarkPending(
+            moduleName,
+            id
+          );
+        }
+      }
+    );
+
+    before.forEach(
+      (_, id) => {
+        if (!after.has(id)) {
+          stage2MarkDeleted(
+            moduleName,
+            id
+          );
+        }
+      }
+    );
+
+    stage2Snapshots.set(
+      moduleName,
+      after
+    );
+
+    scheduleStage2Sync();
+  }
+
+  /* =======================================================
+     STAGE 2 - CLOUD ROW BUILDERS
+     ======================================================= */
+
+  function stage2SaleValue(
+    record
+  ) {
+    return Number(
+      record?.finalSaleTotal ??
+      record?.netSaleTotal ??
+      record?.saleAmount ??
+      record?.grossSaleTotal ??
+      record?.totalValue ??
+      record?.value ??
+      record?.total ??
+      0
+    );
+  }
+
+  function stage2DeliveryQuantity(
+    record
+  ) {
+    return Number(
+      record?.totalPoles ??
+      record?.quantity ??
+      record?.totalKg ??
+      record?.kg ??
+      0
+    );
+  }
+
+  function stage2BaseCloudFields(
+    record,
+    identity
+  ) {
+    const created =
+      stage2ISO(
+        record?.createdAt ||
+        record?.recordedAt ||
+        record?.date
+      );
+
+    const updated =
+      stage2ISO(
+        record?.editedAt ||
+        record?.updatedAt ||
+        record?.customerUpdatedAt ||
+        record?.confirmedAt ||
+        record?.completedAt ||
+        record?.cancelledAt ||
+        record?.reversedAt ||
+        record?.recordedAt ||
+        record?.createdAt ||
+        record?.date
+      );
+
+    return {
+      company_id:
+        COMPANY_ID,
+
+      payload:
+        record,
+
+      synced_by_user:
+        identity.session.user.id,
+
+      synced_by_employee_id:
+        identity.membership
+          .employee_id,
+
+      synced_by_role:
+        identity.membership.role,
+
+      client_created_at:
+        created,
+
+      client_updated_at:
+        updated
+    };
+  }
+
+  function stage2BuildCloudRow(
+    moduleName,
+    record,
+    identity
+  ) {
+    const id =
+      stage2SourceId(
+        moduleName,
+        record
+      );
+
+    const base =
+      stage2BaseCloudFields(
+        record,
+        identity
+      );
+
+    if (
+      moduleName ===
+      "suppliers"
+    ) {
+      return {
+        ...base,
+        source_record_id: id,
+        name:
+          record.name || null,
+        phone:
+          record.phone || null,
+        location:
+          record.location || null,
+        material:
+          record.material || null,
+        status:
+          record.status ||
+          "ACTIVE"
+      };
+    }
+
+    if (
+      moduleName ===
+      "supplierPurchases"
+    ) {
+      return {
+        ...base,
+        source_record_id: id,
+        supplier_id:
+          record.supplierId ||
+          null,
+        purchase_date:
+          stage2DateOnly(
+            record.date ||
+            record.purchaseDate
+          ),
+        material_type:
+          record.materialType ||
+          null,
+        gross_kg:
+          Number(
+            record.grossKg || 0
+          ),
+        accepted_kg:
+          Number(
+            record.acceptedKg || 0
+          ),
+        total_cost:
+          Number(
+            record.totalCost || 0
+          ),
+        status:
+          record.status ||
+          "ACTIVE"
+      };
+    }
+
+    if (
+      moduleName ===
+      "customers"
+    ) {
+      return {
+        ...base,
+        source_record_id: id,
+        customer_no:
+          record.customerNo ||
+          null,
+        name:
+          record.name ||
+          record.customerName ||
+          null,
+        phone:
+          record.phone ||
+          null,
+        customer_type:
+          record.customerType ||
+          null,
+        status:
+          record.status ||
+          "ACTIVE"
+      };
+    }
+
+    if (
+      moduleName ===
+      "orders"
+    ) {
+      return {
+        ...base,
+        source_record_id: id,
+        reference:
+          record.reference ||
+          record.orderNumber ||
+          record.orderNo ||
+          null,
+        customer_id:
+          record.customerId ||
+          null,
+        customer_name:
+          record.customerName ||
+          record.clientName ||
+          null,
+        order_date:
+          stage2DateOnly(
+            record.date ||
+            record.orderDate ||
+            record.createdAt
+          ),
+        record_type:
+          record.type ||
+          record.recordType ||
+          "Order",
+        status:
+          record.status ||
+          "DRAFT",
+        total_value:
+          stage2SaleValue(
+            record
+          )
+      };
+    }
+
+    if (
+      moduleName ===
+      "payments"
+    ) {
+      return {
+        ...base,
+        source_record_id: id,
+        payment_no:
+          record.paymentNo ||
+          record.receiptNo ||
+          null,
+        customer_id:
+          record.customerId ||
+          null,
+        customer_name:
+          record.customerName ||
+          record.clientName ||
+          null,
+        payment_date:
+          stage2DateOnly(
+            record.date ||
+            record.paymentDate ||
+            record.recordedAt
+          ),
+        amount:
+          Number(
+            record.amount || 0
+          ),
+        payment_method:
+          record.paymentMethod ||
+          record.method ||
+          null,
+        reference:
+          record.reference ||
+          null,
+        status:
+          record.status ||
+          "ACTIVE"
+      };
+    }
+
+    if (
+      moduleName ===
+      "followups"
+    ) {
+      return {
+        ...base,
+        source_record_id: id,
+        customer_id:
+          record.customerId ||
+          null,
+        customer_name:
+          record.customerName ||
+          null,
+        followup_date:
+          stage2DateOnly(
+            record.date ||
+            record.followupDate ||
+            record.createdAt
+          ),
+        status:
+          record.status ||
+          "PENDING",
+        note:
+          record.note ||
+          record.notes ||
+          null
+      };
+    }
+
+    if (
+      moduleName ===
+      "deliveries"
+    ) {
+      return {
+        ...base,
+        source_record_id: id,
+        delivery_number:
+          record.deliveryNumber ||
+          null,
+        customer_id:
+          record.customerId ||
+          null,
+        customer_name:
+          record.customerName ||
+          record.clientName ||
+          null,
+        delivery_date:
+          stage2DateOnly(
+            record.date ||
+            record.deliveryDate ||
+            record.createdAt
+          ),
+        delivery_type:
+          record.deliveryType ||
+          record.type ||
+          null,
+        quantity:
+          stage2DeliveryQuantity(
+            record
+          ),
+        sale_value:
+          stage2SaleValue(
+            record
+          ),
+        status:
+          record.status ||
+          "ACTIVE"
+      };
+    }
+
+    return {
+      ...base,
+      source_record_id: id
+    };
+  }
+
+  /* =======================================================
+     STAGE 2 - CLOUD AUDIT
+     ======================================================= */
+
+  async function stage2AuditCloud(
+    moduleName,
+    action,
+    recordId,
+    details
+  ) {
+    try {
+      const identity =
+        await verifyCurrentCloudIdentity();
+
+      if (!identity) return;
+
+      const client =
+        await getSupabase();
+
+      await client
+        .from(
+          "af_cloud_audit"
+        )
+        .insert({
+          company_id:
+            COMPANY_ID,
+
+          user_id:
+            identity.session
+              .user.id,
+
+          employee_id:
+            identity.membership
+              .employee_id,
+
+          role:
+            identity.membership
+              .role,
+
+          module:
+            STAGE2_MODULES[
+              moduleName
+            ]?.label ||
+            moduleName,
+
+          action,
+
+          record_id:
+            String(
+              recordId || ""
+            ),
+
+          details:
+            details || {}
+        });
+    } catch (_) {}
+  }
+
+  /* =======================================================
+     STAGE 2 - PUSH / DELETE
+     ======================================================= */
+
+  async function stage2PushRecord(
+    moduleName,
+    record,
+    identity
+  ) {
+    const config =
+      STAGE2_MODULES[
+        moduleName
+      ];
+
+    if (!config) return false;
+
+    const id =
+      stage2SourceId(
+        moduleName,
+        record
+      );
+
+    if (!id) return false;
+
+    const client =
+      await getSupabase();
+
+    const {
+      data: existing,
+      error: lookupError
+    } =
+      await client
+        .from(
+          config.table
+        )
+        .select(
+          "id,source_record_id,payload,updated_at"
+        )
+        .eq(
+          "company_id",
+          COMPANY_ID
+        )
+        .eq(
+          "source_record_id",
+          id
+        )
+        .maybeSingle();
+
+    if (lookupError) {
+      throw lookupError;
+    }
+
+    const row =
+      stage2BuildCloudRow(
+        moduleName,
+        record,
+        identity
+      );
+
+    if (!existing) {
+      const {
+        error
+      } =
+        await client
+          .from(
+            config.table
+          )
+          .insert(row);
+
+      if (error) throw error;
+
+      stage2ClearPending(
+        moduleName,
+        id
+      );
+
+      stage2AuditCloud(
+        moduleName,
+        "INSERT",
+        id,
+        {}
+      );
+
+      return true;
+    }
+
+    const same =
+      JSON.stringify(
+        existing.payload || {}
+      ) ===
+      JSON.stringify(
+        record
+      );
+
+    if (same) {
+      stage2ClearPending(
+        moduleName,
+        id
+      );
+
+      return true;
+    }
+
+    const role =
+      identity.membership.role;
+
+    const canUpdate =
+      role === "Director" ||
+      (
+        role === "Secretary" &&
+        config.secretaryCanUpdate
+      );
+
+    if (!canUpdate) {
+      throw new Error(
+        config.label +
+        " saved records can only be corrected by the Director."
+      );
+    }
+
+    const updateRow = {
+      ...row
+    };
+
+    delete updateRow.company_id;
+    delete updateRow.source_record_id;
+    delete updateRow.synced_by_user;
+    delete updateRow.synced_by_employee_id;
+    delete updateRow.synced_by_role;
+    delete updateRow.client_created_at;
+
+    updateRow.synced_by_user =
+      identity.session.user.id;
+
+    updateRow.synced_by_employee_id =
+      identity.membership.employee_id;
+
+    updateRow.synced_by_role =
+      identity.membership.role;
+
+    const {
+      error: updateError
+    } =
+      await client
+        .from(
+          config.table
+        )
+        .update(
+          updateRow
+        )
+        .eq(
+          "company_id",
+          COMPANY_ID
+        )
+        .eq(
+          "source_record_id",
+          id
+        );
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    stage2ClearPending(
+      moduleName,
+      id
+    );
+
+    stage2AuditCloud(
+      moduleName,
+      "UPDATE",
+      id,
+      {}
+    );
+
+    return true;
+  }
+
+  async function stage2DeleteCloudRecord(
+    moduleName,
+    id,
+    identity
+  ) {
+    const config =
+      STAGE2_MODULES[
+        moduleName
+      ];
+
+    if (!config || !id) {
+      return false;
+    }
+
+    if (
+      identity.membership.role !==
+      "Director"
+    ) {
+      throw new Error(
+        "Only the Director can delete saved " +
+        config.label +
+        " records."
+      );
+    }
+
+    const client =
+      await getSupabase();
+
+    const {
+      error
+    } =
+      await client
+        .from(
+          config.table
+        )
+        .delete()
+        .eq(
+          "company_id",
+          COMPANY_ID
+        )
+        .eq(
+          "source_record_id",
+          String(id)
+        );
+
+    if (error) throw error;
+
+    stage2ClearDeleted(
+      moduleName,
+      id
+    );
+
+    stage2AuditCloud(
+      moduleName,
+      "DELETE",
+      id,
+      {}
+    );
+
+    return true;
+  }
+
+  /* =======================================================
+     STAGE 2 - LOCAL -> CLOUD
+     ======================================================= */
+
+  async function syncStage2Local(
+    includeHistorical = false
+  ) {
+    if (
+      applyingRemoteStage2 ||
+      !navigator.onLine
+    ) {
+      return;
+    }
+
+    let identity;
+
+    try {
+      identity =
+        await verifyCurrentCloudIdentity();
+    } catch (error) {
+      setStatus(
+        "AUTH_REQUIRED",
+        "Cloud authentication is required."
+      );
+
+      return;
+    }
+
+    if (!identity) return;
+
+    if (
+      ![
+        "Director",
+        "Secretary"
+      ].includes(
+        identity.membership.role
+      )
+    ) {
+      return;
+    }
+
+    const pending =
+      stage2PendingState();
+
+    const deleted =
+      stage2DeletedState();
+
+    setStatus(
+      "SYNCING",
+      "Synchronising Suppliers, Sales & Deliveries...",
+      {
+        pending:
+          stage2PendingCount()
+      }
+    );
+
+    for (
+      const moduleName of
+      Object.keys(
+        STAGE2_MODULES
+      )
+    ) {
+      const records =
+        stage2ReadModule(
+          moduleName
+        );
+
+      const byId =
+        new Map();
+
+      records.forEach(record => {
+        const id =
+          stage2SourceId(
+            moduleName,
+            record
+          );
+
+        if (id) {
+          byId.set(
+            id,
+            record
+          );
+        }
+      });
+
+      const targetIds =
+        includeHistorical
+          ? Array.from(
+              byId.keys()
+            )
+          : Array.from(
+              new Set(
+                Array.isArray(
+                  pending[moduleName]
+                )
+                  ? pending[
+                      moduleName
+                    ].map(String)
+                  : []
+              )
+            );
+
+      for (
+        const id of targetIds
+      ) {
+        const record =
+          byId.get(
+            String(id)
+          );
+
+        if (!record) continue;
+
+        try {
+          await stage2PushRecord(
+            moduleName,
+            record,
+            identity
+          );
+        } catch (error) {
+          console.warn(
+            "A&F Stage 2 sync failed:",
+            moduleName,
+            id,
+            error
+          );
+        }
+      }
+
+      const deletedIds =
+        Array.from(
+          new Set(
+            Array.isArray(
+              deleted[moduleName]
+            )
+              ? deleted[
+                  moduleName
+                ].map(String)
+              : []
+          )
+        );
+
+      for (
+        const id of deletedIds
+      ) {
+        try {
+          await stage2DeleteCloudRecord(
+            moduleName,
+            id,
+            identity
+          );
+        } catch (error) {
+          console.warn(
+            "A&F Stage 2 cloud delete failed:",
+            moduleName,
+            id,
+            error
+          );
+        }
+      }
+    }
+
+    const stillPending =
+      stage2PendingCount();
+
+    setStatus(
+      stillPending
+        ? "PENDING"
+        : "CONNECTED",
+
+      stillPending
+        ? (
+            stillPending +
+            " Stage 2 cloud change(s) still pending."
+          )
+        : "Live Cloud Sync connected. Expenses, Suppliers, Sales & Deliveries are up to date.",
+
+      {
+        pending:
+          stillPending,
+        lastStage2SyncAt:
+          new Date()
+            .toISOString()
+      }
+    );
+  }
+
+  function scheduleStage2Sync() {
+    clearTimeout(
+      stage2SyncTimer
+    );
+
+    stage2SyncTimer =
+      setTimeout(
+        () =>
+          syncStage2Local(
+            false
+          ).catch(error =>
+            console.warn(
+              "A&F Stage 2 scheduled sync:",
+              error
+            )
+          ),
+        650
+      );
+  }
+
+  /* =======================================================
+     STAGE 2 - REMOTE -> LOCAL
+     ======================================================= */
+
+  function stage2WriteModule(
+    moduleName,
+    records
+  ) {
+    const config =
+      STAGE2_MODULES[
+        moduleName
+      ];
+
+    if (!config) return;
+
+    const clean =
+      Array.isArray(records)
+        ? records
+        : [];
+
+    applyingRemoteStage2 =
+      true;
+
+    try {
+      originalStorageSetItem.call(
+        localStorage,
+        config.key,
+        JSON.stringify(clean)
+      );
+    } finally {
+      applyingRemoteStage2 =
+        false;
+    }
+
+    stage2Snapshots.set(
+      moduleName,
+      stage2SnapshotFor(
+        moduleName,
+        clean
+      )
+    );
+  }
+
+  function stage2RefreshAfterRemote(
+    moduleName
+  ) {
+    try {
+      if (
+        typeof populateMaterialSupplierDropdown ===
+        "function" &&
+        (
+          moduleName ===
+            "suppliers" ||
+          moduleName ===
+            "supplierPurchases"
+        )
+      ) {
+        populateMaterialSupplierDropdown();
+      }
+    } catch (_) {}
+
+    try {
+      if (
+        currentRole() ===
+          "Director" &&
+        typeof refreshAFDirectorDashboard ===
+          "function"
+      ) {
+        refreshAFDirectorDashboard();
+      }
+    } catch (_) {}
+
+    try {
+      if (
+        currentRole() ===
+          "Secretary" &&
+        typeof renderAFSecretaryDashboard ===
+          "function"
+      ) {
+        renderAFSecretaryDashboard();
+      }
+    } catch (_) {}
+
+    window.dispatchEvent(
+      new CustomEvent(
+        "af-cloud-stage2-updated",
+        {
+          detail: {
+            module:
+              moduleName
+          }
+        }
+      )
+    );
+  }
+
+  function stage2MergeRemoteRow(
+    moduleName,
+    row
+  ) {
+    const id =
+      String(
+        row?.source_record_id ||
+        ""
+      );
+
+    if (!id) return;
+
+    const remoteRecord =
+      row?.payload &&
+      typeof row.payload ===
+        "object"
+        ? {
+            ...row.payload
+          }
+        : {};
+
+    if (
+      remoteRecord.id ===
+        undefined ||
+      remoteRecord.id === null ||
+      String(
+        remoteRecord.id
+      ).trim() === ""
+    ) {
+      remoteRecord.id =
+        row.source_record_id;
+    }
+
+    const records =
+      stage2ReadModule(
+        moduleName
+      );
+
+    const index =
+      records.findIndex(
+        record =>
+          stage2SourceId(
+            moduleName,
+            record
+          ) === id
+      );
+
+    if (index >= 0) {
+      records[index] =
+        remoteRecord;
+    } else {
+      records.push(
+        remoteRecord
+      );
+    }
+
+    stage2WriteModule(
+      moduleName,
+      records
+    );
+
+    stage2ClearPending(
+      moduleName,
+      id
+    );
+
+    stage2ClearDeleted(
+      moduleName,
+      id
+    );
+
+    stage2RefreshAfterRemote(
+      moduleName
+    );
+  }
+
+  function stage2RemoveRemoteRow(
+    moduleName,
+    row
+  ) {
+    const id =
+      String(
+        row?.source_record_id ||
+        ""
+      );
+
+    if (!id) return;
+
+    const records =
+      stage2ReadModule(
+        moduleName
+      ).filter(
+        record =>
+          stage2SourceId(
+            moduleName,
+            record
+          ) !== id
+      );
+
+    stage2WriteModule(
+      moduleName,
+      records
+    );
+
+    stage2ClearPending(
+      moduleName,
+      id
+    );
+
+    stage2ClearDeleted(
+      moduleName,
+      id
+    );
+
+    stage2RefreshAfterRemote(
+      moduleName
+    );
+  }
+
+  async function pullStage2CloudRecords() {
+    const identity =
+      await verifyCurrentCloudIdentity();
+
+    if (!identity) return;
+
+    const client =
+      await getSupabase();
+
+    for (
+      const [
+        moduleName,
+        config
+      ] of Object.entries(
+        STAGE2_MODULES
+      )
+    ) {
+      const {
+        data,
+        error
+      } =
+        await client
+          .from(
+            config.table
+          )
+          .select(
+            "source_record_id,payload,updated_at"
+          )
+          .eq(
+            "company_id",
+            COMPANY_ID
+          );
+
+      if (error) {
+        throw error;
+      }
+
+      (
+        Array.isArray(data)
+          ? data
+          : []
+      ).forEach(
+        row =>
+          stage2MergeRemoteRow(
+            moduleName,
+            row
+          )
+      );
+    }
+
+    originalStorageSetItem.call(
+      localStorage,
+      STAGE2_LAST_PULL_KEY,
+      new Date()
+        .toISOString()
+    );
+  }
+
+  /* =======================================================
+     STAGE 2 - REALTIME
+     ======================================================= */
+
+  async function subscribeStage2() {
+    const identity =
+      await verifyCurrentCloudIdentity();
+
+    if (!identity) return;
+
+    const client =
+      await getSupabase();
+
+    if (
+      realtimeStage2Channel
+    ) {
+      try {
+        await client
+          .removeChannel(
+            realtimeStage2Channel
+          );
+      } catch (_) {}
+    }
+
+    let channel =
+      client.channel(
+        "af-stage2-" +
+        COMPANY_ID
+      );
+
+    Object.entries(
+      STAGE2_MODULES
+    ).forEach(
+      ([moduleName, config]) => {
+        channel =
+          channel.on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table:
+                config.table,
+              filter:
+                "company_id=eq." +
+                COMPANY_ID
+            },
+            payload => {
+              if (
+                payload.eventType ===
+                "DELETE"
+              ) {
+                stage2RemoveRemoteRow(
+                  moduleName,
+                  payload.old
+                );
+              } else {
+                stage2MergeRemoteRow(
+                  moduleName,
+                  payload.new
+                );
+              }
+
+              setStatus(
+                "CONNECTED",
+                "Live Cloud Sync connected. Expenses, Suppliers, Sales & Deliveries are live.",
+                {
+                  lastRealtimeAt:
+                    new Date()
+                      .toISOString(),
+                  pending:
+                    stage2PendingCount()
+                }
+              );
+            }
+          );
+      }
+    );
+
+    realtimeStage2Channel =
+      channel.subscribe(
+        status => {
+          if (
+            status ===
+            "SUBSCRIBED"
+          ) {
+            setStatus(
+              "CONNECTED",
+              "Live Cloud Sync connected. Expenses, Suppliers, Sales & Deliveries are live.",
+              {
+                pending:
+                  stage2PendingCount()
+              }
+            );
+          }
+        }
+      );
+  }
+
+
+
+  /* =======================================================
+     MASTER STAGES 3 - 5 SYNC ENGINE
+     ======================================================= */
+
+  function masterClone(value) {
+    try {
+      return JSON.parse(
+        JSON.stringify(value)
+      );
+    } catch (_) {
+      return value;
+    }
+  }
+
+  function masterSanitisePayload(
+    moduleKey,
+    value
+  ) {
+    const copy =
+      masterClone(value);
+
+    /*
+     * Password hashes and password-related local cache
+     * fields must NEVER be uploaded to the cloud data table.
+     * Supabase Auth is the online password authority.
+     */
+    if (
+      moduleKey === "employees" &&
+      copy &&
+      typeof copy === "object"
+    ) {
+      [
+        "passwordHash",
+        "password",
+        "temporaryPassword",
+        "tempPassword",
+        "resetPassword",
+        "resetCode",
+        "passwordResetCode",
+        "passwordToken"
+      ].forEach(
+        key => {
+          if (
+            Object.prototype
+              .hasOwnProperty
+              .call(copy, key)
+          ) {
+            delete copy[key];
+          }
+        }
+      );
+    }
+
+    return copy;
+  }
+
+  function masterLocalExists(
+    moduleKey
+  ) {
+    return (
+      localStorage.getItem(
+        moduleKey
+      ) !== null
+    );
+  }
+
+  function masterReadValue(
+    moduleKey
+  ) {
+    const config =
+      MASTER_MODULES[
+        moduleKey
+      ];
+
+    if (!config) return null;
+
+    const raw =
+      localStorage.getItem(
+        moduleKey
+      );
+
+    if (raw === null) {
+      if (
+        config.kind ===
+        "array"
+      ) {
+        return [];
+      }
+
+      if (
+        config.kind ===
+        "object"
+      ) {
+        return {};
+      }
+
+      return (
+        config.defaultValue ??
+        null
+      );
+    }
+
+    if (
+      config.kind ===
+      "scalar"
+    ) {
+      const numberValue =
+        Number(raw);
+
+      return Number.isFinite(
+        numberValue
+      )
+        ? numberValue
+        : raw;
+    }
+
+    try {
+      const parsed =
+        JSON.parse(raw);
+
+      if (
+        config.kind ===
+        "array"
+      ) {
+        return Array.isArray(
+          parsed
+        )
+          ? parsed
+          : [];
+      }
+
+      return (
+        parsed &&
+        typeof parsed ===
+          "object" &&
+        !Array.isArray(parsed)
+      )
+        ? parsed
+        : {};
+    } catch (_) {
+      return (
+        config.kind ===
+        "array"
+      )
+        ? []
+        : {};
+    }
+  }
+
+  function masterStableHash(
+    value
+  ) {
+    const text =
+      String(value || "");
+
+    let hash = 2166136261;
+
+    for (
+      let i = 0;
+      i < text.length;
+      i += 1
+    ) {
+      hash ^=
+        text.charCodeAt(i);
+
+      hash =
+        Math.imul(
+          hash,
+          16777619
+        );
+    }
+
+    return (
+      hash >>> 0
+    ).toString(36);
+  }
+
+  function masterRecordId(
+    moduleKey,
+    record,
+    index = 0
+  ) {
+    if (
+      !record ||
+      typeof record !==
+        "object"
+    ) {
+      return (
+        "record-" +
+        index
+      );
+    }
+
+    const candidates = [
+      record.id,
+      record.employeeId,
+      record.employeeID,
+      record.teamId,
+      record.shiftId,
+      record.batchId,
+      record.batchNumber,
+      record.washingSubBatchNumber,
+      record.productionId,
+      record.productionNumber,
+      record.payrollId,
+      record.payrollKey,
+      record.sourcePayrollKey,
+      record.documentId,
+      record.letterId,
+      record.letterNo,
+      record.itemId,
+      record.itemCode,
+      record.assetId,
+      record.assetNo,
+      record.journalId,
+      record.periodKey,
+      record.reference,
+      record.recordNumber,
+      record.number
+    ];
+
+    const direct =
+      candidates.find(
+        value =>
+          value !==
+            undefined &&
+          value !== null &&
+          String(value)
+            .trim() !== ""
+      );
+
+    if (
+      direct !== undefined
+    ) {
+      return String(direct);
+    }
+
+    const compound =
+      [
+        record.employeeId,
+        record.date,
+        record.year,
+        record.month,
+        record.type,
+        record.category,
+        record.teamName,
+        record.shift,
+        record.name
+      ]
+        .filter(
+          value =>
+            value !==
+              undefined &&
+            value !== null &&
+            String(value)
+              .trim() !== ""
+        )
+        .map(String)
+        .join("|");
+
+    if (compound) {
+      return (
+        "key-" +
+        masterStableHash(
+          compound
+        )
+      );
+    }
+
+    return (
+      "hash-" +
+      masterStableHash(
+        JSON.stringify(
+          masterSanitisePayload(
+            moduleKey,
+            record
+          )
+        )
+      ) +
+      "-" +
+      index
+    );
+  }
+
+  function masterEntries(
+    moduleKey
+  ) {
+    const config =
+      MASTER_MODULES[
+        moduleKey
+      ];
+
+    if (!config) return [];
+
+    const value =
+      masterReadValue(
+        moduleKey
+      );
+
+    if (
+      config.kind ===
+      "array"
+    ) {
+      return (
+        Array.isArray(value)
+          ? value
+          : []
+      ).map(
+        (record, index) => ({
+          id:
+            masterRecordId(
+              moduleKey,
+              record,
+              index
+            ),
+          payload:
+            masterSanitisePayload(
+              moduleKey,
+              record
+            ),
+          localRecord:
+            record
+        })
+      );
+    }
+
+    if (
+      config.kind ===
+      "object"
+    ) {
+      return masterLocalExists(
+        moduleKey
+      )
+        ? [
+            {
+              id: "__object__",
+              payload:
+                masterSanitisePayload(
+                  moduleKey,
+                  value
+                ),
+              localRecord:
+                value
+            }
+          ]
+        : [];
+    }
+
+    return masterLocalExists(
+      moduleKey
+    )
+      ? [
+          {
+            id: "__value__",
+            payload: {
+              value
+            },
+            localRecord:
+              value
+          }
+        ]
+      : [];
+  }
+
+  function masterSnapshotFor(
+    moduleKey
+  ) {
+    const snapshot =
+      new Map();
+
+    masterEntries(
+      moduleKey
+    ).forEach(entry => {
+      snapshot.set(
+        String(entry.id),
+        JSON.stringify(
+          entry.payload
+        )
+      );
+    });
+
+    return snapshot;
+  }
+
+  function initializeMasterSnapshots() {
+    Object.keys(
+      MASTER_MODULES
+    ).forEach(moduleKey => {
+      masterSnapshots.set(
+        moduleKey,
+        masterSnapshotFor(
+          moduleKey
+        )
+      );
+    });
+  }
+
+  function masterPendingState() {
+    const value =
+      readJSON(
+        MASTER_PENDING_KEY,
+        {}
+      );
+
+    return (
+      value &&
+      typeof value ===
+        "object" &&
+      !Array.isArray(value)
+    )
+      ? value
+      : {};
+  }
+
+  function masterDeletedState() {
+    const value =
+      readJSON(
+        MASTER_DELETED_KEY,
+        {}
+      );
+
+    return (
+      value &&
+      typeof value ===
+        "object" &&
+      !Array.isArray(value)
+    )
+      ? value
+      : {};
+  }
+
+  function masterMarkPending(
+    moduleKey,
+    id
+  ) {
+    if (!id) return;
+
+    const state =
+      masterPendingState();
+
+    const list =
+      new Set(
+        Array.isArray(
+          state[moduleKey]
+        )
+          ? state[moduleKey]
+              .map(String)
+          : []
+      );
+
+    list.add(
+      String(id)
+    );
+
+    state[moduleKey] =
+      Array.from(list)
+        .slice(-10000);
+
+    writeJSON(
+      MASTER_PENDING_KEY,
+      state
+    );
+  }
+
+  function masterClearPending(
+    moduleKey,
+    id
+  ) {
+    const state =
+      masterPendingState();
+
+    const list =
+      new Set(
+        Array.isArray(
+          state[moduleKey]
+        )
+          ? state[moduleKey]
+              .map(String)
+          : []
+      );
+
+    list.delete(
+      String(id)
+    );
+
+    state[moduleKey] =
+      Array.from(list);
+
+    writeJSON(
+      MASTER_PENDING_KEY,
+      state
+    );
+  }
+
+  function masterMarkDeleted(
+    moduleKey,
+    id
+  ) {
+    if (!id) return;
+
+    const state =
+      masterDeletedState();
+
+    const list =
+      new Set(
+        Array.isArray(
+          state[moduleKey]
+        )
+          ? state[moduleKey]
+              .map(String)
+          : []
+      );
+
+    list.add(
+      String(id)
+    );
+
+    state[moduleKey] =
+      Array.from(list)
+        .slice(-10000);
+
+    writeJSON(
+      MASTER_DELETED_KEY,
+      state
+    );
+
+    masterClearPending(
+      moduleKey,
+      id
+    );
+  }
+
+  function masterClearDeleted(
+    moduleKey,
+    id
+  ) {
+    const state =
+      masterDeletedState();
+
+    const list =
+      new Set(
+        Array.isArray(
+          state[moduleKey]
+        )
+          ? state[moduleKey]
+              .map(String)
+          : []
+      );
+
+    list.delete(
+      String(id)
+    );
+
+    state[moduleKey] =
+      Array.from(list);
+
+    writeJSON(
+      MASTER_DELETED_KEY,
+      state
+    );
+  }
+
+  function masterPendingCount() {
+    const pending =
+      masterPendingState();
+
+    const deleted =
+      masterDeletedState();
+
+    let count = 0;
+
+    Object.keys(
+      MASTER_MODULES
+    ).forEach(moduleKey => {
+      count +=
+        Array.isArray(
+          pending[moduleKey]
+        )
+          ? pending[
+              moduleKey
+            ].length
+          : 0;
+
+      count +=
+        Array.isArray(
+          deleted[moduleKey]
+        )
+          ? deleted[
+              moduleKey
+            ].length
+          : 0;
+    });
+
+    return count;
+  }
+
+  function totalCloudPendingCount() {
+    let total = 0;
+
+    try {
+      total +=
+        pendingIds().size;
+    } catch (_) {}
+
+    try {
+      total +=
+        stage2PendingCount();
+    } catch (_) {}
+
+    try {
+      total +=
+        masterPendingCount();
+    } catch (_) {}
+
+    return total;
+  }
+
+  function captureMasterStorageChange(
+    moduleKey
+  ) {
+    if (
+      applyingRemoteMaster ||
+      !MASTER_MODULES[
+        moduleKey
+      ]
+    ) {
+      return;
+    }
+
+    const before =
+      masterSnapshots.get(
+        moduleKey
+      ) ||
+      new Map();
+
+    const after =
+      masterSnapshotFor(
+        moduleKey
+      );
+
+    after.forEach(
+      (serialised, id) => {
+        if (
+          before.get(id) !==
+          serialised
+        ) {
+          masterMarkPending(
+            moduleKey,
+            id
+          );
+        }
+      }
+    );
+
+    before.forEach(
+      (_, id) => {
+        if (!after.has(id)) {
+          masterMarkDeleted(
+            moduleKey,
+            id
+          );
+        }
+      }
+    );
+
+    masterSnapshots.set(
+      moduleKey,
+      after
+    );
+
+    scheduleMasterSync();
+  }
+
+  function masterClientTimestamp(
+    payload
+  ) {
+    if (
+      !payload ||
+      typeof payload !==
+        "object"
+    ) {
+      return null;
+    }
+
+    const candidates = [
+      payload.updatedAt,
+      payload.editedAt,
+      payload.completedAt,
+      payload.cancelledAt,
+      payload.reversedAt,
+      payload.recordedAt,
+      payload.createdAt,
+      payload.date
+    ];
+
+    for (
+      const value of candidates
+    ) {
+      if (!value) continue;
+
+      const date =
+        new Date(value);
+
+      if (
+        !Number.isNaN(
+          date.getTime()
+        )
+      ) {
+        return date
+          .toISOString();
+      }
+    }
+
+    return null;
+  }
+
+  async function masterPushEntry(
+    moduleKey,
+    entry,
+    identity
+  ) {
+    const config =
+      MASTER_MODULES[
+        moduleKey
+      ];
+
+    if (
+      !config ||
+      !entry?.id
+    ) {
+      return false;
+    }
+
+    const client =
+      await getSupabase();
+
+    const id =
+      String(entry.id);
+
+    const payload =
+      masterSanitisePayload(
+        moduleKey,
+        entry.payload
+      );
+
+    const {
+      data: existing,
+      error: lookupError
+    } =
+      await client
+        .from(
+          "af_module_records"
+        )
+        .select(
+          "id,payload,updated_at"
+        )
+        .eq(
+          "company_id",
+          COMPANY_ID
+        )
+        .eq(
+          "module_key",
+          moduleKey
+        )
+        .eq(
+          "source_record_id",
+          id
+        )
+        .maybeSingle();
+
+    if (lookupError) {
+      throw lookupError;
+    }
+
+    if (
+      existing &&
+      JSON.stringify(
+        existing.payload || {}
+      ) ===
+      JSON.stringify(
+        payload
+      )
+    ) {
+      masterClearPending(
+        moduleKey,
+        id
+      );
+
+      return true;
+    }
+
+    const row = {
+      company_id:
+        COMPANY_ID,
+
+      module_key:
+        moduleKey,
+
+      source_record_id:
+        id,
+
+      payload,
+
+      data_kind:
+        config.kind ===
+          "array"
+          ? "array"
+          : "object",
+
+      synced_by_user:
+        identity.session
+          .user.id,
+
+      synced_by_employee_id:
+        identity.membership
+          .employee_id,
+
+      synced_by_role:
+        identity.membership
+          .role,
+
+      client_created_at:
+        masterClientTimestamp(
+          payload
+        ),
+
+      client_updated_at:
+        masterClientTimestamp(
+          payload
+        )
+    };
+
+    let error = null;
+
+    if (!existing) {
+      const result =
+        await client
+          .from(
+            "af_module_records"
+          )
+          .insert(row);
+
+      error =
+        result.error;
+    } else {
+      const updateRow = {
+        payload:
+          row.payload,
+        data_kind:
+          row.data_kind,
+        synced_by_user:
+          row.synced_by_user,
+        synced_by_employee_id:
+          row.synced_by_employee_id,
+        synced_by_role:
+          row.synced_by_role,
+        client_updated_at:
+          row.client_updated_at
+      };
+
+      const result =
+        await client
+          .from(
+            "af_module_records"
+          )
+          .update(
+            updateRow
+          )
+          .eq(
+            "company_id",
+            COMPANY_ID
+          )
+          .eq(
+            "module_key",
+            moduleKey
+          )
+          .eq(
+            "source_record_id",
+            id
+          );
+
+      error =
+        result.error;
+    }
+
+    if (error) {
+      throw error;
+    }
+
+    masterClearPending(
+      moduleKey,
+      id
+    );
+
+    return true;
+  }
+
+  async function masterDeleteEntry(
+    moduleKey,
+    id,
+    identity
+  ) {
+    if (
+      identity.membership.role !==
+      "Director"
+    ) {
+      throw new Error(
+        "Only the Director can delete saved cloud records."
+      );
+    }
+
+    const client =
+      await getSupabase();
+
+    const {
+      error
+    } =
+      await client
+        .from(
+          "af_module_records"
+        )
+        .delete()
+        .eq(
+          "company_id",
+          COMPANY_ID
+        )
+        .eq(
+          "module_key",
+          moduleKey
+        )
+        .eq(
+          "source_record_id",
+          String(id)
+        );
+
+    if (error) {
+      throw error;
+    }
+
+    masterClearDeleted(
+      moduleKey,
+      id
+    );
+
+    return true;
+  }
+
+  async function syncMasterLocal(
+    includeHistorical = false
+  ) {
+    if (
+      applyingRemoteMaster ||
+      !navigator.onLine
+    ) {
+      return;
+    }
+
+    let identity;
+
+    try {
+      identity =
+        await verifyCurrentCloudIdentity();
+    } catch (_) {
+      return;
+    }
+
+    if (!identity) return;
+
+    const pending =
+      masterPendingState();
+
+    const deleted =
+      masterDeletedState();
+
+    setStatus(
+      "SYNCING",
+      "Synchronising A&F master records...",
+      {
+        pending:
+          totalCloudPendingCount()
+      }
+    );
+
+    for (
+      const moduleKey of
+      Object.keys(
+        MASTER_MODULES
+      )
+    ) {
+      const entries =
+        masterEntries(
+          moduleKey
+        );
+
+      const byId =
+        new Map(
+          entries.map(
+            entry => [
+              String(entry.id),
+              entry
+            ]
+          )
+        );
+
+      const targetIds =
+        includeHistorical
+          ? Array.from(
+              byId.keys()
+            )
+          : Array.from(
+              new Set(
+                Array.isArray(
+                  pending[moduleKey]
+                )
+                  ? pending[
+                      moduleKey
+                    ].map(String)
+                  : []
+              )
+            );
+
+      for (
+        const id of targetIds
+      ) {
+        const entry =
+          byId.get(
+            String(id)
+          );
+
+        if (!entry) continue;
+
+        try {
+          await masterPushEntry(
+            moduleKey,
+            entry,
+            identity
+          );
+        } catch (error) {
+          console.warn(
+            "A&F Master cloud sync failed:",
+            moduleKey,
+            id,
+            error
+          );
+        }
+      }
+
+      const deletedIds =
+        Array.from(
+          new Set(
+            Array.isArray(
+              deleted[moduleKey]
+            )
+              ? deleted[
+                  moduleKey
+                ].map(String)
+              : []
+          )
+        );
+
+      for (
+        const id of deletedIds
+      ) {
+        try {
+          await masterDeleteEntry(
+            moduleKey,
+            id,
+            identity
+          );
+        } catch (error) {
+          console.warn(
+            "A&F Master cloud delete failed:",
+            moduleKey,
+            id,
+            error
+          );
+        }
+      }
+    }
+
+    const stillPending =
+      totalCloudPendingCount();
+
+    setStatus(
+      stillPending
+        ? "PENDING"
+        : "CONNECTED",
+
+      stillPending
+        ? (
+            stillPending +
+            " cloud change(s) still pending."
+          )
+        : "Live Cloud Sync connected. All authorised A&F modules are up to date.",
+
+      {
+        pending:
+          stillPending,
+        lastMasterSyncAt:
+          new Date()
+            .toISOString()
+      }
+    );
+  }
+
+  function scheduleMasterSync() {
+    clearTimeout(
+      masterSyncTimer
+    );
+
+    masterSyncTimer =
+      setTimeout(
+        () =>
+          syncMasterLocal(
+            false
+          ).catch(error =>
+            console.warn(
+              "A&F Master scheduled sync:",
+              error
+            )
+          ),
+        800
+      );
+  }
+
+  function masterWriteValue(
+    moduleKey,
+    value
+  ) {
+    const config =
+      MASTER_MODULES[
+        moduleKey
+      ];
+
+    if (!config) return;
+
+    applyingRemoteMaster =
+      true;
+
+    try {
+      if (
+        config.kind ===
+        "scalar"
+      ) {
+        originalStorageSetItem.call(
+          localStorage,
+          moduleKey,
+          String(
+            value ??
+            config.defaultValue ??
+            0
+          )
+        );
+      } else {
+        originalStorageSetItem.call(
+          localStorage,
+          moduleKey,
+          JSON.stringify(value)
+        );
+      }
+    } finally {
+      applyingRemoteMaster =
+        false;
+    }
+
+    masterSnapshots.set(
+      moduleKey,
+      masterSnapshotFor(
+        moduleKey
+      )
+    );
+  }
+
+  function masterMergeArrayRecord(
+    moduleKey,
+    row
+  ) {
+    const config =
+      MASTER_MODULES[
+        moduleKey
+      ];
+
+    if (
+      !config ||
+      config.kind !==
+        "array"
+    ) {
+      return;
+    }
+
+    const id =
+      String(
+        row?.source_record_id ||
+        ""
+      );
+
+    if (!id) return;
+
+    let remoteRecord =
+      row?.payload &&
+      typeof row.payload ===
+        "object"
+        ? masterClone(
+            row.payload
+          )
+        : {};
+
+    const list =
+      masterReadValue(
+        moduleKey
+      );
+
+    const records =
+      Array.isArray(list)
+        ? list
+        : [];
+
+    const index =
+      records.findIndex(
+        (record, recordIndex) =>
+          masterRecordId(
+            moduleKey,
+            record,
+            recordIndex
+          ) === id
+      );
+
+    /*
+     * Keep the local offline password hash only on the
+     * user's own device. It never enters the cloud payload.
+     */
+    if (
+      moduleKey ===
+        "employees" &&
+      index >= 0
+    ) {
+      const localPasswordHash =
+        records[index]
+          ?.passwordHash;
+
+      if (
+        localPasswordHash
+      ) {
+        remoteRecord.passwordHash =
+          localPasswordHash;
+      }
+    }
+
+    if (index >= 0) {
+      records[index] =
+        remoteRecord;
+    } else {
+      records.push(
+        remoteRecord
+      );
+    }
+
+    masterWriteValue(
+      moduleKey,
+      records
+    );
+
+    masterClearPending(
+      moduleKey,
+      id
+    );
+
+    masterClearDeleted(
+      moduleKey,
+      id
+    );
+  }
+
+  function masterRemoveArrayRecord(
+    moduleKey,
+    row
+  ) {
+    const id =
+      String(
+        row?.source_record_id ||
+        ""
+      );
+
+    if (!id) return;
+
+    const records =
+      masterReadValue(
+        moduleKey
+      );
+
+    const filtered =
+      (
+        Array.isArray(records)
+          ? records
+          : []
+      ).filter(
+        (record, index) =>
+          masterRecordId(
+            moduleKey,
+            record,
+            index
+          ) !== id
+      );
+
+    masterWriteValue(
+      moduleKey,
+      filtered
+    );
+
+    masterClearPending(
+      moduleKey,
+      id
+    );
+
+    masterClearDeleted(
+      moduleKey,
+      id
+    );
+  }
+
+  function masterApplyRemoteRow(
+    row
+  ) {
+    const moduleKey =
+      String(
+        row?.module_key ||
+        ""
+      );
+
+    const config =
+      MASTER_MODULES[
+        moduleKey
+      ];
+
+    if (!config) return;
+
+    if (
+      config.kind ===
+      "array"
+    ) {
+      masterMergeArrayRecord(
+        moduleKey,
+        row
+      );
+    } else if (
+      config.kind ===
+      "scalar"
+    ) {
+      masterWriteValue(
+        moduleKey,
+        row?.payload?.value ??
+        config.defaultValue ??
+        0
+      );
+
+      masterClearPending(
+        moduleKey,
+        "__value__"
+      );
+    } else {
+      masterWriteValue(
+        moduleKey,
+        (
+          row?.payload &&
+          typeof row.payload ===
+            "object"
+        )
+          ? row.payload
+          : {}
+      );
+
+      masterClearPending(
+        moduleKey,
+        "__object__"
+      );
+    }
+
+    refreshAfterMasterRemote(
+      moduleKey
+    );
+  }
+
+  function masterRemoveRemoteRow(
+    row
+  ) {
+    const moduleKey =
+      String(
+        row?.module_key ||
+        ""
+      );
+
+    const config =
+      MASTER_MODULES[
+        moduleKey
+      ];
+
+    if (!config) return;
+
+    if (
+      config.kind ===
+      "array"
+    ) {
+      masterRemoveArrayRecord(
+        moduleKey,
+        row
+      );
+    } else if (
+      config.kind ===
+      "scalar"
+    ) {
+      masterWriteValue(
+        moduleKey,
+        config.defaultValue ??
+        0
+      );
+    } else {
+      masterWriteValue(
+        moduleKey,
+        {}
+      );
+    }
+
+    refreshAfterMasterRemote(
+      moduleKey
+    );
+  }
+
+  function refreshAfterMasterRemote(
+    moduleKey
+  ) {
+    try {
+      if (
+        typeof updateDashboardMaterialTotals ===
+        "function"
+      ) {
+        updateDashboardMaterialTotals();
+      }
+    } catch (_) {}
+
+    try {
+      if (
+        typeof updateClientPerformance ===
+        "function"
+      ) {
+        updateClientPerformance();
+      }
+    } catch (_) {}
+
+    try {
+      if (
+        currentRole() ===
+          "Director" &&
+        typeof refreshAFDirectorDashboard ===
+          "function"
+      ) {
+        refreshAFDirectorDashboard();
+      }
+    } catch (_) {}
+
+    try {
+      if (
+        currentRole() ===
+          "Secretary" &&
+        typeof renderAFSecretaryDashboard ===
+          "function"
+      ) {
+        renderAFSecretaryDashboard();
+      }
+    } catch (_) {}
+
+    try {
+      if (
+        typeof window
+          .refreshAFWeeklyItemsDashboard ===
+        "function" &&
+        (
+          moduleKey ===
+            "afFactoryItemRegister" ||
+          moduleKey ===
+            "afWeeklyFactoryChecks"
+        )
+      ) {
+        window
+          .refreshAFWeeklyItemsDashboard();
+      }
+    } catch (_) {}
+
+    window.dispatchEvent(
+      new CustomEvent(
+        "af-cloud-master-updated",
+        {
+          detail: {
+            module:
+              moduleKey
+          }
+        }
+      )
+    );
+  }
+
+  async function pullMasterCloudRecords() {
+    const identity =
+      await verifyCurrentCloudIdentity();
+
+    if (!identity) return;
+
+    const client =
+      await getSupabase();
+
+    const {
+      data,
+      error
+    } =
+      await client
+        .from(
+          "af_module_records"
+        )
+        .select(
+          "module_key,source_record_id,payload,data_kind,updated_at"
+        )
+        .eq(
+          "company_id",
+          COMPANY_ID
+        )
+        .order(
+          "updated_at",
+          {
+            ascending: true
+          }
+        );
+
+    if (error) {
+      throw error;
+    }
+
+    const rows =
+      Array.isArray(data)
+        ? data
+        : [];
+
+    rows.forEach(
+      masterApplyRemoteRow
+    );
+
+    originalStorageSetItem.call(
+      localStorage,
+      MASTER_LAST_PULL_KEY,
+      new Date()
+        .toISOString()
+    );
+
+    return rows.length;
+  }
+
+  async function subscribeMasterCloud() {
+    const identity =
+      await verifyCurrentCloudIdentity();
+
+    if (!identity) return;
+
+    const client =
+      await getSupabase();
+
+    if (
+      realtimeMasterChannel
+    ) {
+      try {
+        await client
+          .removeChannel(
+            realtimeMasterChannel
+          );
+      } catch (_) {}
+    }
+
+    realtimeMasterChannel =
+      client
+        .channel(
+          "af-master-" +
+          COMPANY_ID
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table:
+              "af_module_records",
+            filter:
+              "company_id=eq." +
+              COMPANY_ID
+          },
+          payload => {
+            if (
+              payload.eventType ===
+              "DELETE"
+            ) {
+              masterRemoveRemoteRow(
+                payload.old
+              );
+            } else {
+              masterApplyRemoteRow(
+                payload.new
+              );
+            }
+
+            setStatus(
+              "CONNECTED",
+              "Live Cloud Sync connected. All authorised A&F modules are live.",
+              {
+                lastRealtimeAt:
+                  new Date()
+                    .toISOString(),
+                pending:
+                  totalCloudPendingCount()
+              }
+            );
+          }
+        )
+        .subscribe(
+          status => {
+            if (
+              status ===
+              "SUBSCRIBED"
+            ) {
+              setStatus(
+                "CONNECTED",
+                "Live Cloud Sync connected. All authorised A&F modules are live.",
+                {
+                  pending:
+                    totalCloudPendingCount()
+                }
+              );
+            }
+          }
+        );
+  }
+
+  /* =======================================================
+     DIRECTOR - PREPARE STAFF CLOUD LOGIN
+     ======================================================= */
+
+  async function openAFCloudUserProvisioning() {
+    if (
+      currentRole() !==
+      "Director"
+    ) {
+      alert(
+        "Only the Director can prepare staff cloud activation."
+      );
+      return;
+    }
+
+    let identity;
+
+    try {
+      identity =
+        await verifyCurrentCloudIdentity();
+    } catch (_) {
+      identity = null;
+    }
+
+    if (!identity) {
+      alert(
+        "Please connect and log in to A&F Cloud first."
+      );
+      return;
+    }
+
+    let employees = [];
+
+    try {
+      employees =
+        typeof getEmployees ===
+          "function"
+          ? (
+              getEmployees() ||
+              []
+            )
+          : readJSON(
+              "employees",
+              []
+            );
+    } catch (_) {
+      employees =
+        readJSON(
+          "employees",
+          []
+        );
+    }
+
+    employees =
+      (
+        Array.isArray(employees)
+          ? employees
+          : []
+      )
+        .filter(
+          employee =>
+            employee?.employeeId &&
+            employee?.role
+        )
+        .sort(
+          (a, b) =>
+            String(
+              a.fullName || ""
+            ).localeCompare(
+              String(
+                b.fullName || ""
+              )
+            )
+        );
+
+    document.getElementById(
+      "afCloudUserProvisionModal"
+    )?.remove();
+
+    const modal =
+      document.createElement(
+        "div"
+      );
+
+    modal.id =
+      "afCloudUserProvisionModal";
+
+    modal.style.cssText = `
+      position:fixed;
+      inset:0;
+      z-index:1000005;
+      background:rgba(0,0,0,.58);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:12px;
+      box-sizing:border-box;
+      font-family:Arial,sans-serif;
+    `;
+
+    modal.innerHTML = `
+      <div style="
+        width:650px;
+        max-width:96%;
+        max-height:92vh;
+        overflow:auto;
+        background:white;
+        border-radius:13px;
+        padding:18px;
+        box-sizing:border-box;
+      ">
+        <div style="
+          display:flex;
+          justify-content:space-between;
+          gap:12px;
+          align-items:flex-start;
+        ">
+          <div>
+            <h2 style="
+              margin:0;
+              color:#0b5d3b;
+            ">
+              ☁ Staff Cloud Activation
+            </h2>
+
+            <div style="
+              margin-top:5px;
+              font-size:11px;
+              color:#66736d;
+              line-height:1.5;
+            ">
+              Director prepares a one-time activation code.
+              The employee uses the code once with his/her
+              existing A&F Employee ID and password.
+            </div>
+          </div>
+
+          <button
+            id="afCloseCloudUserProvision"
+            type="button"
+            style="
+              border:0;
+              border-radius:7px;
+              padding:8px 10px;
+              cursor:pointer;
+            "
+          >
+            ✕
+          </button>
+        </div>
+
+        <label style="
+          display:block;
+          margin-top:16px;
+          font-size:12px;
+          font-weight:bold;
+        ">
+          Employee
+
+          <select
+            id="afCloudProvisionEmployee"
+            style="
+              width:100%;
+              box-sizing:border-box;
+              margin-top:5px;
+              padding:10px;
+              border:1px solid #ccd7d1;
+              border-radius:7px;
+            "
+          >
+            <option value="">
+              -- Select Employee --
+            </option>
+
+            ${employees.map(
+              employee => `
+                <option
+                  value="${esc(
+                    employee.employeeId
+                  )}"
+                >
+                  ${esc(
+                    employee.employeeId
+                  )} — ${esc(
+                    employee.fullName ||
+                    employee.employeeName ||
+                    ""
+                  )} — ${esc(
+                    employee.role ||
+                    ""
+                  )}
+                </option>
+              `
+            ).join("")}
+          </select>
+        </label>
+
+        <button
+          id="afPrepareCloudActivation"
+          type="button"
+          style="
+            margin-top:12px;
+            border:0;
+            border-radius:8px;
+            padding:10px 14px;
+            background:#0b5d3b;
+            color:white;
+            font-weight:bold;
+            cursor:pointer;
+          "
+        >
+          Prepare One-Time Activation Code
+        </button>
+
+        <div
+          id="afCloudProvisionMessage"
+          style="
+            margin-top:13px;
+            font-size:12px;
+            line-height:1.6;
+          "
+        ></div>
+      </div>
+    `;
+
+    document.body.appendChild(
+      modal
+    );
+
+    modal.querySelector(
+      "#afCloseCloudUserProvision"
+    ).onclick =
+      () => modal.remove();
+
+    modal.querySelector(
+      "#afPrepareCloudActivation"
+    ).onclick =
+      async () => {
+        const employeeId =
+          modal.querySelector(
+            "#afCloudProvisionEmployee"
+          ).value;
+
+        const message =
+          modal.querySelector(
+            "#afCloudProvisionMessage"
+          );
+
+        const employee =
+          employees.find(
+            item =>
+              String(
+                item.employeeId
+              ) ===
+              String(
+                employeeId
+              )
+          );
+
+        if (!employee) {
+          message.style.color =
+            "#b42318";
+          message.textContent =
+            "Select an employee first.";
+          return;
+        }
+
+        message.style.color =
+          "#555";
+        message.textContent =
+          "Preparing secure one-time activation...";
+
+        try {
+          const client =
+            await getSupabase();
+
+          const {
+            data,
+            error
+          } =
+            await client.functions.invoke(
+              "af-cloud-enroll",
+              {
+                body: {
+                  action:
+                    "provision",
+
+                  companyId:
+                    COMPANY_ID,
+
+                  employeeId:
+                    employee.employeeId,
+
+                  fullName:
+                    employee.fullName ||
+                    employee.employeeName ||
+                    employee.employeeId,
+
+                  role:
+                    employee.role
+                }
+              }
+            );
+
+          if (error) {
+            throw error;
+          }
+
+          if (
+            !data?.activationCode
+          ) {
+            throw new Error(
+              data?.error ||
+              "Activation code was not returned."
+            );
+          }
+
+          message.style.color =
+            "#0b5d3b";
+
+          message.innerHTML = `
+            <b>Activation prepared for:</b>
+            ${esc(
+              employee.employeeId
+            )} — ${esc(
+              employee.fullName ||
+              employee.employeeName ||
+              ""
+            )}
+            <br><br>
+
+            <b>One-time code:</b>
+            <span style="
+              display:inline-block;
+              margin-top:5px;
+              padding:8px 10px;
+              border:1px solid #b7c8bf;
+              border-radius:7px;
+              background:#f8fbf9;
+              font-family:monospace;
+              user-select:all;
+            ">
+              ${esc(
+                data.activationCode
+              )}
+            </span>
+
+            <br><br>
+            Give this code only to the named employee.
+            It works once and is not stored in app.js.
+          `;
+        } catch (error) {
+          message.style.color =
+            "#b42318";
+
+          message.textContent =
+            "Unable to prepare activation: " +
+            String(
+              error?.message ||
+              error
+            );
+        }
+      };
+  }
+
+
   /*
    * Catch ALL current expense writers, including the
    * base Expense module and the later Salary/Advance
@@ -93322,6 +97343,33 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
         )
       ) {
         scheduleExpenseSync();
+      }
+
+      if (
+        this === localStorage &&
+        !applyingRemoteStage2 &&
+        STAGE2_KEY_TO_MODULE[
+          key
+        ]
+      ) {
+        captureStage2StorageChange(
+          STAGE2_KEY_TO_MODULE[
+            key
+          ],
+          value
+        );
+      }
+
+      if (
+        this === localStorage &&
+        !applyingRemoteMaster &&
+        MASTER_MODULES[
+          key
+        ]
+      ) {
+        captureMasterStorageChange(
+          key
+        );
       }
 
       return result;
@@ -93675,7 +97723,7 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
         "Offline. Local work will sync when internet returns.",
         {
           pending:
-            pendingIds().size
+            totalCloudPendingCount()
         }
       );
       return false;
@@ -93702,13 +97750,41 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
       return false;
     }
 
-    await pullCloudExpenses();
+    const cloudRole =
+      identity.membership.role;
 
-    await syncLocalExpenses(
+    if (
+      [
+        "Director",
+        "Secretary"
+      ].includes(
+        cloudRole
+      )
+    ) {
+      await pullCloudExpenses();
+
+      await syncLocalExpenses(
+        false
+      );
+
+      await subscribeExpenses();
+
+      await pullStage2CloudRecords();
+
+      await syncStage2Local(
+        false
+      );
+
+      await subscribeStage2();
+    }
+
+    await pullMasterCloudRecords();
+
+    await syncMasterLocal(
       false
     );
 
-    await subscribeExpenses();
+    await subscribeMasterCloud();
 
     if (!retryTimer) {
       retryTimer =
@@ -93718,6 +97794,14 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
               navigator.onLine
             ) {
               syncLocalExpenses(
+                false
+              ).catch(() => {});
+
+              syncStage2Local(
+                false
+              ).catch(() => {});
+
+              syncMasterLocal(
                 false
               ).catch(() => {});
             }
@@ -93753,7 +97837,7 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
 
   /* =======================================================
      CLOUD STATUS CARD
-     Director + Secretary during Stage 1
+     All authorised A&F roles - Master
      ======================================================= */
 
   function statusColour(state) {
@@ -93779,13 +97863,17 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
 
     const old =
       document.getElementById(
-        "afCloudSyncStage1Card"
+        "afCloudSyncMasterCard"
       );
 
     if (
       ![
         "Director",
-        "Secretary"
+        "Manager",
+        "HR",
+        "Secretary",
+        "Team Leader",
+        "Employee"
       ].includes(role)
     ) {
       old?.remove();
@@ -93808,7 +97896,7 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
         );
 
       card.id =
-        "afCloudSyncStage1Card";
+        "afCloudSyncMasterCard";
 
       card.className =
         "card";
@@ -93937,7 +98025,7 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
               ? `
                 <button
                   type="button"
-                  id="afCloudMigrateExpensesBtn"
+                  id="afCloudUsersBtn"
                   style="
                     border:1px solid #b7c8bf;
                     border-radius:7px;
@@ -93949,7 +98037,24 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
                     cursor:pointer;
                   "
                 >
-                  Migrate Old Expenses
+                  Cloud Users
+                </button>
+
+                <button
+                  type="button"
+                  id="afCloudMigrateAllBtn"
+                  style="
+                    border:1px solid #b7c8bf;
+                    border-radius:7px;
+                    padding:7px 10px;
+                    background:white;
+                    color:#173d2b;
+                    font-size:10px;
+                    font-weight:bold;
+                    cursor:pointer;
+                  "
+                >
+                  Migrate All Existing Data
                 </button>
               `
               : ""
@@ -93984,25 +98089,58 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
     );
 
     card.querySelector(
-      "#afCloudMigrateExpensesBtn"
+      "#afCloudUsersBtn"
+    )?.addEventListener(
+      "click",
+      openAFCloudUserProvisioning
+    );
+
+    card.querySelector(
+      "#afCloudMigrateAllBtn"
     )?.addEventListener(
       "click",
       async () => {
         const ok =
           confirm(
-            "Migrate existing local Expense History to the central A&F Cloud database?\n\n" +
-            "Do this only once, after Stage 1 live sync has been tested."
+            "Migrate ALL existing A&F application records to the central A&F Cloud database?\\n\\n" +
+            "This includes Expenses, Suppliers, Sales, Deliveries, Material, Washing, Production, HR, Payroll, Weekly Stock, Assets, Journals, Targets and Settings.\\n\\n" +
+            "Run this once from the Director's main factory laptop after a new-record live sync test has succeeded."
           );
 
         if (!ok) return;
+
+        setStatus(
+          "SYNCING",
+          "Migrating all existing A&F records to Cloud..."
+        );
 
         await syncLocalExpenses(
           true
         );
 
+        await syncStage2Local(
+          true
+        );
+
+        await syncMasterLocal(
+          true
+        );
+
+        await pullMasterCloudRecords();
+
+        const pending =
+          totalCloudPendingCount();
+
         alert(
-          "Existing Expense migration attempt completed.\n\n" +
-          "Check the Cloud Sync status for any pending records."
+          pending
+            ? (
+                "Migration attempt completed.\\n\\n" +
+                pending +
+                " record change(s) are still pending. Keep the device online and tap Sync Now."
+              )
+            : (
+                "All existing A&F records have been migrated to Cloud successfully."
+              )
         );
       }
     );
@@ -94334,7 +98472,7 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
         );
 
         if (
-          allowedStage1Role()
+          allowedCloudRole()
         ) {
           setTimeout(
             () => {
@@ -94386,6 +98524,36 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
         realtimeChannel =
           null;
 
+        if (
+          realtimeStage2Channel &&
+          supabaseClient
+        ) {
+          try {
+            supabaseClient
+              .removeChannel(
+                realtimeStage2Channel
+              );
+          } catch (_) {}
+        }
+
+        realtimeStage2Channel =
+          null;
+
+        if (
+          realtimeMasterChannel &&
+          supabaseClient
+        ) {
+          try {
+            supabaseClient
+              .removeChannel(
+                realtimeMasterChannel
+              );
+          } catch (_) {}
+        }
+
+        realtimeMasterChannel =
+          null;
+
         return previousLogout.apply(
           this,
           arguments
@@ -94397,13 +98565,16 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
      EXISTING SESSION
      ======================================================= */
 
+  initializeStage2Snapshots();
+  initializeMasterSnapshots();
+
   setTimeout(
     renderCloudStatusCard,
     600
   );
 
   if (
-    allowedStage1Role()
+    allowedCloudRole()
   ) {
     setTimeout(
       () =>
@@ -94435,7 +98606,49 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
         true
       );
 
+  window.syncAFCloudStage2 =
+    () =>
+      syncStage2Local(
+        false
+      );
+
+  window.migrateAFExistingStage2ToCloud =
+    () =>
+      syncStage2Local(
+        true
+      );
+
+  window.pullAFCloudStage2 =
+    pullStage2CloudRecords;
+
+  window.syncAFCloudMaster =
+    () =>
+      syncMasterLocal(
+        false
+      );
+
+  window.migrateAFAllExistingDataToCloud =
+    async () => {
+      await syncLocalExpenses(
+        true
+      );
+
+      await syncStage2Local(
+        true
+      );
+
+      await syncMasterLocal(
+        true
+      );
+    };
+
+  window.pullAFCloudMaster =
+    pullMasterCloudRecords;
+
+  window.openAFCloudUserProvisioning =
+    openAFCloudUserProvisioning;
+
   console.log(
-    "A&F Cloud Sync Stage 1 loaded."
+    "A&F Cloud Sync Master loaded: Stages 1 - 5."
   );
 })();
