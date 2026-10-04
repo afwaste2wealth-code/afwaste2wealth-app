@@ -100880,7 +100880,7 @@ document.getElementById("afAddUpcomingEvent")?.addEventListener(
 const upcoming = afSMUpcomingEvents().slice(0, 3);
 const director = afSMIsDirector();
 
-consteventPreview = upcoming.length
+const eventPreview = upcoming.length
       ? upcoming.map(event => `
 <div style="
             padding:8px 0;
@@ -101088,7 +101088,7 @@ afSMRenderDashboardCard,
     );
   });
 
-conststartObserver = () => {
+const startObserver = () => {
     if (!document.body) return;
 
 observer.observe(document.body, {
