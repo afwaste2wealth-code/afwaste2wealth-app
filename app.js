@@ -87263,83 +87263,148 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
 })();
 
 /* =========================================================
-   A&F UGANDA ENVIRONMENTAL NEWS
+   A&F UGANDA ENVIRONMENTAL NEWS - SCROLLING VERSION
    Director + Secretary dashboards only
 
-   Purpose:
-   - Shows recent Uganda environmental news headlines
-   - Smoothly scrolls headlines in a compact dashboard card
-   - Click a headline to open the original article
-   - Refreshes automatically and caches the last successful feed
-   - If the feed is unavailable, the rest of the dashboard still works
+   Replace the previous Environmental News block with this one.
 
-   Paste ONCE at the very bottom of app.js
+   Features:
+   - Smooth vertical scrolling headlines
+   - Click headline to open source in new tab
+   - Tries to load live Uganda environmental news
+   - If live feed fails, recent official NEMA headlines still scroll
+   - Director + Secretary only
    ========================================================= */
 
-(function connectAFUgandaEnvironmentalNews() {
+(function connectAFUgandaEnvironmentalNewsScrolling() {
   "use strict";
 
   if (window.__afUgandaEnvironmentNewsInstalled) return;
   window.__afUgandaEnvironmentNewsInstalled = true;
 
   const CARD_ID = "afUgandaEnvironmentalNewsCard";
+  const STYLE_ID = "afUgandaEnvironmentalNewsStyle";
   const CACHE_KEY = "afUgandaEnvironmentalNewsCache";
-  const CACHE_MAX_AGE = 60 * 60 * 1000; // 1 hour
   const MAX_ITEMS = 8;
+  const CACHE_MAX_AGE = 60 * 60 * 1000;
 
-  /*
-   * Google News RSS search focused on Uganda environmental issues.
-   * rss2json is used only as a browser-readable bridge for the RSS feed.
-   */
-  const NEWS_RSS =
-    "https://news.google.com/rss/search?q=" +
-    encodeURIComponent(
-      'Uganda (environment OR environmental OR NEMA OR "plastic waste" OR recycling OR pollution OR wetlands OR climate OR waste management)'
-    ) +
-    "&hl=en-UG&gl=UG&ceid=UG:en";
+  const NEMA_NEWS_URL =
+    "https://www.nema.go.ug/en/news-updates/";
 
-  const NEWS_API =
-    "https://api.rss2json.com/v1/api.json?rss_url=" +
-    encodeURIComponent(NEWS_RSS);
-
-  const MORE_NEWS_URL =
+  const GOOGLE_NEWS_URL =
     "https://news.google.com/search?q=" +
     encodeURIComponent(
-      'Uganda environment NEMA plastic waste recycling pollution wetlands climate'
+      "Uganda environment NEMA plastic waste recycling pollution wetlands climate"
     ) +
     "&hl=en-UG&gl=UG&ceid=UG:en";
 
-  let refreshTimer = null;
-  let positionTimer = null;
-  let isFetching = false;
+  const GOOGLE_RSS =
+    "https://news.google.com/rss/search?q=" +
+    encodeURIComponent(
+      'Uganda (environment OR environmental OR NEMA OR "plastic waste" OR recycling OR pollution OR wetlands OR climate OR "waste management")'
+    ) +
+    "&hl=en-UG&gl=UG&ceid=UG:en";
 
-  function afEnvUser() {
+  const RSS_JSON_URL =
+    "https://api.rss2json.com/v1/api.json?rss_url=" +
+    encodeURIComponent(GOOGLE_RSS);
+
+  /*
+   * Safe fallback:
+   * These are recent official NEMA Uganda environmental headlines.
+   * They are shown automatically whenever the live feed cannot load.
+   */
+  const FALLBACK_ITEMS = [
+    {
+      title:
+        "NEMA and CSE Launch Centralised Waste Management Information Database for Uganda",
+      link:
+        "https://www.nema.go.ug/en/nema-and-cse-launch-centralised-waste-management-information-database-for-uganda/",
+      source: "NEMA Uganda",
+      pubDate: "2026-09-24"
+    },
+    {
+      title:
+        "NEMA Trains District Officials on Payment for Ecosystem Services",
+      link: NEMA_NEWS_URL,
+      source: "NEMA Uganda",
+      pubDate: "2026-09-17"
+    },
+    {
+      title:
+        "NEMA Passes Out 55 Environment Protection Officers and Rangers",
+      link: NEMA_NEWS_URL,
+      source: "NEMA Uganda",
+      pubDate: "2026-09-04"
+    },
+    {
+      title:
+        "NEMA Joins Ugandans in Launching National Cleaning Days",
+      link: NEMA_NEWS_URL,
+      source: "NEMA Uganda",
+      pubDate: "2026-08-07"
+    },
+    {
+      title:
+        "NEMA and Ministry of Water and Environment Halt Illegal Sand Mining in Lwera Wetland",
+      link:
+        "https://www.nema.go.ug/en/press-release/",
+      source: "NEMA Uganda",
+      pubDate: "2026-07-23"
+    },
+    {
+      title:
+        "NEMA Agrees with Stakeholders on Restoration of Kalungu Wetland",
+      link:
+        "https://www.nema.go.ug/en/press-release/",
+      source: "NEMA Uganda",
+      pubDate: "2026-06-26"
+    },
+    {
+      title:
+        "Government of Uganda Revives National Cleaning Days",
+      link: NEMA_NEWS_URL,
+      source: "NEMA Uganda",
+      pubDate: "2026-06-19"
+    },
+    {
+      title:
+        "NEMA Reviews National Strategy and Action Plan for Chemicals Management",
+      link: NEMA_NEWS_URL,
+      source: "NEMA Uganda",
+      pubDate: "2026-06-11"
+    }
+  ];
+
+  let loading = false;
+
+  function currentUser() {
     try {
       if (typeof getAFCurrentUser === "function") {
         return getAFCurrentUser() || {};
       }
-    } catch (error) {}
+    } catch (_) {}
 
     try {
       return JSON.parse(
         localStorage.getItem("currentUser") || "{}"
       ) || {};
-    } catch (error) {
+    } catch (_) {
       return {};
     }
   }
 
-  function afEnvRole() {
-    return String(afEnvUser().role || "");
+  function currentRole() {
+    return String(currentUser().role || "");
   }
 
-  function afEnvAllowed() {
+  function allowed() {
     return ["Director", "Secretary"].includes(
-      afEnvRole()
+      currentRole()
     );
   }
 
-  function afEnvEscape(value) {
+  function esc(value) {
     return String(value ?? "")
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -87348,7 +87413,7 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
       .replace(/'/g, "&#039;");
   }
 
-  function afEnvSafeURL(value) {
+  function safeURL(value) {
     const url = String(value || "").trim();
 
     if (
@@ -87358,19 +87423,19 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
       return url;
     }
 
-    return MORE_NEWS_URL;
+    return NEMA_NEWS_URL;
   }
 
-  function afEnvFormatDate(value) {
+  function formatDate(value) {
     if (!value) return "";
 
-    const date = new Date(value);
+    const d = new Date(value);
 
-    if (Number.isNaN(date.getTime())) {
+    if (Number.isNaN(d.getTime())) {
       return "";
     }
 
-    return date.toLocaleDateString(
+    return d.toLocaleDateString(
       "en-UG",
       {
         day: "2-digit",
@@ -87380,81 +87445,34 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
     );
   }
 
-  function afEnvReadCache() {
-    try {
-      const saved = JSON.parse(
-        localStorage.getItem(CACHE_KEY) || "null"
-      );
-
-      if (
-        !saved ||
-        !Array.isArray(saved.items)
-      ) {
-        return null;
-      }
-
-      return saved;
-    } catch (error) {
-      return null;
-    }
-  }
-
-  function afEnvWriteCache(items) {
-    const data = {
-      savedAt: Date.now(),
-      items: Array.isArray(items)
-        ? items.slice(0, MAX_ITEMS)
-        : []
-    };
-
-    try {
-      localStorage.setItem(
-        CACHE_KEY,
-        JSON.stringify(data)
-      );
-    } catch (error) {}
-
-    return data;
-  }
-
-  function afEnvNormaliseItems(rawItems) {
+  function normalize(items) {
     const seen = new Set();
 
-    return (Array.isArray(rawItems) ? rawItems : [])
-      .map(item => {
-        const title = String(
-          item?.title || ""
-        ).trim();
-
-        const link = afEnvSafeURL(
-          item?.link || item?.guid || ""
-        );
-
-        const pubDate =
+    return (Array.isArray(items) ? items : [])
+      .map(item => ({
+        title: String(item?.title || "").trim(),
+        link: safeURL(
+          item?.link ||
+          item?.guid ||
+          NEMA_NEWS_URL
+        ),
+        source: String(
+          item?.author ||
+          item?.source ||
+          "Uganda Environmental News"
+        ).trim(),
+        pubDate:
           item?.pubDate ||
           item?.published ||
           item?.date ||
-          "";
-
-        const source =
-          item?.author ||
-          item?.source ||
-          "";
-
-        return {
-          title,
-          link,
-          pubDate,
-          source
-        };
-      })
+          ""
+      }))
       .filter(item => {
         if (!item.title) return false;
 
         const key = item.title
           .toLowerCase()
-          .replace(/\s+/g, " ")
-          .trim();
+          .replace(/\s+/g, " ");
 
         if (seen.has(key)) {
           return false;
@@ -87466,106 +87484,130 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
       .slice(0, MAX_ITEMS);
   }
 
-  function afEnvCard() {
-    return document.getElementById(CARD_ID);
+  function readCache() {
+    try {
+      const data = JSON.parse(
+        localStorage.getItem(CACHE_KEY) || "null"
+      );
+
+      return (
+        data &&
+        Array.isArray(data.items)
+      )
+        ? data
+        : null;
+    } catch (_) {
+      return null;
+    }
   }
 
-  function afEnvEnsureStyle() {
-    if (
-      document.getElementById(
-        "afUgandaEnvironmentalNewsStyle"
-      )
-    ) {
+  function saveCache(items) {
+    const data = {
+      savedAt: Date.now(),
+      items: normalize(items)
+    };
+
+    try {
+      localStorage.setItem(
+        CACHE_KEY,
+        JSON.stringify(data)
+      );
+    } catch (_) {}
+
+    return data;
+  }
+
+  function ensureStyle() {
+    if (document.getElementById(STYLE_ID)) {
       return;
     }
 
-    const style =
-      document.createElement("style");
-
-    style.id =
-      "afUgandaEnvironmentalNewsStyle";
+    const style = document.createElement("style");
+    style.id = STYLE_ID;
 
     style.textContent = `
       #${CARD_ID} {
-        width:100%;
         box-sizing:border-box;
+        width:100%;
       }
 
-      #${CARD_ID} .afEnvNewsViewport {
-        height:174px;
+      #${CARD_ID} .afEnvViewport {
+        height:178px;
         overflow:hidden;
         position:relative;
+        background:#fff;
         border-top:1px solid #e4ece7;
         border-bottom:1px solid #e4ece7;
-        background:#fff;
       }
 
-      #${CARD_ID} .afEnvNewsTrack {
+      #${CARD_ID} .afEnvTrack {
         will-change:transform;
       }
 
-      #${CARD_ID} .afEnvNewsTrack.afEnvNewsMoving {
+      #${CARD_ID} .afEnvTrack.isScrolling {
         animation:
-          afEnvNewsScroll var(--af-env-duration, 36s)
-          linear infinite;
+          afUgandaEnvScroll
+          var(--af-env-speed, 42s)
+          linear
+          infinite;
       }
 
-      #${CARD_ID} .afEnvNewsViewport:hover
-      .afEnvNewsTrack {
+      #${CARD_ID} .afEnvViewport:hover
+      .afEnvTrack.isScrolling {
         animation-play-state:paused;
       }
 
-      #${CARD_ID} .afEnvNewsItem {
-        min-height:58px;
-        padding:9px 12px;
-        border-bottom:1px solid #edf2ef;
+      #${CARD_ID} .afEnvItem {
+        min-height:60px;
         box-sizing:border-box;
+        padding:9px 12px;
         display:flex;
-        gap:9px;
         align-items:flex-start;
+        gap:8px;
+        border-bottom:1px solid #edf2ef;
       }
 
-      #${CARD_ID} .afEnvNewsItem:hover {
+      #${CARD_ID} .afEnvItem:hover {
         background:#f4faf6;
       }
 
-      #${CARD_ID} .afEnvNewsLink {
-        color:#173d2b;
-        text-decoration:none;
-        font-size:12px;
-        font-weight:700;
-        line-height:1.4;
+      #${CARD_ID} .afEnvHeadline {
         display:block;
+        color:#173d2b;
+        font-size:12px;
+        line-height:1.38;
+        font-weight:700;
+        text-decoration:none;
       }
 
-      #${CARD_ID} .afEnvNewsLink:hover {
-        text-decoration:underline;
+      #${CARD_ID} .afEnvHeadline:hover {
         color:#0b5d3b;
+        text-decoration:underline;
       }
 
-      #${CARD_ID} .afEnvNewsMeta {
+      #${CARD_ID} .afEnvMeta {
         margin-top:3px;
-        color:#7b8881;
+        color:#7a8981;
         font-size:9px;
-        line-height:1.3;
+        line-height:1.25;
       }
 
-      @keyframes afEnvNewsScroll {
-        from {
+      @keyframes afUgandaEnvScroll {
+        0% {
           transform:translateY(0);
         }
 
-        to {
+        100% {
           transform:translateY(-50%);
         }
       }
 
       @media (prefers-reduced-motion: reduce) {
-        #${CARD_ID} .afEnvNewsTrack.afEnvNewsMoving {
+        #${CARD_ID} .afEnvTrack.isScrolling {
           animation:none !important;
         }
 
-        #${CARD_ID} .afEnvNewsViewport {
+        #${CARD_ID} .afEnvViewport {
           overflow:auto;
         }
       }
@@ -87574,6 +87616,7 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
         #${CARD_ID} {
           width:100% !important;
           max-width:100% !important;
+          min-width:0 !important;
         }
       }
     `;
@@ -87581,15 +87624,20 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
     document.head.appendChild(style);
   }
 
-  function afEnvCreateCard() {
-    let card = afEnvCard();
+  function getCard() {
+    return document.getElementById(CARD_ID);
+  }
+
+  function createCard() {
+    let card = getCard();
 
     if (card) {
       return card;
     }
 
-    card =
-      document.createElement("section");
+    ensureStyle();
+
+    card = document.createElement("section");
 
     card.id = CARD_ID;
     card.className = "card";
@@ -87597,10 +87645,10 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
     card.style.cssText = `
       margin:14px 0;
       padding:0;
-      overflow:hidden;
       border:1px solid #d6e4db;
       border-radius:12px;
       background:white;
+      overflow:hidden;
       box-sizing:border-box;
     `;
 
@@ -87630,12 +87678,12 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
               font-size:9px;
             "
           >
-            Loading recent environmental headlines...
+            Loading headlines...
           </div>
         </div>
 
         <button
-          id="afEnvNewsRefresh"
+          id="afEnvRefresh"
           type="button"
           title="Refresh environmental news"
           style="
@@ -87654,40 +87702,25 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
         </button>
       </div>
 
-      <div
-        id="afEnvNewsBody"
-        style="
-          min-height:174px;
-          background:white;
-        "
-      >
-        <div style="
-          padding:22px 14px;
-          color:#718078;
-          font-size:12px;
-          text-align:center;
-        ">
-          Loading Uganda environmental news...
-        </div>
-      </div>
+      <div id="afEnvNewsBody"></div>
 
       <div style="
         display:flex;
-        justify-content:space-between;
         align-items:center;
+        justify-content:space-between;
         gap:10px;
-        padding:9px 12px;
+        padding:8px 12px;
         background:#f8fbf9;
       ">
         <span style="
           color:#7a8981;
           font-size:9px;
         ">
-          Headlines open in a new tab
+          Hover over headlines to pause
         </span>
 
         <a
-          href="${afEnvEscape(MORE_NEWS_URL)}"
+          href="${esc(GOOGLE_NEWS_URL)}"
           target="_blank"
           rel="noopener noreferrer"
           style="
@@ -87702,128 +87735,87 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
       </div>
     `;
 
-    const refresh =
-      card.querySelector(
-        "#afEnvNewsRefresh"
-      );
-
-    if (refresh) {
-      refresh.onclick = () => {
-        afEnvLoadNews(true);
-      };
-    }
+    card.querySelector(
+      "#afEnvRefresh"
+    ).onclick = () => loadNews(true);
 
     return card;
   }
 
-  function afEnvPositionCard() {
-    const role = afEnvRole();
-    let card = afEnvCard();
+  function positionCard() {
+    const role = currentRole();
+    let card = getCard();
 
     if (
       !["Director", "Secretary"].includes(role)
     ) {
-      if (card) {
-        card.remove();
-      }
-
+      card?.remove();
       return;
     }
 
-    afEnvEnsureStyle();
-
     if (!card) {
-      card = afEnvCreateCard();
+      card = createCard();
     }
-
-    const checklist =
-      document.getElementById(
-        "afTodaysChecklist"
-      );
 
     const supplier =
       document.getElementById(
         "afSupplierPerformanceDashboardCard"
       );
 
+    const checklist =
+      document.getElementById(
+        "afTodaysChecklist"
+      );
+
     /*
      * Director:
-     * Put Environmental News immediately above
-     * Supplier Performance when that card exists.
+     * Keep it in the space immediately above Supplier Performance.
      */
     if (
       role === "Director" &&
       supplier &&
       supplier.parentElement
     ) {
-      if (
-        card.parentElement !==
-          supplier.parentElement ||
-        card.nextElementSibling !== supplier
-      ) {
-        supplier.parentElement.insertBefore(
-          card,
-          supplier
-        );
-      }
+      supplier.parentElement.insertBefore(
+        card,
+        supplier
+      );
 
-      card.style.width =
-        supplier.style.width || "100%";
-      card.style.marginTop = "0";
+      card.style.width = "100%";
+      card.style.maxWidth = "100%";
+      card.style.minWidth = "0";
 
       return;
     }
 
     /*
      * Secretary:
-     * Put Environmental News immediately below
-     * Today's Checklist.
+     * Put it immediately below Today's Checklist.
      */
     if (
+      role === "Secretary" &&
       checklist &&
       checklist.parentElement
     ) {
-      if (
-        card.parentElement !==
-          checklist.parentElement ||
-        checklist.nextElementSibling !== card
-      ) {
-        checklist.insertAdjacentElement(
-          "afterend",
-          card
-        );
-      }
+      checklist.insertAdjacentElement(
+        "afterend",
+        card
+      );
 
-      /*
-       * Match Today's Checklist width where possible.
-       */
-      if (
-        checklist.style.width
-      ) {
-        card.style.width =
-          checklist.style.width;
-      }
+      card.style.width =
+        checklist.style.width || "40%";
 
-      if (
-        checklist.style.maxWidth
-      ) {
-        card.style.maxWidth =
-          checklist.style.maxWidth;
-      }
+      card.style.maxWidth =
+        checklist.style.maxWidth || "620px";
 
-      if (
-        checklist.style.minWidth
-      ) {
-        card.style.minWidth =
-          checklist.style.minWidth;
-      }
+      card.style.minWidth =
+        checklist.style.minWidth || "420px";
 
       return;
     }
 
     /*
-     * Safe fallback if one of the dashboard anchors
-     * has not yet rendered.
+     * Safe fallback.
      */
     const main =
       document.querySelector(
@@ -87838,8 +87830,8 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
     }
   }
 
-  function afEnvRender(items, meta = {}) {
-    const card = afEnvCard();
+  function render(items, options = {}) {
+    const card = getCard();
 
     if (!card) return;
 
@@ -87855,139 +87847,96 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
       return;
     }
 
-    const cleanItems =
-      afEnvNormaliseItems(items);
+    const clean = normalize(items);
 
-    if (!cleanItems.length) {
-      status.textContent =
-        "Environmental news is temporarily unavailable.";
-
-      body.innerHTML = `
-        <div style="
-          padding:26px 15px;
-          text-align:center;
-          color:#68776f;
-          font-size:12px;
-          line-height:1.6;
-        ">
-          Environmental news could not be loaded right now.
-          <br>
-          <a
-            href="${afEnvEscape(MORE_NEWS_URL)}"
-            target="_blank"
-            rel="noopener noreferrer"
-            style="
-              color:#0b5d3b;
-              font-weight:bold;
-            "
-          >
-            Open Uganda environmental news →
-          </a>
-        </div>
-      `;
-
-      return;
+    if (!clean.length) {
+      clean.push(...FALLBACK_ITEMS);
     }
 
-    const updatedAt =
-      Number(meta.savedAt || Date.now());
-
-    const updatedDate =
-      new Date(updatedAt);
+    const fallback =
+      options.fallback === true;
 
     status.textContent =
-      (
-        meta.stale
-          ? "Showing saved headlines • "
-          : "Latest headlines • "
-      ) +
-      "Updated " +
-      updatedDate.toLocaleTimeString(
-        "en-UG",
-        {
-          hour: "2-digit",
-          minute: "2-digit"
-        }
-      );
+      fallback
+        ? "Recent official NEMA headlines • Live feed temporarily unavailable"
+        : "Latest Uganda environmental headlines";
 
-    const rows =
-      cleanItems.map(item => {
-        const date =
-          afEnvFormatDate(item.pubDate);
+    const rowHTML =
+      clean.map(item => `
+        <div class="afEnvItem">
+          <div style="
+            font-size:16px;
+            line-height:1;
+            flex:0 0 auto;
+            margin-top:2px;
+          ">
+            ♻️
+          </div>
 
-        return `
-          <div class="afEnvNewsItem">
-            <div style="
-              font-size:17px;
-              line-height:1;
-              flex:0 0 auto;
-              margin-top:2px;
-            ">
-              ♻️
-            </div>
+          <div style="
+            min-width:0;
+            flex:1;
+          ">
+            <a
+              class="afEnvHeadline"
+              href="${esc(safeURL(item.link))}"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              ${esc(item.title)}
+            </a>
 
-            <div style="
-              min-width:0;
-              flex:1;
-            ">
-              <a
-                class="afEnvNewsLink"
-                href="${afEnvEscape(afEnvSafeURL(item.link))}"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                ${afEnvEscape(item.title)}
-              </a>
-
-              <div class="afEnvNewsMeta">
-                ${
-                  afEnvEscape(
-                    [
-                      item.source,
-                      date
-                    ]
-                      .filter(Boolean)
-                      .join(" • ")
-                  )
-                }
-              </div>
+            <div class="afEnvMeta">
+              ${esc(
+                [
+                  item.source,
+                  formatDate(item.pubDate)
+                ]
+                  .filter(Boolean)
+                  .join(" • ")
+              )}
             </div>
           </div>
-        `;
-      }).join("");
+        </div>
+      `).join("");
 
-    const shouldScroll =
-      cleanItems.length > 3;
+    /*
+     * Duplicate the same set once.
+     * The animation moves through exactly half of the track,
+     * producing a continuous loop with no jump.
+     */
+    const duplicated =
+      clean.length > 2;
 
     const duration =
       Math.max(
-        24,
-        cleanItems.length * 6
+        30,
+        clean.length * 7
       );
 
     body.innerHTML = `
-      <div class="afEnvNewsViewport">
+      <div class="afEnvViewport">
         <div
-          class="afEnvNewsTrack ${
-            shouldScroll
-              ? "afEnvNewsMoving"
+          class="afEnvTrack ${
+            duplicated
+              ? "isScrolling"
               : ""
           }"
           style="
-            --af-env-duration:${duration}s;
+            --af-env-speed:${duration}s;
           "
         >
-          ${rows}
-          ${shouldScroll ? rows : ""}
+          ${rowHTML}
+          ${duplicated ? rowHTML : ""}
         </div>
       </div>
     `;
   }
 
-  async function afEnvFetchNews() {
+  async function fetchLiveNews() {
     const response =
       await fetch(
-        NEWS_API,
+        RSS_JSON_URL,
         {
           method: "GET",
           cache: "no-store"
@@ -87996,7 +87945,7 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
 
     if (!response.ok) {
       throw new Error(
-        "Environmental news request failed: " +
+        "News feed returned " +
         response.status
       );
     }
@@ -88005,42 +87954,41 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
       await response.json();
 
     const items =
-      afEnvNormaliseItems(
-        data?.items || []
-      );
+      normalize(data?.items || []);
 
     if (!items.length) {
       throw new Error(
-        "No environmental news items returned."
+        "No live news items returned"
       );
     }
 
     return items;
   }
 
-  async function afEnvLoadNews(force = false) {
-    if (!afEnvAllowed()) {
-      return;
-    }
+  async function loadNews(force = false) {
+    if (!allowed()) return;
 
-    afEnvPositionCard();
+    positionCard();
 
-    const cache =
-      afEnvReadCache();
+    const cache = readCache();
 
+    /*
+     * Show something immediately.
+     * No more empty/unavailable panel.
+     */
     if (
       cache &&
+      Array.isArray(cache.items) &&
       cache.items.length
     ) {
-      afEnvRender(
+      render(
         cache.items,
-        {
-          savedAt: cache.savedAt,
-          stale:
-            Date.now() -
-              Number(cache.savedAt || 0) >
-            CACHE_MAX_AGE
-        }
+        { fallback: false }
+      );
+    } else {
+      render(
+        FALLBACK_ITEMS,
+        { fallback: true }
       );
     }
 
@@ -88054,15 +88002,12 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
       return;
     }
 
-    if (isFetching) {
-      return;
-    }
-
-    isFetching = true;
+    if (loading) return;
+    loading = true;
 
     const refresh =
-      afEnvCard()?.querySelector(
-        "#afEnvNewsRefresh"
+      getCard()?.querySelector(
+        "#afEnvRefresh"
       );
 
     if (refresh) {
@@ -88072,84 +88017,69 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
 
     try {
       const items =
-        await afEnvFetchNews();
+        await fetchLiveNews();
 
-      const saved =
-        afEnvWriteCache(items);
+      saveCache(items);
 
-      afEnvRender(
-        saved.items,
-        {
-          savedAt: saved.savedAt,
-          stale: false
-        }
+      render(
+        items,
+        { fallback: false }
       );
     } catch (error) {
       console.warn(
-        "A&F Uganda Environmental News:",
+        "A&F Environmental News live feed:",
         error
       );
 
       /*
-       * Keep cached news if available.
-       * Otherwise show a harmless fallback.
+       * Keep scrolling fallback/cache visible.
+       * Do not display an empty error panel.
        */
       if (
         !cache ||
-        !cache.items.length
+        !cache.items?.length
       ) {
-        afEnvRender([], {});
+        render(
+          FALLBACK_ITEMS,
+          { fallback: true }
+        );
       }
     } finally {
-      isFetching = false;
+      loading = false;
 
-      const button =
-        afEnvCard()?.querySelector(
-          "#afEnvNewsRefresh"
-        );
-
-      if (button) {
-        button.disabled = false;
-        button.textContent = "↻";
+      if (refresh) {
+        refresh.disabled = false;
+        refresh.textContent = "↻";
       }
     }
   }
 
-  function afEnvRefreshDashboard() {
-    afEnvPositionCard();
-
-    if (afEnvAllowed()) {
-      afEnvLoadNews(false);
-    }
+  function refreshDashboardNews() {
+    positionCard();
+    loadNews(false);
   }
 
   /*
-   * Connect safely to the existing role dashboard.
-   * No MutationObserver is used, avoiding observer loops.
+   * Connect after the normal role dashboard has rendered.
    */
   if (
     typeof applyAFRoleDashboard ===
     "function"
   ) {
-    const previousApplyAFRoleDashboard =
+    const previous =
       applyAFRoleDashboard;
 
     applyAFRoleDashboard =
       function() {
         const result =
-          previousApplyAFRoleDashboard.apply(
+          previous.apply(
             this,
             arguments
           );
 
         setTimeout(
-          afEnvRefreshDashboard,
-          180
-        );
-
-        setTimeout(
-          afEnvPositionCard,
-          700
+          refreshDashboardNews,
+          250
         );
 
         return result;
@@ -88160,40 +88090,31 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
    * Existing logged-in session.
    */
   setTimeout(
-    afEnvRefreshDashboard,
+    refreshDashboardNews,
     500
   );
 
-  setTimeout(
-    afEnvPositionCard,
-    1400
+  /*
+   * Keep position correct if other dashboard cards
+   * redraw later.
+   */
+  setInterval(
+    positionCard,
+    5000
   );
 
   /*
-   * Re-position occasionally in case another
-   * dashboard module redraws or moves cards.
-   * This does NOT rebuild the dashboard.
+   * Try for newer live headlines every 30 minutes.
    */
-  positionTimer =
-    setInterval(
-      afEnvPositionCard,
-      5000
-    );
-
-  /*
-   * Check for newer headlines every 30 minutes.
-   * Cache prevents unnecessary repeat downloads.
-   */
-  refreshTimer =
-    setInterval(
-      () => afEnvLoadNews(false),
-      30 * 60 * 1000
-    );
+  setInterval(
+    () => loadNews(false),
+    30 * 60 * 1000
+  );
 
   window.refreshAFUgandaEnvironmentalNews =
-    () => afEnvLoadNews(true);
+    () => loadNews(true);
 
   console.log(
-    "A&F Uganda Environmental News connected."
+    "A&F Uganda Environmental News scrolling ticker connected."
   );
 })();
