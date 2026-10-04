@@ -13860,6 +13860,7 @@ modal.remove();
 
 renderEmployees();
 }
+
 function printBlankEmployeeForm() {
 const printWindow = window.open("", "_blank");
 
