@@ -87261,3 +87261,939 @@ setTimeout(() => {
 console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
 
 })();
+
+/* =========================================================
+   A&F UGANDA ENVIRONMENTAL NEWS
+   Director + Secretary dashboards only
+
+   Purpose:
+   - Shows recent Uganda environmental news headlines
+   - Smoothly scrolls headlines in a compact dashboard card
+   - Click a headline to open the original article
+   - Refreshes automatically and caches the last successful feed
+   - If the feed is unavailable, the rest of the dashboard still works
+
+   Paste ONCE at the very bottom of app.js
+   ========================================================= */
+
+(function connectAFUgandaEnvironmentalNews() {
+  "use strict";
+
+  if (window.__afUgandaEnvironmentNewsInstalled) return;
+  window.__afUgandaEnvironmentNewsInstalled = true;
+
+  const CARD_ID = "afUgandaEnvironmentalNewsCard";
+  const CACHE_KEY = "afUgandaEnvironmentalNewsCache";
+  const CACHE_MAX_AGE = 60 * 60 * 1000; // 1 hour
+  const MAX_ITEMS = 8;
+
+  /*
+   * Google News RSS search focused on Uganda environmental issues.
+   * rss2json is used only as a browser-readable bridge for the RSS feed.
+   */
+  const NEWS_RSS =
+    "https://news.google.com/rss/search?q=" +
+    encodeURIComponent(
+      'Uganda (environment OR environmental OR NEMA OR "plastic waste" OR recycling OR pollution OR wetlands OR climate OR waste management)'
+    ) +
+    "&hl=en-UG&gl=UG&ceid=UG:en";
+
+  const NEWS_API =
+    "https://api.rss2json.com/v1/api.json?rss_url=" +
+    encodeURIComponent(NEWS_RSS);
+
+  const MORE_NEWS_URL =
+    "https://news.google.com/search?q=" +
+    encodeURIComponent(
+      'Uganda environment NEMA plastic waste recycling pollution wetlands climate'
+    ) +
+    "&hl=en-UG&gl=UG&ceid=UG:en";
+
+  let refreshTimer = null;
+  let positionTimer = null;
+  let isFetching = false;
+
+  function afEnvUser() {
+    try {
+      if (typeof getAFCurrentUser === "function") {
+        return getAFCurrentUser() || {};
+      }
+    } catch (error) {}
+
+    try {
+      return JSON.parse(
+        localStorage.getItem("currentUser") || "{}"
+      ) || {};
+    } catch (error) {
+      return {};
+    }
+  }
+
+  function afEnvRole() {
+    return String(afEnvUser().role || "");
+  }
+
+  function afEnvAllowed() {
+    return ["Director", "Secretary"].includes(
+      afEnvRole()
+    );
+  }
+
+  function afEnvEscape(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function afEnvSafeURL(value) {
+    const url = String(value || "").trim();
+
+    if (
+      url.startsWith("https://") ||
+      url.startsWith("http://")
+    ) {
+      return url;
+    }
+
+    return MORE_NEWS_URL;
+  }
+
+  function afEnvFormatDate(value) {
+    if (!value) return "";
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+
+    return date.toLocaleDateString(
+      "en-UG",
+      {
+        day: "2-digit",
+        month: "short",
+        year: "numeric"
+      }
+    );
+  }
+
+  function afEnvReadCache() {
+    try {
+      const saved = JSON.parse(
+        localStorage.getItem(CACHE_KEY) || "null"
+      );
+
+      if (
+        !saved ||
+        !Array.isArray(saved.items)
+      ) {
+        return null;
+      }
+
+      return saved;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function afEnvWriteCache(items) {
+    const data = {
+      savedAt: Date.now(),
+      items: Array.isArray(items)
+        ? items.slice(0, MAX_ITEMS)
+        : []
+    };
+
+    try {
+      localStorage.setItem(
+        CACHE_KEY,
+        JSON.stringify(data)
+      );
+    } catch (error) {}
+
+    return data;
+  }
+
+  function afEnvNormaliseItems(rawItems) {
+    const seen = new Set();
+
+    return (Array.isArray(rawItems) ? rawItems : [])
+      .map(item => {
+        const title = String(
+          item?.title || ""
+        ).trim();
+
+        const link = afEnvSafeURL(
+          item?.link || item?.guid || ""
+        );
+
+        const pubDate =
+          item?.pubDate ||
+          item?.published ||
+          item?.date ||
+          "";
+
+        const source =
+          item?.author ||
+          item?.source ||
+          "";
+
+        return {
+          title,
+          link,
+          pubDate,
+          source
+        };
+      })
+      .filter(item => {
+        if (!item.title) return false;
+
+        const key = item.title
+          .toLowerCase()
+          .replace(/\s+/g, " ")
+          .trim();
+
+        if (seen.has(key)) {
+          return false;
+        }
+
+        seen.add(key);
+        return true;
+      })
+      .slice(0, MAX_ITEMS);
+  }
+
+  function afEnvCard() {
+    return document.getElementById(CARD_ID);
+  }
+
+  function afEnvEnsureStyle() {
+    if (
+      document.getElementById(
+        "afUgandaEnvironmentalNewsStyle"
+      )
+    ) {
+      return;
+    }
+
+    const style =
+      document.createElement("style");
+
+    style.id =
+      "afUgandaEnvironmentalNewsStyle";
+
+    style.textContent = `
+      #${CARD_ID} {
+        width:100%;
+        box-sizing:border-box;
+      }
+
+      #${CARD_ID} .afEnvNewsViewport {
+        height:174px;
+        overflow:hidden;
+        position:relative;
+        border-top:1px solid #e4ece7;
+        border-bottom:1px solid #e4ece7;
+        background:#fff;
+      }
+
+      #${CARD_ID} .afEnvNewsTrack {
+        will-change:transform;
+      }
+
+      #${CARD_ID} .afEnvNewsTrack.afEnvNewsMoving {
+        animation:
+          afEnvNewsScroll var(--af-env-duration, 36s)
+          linear infinite;
+      }
+
+      #${CARD_ID} .afEnvNewsViewport:hover
+      .afEnvNewsTrack {
+        animation-play-state:paused;
+      }
+
+      #${CARD_ID} .afEnvNewsItem {
+        min-height:58px;
+        padding:9px 12px;
+        border-bottom:1px solid #edf2ef;
+        box-sizing:border-box;
+        display:flex;
+        gap:9px;
+        align-items:flex-start;
+      }
+
+      #${CARD_ID} .afEnvNewsItem:hover {
+        background:#f4faf6;
+      }
+
+      #${CARD_ID} .afEnvNewsLink {
+        color:#173d2b;
+        text-decoration:none;
+        font-size:12px;
+        font-weight:700;
+        line-height:1.4;
+        display:block;
+      }
+
+      #${CARD_ID} .afEnvNewsLink:hover {
+        text-decoration:underline;
+        color:#0b5d3b;
+      }
+
+      #${CARD_ID} .afEnvNewsMeta {
+        margin-top:3px;
+        color:#7b8881;
+        font-size:9px;
+        line-height:1.3;
+      }
+
+      @keyframes afEnvNewsScroll {
+        from {
+          transform:translateY(0);
+        }
+
+        to {
+          transform:translateY(-50%);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        #${CARD_ID} .afEnvNewsTrack.afEnvNewsMoving {
+          animation:none !important;
+        }
+
+        #${CARD_ID} .afEnvNewsViewport {
+          overflow:auto;
+        }
+      }
+
+      @media (max-width:700px) {
+        #${CARD_ID} {
+          width:100% !important;
+          max-width:100% !important;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function afEnvCreateCard() {
+    let card = afEnvCard();
+
+    if (card) {
+      return card;
+    }
+
+    card =
+      document.createElement("section");
+
+    card.id = CARD_ID;
+    card.className = "card";
+
+    card.style.cssText = `
+      margin:14px 0;
+      padding:0;
+      overflow:hidden;
+      border:1px solid #d6e4db;
+      border-radius:12px;
+      background:white;
+      box-sizing:border-box;
+    `;
+
+    card.innerHTML = `
+      <div style="
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:10px;
+        padding:11px 13px;
+        background:#eef8f2;
+      ">
+        <div>
+          <div style="
+            color:#0b5d3b;
+            font-size:14px;
+            font-weight:bold;
+          ">
+            🌍 Uganda Environmental News
+          </div>
+
+          <div
+            id="afEnvNewsStatus"
+            style="
+              margin-top:3px;
+              color:#65756d;
+              font-size:9px;
+            "
+          >
+            Loading recent environmental headlines...
+          </div>
+        </div>
+
+        <button
+          id="afEnvNewsRefresh"
+          type="button"
+          title="Refresh environmental news"
+          style="
+            border:1px solid #bdd2c5;
+            background:white;
+            color:#0b5d3b;
+            width:31px;
+            height:31px;
+            border-radius:8px;
+            cursor:pointer;
+            font-size:15px;
+            flex:0 0 auto;
+          "
+        >
+          ↻
+        </button>
+      </div>
+
+      <div
+        id="afEnvNewsBody"
+        style="
+          min-height:174px;
+          background:white;
+        "
+      >
+        <div style="
+          padding:22px 14px;
+          color:#718078;
+          font-size:12px;
+          text-align:center;
+        ">
+          Loading Uganda environmental news...
+        </div>
+      </div>
+
+      <div style="
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        gap:10px;
+        padding:9px 12px;
+        background:#f8fbf9;
+      ">
+        <span style="
+          color:#7a8981;
+          font-size:9px;
+        ">
+          Headlines open in a new tab
+        </span>
+
+        <a
+          href="${afEnvEscape(MORE_NEWS_URL)}"
+          target="_blank"
+          rel="noopener noreferrer"
+          style="
+            color:#0b5d3b;
+            font-size:10px;
+            font-weight:bold;
+            text-decoration:none;
+          "
+        >
+          View more news →
+        </a>
+      </div>
+    `;
+
+    const refresh =
+      card.querySelector(
+        "#afEnvNewsRefresh"
+      );
+
+    if (refresh) {
+      refresh.onclick = () => {
+        afEnvLoadNews(true);
+      };
+    }
+
+    return card;
+  }
+
+  function afEnvPositionCard() {
+    const role = afEnvRole();
+    let card = afEnvCard();
+
+    if (
+      !["Director", "Secretary"].includes(role)
+    ) {
+      if (card) {
+        card.remove();
+      }
+
+      return;
+    }
+
+    afEnvEnsureStyle();
+
+    if (!card) {
+      card = afEnvCreateCard();
+    }
+
+    const checklist =
+      document.getElementById(
+        "afTodaysChecklist"
+      );
+
+    const supplier =
+      document.getElementById(
+        "afSupplierPerformanceDashboardCard"
+      );
+
+    /*
+     * Director:
+     * Put Environmental News immediately above
+     * Supplier Performance when that card exists.
+     */
+    if (
+      role === "Director" &&
+      supplier &&
+      supplier.parentElement
+    ) {
+      if (
+        card.parentElement !==
+          supplier.parentElement ||
+        card.nextElementSibling !== supplier
+      ) {
+        supplier.parentElement.insertBefore(
+          card,
+          supplier
+        );
+      }
+
+      card.style.width =
+        supplier.style.width || "100%";
+      card.style.marginTop = "0";
+
+      return;
+    }
+
+    /*
+     * Secretary:
+     * Put Environmental News immediately below
+     * Today's Checklist.
+     */
+    if (
+      checklist &&
+      checklist.parentElement
+    ) {
+      if (
+        card.parentElement !==
+          checklist.parentElement ||
+        checklist.nextElementSibling !== card
+      ) {
+        checklist.insertAdjacentElement(
+          "afterend",
+          card
+        );
+      }
+
+      /*
+       * Match Today's Checklist width where possible.
+       */
+      if (
+        checklist.style.width
+      ) {
+        card.style.width =
+          checklist.style.width;
+      }
+
+      if (
+        checklist.style.maxWidth
+      ) {
+        card.style.maxWidth =
+          checklist.style.maxWidth;
+      }
+
+      if (
+        checklist.style.minWidth
+      ) {
+        card.style.minWidth =
+          checklist.style.minWidth;
+      }
+
+      return;
+    }
+
+    /*
+     * Safe fallback if one of the dashboard anchors
+     * has not yet rendered.
+     */
+    const main =
+      document.querySelector(
+        "#mainApplication .main"
+      );
+
+    if (
+      main &&
+      card.parentElement !== main
+    ) {
+      main.appendChild(card);
+    }
+  }
+
+  function afEnvRender(items, meta = {}) {
+    const card = afEnvCard();
+
+    if (!card) return;
+
+    const body =
+      card.querySelector("#afEnvNewsBody");
+
+    const status =
+      card.querySelector(
+        "#afEnvNewsStatus"
+      );
+
+    if (!body || !status) {
+      return;
+    }
+
+    const cleanItems =
+      afEnvNormaliseItems(items);
+
+    if (!cleanItems.length) {
+      status.textContent =
+        "Environmental news is temporarily unavailable.";
+
+      body.innerHTML = `
+        <div style="
+          padding:26px 15px;
+          text-align:center;
+          color:#68776f;
+          font-size:12px;
+          line-height:1.6;
+        ">
+          Environmental news could not be loaded right now.
+          <br>
+          <a
+            href="${afEnvEscape(MORE_NEWS_URL)}"
+            target="_blank"
+            rel="noopener noreferrer"
+            style="
+              color:#0b5d3b;
+              font-weight:bold;
+            "
+          >
+            Open Uganda environmental news →
+          </a>
+        </div>
+      `;
+
+      return;
+    }
+
+    const updatedAt =
+      Number(meta.savedAt || Date.now());
+
+    const updatedDate =
+      new Date(updatedAt);
+
+    status.textContent =
+      (
+        meta.stale
+          ? "Showing saved headlines • "
+          : "Latest headlines • "
+      ) +
+      "Updated " +
+      updatedDate.toLocaleTimeString(
+        "en-UG",
+        {
+          hour: "2-digit",
+          minute: "2-digit"
+        }
+      );
+
+    const rows =
+      cleanItems.map(item => {
+        const date =
+          afEnvFormatDate(item.pubDate);
+
+        return `
+          <div class="afEnvNewsItem">
+            <div style="
+              font-size:17px;
+              line-height:1;
+              flex:0 0 auto;
+              margin-top:2px;
+            ">
+              ♻️
+            </div>
+
+            <div style="
+              min-width:0;
+              flex:1;
+            ">
+              <a
+                class="afEnvNewsLink"
+                href="${afEnvEscape(afEnvSafeURL(item.link))}"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                ${afEnvEscape(item.title)}
+              </a>
+
+              <div class="afEnvNewsMeta">
+                ${
+                  afEnvEscape(
+                    [
+                      item.source,
+                      date
+                    ]
+                      .filter(Boolean)
+                      .join(" • ")
+                  )
+                }
+              </div>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+    const shouldScroll =
+      cleanItems.length > 3;
+
+    const duration =
+      Math.max(
+        24,
+        cleanItems.length * 6
+      );
+
+    body.innerHTML = `
+      <div class="afEnvNewsViewport">
+        <div
+          class="afEnvNewsTrack ${
+            shouldScroll
+              ? "afEnvNewsMoving"
+              : ""
+          }"
+          style="
+            --af-env-duration:${duration}s;
+          "
+        >
+          ${rows}
+          ${shouldScroll ? rows : ""}
+        </div>
+      </div>
+    `;
+  }
+
+  async function afEnvFetchNews() {
+    const response =
+      await fetch(
+        NEWS_API,
+        {
+          method: "GET",
+          cache: "no-store"
+        }
+      );
+
+    if (!response.ok) {
+      throw new Error(
+        "Environmental news request failed: " +
+        response.status
+      );
+    }
+
+    const data =
+      await response.json();
+
+    const items =
+      afEnvNormaliseItems(
+        data?.items || []
+      );
+
+    if (!items.length) {
+      throw new Error(
+        "No environmental news items returned."
+      );
+    }
+
+    return items;
+  }
+
+  async function afEnvLoadNews(force = false) {
+    if (!afEnvAllowed()) {
+      return;
+    }
+
+    afEnvPositionCard();
+
+    const cache =
+      afEnvReadCache();
+
+    if (
+      cache &&
+      cache.items.length
+    ) {
+      afEnvRender(
+        cache.items,
+        {
+          savedAt: cache.savedAt,
+          stale:
+            Date.now() -
+              Number(cache.savedAt || 0) >
+            CACHE_MAX_AGE
+        }
+      );
+    }
+
+    if (
+      !force &&
+      cache &&
+      Date.now() -
+        Number(cache.savedAt || 0) <
+        CACHE_MAX_AGE
+    ) {
+      return;
+    }
+
+    if (isFetching) {
+      return;
+    }
+
+    isFetching = true;
+
+    const refresh =
+      afEnvCard()?.querySelector(
+        "#afEnvNewsRefresh"
+      );
+
+    if (refresh) {
+      refresh.disabled = true;
+      refresh.textContent = "…";
+    }
+
+    try {
+      const items =
+        await afEnvFetchNews();
+
+      const saved =
+        afEnvWriteCache(items);
+
+      afEnvRender(
+        saved.items,
+        {
+          savedAt: saved.savedAt,
+          stale: false
+        }
+      );
+    } catch (error) {
+      console.warn(
+        "A&F Uganda Environmental News:",
+        error
+      );
+
+      /*
+       * Keep cached news if available.
+       * Otherwise show a harmless fallback.
+       */
+      if (
+        !cache ||
+        !cache.items.length
+      ) {
+        afEnvRender([], {});
+      }
+    } finally {
+      isFetching = false;
+
+      const button =
+        afEnvCard()?.querySelector(
+          "#afEnvNewsRefresh"
+        );
+
+      if (button) {
+        button.disabled = false;
+        button.textContent = "↻";
+      }
+    }
+  }
+
+  function afEnvRefreshDashboard() {
+    afEnvPositionCard();
+
+    if (afEnvAllowed()) {
+      afEnvLoadNews(false);
+    }
+  }
+
+  /*
+   * Connect safely to the existing role dashboard.
+   * No MutationObserver is used, avoiding observer loops.
+   */
+  if (
+    typeof applyAFRoleDashboard ===
+    "function"
+  ) {
+    const previousApplyAFRoleDashboard =
+      applyAFRoleDashboard;
+
+    applyAFRoleDashboard =
+      function() {
+        const result =
+          previousApplyAFRoleDashboard.apply(
+            this,
+            arguments
+          );
+
+        setTimeout(
+          afEnvRefreshDashboard,
+          180
+        );
+
+        setTimeout(
+          afEnvPositionCard,
+          700
+        );
+
+        return result;
+      };
+  }
+
+  /*
+   * Existing logged-in session.
+   */
+  setTimeout(
+    afEnvRefreshDashboard,
+    500
+  );
+
+  setTimeout(
+    afEnvPositionCard,
+    1400
+  );
+
+  /*
+   * Re-position occasionally in case another
+   * dashboard module redraws or moves cards.
+   * This does NOT rebuild the dashboard.
+   */
+  positionTimer =
+    setInterval(
+      afEnvPositionCard,
+      5000
+    );
+
+  /*
+   * Check for newer headlines every 30 minutes.
+   * Cache prevents unnecessary repeat downloads.
+   */
+  refreshTimer =
+    setInterval(
+      () => afEnvLoadNews(false),
+      30 * 60 * 1000
+    );
+
+  window.refreshAFUgandaEnvironmentalNews =
+    () => afEnvLoadNews(true);
+
+  console.log(
+    "A&F Uganda Environmental News connected."
+  );
+})();
