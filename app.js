@@ -98652,3 +98652,1409 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
     "A&F Cloud Sync Master loaded: Stages 1 - 5."
   );
 })();
+
+/* =========================================================
+   A&F WEKAVERA LTD - PRODUCTION GO-LIVE RESET
+   CLOUD + LOCAL + ALL DEVICES
+
+   PURPOSE
+   - Safely clears old/test factory data before real go-live.
+   - Clears the central Supabase factory data.
+   - Clears stale local factory data on every device.
+   - Preserves the Director account.
+   - Preserves company/print/system configuration.
+   - Preserves pole prices and standard weights.
+   - Preserves Factory Item Register + Fixed Assets.
+   - Preserves Company Letters.
+   - Preserves Shift Settings.
+   - NEVER touches independent TVSLA data.
+   - Requires a backup before reset.
+   - Requires Director cloud authentication.
+   - Requires Director password + typed confirmation phrase.
+
+   INSTALL
+   Paste this entire block ONCE at the very bottom of app.js,
+   AFTER the A&F CLOUD SYNC MASTER block.
+   ========================================================= */
+
+(function connectAFProductionGoLiveReset() {
+  "use strict";
+
+  if (window.__afProductionGoLiveResetInstalled) {
+    return;
+  }
+
+  window.__afProductionGoLiveResetInstalled = true;
+
+  const SUPABASE_URL =
+    "https://ggxsrjcuncflogjxnznn.supabase.co";
+
+  const PUBLISHABLE_KEY =
+    "sb_publishable_N3PJjp8VPyiAVX3ZD9s-uQ_BgVAnhqw";
+
+  const RESET_FUNCTION_URL =
+    SUPABASE_URL +
+    "/functions/v1/af-go-live-reset";
+
+  const GENERATION_KEY =
+    "afCloudDataGeneration";
+
+  const RESET_NOTICE_KEY =
+    "afProductionResetNotice";
+
+  const CONFIRMATION_PHRASE =
+    "RESET A&F FOR LIVE USE";
+
+  const TVSLA_KEYS = [
+    "tvslaMembers",
+    "tvslaTransactions",
+    "tvslaLoans",
+    "tvslaSettings"
+  ];
+
+  /*
+   * These permanent/local configuration records survive
+   * the Production Go-Live Reset.
+   */
+  const PRESERVE_KEYS = new Set([
+    "afCompanyProfile",
+    "afPrintSettings",
+    "afSystemSettings",
+    "afRolePermissions",
+    "poleSellingPrices",
+    "poleStandardWeights",
+    "afFactoryItemRegister",
+    "afFixedAssets",
+    "afCompanyLetters",
+    "shiftSettings",
+    "afPerformanceAwardSettings",
+
+    "afCloudSupabaseConfig",
+    "afCloudExpensesActivatedAt",
+    "afCloudSyncStatus",
+    "afCloudDataGeneration",
+
+    "afSecuritySettings",
+    "afSecurityAuditLog",
+    "afSecurityLastActivity",
+    "afCurrentAppCodeHash",
+    "afRemoteAppCodeHash",
+
+    ...TVSLA_KEYS
+  ]);
+
+  /*
+   * Factory/HR/transaction data that must start clean.
+   * Employees are handled specially: Director only survives.
+   */
+  const CLEAR_ARRAY_KEYS = [
+    "afSuppliers",
+    "afSupplierPurchases",
+    "afCustomers",
+    "afSalesOrders",
+    "afCustomerPayments",
+    "afCustomerFollowups",
+    "afDeliveryRecords",
+
+    "materialRecords",
+    "clientMaterialRecords",
+    "washingShiftRecords",
+    "washingCycles",
+    "productionRecords",
+    "afCompanyPelletRecords",
+    "salesRecords",
+    "supplierPayments",
+
+    "factoryTeams",
+    "attendanceRecords",
+    "employeeAdvances",
+    "employeeDeductions",
+    "advanceRecoveries",
+    "payrollRecords",
+    "afPerformanceAwards",
+    "afQualityDisciplineRecords",
+    "teamTransferHistory",
+    "employeeChangeHistory",
+    "afMonthEndPrizePlans",
+    "afMonthEndWinners",
+    "afEmployeeDocuments",
+
+    "afWeeklyFactoryChecks",
+    "afJournalEntries",
+    "afProductionTargets",
+
+    "expenses",
+    "expenseRecords"
+  ];
+
+  const CLEAR_OBJECT_KEYS = [
+    "clientPerformance",
+    "teamPerformanceSettings",
+    "afDailyDashboardChecklist",
+    "afMonthlyBusinessTargets"
+  ];
+
+  const CLEAR_SCALAR_KEYS = [
+    "washedKaveraStock",
+    "companyWashedKaveraStock",
+    "clientWashedKaveraStock"
+  ];
+
+  const CLOUD_QUEUE_KEYS = [
+    "afCloudExpenseSyncedIds",
+    "afCloudExpensePendingIds",
+    "afCloudExpensesLastPullAt",
+
+    "afCloudStage2Pending",
+    "afCloudStage2Deleted",
+    "afCloudStage2LastPullAt",
+
+    "afCloudMasterPending",
+    "afCloudMasterDeleted",
+    "afCloudMasterLastPullAt"
+  ];
+
+  /* =======================================================
+     HELPERS
+     ======================================================= */
+
+  function readJSON(
+    key,
+    fallback
+  ) {
+    try {
+      const value =
+        JSON.parse(
+          localStorage.getItem(key) ||
+          "null"
+        );
+
+      return value ?? fallback;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  function currentUser() {
+    try {
+      if (
+        typeof getAFCurrentUser ===
+        "function"
+      ) {
+        return getAFCurrentUser() || {};
+      }
+    } catch (_) {}
+
+    return readJSON(
+      "currentUser",
+      {}
+    );
+  }
+
+  function isDirector() {
+    return (
+      String(
+        currentUser().role || ""
+      ).toLowerCase() ===
+      "director"
+    );
+  }
+
+  function escapeHTML(
+    value
+  ) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  async function sha256Text(
+    value
+  ) {
+    const bytes =
+      new TextEncoder()
+        .encode(
+          String(value || "")
+        );
+
+    const digest =
+      await crypto.subtle
+        .digest(
+          "SHA-256",
+          bytes
+        );
+
+    return Array.from(
+      new Uint8Array(digest)
+    )
+      .map(
+        byte =>
+          byte
+            .toString(16)
+            .padStart(2, "0")
+      )
+      .join("");
+  }
+
+  function findDirectorEmployee() {
+    const employees =
+      readJSON(
+        "employees",
+        []
+      );
+
+    const list =
+      Array.isArray(employees)
+        ? employees
+        : [];
+
+    const user =
+      currentUser();
+
+    const exact =
+      list.find(
+        employee =>
+          String(
+            employee.employeeId ||
+            ""
+          ) ===
+          String(
+            user.employeeId ||
+            ""
+          ) &&
+          String(
+            employee.role ||
+            ""
+          ).toLowerCase() ===
+          "director"
+      );
+
+    if (exact) {
+      return exact;
+    }
+
+    return (
+      list.find(
+        employee =>
+          String(
+            employee.role ||
+            ""
+          ).toLowerCase() ===
+          "director"
+      ) ||
+      null
+    );
+  }
+
+  function getCloudAccessToken() {
+    const stores = [
+      localStorage,
+      sessionStorage
+    ];
+
+    for (
+      const store of stores
+    ) {
+      for (
+        let i = 0;
+        i < store.length;
+        i += 1
+      ) {
+        const key =
+          store.key(i);
+
+        if (
+          !key ||
+          !/^sb-.*-auth-token$/
+            .test(key)
+        ) {
+          continue;
+        }
+
+        try {
+          const value =
+            JSON.parse(
+              store.getItem(key) ||
+              "{}"
+            );
+
+          const token =
+            value?.access_token ||
+            value?.currentSession
+              ?.access_token ||
+            "";
+
+          if (token) {
+            return token;
+          }
+        } catch (_) {}
+      }
+    }
+
+    return "";
+  }
+
+  function clearNonDirectorCloudTokens() {
+    const user =
+      currentUser();
+
+    if (
+      String(
+        user.role || ""
+      ).toLowerCase() ===
+      "director"
+    ) {
+      return;
+    }
+
+    [
+      localStorage,
+      sessionStorage
+    ].forEach(store => {
+      const keys = [];
+
+      for (
+        let i = 0;
+        i < store.length;
+        i += 1
+      ) {
+        const key =
+          store.key(i);
+
+        if (
+          key &&
+          /^sb-.*-auth-token$/
+            .test(key)
+        ) {
+          keys.push(key);
+        }
+      }
+
+      keys.forEach(
+        key =>
+          store.removeItem(key)
+      );
+    });
+  }
+
+  async function callResetServer(
+    action,
+    extra = {},
+    requireAuth = false
+  ) {
+    const headers = {
+      "Content-Type":
+        "application/json",
+
+      "apikey":
+        PUBLISHABLE_KEY
+    };
+
+    if (requireAuth) {
+      const token =
+        getCloudAccessToken();
+
+      if (!token) {
+        throw new Error(
+          "Director cloud login was not found. Please make sure Cloud Sync is connected and try again."
+        );
+      }
+
+      headers.Authorization =
+        "Bearer " + token;
+    }
+
+    const response =
+      await fetch(
+        RESET_FUNCTION_URL,
+        {
+          method: "POST",
+          headers,
+          body:
+            JSON.stringify({
+              action,
+              ...extra
+            })
+        }
+      );
+
+    let data = {};
+
+    try {
+      data =
+        await response.json();
+    } catch (_) {}
+
+    if (
+      !response.ok ||
+      data?.success ===
+        false ||
+      data?.error
+    ) {
+      throw new Error(
+        data?.error ||
+        (
+          "Cloud reset server returned " +
+          response.status +
+          "."
+        )
+      );
+    }
+
+    return data;
+  }
+
+  function hasOldFactoryData() {
+    for (
+      const key of
+      CLEAR_ARRAY_KEYS
+    ) {
+      const value =
+        readJSON(
+          key,
+          []
+        );
+
+      if (
+        Array.isArray(value) &&
+        value.length
+      ) {
+        return true;
+      }
+    }
+
+    const employees =
+      readJSON(
+        "employees",
+        []
+      );
+
+    if (
+      Array.isArray(employees) &&
+      employees.some(
+        employee =>
+          String(
+            employee.role ||
+            ""
+          ).toLowerCase() !==
+          "director"
+      )
+    ) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /* =======================================================
+     LOCAL CLEAN RESET
+     ======================================================= */
+
+  function cleanLocalFactoryData(
+    nextGeneration
+  ) {
+    const userBefore =
+      currentUser();
+
+    const directorEmployee =
+      findDirectorEmployee();
+
+    /*
+     * Clear known live/test factory data.
+     */
+    CLEAR_ARRAY_KEYS
+      .forEach(key => {
+        localStorage.setItem(
+          key,
+          "[]"
+        );
+      });
+
+    CLEAR_OBJECT_KEYS
+      .forEach(key => {
+        localStorage.setItem(
+          key,
+          "{}"
+        );
+      });
+
+    CLEAR_SCALAR_KEYS
+      .forEach(key => {
+        localStorage.setItem(
+          key,
+          "0"
+        );
+      });
+
+    /*
+     * Rebuild the employee register with the Director only.
+     * Other staff will be entered again and activated later.
+     */
+    localStorage.setItem(
+      "employees",
+      JSON.stringify(
+        directorEmployee
+          ? [directorEmployee]
+          : []
+      )
+    );
+
+    localStorage.setItem(
+      "factoryTeams",
+      "[]"
+    );
+
+    /*
+     * Clear old lockouts, queues and sync fingerprints so
+     * deleted test records cannot be pushed back to cloud.
+     */
+    localStorage.removeItem(
+      "afSecurityLoginState"
+    );
+
+    CLOUD_QUEUE_KEYS
+      .forEach(
+        key =>
+          localStorage.removeItem(
+            key
+          )
+      );
+
+    if (
+      nextGeneration !==
+        undefined &&
+      nextGeneration !==
+        null
+    ) {
+      localStorage.setItem(
+        GENERATION_KEY,
+        String(
+          Number(
+            nextGeneration
+          )
+        )
+      );
+    }
+
+    /*
+     * The Director stays logged in.
+     * Any old staff device is returned to Login.
+     */
+    if (
+      String(
+        userBefore.role ||
+        ""
+      ).toLowerCase() !==
+      "director"
+    ) {
+      localStorage.removeItem(
+        "currentUser"
+      );
+
+      clearNonDirectorCloudTokens();
+    }
+
+    localStorage.setItem(
+      RESET_NOTICE_KEY,
+      JSON.stringify({
+        at:
+          new Date()
+            .toISOString(),
+
+        generation:
+          Number(
+            nextGeneration ||
+            0
+          )
+      })
+    );
+  }
+
+  /* =======================================================
+     SAFETY BACKUP
+     ======================================================= */
+
+  function fallbackBackup() {
+    const backup = {};
+
+    for (
+      let i = 0;
+      i <
+        localStorage.length;
+      i += 1
+    ) {
+      const key =
+        localStorage.key(i);
+
+      if (!key) continue;
+
+      backup[key] =
+        localStorage.getItem(
+          key
+        );
+    }
+
+    const packageObject = {
+      format:
+        "AF_WEKAVERA_PRE_GO_LIVE_RESET_BACKUP",
+      createdAt:
+        new Date()
+          .toISOString(),
+      data:
+        backup
+    };
+
+    const blob =
+      new Blob(
+        [
+          JSON.stringify(
+            packageObject,
+            null,
+            2
+          )
+        ],
+        {
+          type:
+            "application/json"
+        }
+      );
+
+    const url =
+      URL.createObjectURL(
+        blob
+      );
+
+    const link =
+      document.createElement(
+        "a"
+      );
+
+    link.href = url;
+    link.download =
+      "AF-Wekavera-PRE-GO-LIVE-RESET-" +
+      new Date()
+        .toISOString()
+        .replace(
+          /[:.]/g,
+          "-"
+        ) +
+      ".json";
+
+    document.body.appendChild(
+      link
+    );
+
+    link.click();
+    link.remove();
+
+    setTimeout(
+      () =>
+        URL.revokeObjectURL(
+          url
+        ),
+      1000
+    );
+
+    return {
+      saved: true,
+      method: "DOWNLOAD"
+    };
+  }
+
+  async function createMandatoryBackup() {
+    if (
+      typeof window
+        .backupAFCompanyData ===
+      "function"
+    ) {
+      const result =
+        await window
+          .backupAFCompanyData();
+
+      if (
+        !result ||
+        result.saved !==
+          true
+      ) {
+        throw new Error(
+          "Backup was cancelled. The Production Reset has been stopped."
+        );
+      }
+
+      return result;
+    }
+
+    return fallbackBackup();
+  }
+
+  /* =======================================================
+     DIRECTOR PASSWORD CHECK
+     ======================================================= */
+
+  async function verifyDirectorPassword() {
+    const director =
+      findDirectorEmployee();
+
+    if (
+      !director ||
+      !director.passwordHash
+    ) {
+      /*
+       * Cloud Director authentication remains mandatory.
+       * If no local password hash exists, do not block here.
+       */
+      return true;
+    }
+
+    const password =
+      prompt(
+        "DIRECTOR SECURITY CHECK\n\n" +
+        "Enter your current A&F application password to continue with the Production Go-Live Reset."
+      );
+
+    if (
+      password ===
+        null
+    ) {
+      return false;
+    }
+
+    const hash =
+      await sha256Text(
+        password
+      );
+
+    if (
+      hash !==
+      director.passwordHash
+    ) {
+      alert(
+        "Incorrect Director password.\n\nProduction Reset cancelled."
+      );
+
+      return false;
+    }
+
+    return true;
+  }
+
+  /* =======================================================
+     PRODUCTION GO-LIVE RESET
+     ======================================================= */
+
+  async function runProductionGoLiveReset() {
+    if (!isDirector()) {
+      alert(
+        "Access Denied\n\nOnly the Director can perform the Production Go-Live Reset."
+      );
+
+      return;
+    }
+
+    if (!navigator.onLine) {
+      alert(
+        "Internet connection is required because this reset must clear both the central cloud database and this device."
+      );
+
+      return;
+    }
+
+    let preview;
+
+    try {
+      preview =
+        await callResetServer(
+          "preview",
+          {},
+          true
+        );
+    } catch (error) {
+      alert(
+        "Production Reset cannot start.\n\n" +
+        String(
+          error?.message ||
+          error
+        )
+      );
+
+      return;
+    }
+
+    const counts =
+      preview?.counts ||
+      {};
+
+    const cloudUsers =
+      Number(
+        counts.cloudUsers ||
+        0
+      );
+
+    const moduleRecords =
+      Number(
+        counts.af_module_records ||
+        0
+      );
+
+    const dedicatedRecords =
+      Object.entries(
+        counts
+      )
+        .filter(
+          ([key]) =>
+            key !==
+              "cloudUsers" &&
+            key !==
+              "af_module_records"
+        )
+        .reduce(
+          (
+            total,
+            [, value]
+          ) =>
+            total +
+            Number(
+              value ||
+              0
+            ),
+          0
+        );
+
+    const firstConfirm =
+      confirm(
+        "A&F PRODUCTION GO-LIVE RESET\n\n" +
+        "This will permanently clear the current TEST/OLD factory operational data from the central Cloud and connected devices.\n\n" +
+        "Cloud records to be cleaned: about " +
+        (
+          dedicatedRecords +
+          moduleRecords
+        ).toLocaleString() +
+        "\n" +
+        "Current Cloud users: " +
+        cloudUsers.toLocaleString() +
+        "\n\n" +
+        "PRESERVED:\n" +
+        "• Director cloud account\n" +
+        "• Company / print / system settings\n" +
+        "• Roles & permissions\n" +
+        "• Pole prices & standard weights\n" +
+        "• Factory Item Register & Fixed Assets\n" +
+        "• Company Letters\n" +
+        "• Shift Settings\n" +
+        "• TVSLA data\n\n" +
+        "REMOVED:\n" +
+        "• Other employee accounts\n" +
+        "• Suppliers & customers\n" +
+        "• Purchases, sales & deliveries\n" +
+        "• Expenses & payments\n" +
+        "• Material, washing, production & stock activity\n" +
+        "• Attendance, payroll, advances & deductions\n" +
+        "• Performance / month-end results\n" +
+        "• Weekly stock checks & journals\n\n" +
+        "After reset, employees will be entered and activated afresh.\n\n" +
+        "Continue?"
+      );
+
+    if (!firstConfirm) {
+      return;
+    }
+
+    /*
+     * A valid backup is compulsory before destructive work.
+     */
+    try {
+      await createMandatoryBackup();
+    } catch (error) {
+      alert(
+        String(
+          error?.message ||
+          error
+        )
+      );
+
+      return;
+    }
+
+    const passwordOK =
+      await verifyDirectorPassword();
+
+    if (!passwordOK) {
+      return;
+    }
+
+    const phrase =
+      prompt(
+        "FINAL CONFIRMATION\n\n" +
+        "Type exactly:\n\n" +
+        CONFIRMATION_PHRASE +
+        "\n\n" +
+        "This is the last step before the cloud data is cleared."
+      );
+
+    if (
+      String(
+        phrase || ""
+      ).trim() !==
+      CONFIRMATION_PHRASE
+    ) {
+      alert(
+        "Confirmation phrase did not match.\n\nProduction Reset cancelled."
+      );
+
+      return;
+    }
+
+    const finalConfirm =
+      confirm(
+        "FINAL WARNING\n\n" +
+        "Your backup has been created.\n\n" +
+        "Proceed with the Production Go-Live Reset now?"
+      );
+
+    if (!finalConfirm) {
+      return;
+    }
+
+    try {
+      const resetResult =
+        await callResetServer(
+          "reset",
+          {
+            confirmation:
+              CONFIRMATION_PHRASE
+          },
+          true
+        );
+
+      cleanLocalFactoryData(
+        resetResult
+          .dataGeneration
+      );
+
+      /*
+       * Re-publish the preserved Director/local permanent
+       * records to the clean generation.
+       */
+      if (
+        typeof window
+          .migrateAFAllExistingDataToCloud ===
+        "function"
+      ) {
+        try {
+          await window
+            .migrateAFAllExistingDataToCloud();
+        } catch (error) {
+          console.warn(
+            "Post-reset preserved-data sync:",
+            error
+          );
+        }
+      }
+
+      if (
+        typeof window
+          .afAuditLogAction ===
+        "function"
+      ) {
+        try {
+          window.afAuditLogAction(
+            "PRODUCTION_GO_LIVE_RESET",
+            "Cloud + local factory data reset. Director and permanent configuration preserved."
+          );
+        } catch (_) {}
+      }
+
+      alert(
+        "PRODUCTION GO-LIVE RESET COMPLETED SUCCESSFULLY.\n\n" +
+        "The Director account and permanent company settings were preserved.\n\n" +
+        "Other employees, test transactions and old operational records were cleared.\n\n" +
+        "TVSLA was not touched.\n\n" +
+        "The application will now reload. We can then begin entering the real employee details."
+      );
+
+      location.reload();
+    } catch (error) {
+      alert(
+        "Production Reset did not complete.\n\n" +
+        String(
+          error?.message ||
+          error
+        ) +
+        "\n\nDo NOT use the old local-only Full Factory Reset. Keep the backup you created and contact the system administrator / developer."
+      );
+    }
+  }
+
+  /* =======================================================
+     CROSS-DEVICE RESET GENERATION GUARD
+
+     If a phone/laptop was offline during the reset, it sees
+     the new generation when it reconnects and clears stale
+     factory data before that old data can be used again.
+     ======================================================= */
+
+  let generationCheckBusy =
+    false;
+
+  async function checkProductionGeneration() {
+    if (
+      generationCheckBusy ||
+      !navigator.onLine
+    ) {
+      return;
+    }
+
+    generationCheckBusy =
+      true;
+
+    try {
+      const status =
+        await callResetServer(
+          "status",
+          {},
+          false
+        );
+
+      const serverGeneration =
+        Number(
+          status
+            ?.dataGeneration ||
+          1
+        );
+
+      const localGeneration =
+        Number(
+          localStorage.getItem(
+            GENERATION_KEY
+          ) ||
+          0
+        );
+
+      /*
+       * First installation before any reset:
+       * simply remember the baseline generation.
+       */
+      if (
+        localGeneration ===
+          0 &&
+        serverGeneration ===
+          1
+      ) {
+        localStorage.setItem(
+          GENERATION_KEY,
+          "1"
+        );
+
+        return;
+      }
+
+      /*
+       * A device that first comes online after a completed
+       * reset may have no generation marker. Only clear it
+       * when it actually contains old factory data.
+       */
+      if (
+        localGeneration ===
+          0 &&
+        serverGeneration >
+          1
+      ) {
+        if (
+          hasOldFactoryData()
+        ) {
+          cleanLocalFactoryData(
+            serverGeneration
+          );
+
+          alert(
+            "A&F Go-Live Reset detected.\n\nOld factory/test data on this device has been cleared so it matches the central Cloud."
+          );
+
+          location.reload();
+          return;
+        }
+
+        localStorage.setItem(
+          GENERATION_KEY,
+          String(
+            serverGeneration
+          )
+        );
+
+        return;
+      }
+
+      if (
+        serverGeneration >
+        localGeneration
+      ) {
+        cleanLocalFactoryData(
+          serverGeneration
+        );
+
+        alert(
+          "A newer A&F production data generation was detected.\n\nStale local factory records on this device have been cleared automatically."
+        );
+
+        location.reload();
+      }
+    } catch (error) {
+      console.warn(
+        "A&F reset generation check:",
+        error
+      );
+    } finally {
+      generationCheckBusy =
+        false;
+    }
+  }
+
+  /* =======================================================
+     GO-LIVE SETTINGS UI
+     Disable old local-only reset buttons and provide the
+     cloud-aware Production Go-Live Reset.
+     ======================================================= */
+
+  function enhanceGoLiveSettings() {
+    const modal =
+      document.getElementById(
+        "afGoLiveSettingsModal"
+      );
+
+    if (!modal) {
+      return;
+    }
+
+    const oldOperational =
+      modal.querySelector(
+        "#afOperationalReset"
+      );
+
+    const oldFull =
+      modal.querySelector(
+        "#afFullReset"
+      );
+
+    if (oldOperational) {
+      oldOperational.disabled =
+        true;
+
+      oldOperational.style
+        .opacity =
+        "0.38";
+
+      oldOperational.title =
+        "Disabled after Cloud migration. Use Production Go-Live Reset.";
+    }
+
+    if (oldFull) {
+      oldFull.disabled =
+        true;
+
+      oldFull.style.opacity =
+        "0.38";
+
+      oldFull.title =
+        "Disabled after Cloud migration. Use Production Go-Live Reset.";
+    }
+
+    if (
+      modal.querySelector(
+        "#afProductionGoLiveReset"
+      )
+    ) {
+      return;
+    }
+
+    const anchor =
+      oldOperational
+        ?.parentElement ||
+      oldFull
+        ?.parentElement;
+
+    if (!anchor) {
+      return;
+    }
+
+    const box =
+      document.createElement(
+        "div"
+      );
+
+    box.id =
+      "afProductionGoLiveResetBox";
+
+    box.style.cssText = `
+      width:100%;
+      box-sizing:border-box;
+      padding:12px;
+      border:2px solid #8b1e15;
+      border-radius:10px;
+      background:#fff4f2;
+      margin-bottom:12px;
+    `;
+
+    box.innerHTML = `
+      <div style="
+        font-size:13px;
+        font-weight:bold;
+        color:#7a1b14;
+        margin-bottom:5px;
+      ">
+        🚨 Production Go-Live Reset
+      </div>
+
+      <div style="
+        font-size:11px;
+        line-height:1.55;
+        color:#5d3834;
+        margin-bottom:10px;
+      ">
+        Cloud-aware final reset. Clears old/test factory data
+        from the central database and all devices while keeping
+        the Director, permanent company settings and TVSLA.
+      </div>
+
+      <button
+        id="afProductionGoLiveReset"
+        type="button"
+        style="
+          border:0;
+          border-radius:8px;
+          padding:10px 14px;
+          background:#8b1e15;
+          color:white;
+          font-weight:bold;
+          cursor:pointer;
+        "
+      >
+        PRODUCTION GO-LIVE RESET
+      </button>
+    `;
+
+    anchor.parentElement
+      ?.insertBefore(
+        box,
+        anchor
+      );
+
+    box.querySelector(
+      "#afProductionGoLiveReset"
+    ).onclick =
+      runProductionGoLiveReset;
+  }
+
+  /* =======================================================
+     CLOUD STATUS WORDING CLEAN-UP
+     ======================================================= */
+
+  function cleanCloudStatusWording() {
+    const card =
+      document.getElementById(
+        "afCloudSyncMasterCard"
+      );
+
+    if (!card) return;
+
+    const walker =
+      document.createTreeWalker(
+        card,
+        NodeFilter.SHOW_TEXT
+      );
+
+    let node;
+
+    while (
+      (
+        node =
+          walker.nextNode()
+      )
+    ) {
+      const text =
+        String(
+          node.nodeValue ||
+          ""
+        );
+
+      if (
+        text.includes(
+          "Expenses are up to date."
+        )
+      ) {
+        node.nodeValue =
+          text.replace(
+            "Expenses are up to date.",
+            "All authorised A&F modules are up to date."
+          );
+      }
+
+      if (
+        text.includes(
+          "Cloud Sync connected. Expenses are up to date."
+        )
+      ) {
+        node.nodeValue =
+          text.replace(
+            "Cloud Sync connected. Expenses are up to date.",
+            "Live Cloud Sync connected. All authorised A&F modules are up to date."
+          );
+      }
+    }
+  }
+
+  /* =======================================================
+     START
+     ======================================================= */
+
+  const observer =
+    new MutationObserver(
+      () => {
+        enhanceGoLiveSettings();
+        cleanCloudStatusWording();
+      }
+    );
+
+  observer.observe(
+    document.body,
+    {
+      childList: true,
+      subtree: true
+    }
+  );
+
+  setTimeout(
+    () => {
+      enhanceGoLiveSettings();
+      cleanCloudStatusWording();
+      checkProductionGeneration();
+    },
+    800
+  );
+
+  window.addEventListener(
+    "online",
+    () => {
+      checkProductionGeneration();
+    }
+  );
+
+  setInterval(
+    () => {
+      checkProductionGeneration();
+    },
+    30000
+  );
+
+  window.runAFProductionGoLiveReset =
+    runProductionGoLiveReset;
+
+  window.checkAFProductionGeneration =
+    checkProductionGeneration;
+
+  console.log(
+    "A&F Production Go-Live Reset guard connected."
+  );
+})();
