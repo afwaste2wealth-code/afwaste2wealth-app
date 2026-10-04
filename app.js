@@ -84821,11 +84821,13 @@ b.textContent = "Calculate Payroll";
    1) 📊 Accounts & Reports sidebar button
    2) 🧰 Weekly Stock Taking sidebar button
    3) Weekly Items & Equipment Register + condition checks
-   4) Attention list: Missing / Damaged / Needs Replacement /
+   4) Clickable filters: All / Good / Fair / Needs Attention / Poor /
+      Active / Inactive / Damaged / Needs Replacement / Repaired / Missing
+   5) Attention list: Missing / Damaged / Needs Replacement /
       Inactive / Needs Attention / Poor
-   5) Useful accounting registers built from existing A&F data
-   6) Fixed Asset Register
-   7) Manual Journal Register
+   6) Useful accounting registers built from existing A&F data
+   7) Fixed Asset Register
+   8) Manual Journal Register
 
    IMPORTANT ACCOUNTING NOTE:
    Profit & Loss uses the existing A&F P&L engine.
@@ -85996,7 +85998,7 @@ function afARCheckAttentionItem(itemCheck) {
 
     return (
         ["Needs Attention", "Poor"].includes(condition) ||
-        ["Damaged", "Needs Replacement"].includes(status) ||
+        ["Inactive", "Damaged", "Needs Replacement"].includes(status) ||
         itemCheck.missing === true ||
         actionNeedsFollowUp
     );
@@ -86504,7 +86506,7 @@ function afAROpenWeeklyCheckHistory() {
     });
 }
 
-function afAROpenWeeklyCheckDetail(check) {
+function afAROpenWeeklyCheckDetail(check, initialFilter = "all") {
     const { body } = afAROpenModal(
         "afWeeklyCheckDetailModal",
         "Weekly Items & Equipment Report",
@@ -86512,72 +86514,112 @@ function afAROpenWeeklyCheckDetail(check) {
         1200
     );
 
-    const rows = (check.items || []).map(item => {
-        const attention = afARCheckAttentionItem(item);
-        return `
-            <tr style="${attention ? "background:#fff8e6;" : ""}">
-                <td>${afAREscape(item.itemName || "")}</td>
-                <td>${afAREscape(item.location || "")}</td>
-                <td><b>${afAREscape(item.condition || "")}</b></td>
-                <td><b>${afAREscape(item.status || (item.damaged ? "Damaged" : item.needsRepair ? "Needs Replacement" : "Active"))}</b></td>
-                <td>${item.missing ? "YES" : "—"}</td>
-                <td>${afAREscape(item.remarks || "")}</td>
-                <td>${afAREscape(item.actionRequired || "")}</td>
-            </tr>
-        `;
-    }).join("");
+    const allItems = Array.isArray(check.items) ? check.items : [];
+    const filters = [
+        ["all", "Items Checked", allItems.length],
+        ["good", "Good", afARWeeklyFilteredItems(allItems, "good").length],
+        ["fair", "Fair", afARWeeklyFilteredItems(allItems, "fair").length],
+        ["needsAttention", "Needs Attention", afARWeeklyFilteredItems(allItems, "needsAttention").length],
+        ["poor", "Poor", afARWeeklyFilteredItems(allItems, "poor").length],
+        ["active", "Active", afARWeeklyFilteredItems(allItems, "active").length],
+        ["inactive", "Inactive", afARWeeklyFilteredItems(allItems, "inactive").length],
+        ["damaged", "Damaged", afARWeeklyFilteredItems(allItems, "damaged").length],
+        ["needsReplacement", "Needs Replacement", afARWeeklyFilteredItems(allItems, "needsReplacement").length],
+        ["repaired", "Repaired", afARWeeklyFilteredItems(allItems, "repaired").length],
+        ["missing", "Missing", afARWeeklyFilteredItems(allItems, "missing").length],
+        ["attention", "Needs Follow-up", afARWeeklyFilteredItems(allItems, "attention").length]
+    ];
+    const validFilters = new Set(filters.map(x => x[0]));
+    let selectedFilter = validFilters.has(initialFilter) ? initialFilter : "all";
 
     body.innerHTML = `
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-            <button id="afPrintWeeklyDetail" type="button" style="${afARPrimaryButtonStyle()}">🖨 Print Report</button>
+            <button id="afPrintWeeklyDetail" type="button" style="${afARPrimaryButtonStyle()}">🖨 Print Current View</button>
             <div style="margin-left:auto;font-size:12px;line-height:1.5;">
                 <b>Checked:</b> ${afAREscape(check.checkedBy || "")}<br>
                 <b>Date:</b> ${afAREscape(afARFormatDate(check.checkDate))}
             </div>
         </div>
 
+        <div style="font-size:11px;color:#667;margin-bottom:7px;"><b>Quick Filters:</b> tap a box to isolate matching items.</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px;">
-            ${[
-                ["Items Checked", check.summary?.itemsChecked || 0],
-                ["Good", check.summary?.good || 0],
-                ["Fair", check.summary?.fair || 0],
-                ["Needs Attention", check.summary?.needAttention || 0],
-                ["Poor", check.summary?.poor || 0],
-                ["Active", check.summary?.active || 0],
-                ["Inactive", check.summary?.inactive || 0],
-                ["Damaged", check.summary?.damaged || 0],
-                ["Needs Replacement", check.summary?.needsReplacement || check.summary?.needRepair || 0],
-                ["Repaired", check.summary?.repaired || 0],
-                ["Missing", check.summary?.missing || 0]
-            ].map(([label, value]) => `
-                <div style="padding:10px;background:#f7faf8;border:1px solid #e1e8e4;border-radius:8px;">
+            ${filters.map(([key, label, value]) => `
+                <button type="button" data-af-detail-filter="${key}" style="${afARWeeklyFilterCardStyle(key === selectedFilter, ["damaged","needsReplacement","poor","attention"].includes(key) ? "#fff0f0" : ["missing","inactive","needsAttention"].includes(key) ? "#fff7e6" : ["good","active","repaired"].includes(key) ? "#eaf7ef" : "#f7faf8")}">
                     <div style="font-size:10px;color:#666;">${afAREscape(label)}</div>
                     <div style="font-size:18px;font-weight:bold;margin-top:3px;">${Number(value)}</div>
-                </div>
+                </button>
             `).join("")}
         </div>
+
+        <div id="afWeeklyDetailFilterTitle" style="font-weight:bold;color:#0b5d3b;margin-bottom:8px;"></div>
 
         <div id="afWeeklyPrintable" style="overflow:auto;border:1px solid #ddd;border-radius:9px;">
             <table style="width:100%;min-width:1000px;border-collapse:collapse;font-size:12px;">
                 <thead><tr style="background:#eef8f2;text-align:left;">
                     <th>Item / Equipment</th><th>Location</th><th>Condition</th><th>Status</th><th>Missing</th><th>Remarks</th><th>Action Required</th>
                 </tr></thead>
-                <tbody>${rows}</tbody>
+                <tbody id="afWeeklyDetailRows"></tbody>
             </table>
         </div>
 
         ${check.generalNotes ? `<div style="margin-top:12px;padding:10px;background:#f7f7f7;border-radius:8px;"><b>General Notes:</b> ${afAREscape(check.generalNotes)}</div>` : ""}
     `;
 
-    body.querySelectorAll("th,td").forEach(cell => {
-        cell.style.padding = "8px";
-        cell.style.borderBottom = "1px solid #eee";
+    function renderDetailFilter(filter) {
+        selectedFilter = validFilters.has(filter) ? filter : "all";
+        const filtered = afARWeeklyFilteredItems(allItems, selectedFilter);
+        const tbody = body.querySelector("#afWeeklyDetailRows");
+        const title = body.querySelector("#afWeeklyDetailFilterTitle");
+
+        if (title) {
+            title.textContent = `Showing: ${afARWeeklyFilterLabel(selectedFilter)} (${filtered.length})`;
+        }
+
+        if (tbody) {
+            tbody.innerHTML = filtered.length
+                ? filtered.map(item => {
+                    const attention = afARCheckAttentionItem(item);
+                    return `
+                        <tr style="${attention ? "background:#fff8e6;" : ""}">
+                            <td>${afAREscape(item.itemName || "")}</td>
+                            <td>${afAREscape(item.location || "")}</td>
+                            <td><b>${afAREscape(item.condition || "")}</b></td>
+                            <td><b>${afAREscape(item.status || (item.damaged ? "Damaged" : item.needsRepair ? "Needs Replacement" : "Active"))}</b></td>
+                            <td>${item.missing ? "YES" : "—"}</td>
+                            <td>${afAREscape(item.remarks || "")}</td>
+                            <td>${afAREscape(item.actionRequired || "")}</td>
+                        </tr>
+                    `;
+                }).join("")
+                : `<tr><td colspan="7" style="padding:16px;text-align:center;color:#667;">No ${afAREscape(afARWeeklyFilterLabel(selectedFilter).toLowerCase())} items in this weekly check.</td></tr>`;
+        }
+
+        body.querySelectorAll("[data-af-detail-filter]").forEach(button => {
+            const key = button.getAttribute("data-af-detail-filter");
+            const bg = ["damaged","needsReplacement","poor","attention"].includes(key)
+                ? "#fff0f0"
+                : ["missing","inactive","needsAttention"].includes(key)
+                    ? "#fff7e6"
+                    : ["good","active","repaired"].includes(key)
+                        ? "#eaf7ef"
+                        : "#f7faf8";
+            button.style.cssText = afARWeeklyFilterCardStyle(key === selectedFilter, bg);
+        });
+
+        body.querySelectorAll("th,td").forEach(cell => {
+            cell.style.padding = "8px";
+            cell.style.borderBottom = "1px solid #eee";
+        });
+    }
+
+    body.querySelectorAll("[data-af-detail-filter]").forEach(button => {
+        button.onclick = () => renderDetailFilter(button.getAttribute("data-af-detail-filter"));
     });
 
     body.querySelector("#afPrintWeeklyDetail").onclick = () => {
         const popup = window.open("", "_blank");
         if (!popup) {
-            alert("Please allow pop-ups to print the weekly report.");
+            alert("Please allow pop-ups to print this report.");
             return;
         }
 
@@ -86593,7 +86635,8 @@ function afAROpenWeeklyCheckDetail(check) {
             <h2 style="margin-top:0;">Weekly Items & Equipment Register</h2>
             <p><b>Week:</b> ${afAREscape(afARFormatDate(check.weekStart))} - ${afAREscape(afARFormatDate(check.weekEnd))}<br>
             <b>Checked By:</b> ${afAREscape(check.checkedBy || "")}<br>
-            <b>Check Date:</b> ${afAREscape(afARFormatDate(check.checkDate))}</p>
+            <b>Check Date:</b> ${afAREscape(afARFormatDate(check.checkDate))}<br>
+            <b>Filtered View:</b> ${afAREscape(afARWeeklyFilterLabel(selectedFilter))}</p>
             ${body.querySelector("#afWeeklyPrintable").innerHTML}
             </body></html>
         `);
@@ -86601,13 +86644,15 @@ function afAROpenWeeklyCheckDetail(check) {
         popup.focus();
         setTimeout(() => popup.print(), 250);
     };
+
+    renderDetailFilter(selectedFilter);
 }
 
 /* =========================================================
    WEEKLY STOCK TAKING MAIN SCREEN
    ========================================================= */
 
-function openAFWeeklyStockTaking() {
+function openAFWeeklyStockTaking(initialFilter = "attention") {
     const role = afARRole();
     if (!["Director", "Manager"].includes(role)) {
         alert("Access Denied\n\nWeekly Stock Taking is available to the Director and Manager.");
@@ -86617,16 +86662,14 @@ function openAFWeeklyStockTaking() {
     const { body } = afAROpenModal(
         "afWeeklyStockTakingModal",
         "🧰 Weekly Stock Taking",
-        "Weekly Items & Equipment Register • Physical condition • Attention tracking",
+        "Weekly Items & Equipment Register • Physical condition • Click a summary box to isolate items",
         1100
     );
 
     const latest = afARLatestWeeklyCheck();
     const status = afARWeeklyStatus();
     const activeItems = afARActiveFactoryItems();
-    const attentionItems = latest
-        ? (latest.items || []).filter(afARCheckAttentionItem)
-        : [];
+    const latestItems = Array.isArray(latest?.items) ? latest.items : [];
 
     const statusBackground =
         status.state === "ATTENTION" || status.state === "DUE"
@@ -86635,18 +86678,23 @@ function openAFWeeklyStockTaking() {
                 ? "#eaf7ef"
                 : "#fff7e6";
 
-    const attentionRows = attentionItems.length
-        ? attentionItems.map(item => `
-            <tr>
-                <td><b>${afAREscape(item.itemName || "")}</b></td>
-                <td>${afAREscape(item.location || "")}</td>
-                <td>${afAREscape(item.condition || "")}</td>
-                <td>${afAREscape(item.status || (item.damaged ? "Damaged" : item.needsRepair ? "Needs Replacement" : "Active"))}</td>
-                <td>${item.missing ? "Missing" : "—"}</td>
-                <td>${afAREscape(item.actionRequired || item.remarks || "Follow up")}</td>
-            </tr>
-        `).join("")
-        : `<tr><td colspan="6" style="padding:14px;text-align:center;color:#667;">No items currently require attention.</td></tr>`;
+    const filters = [
+        ["all", "Items Checked", latestItems.length, "#f7faf8"],
+        ["good", "Good", latestItems.filter(x => afARWeeklyFilterMatch(x, "good")).length, "#eaf7ef"],
+        ["fair", "Fair", latestItems.filter(x => afARWeeklyFilterMatch(x, "fair")).length, "#f7faf8"],
+        ["needsAttention", "Needs Attention", latestItems.filter(x => afARWeeklyFilterMatch(x, "needsAttention")).length, "#fff7e6"],
+        ["poor", "Poor", latestItems.filter(x => afARWeeklyFilterMatch(x, "poor")).length, "#fff0f0"],
+        ["active", "Active", latestItems.filter(x => afARWeeklyFilterMatch(x, "active")).length, "#eaf7ef"],
+        ["inactive", "Inactive", latestItems.filter(x => afARWeeklyFilterMatch(x, "inactive")).length, "#fff7e6"],
+        ["damaged", "Damaged", latestItems.filter(x => afARWeeklyFilterMatch(x, "damaged")).length, "#fff0f0"],
+        ["needsReplacement", "Needs Replacement", latestItems.filter(x => afARWeeklyFilterMatch(x, "needsReplacement")).length, "#fff0f0"],
+        ["repaired", "Repaired", latestItems.filter(x => afARWeeklyFilterMatch(x, "repaired")).length, "#eaf7ef"],
+        ["missing", "Missing", latestItems.filter(x => afARWeeklyFilterMatch(x, "missing")).length, "#fff7e6"],
+        ["attention", "Needs Follow-up", latestItems.filter(x => afARWeeklyFilterMatch(x, "attention")).length, "#fff0f0"]
+    ];
+
+    const validFilters = new Set(filters.map(x => x[0]));
+    let selectedFilter = validFilters.has(initialFilter) ? initialFilter : "attention";
 
     body.innerHTML = `
         <div style="padding:14px;background:${statusBackground};border-radius:10px;margin-bottom:14px;">
@@ -86654,16 +86702,23 @@ function openAFWeeklyStockTaking() {
             <div style="font-size:18px;font-weight:bold;margin-top:4px;">${afAREscape(status.label)}</div>
         </div>
 
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:9px;margin-bottom:14px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:9px;margin-bottom:12px;">
             <div style="padding:12px;background:#f7faf8;border-radius:8px;"><div style="font-size:10px;color:#666;">Registered Current Items</div><b style="font-size:20px;">${activeItems.length}</b></div>
             <div style="padding:12px;background:#f7faf8;border-radius:8px;"><div style="font-size:10px;color:#666;">Last Check</div><b>${latest ? afAREscape(afARFormatDate(latest.checkDate)) : "Not yet"}</b></div>
             <div style="padding:12px;background:#f7faf8;border-radius:8px;"><div style="font-size:10px;color:#666;">Checked By</div><b>${latest ? afAREscape(latest.checkedBy || "") : "—"}</b></div>
-            <div style="padding:12px;background:#f7faf8;border-radius:8px;"><div style="font-size:10px;color:#666;">Items Checked</div><b style="font-size:20px;">${Number(latest?.summary?.itemsChecked || 0)}</b></div>
-            <div style="padding:12px;background:#f7faf8;border-radius:8px;"><div style="font-size:10px;color:#666;">Active</div><b style="font-size:20px;">${Number(latest?.summary?.active || 0)}</b></div>
-            <div style="padding:12px;background:#fff7e6;border-radius:8px;"><div style="font-size:10px;color:#666;">Inactive</div><b style="font-size:20px;">${Number(latest?.summary?.inactive || 0)}</b></div>
-            <div style="padding:12px;background:#fff0f0;border-radius:8px;"><div style="font-size:10px;color:#666;">Damaged</div><b style="font-size:20px;">${Number(latest?.summary?.damaged || 0)}</b></div>
-            <div style="padding:12px;background:#fff0f0;border-radius:8px;"><div style="font-size:10px;color:#666;">Needs Replacement</div><b style="font-size:20px;">${Number(latest?.summary?.needsReplacement || latest?.summary?.needRepair || 0)}</b></div>
-            <div style="padding:12px;background:#fff7e6;border-radius:8px;"><div style="font-size:10px;color:#666;">Missing</div><b style="font-size:20px;">${Number(latest?.summary?.missing || 0)}</b></div>
+        </div>
+
+        <div style="font-size:11px;color:#667;margin-bottom:7px;">
+            <b>Quick Filters:</b> tap any box to show only those items.
+        </div>
+
+        <div id="afWeeklyFilterCards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:8px;margin-bottom:14px;">
+            ${filters.map(([key, label, value, background]) => `
+                <button type="button" data-af-weekly-filter="${key}" style="${afARWeeklyFilterCardStyle(key === selectedFilter, background)}">
+                    <div style="font-size:10px;color:#666;">${afAREscape(label)}</div>
+                    <div style="font-size:20px;font-weight:bold;margin-top:3px;">${Number(value)}</div>
+                </button>
+            `).join("")}
         </div>
 
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;">
@@ -86673,31 +86728,79 @@ function openAFWeeklyStockTaking() {
             ${latest ? `<button id="afPrintLatestWeekly" type="button" style="${afARSecondaryButtonStyle()}">🖨 View / Print Latest</button>` : ""}
         </div>
 
-        <div style="font-weight:bold;color:#0b5d3b;margin-bottom:8px;">Items Requiring Attention</div>
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+            <div id="afWeeklyFilterTitle" style="font-weight:bold;color:#0b5d3b;"></div>
+            <button id="afWeeklyShowAll" type="button" style="${afARSecondaryButtonStyle()};padding:6px 9px;">Show All</button>
+        </div>
+
         <div style="overflow:auto;border:1px solid #ddd;border-radius:9px;">
             <table style="width:100%;min-width:900px;border-collapse:collapse;font-size:12px;">
                 <thead><tr style="background:#eef8f2;text-align:left;">
-                    <th>Item</th><th>Location</th><th>Condition</th><th>Status</th><th>Missing</th><th>Action Required</th>
+                    <th>Item</th><th>Category</th><th>Location</th><th>Condition</th><th>Status</th><th>Missing</th><th>Action Required</th>
                 </tr></thead>
-                <tbody>${attentionRows}</tbody>
+                <tbody id="afWeeklyFilteredRows"></tbody>
             </table>
         </div>
     `;
 
-    body.querySelectorAll("th,td").forEach(cell => {
-        cell.style.padding = "8px";
-        cell.style.borderBottom = "1px solid #eee";
+    function renderSelectedFilter(filter) {
+        selectedFilter = validFilters.has(filter) ? filter : "all";
+        const filtered = afARWeeklyFilteredItems(latestItems, selectedFilter);
+        const tbody = body.querySelector("#afWeeklyFilteredRows");
+        const title = body.querySelector("#afWeeklyFilterTitle");
+
+        if (title) {
+            title.textContent = `Showing: ${afARWeeklyFilterLabel(selectedFilter)} (${filtered.length})`;
+        }
+
+        if (tbody) {
+            tbody.innerHTML = filtered.length
+                ? filtered.map(item => `
+                    <tr style="${afARCheckAttentionItem(item) ? "background:#fffaf0;" : ""}">
+                        <td><b>${afAREscape(item.itemName || "")}</b></td>
+                        <td>${afAREscape(item.category || "")}</td>
+                        <td>${afAREscape(item.location || "")}</td>
+                        <td>${afAREscape(item.condition || "")}</td>
+                        <td><b>${afAREscape(item.status || (item.damaged ? "Damaged" : item.needsRepair ? "Needs Replacement" : "Active"))}</b></td>
+                        <td>${item.missing ? "YES" : "—"}</td>
+                        <td>${afAREscape(item.actionRequired || item.remarks || "")}</td>
+                    </tr>
+                `).join("")
+                : `<tr><td colspan="7" style="padding:16px;text-align:center;color:#667;">No ${afAREscape(afARWeeklyFilterLabel(selectedFilter).toLowerCase())} items in the latest weekly check.</td></tr>`;
+        }
+
+        body.querySelectorAll("[data-af-weekly-filter]").forEach(button => {
+            const key = button.getAttribute("data-af-weekly-filter");
+            const data = filters.find(x => x[0] === key);
+            button.style.cssText = afARWeeklyFilterCardStyle(
+                key === selectedFilter,
+                data?.[3] || "#f7faf8"
+            );
+        });
+
+        body.querySelectorAll("th,td").forEach(cell => {
+            cell.style.padding = "8px";
+            cell.style.borderBottom = "1px solid #eee";
+        });
+    }
+
+    body.querySelectorAll("[data-af-weekly-filter]").forEach(button => {
+        button.onclick = () => renderSelectedFilter(
+            button.getAttribute("data-af-weekly-filter")
+        );
     });
 
+    body.querySelector("#afWeeklyShowAll").onclick = () => renderSelectedFilter("all");
     body.querySelector("#afOpenItemRegister").onclick = afAROpenFactoryItemRegister;
     body.querySelector("#afStartWeeklyCheck").onclick = afAROpenWeeklyCheckForm;
     body.querySelector("#afWeeklyHistory").onclick = afAROpenWeeklyCheckHistory;
 
     const printLatest = body.querySelector("#afPrintLatestWeekly");
     if (printLatest && latest) {
-        printLatest.onclick = () => afAROpenWeeklyCheckDetail(latest);
+        printLatest.onclick = () => afAROpenWeeklyCheckDetail(latest, selectedFilter);
     }
 
+    renderSelectedFilter(selectedFilter);
     afARCloseMobileMenu();
 }
 
@@ -86734,7 +86837,7 @@ function afARLatestAttentionItems() {
         }));
 }
 
-function afAROpenStockMaintenanceAttention() {
+function afAROpenStockMaintenanceAttention(initialFilter = "attention") {
     const role = afARRole();
 
     if (!["Director", "Manager", "Secretary"].includes(role)) {
@@ -86743,7 +86846,12 @@ function afAROpenStockMaintenanceAttention() {
     }
 
     const latest = afARLatestWeeklyCheck();
-    const items = afARLatestAttentionItems();
+    const allAttentionItems = afARLatestAttentionItems();
+    const allowedFilters = new Set(["attention", "damaged", "needsReplacement", "missing", "needsAttention", "poor", "inactive"]);
+    const selectedFilter = allowedFilters.has(initialFilter) ? initialFilter : "attention";
+    const items = selectedFilter === "attention"
+        ? allAttentionItems
+        : allAttentionItems.filter(item => afARWeeklyFilterMatch(item, selectedFilter));
 
     const { body } = afAROpenModal(
         "afStockMaintenanceAttentionModal",
@@ -86772,7 +86880,7 @@ function afAROpenStockMaintenanceAttention() {
     body.innerHTML = `
         <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
             <div style="padding:10px 12px;background:${items.length ? "#fff0f0" : "#eaf7ef"};border-radius:8px;">
-                <div style="font-size:10px;color:#666;">Current Attention Items</div>
+                <div style="font-size:10px;color:#666;">${selectedFilter === "attention" ? "Current Attention Items" : afAREscape(afARWeeklyFilterLabel(selectedFilter))}</div>
                 <div style="font-size:22px;font-weight:bold;">${items.length}</div>
             </div>
             <div style="padding:10px 12px;background:#f7faf8;border-radius:8px;min-width:190px;">
@@ -86890,10 +86998,10 @@ function afARRenderWeeklyStockDashboardCard() {
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:8px;margin-top:11px;">
             <div style="padding:9px;background:#f7faf8;border-radius:7px;"><div style="font-size:9px;color:#666;">Last Check</div><b>${latest ? afAREscape(afARFormatDate(latest.checkDate)) : "Not yet"}</b></div>
             <div style="padding:9px;background:#f7faf8;border-radius:7px;"><div style="font-size:9px;color:#666;">Checked By</div><b>${latest ? afAREscape(latest.checkedBy || "") : "—"}</b></div>
-            <div style="padding:9px;background:#fff0f0;border-radius:7px;"><div style="font-size:9px;color:#666;">Damaged</div><b>${Number(latest?.summary?.damaged || 0)}</b></div>
-            <div style="padding:9px;background:#fff0f0;border-radius:7px;"><div style="font-size:9px;color:#666;">Needs Replacement</div><b>${Number(latest?.summary?.needsReplacement || latest?.summary?.needRepair || 0)}</b></div>
-            <div style="padding:9px;background:#fff7e6;border-radius:7px;"><div style="font-size:9px;color:#666;">Missing</div><b>${Number(latest?.summary?.missing || 0)}</b></div>
-            <div style="padding:9px;background:${attention ? "#fff0f0" : "#eaf7ef"};border-radius:7px;"><div style="font-size:9px;color:#666;">Needs Follow-up</div><b>${attention}</b></div>
+            <button type="button" data-af-dashboard-stock-filter="damaged" style="padding:9px;background:#fff0f0;border:1px solid #f2cccc;border-radius:7px;text-align:left;cursor:pointer;"><div style="font-size:9px;color:#666;">Damaged</div><b>${Number(latest?.summary?.damaged || 0)}</b></button>
+            <button type="button" data-af-dashboard-stock-filter="needsReplacement" style="padding:9px;background:#fff0f0;border:1px solid #f2cccc;border-radius:7px;text-align:left;cursor:pointer;"><div style="font-size:9px;color:#666;">Needs Replacement</div><b>${Number(latest?.summary?.needsReplacement || latest?.summary?.needRepair || 0)}</b></button>
+            <button type="button" data-af-dashboard-stock-filter="missing" style="padding:9px;background:#fff7e6;border:1px solid #eedba9;border-radius:7px;text-align:left;cursor:pointer;"><div style="font-size:9px;color:#666;">Missing</div><b>${Number(latest?.summary?.missing || 0)}</b></button>
+            <button type="button" data-af-dashboard-stock-filter="attention" style="padding:9px;background:${attention ? "#fff0f0" : "#eaf7ef"};border:1px solid ${attention ? "#f2cccc" : "#cae7d4"};border-radius:7px;text-align:left;cursor:pointer;"><div style="font-size:9px;color:#666;">Needs Follow-up</div><b>${attention}</b></button>
         </div>
 
         <div style="margin-top:10px;overflow:auto;${attention ? "" : "display:none;"}">
@@ -86912,11 +87020,22 @@ function afARRenderWeeklyStockDashboardCard() {
 
     card.querySelector("#afDashboardWeeklyOpen").onclick = () => {
         if (role === "Secretary") {
-            afAROpenStockMaintenanceAttention();
+            afAROpenStockMaintenanceAttention("attention");
         } else {
-            openAFWeeklyStockTaking();
+            openAFWeeklyStockTaking("attention");
         }
     };
+
+    card.querySelectorAll("[data-af-dashboard-stock-filter]").forEach(button => {
+        button.onclick = () => {
+            const filter = button.getAttribute("data-af-dashboard-stock-filter") || "attention";
+            if (role === "Secretary") {
+                afAROpenStockMaintenanceAttention(filter);
+            } else {
+                openAFWeeklyStockTaking(filter);
+            }
+        };
+    });
 }
 
 /* =========================================================
