@@ -100476,7 +100476,7 @@ const existing = events.find(
       event => String(event.id) === String(existingId)
     ) || {};
 
-constisEdit = !!existingId;
+const isEdit = !!existingId;
 
 afSMModal(
 isEdit ? "Edit Upcoming Event" : "Add Upcoming Event",
