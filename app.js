@@ -16478,6 +16478,29 @@ function recordMaterialIn() {
       <label>Transport Cost (UGX)</label>
       <input id="transportCost" type="number" min="0" step="1" value="0"
         style="width:100%;padding:10px;margin:6px 0 14px">
+
+      <div style="border-top:1px solid #d9e8df;margin:8px 0 14px;padding-top:14px">
+        <b style="color:#0b5d3b">Supplier Payment</b>
+        <div style="font-size:12px;color:#666;margin:5px 0 12px">
+          Record what is paid to the material supplier now. Further instalments can be added later from Material Records. Transport remains separate.
+        </div>
+
+        <label>Amount Paid Now to Supplier (UGX)</label>
+        <input id="supplierAmountPaidNow" type="number" min="0" step="1" value="0"
+          style="width:100%;padding:10px;margin:6px 0 14px">
+
+        <label>Payment Method</label>
+        <select id="supplierPaymentMethod" style="width:100%;padding:10px;margin:6px 0 14px">
+          <option>Cash</option>
+          <option>Mobile Money</option>
+          <option>Bank Transfer</option>
+          <option>Cheque</option>
+        </select>
+
+        <label>Payment Reference / Transaction No. (optional)</label>
+        <input id="supplierPaymentReference" type="text"
+          style="width:100%;padding:10px;margin:6px 0 14px">
+      </div>
     </div>
 
     <div id="clientBillingSection" style="display:none">
@@ -16558,8 +16581,11 @@ function recordMaterialIn() {
       <b>Gross Weight:</b> <span id="summaryGrossWeight">0 kg</span><br><br>
       <b>Dirt Deduction:</b> <span id="dirtWeight">0 kg</span><br><br>
       <b>Net Usable Weight / Opening KB Stock:</b> <span id="netWeight">0 kg</span><br><br>
-      <b>Material Cost:</b> <span id="materialCost">UGX 0</span><br><br>
-      <b>Total Cost:</b> <span id="totalCost">UGX 0</span>
+      <b>Material Cost / Supplier Amount Due:</b> <span id="materialCost">UGX 0</span><br><br>
+      <b>Transport Cost:</b> <span id="companyTransportPreview">UGX 0</span><br><br>
+      <b>Total Purchase Cost:</b> <span id="totalCost">UGX 0</span><br><br>
+      <b>Paid to Supplier Now:</b> <span id="supplierPaidPreview">UGX 0</span><br><br>
+      <b>Supplier Balance:</b> <span id="supplierBalancePreview">UGX 0</span>
     </div>
 
     <div style="display:flex;gap:10px">
@@ -16592,6 +16618,7 @@ function recordMaterialIn() {
   const dirt = modal.querySelector("#dirtPercent");
   const price = modal.querySelector("#pricePerKg");
   const transport = modal.querySelector("#transportCost");
+  const supplierPaidNow = modal.querySelector("#supplierAmountPaidNow");
   const washingRate = modal.querySelector("#washingRatePerKg");
   const pelletWeight = modal.querySelector("#pelletWeight");
   const pelletRate = modal.querySelector("#pelletizingRatePerKg");
@@ -16651,11 +16678,19 @@ function recordMaterialIn() {
     modal.querySelector("#netWeight").textContent =
       net.toLocaleString() + " kg";
 
+    const supplierPaidValue = Math.max(Number(supplierPaidNow.value) || 0, 0);
+    const supplierBalance = Math.max(materialCost - supplierPaidValue, 0);
+
     modal.querySelector("#materialCost").textContent =
       afMaterialMoney(materialCost);
-
+    modal.querySelector("#companyTransportPreview").textContent =
+      afMaterialMoney(t);
     modal.querySelector("#totalCost").textContent =
       afMaterialMoney(total);
+    modal.querySelector("#supplierPaidPreview").textContent =
+      afMaterialMoney(supplierPaidValue);
+    modal.querySelector("#supplierBalancePreview").textContent =
+      afMaterialMoney(supplierBalance);
   }
 
   function calculateClientService() {
@@ -16711,7 +16746,7 @@ function recordMaterialIn() {
   source.addEventListener("change", updateForm);
   clientService.addEventListener("change", updateForm);
 
-  [gross, dirt, price, transport].forEach(input => {
+  [gross, dirt, price, transport, supplierPaidNow].forEach(input => {
     input.addEventListener("input", calculateCompanyMaterial);
   });
 
@@ -16967,6 +17002,14 @@ afAddSupplierForm();
     const transportCost =
       Number(transport.value) || 0;
 
+    const materialCost = netKg * purchasePrice;
+    const initialSupplierPayment = Math.max(Number(supplierPaidNow.value) || 0, 0);
+
+    if (initialSupplierPayment > materialCost) {
+      alert("Amount paid to supplier cannot exceed the material amount due (" + afMaterialMoney(materialCost) + "). Transport is kept separate.");
+      return;
+    }
+
     const supplierSelect =
       modal.querySelector("#materialSupplier");
 
@@ -17026,9 +17069,19 @@ afAddSupplierForm();
 
       pricePerKg: purchasePrice,
       transportCost,
+      materialCost,
       totalCost:
-        (netKg * purchasePrice) +
+        materialCost +
         transportCost,
+
+      supplierAmountPaid: initialSupplierPayment,
+      supplierBalance: Math.max(materialCost - initialSupplierPayment, 0),
+      supplierPaymentStatus:
+        initialSupplierPayment <= 0
+          ? "Unpaid"
+          : initialSupplierPayment >= materialCost
+          ? "Paid in Full"
+          : "Partly Paid",
 
       recordedByEmployeeId: currentUser.employeeId || "",
       recordedByName:
@@ -17040,9 +17093,25 @@ afAddSupplierForm();
       recordedAt: new Date().toISOString()
     };
 
+    if (!supplierId && initialSupplierPayment > 0) {
+      alert("Please select the supplier before recording a supplier payment.");
+      return;
+    }
+
     const records = afMaterialReadRecords();
     records.push(record);
     afMaterialSaveRecords(records);
+
+    afEnsureSupplierPurchaseFromMaterial(record);
+
+    if (initialSupplierPayment > 0) {
+      afPostSupplierPayment(record, {
+        amount: initialSupplierPayment,
+        method: modal.querySelector("#supplierPaymentMethod").value,
+        reference: modal.querySelector("#supplierPaymentReference").value.trim(),
+        date: record.date
+      });
+    }
 
     modal.remove();
 
@@ -17052,7 +17121,10 @@ afAddSupplierForm();
       "Gross weight: " + grossKg.toLocaleString() + " kg\n" +
       "Net usable / opening KB stock: " +
       netKg.toLocaleString() + " kg\n" +
-      "Total cost: " + afMaterialMoney(record.totalCost)
+      "Total purchase cost: " + afMaterialMoney(record.totalCost) + "\n" +
+      "Paid to supplier: " + afMaterialMoney(record.supplierAmountPaid || 0) + "\n" +
+      "Supplier balance: " + afMaterialMoney(record.supplierBalance || 0) + "\n" +
+      "Payment status: " + (record.supplierPaymentStatus || "Unpaid")
     );
   };
 
@@ -17245,9 +17317,201 @@ if (typeof updateDashboardMaterialTotals === "function") {
    ========================================================= */
 
 
+/* =========================================================
+   A&F SUPPLIER PURCHASE PAYMENTS / INSTALMENTS
+   Links company KB purchases to Material Records, Cash/Bank
+   Book and Supplier/Creditors Ledger.
+   ========================================================= */
+function afSupplierPaymentReadAll() {
+  try {
+    const rows = JSON.parse(localStorage.getItem("supplierPayments") || "[]");
+    return Array.isArray(rows) ? rows : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function afSupplierPaymentSaveAll(rows) {
+  localStorage.setItem("supplierPayments", JSON.stringify(rows || []));
+}
+
+function afSupplierMaterialDue(record) {
+  if (!record || String(record.materialSource || "").toLowerCase() === "client") return 0;
+  if (record.materialCost != null) return Math.max(Number(record.materialCost) || 0, 0);
+  const netKg = Number(record.netWeight ?? record.openingBatchKg ?? record.grossWeight ?? 0) || 0;
+  const price = Number(record.pricePerKg || 0) || 0;
+  return Math.max(netKg * price, 0);
+}
+
+function afSupplierPaymentsForRecord(record) {
+  if (!record) return [];
+  return afSupplierPaymentReadAll().filter(payment =>
+    String(payment.materialRecordId || "") === String(record.id || "") ||
+    (record.batchNumber && String(payment.batchNumber || "") === String(record.batchNumber))
+  );
+}
+
+function afRefreshSupplierPaymentSummary(record) {
+  if (!record || String(record.materialSource || "").toLowerCase() === "client") return record;
+  const due = afSupplierMaterialDue(record);
+  const paid = afSupplierPaymentsForRecord(record)
+    .reduce((sum, payment) => sum + Math.max(Number(payment.amount) || 0, 0), 0);
+  record.materialCost = due;
+  record.supplierAmountPaid = paid;
+  record.supplierBalance = Math.max(due - paid, 0);
+  record.supplierPaymentStatus =
+    due <= 0 ? "No Supplier Amount" :
+    paid <= 0 ? "Unpaid" :
+    paid + 0.001 >= due ? "Paid in Full" : "Partly Paid";
+  return record;
+}
+
+function afEnsureSupplierPurchaseFromMaterial(record) {
+  if (!record || String(record.materialSource || "").toLowerCase() === "client") return;
+  let purchases = [];
+  try { purchases = JSON.parse(localStorage.getItem("afSupplierPurchases") || "[]") || []; } catch (e) {}
+  if (!Array.isArray(purchases)) purchases = [];
+  const existing = purchases.find(p =>
+    String(p.materialRecordId || "") === String(record.id || "") ||
+    (record.batchNumber && String(p.batchNumber || "") === String(record.batchNumber))
+  );
+  const purchase = existing || { id: "PUR-" + String(record.id || Date.now()) };
+  Object.assign(purchase, {
+    materialRecordId: record.id,
+    batchNumber: record.batchNumber || "",
+    date: record.date || "",
+    supplierId: record.supplierId || "",
+    supplierName: record.supplierName || "",
+    materialType: record.materialType || "",
+    grossKg: Number(record.grossWeight || 0),
+    acceptedKg: Number(record.netWeight ?? record.openingBatchKg ?? 0),
+    pricePerKg: Number(record.pricePerKg || 0),
+    materialCost: afSupplierMaterialDue(record),
+    transportCost: Number(record.transportCost || 0),
+    totalCost: Number(record.totalCost || 0),
+    updatedAt: new Date().toISOString()
+  });
+  if (!existing) purchases.push(purchase);
+  localStorage.setItem("afSupplierPurchases", JSON.stringify(purchases));
+}
+
+function afPostSupplierPayment(record, data) {
+  if (!record) return null;
+  const amount = Math.max(Number(data?.amount) || 0, 0);
+  if (amount <= 0) return null;
+  afRefreshSupplierPaymentSummary(record);
+  const balanceBefore = Math.max(Number(record.supplierBalance) || 0, 0);
+  if (amount > balanceBefore + 0.001) {
+    throw new Error("Payment exceeds the outstanding supplier balance of " + afMaterialMoney(balanceBefore) + ".");
+  }
+  const rows = afSupplierPaymentReadAll();
+  const sequence = rows.filter(p =>
+    String(p.materialRecordId || "") === String(record.id || "") ||
+    String(p.batchNumber || "") === String(record.batchNumber || "")
+  ).length + 1;
+  const user = afMaterialCurrentUser();
+  const payment = {
+    id: "SP-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7).toUpperCase(),
+    paymentNo: "SP-" + String(record.batchNumber || "KB").replace(/[^A-Za-z0-9]/g, "") + "-" + String(sequence).padStart(2, "0"),
+    materialRecordId: record.id,
+    batchNumber: record.batchNumber || "",
+    supplierId: record.supplierId || "",
+    supplierName: record.supplierName || "",
+    materialType: record.materialType || "",
+    date: data?.date || new Date().toISOString().split("T")[0],
+    amount,
+    method: data?.method || "Cash",
+    paymentMethod: data?.method || "Cash",
+    reference: data?.reference || "",
+    recordedByEmployeeId: user.employeeId || "",
+    recordedByName: user.fullName || user.employeeName || user.name || "",
+    recordedAt: new Date().toISOString()
+  };
+  rows.push(payment);
+  afSupplierPaymentSaveAll(rows);
+  afRefreshSupplierPaymentSummary(record);
+  afEnsureSupplierPurchaseFromMaterial(record);
+  const materials = afMaterialReadRecords();
+  const saved = materials.find(r => String(r.id) === String(record.id));
+  if (saved) {
+    saved.materialCost = record.materialCost;
+    saved.supplierAmountPaid = record.supplierAmountPaid;
+    saved.supplierBalance = record.supplierBalance;
+    saved.supplierPaymentStatus = record.supplierPaymentStatus;
+    afMaterialSaveRecords(materials);
+  }
+  return payment;
+}
+
+function afOpenSupplierPaymentModal(recordId) {
+  const records = afMaterialReadRecords();
+  const record = records.find(r => String(r.id) === String(recordId));
+  if (!record || String(record.materialSource || "").toLowerCase() === "client") {
+    alert("Company material record could not be found.");
+    return;
+  }
+  afRefreshSupplierPaymentSummary(record);
+  afEnsureSupplierPurchaseFromMaterial(record);
+  const due = afSupplierMaterialDue(record);
+  const old = document.getElementById("afSupplierPaymentModal");
+  if (old) old.remove();
+  const modal = document.createElement("div");
+  modal.id = "afSupplierPaymentModal";
+  modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:100000;font-family:Arial,sans-serif;padding:10px";
+  modal.innerHTML = `
+    <div style="background:white;width:520px;max-width:96%;max-height:92vh;overflow:auto;border-radius:14px;padding:22px">
+      <h2 style="margin-top:0;color:#0b5d3b">Supplier Payment / Instalment</h2>
+      <div style="background:#eef8f2;padding:12px;border-radius:8px;margin-bottom:15px;line-height:1.7">
+        <b>Batch:</b> ${afMaterialEscape(record.batchNumber || "-")}<br>
+        <b>Supplier:</b> ${afMaterialEscape(record.supplierName || "-")}<br>
+        <b>Material:</b> ${afMaterialEscape(record.materialType || "-")}<br>
+        <b>Supplier Amount Due:</b> ${afMaterialMoney(due)}<br>
+        <b>Total Paid:</b> ${afMaterialMoney(record.supplierAmountPaid || 0)}<br>
+        <b>Outstanding:</b> ${afMaterialMoney(record.supplierBalance || 0)}<br>
+        <b>Status:</b> ${afMaterialEscape(record.supplierPaymentStatus || "Unpaid")}
+      </div>
+      <label>Payment Date</label>
+      <input id="afSupplierPayDate" type="date" value="${new Date().toISOString().split("T")[0]}" style="width:100%;padding:10px;margin:6px 0 14px;box-sizing:border-box">
+      <label>Amount Paid (UGX)</label>
+      <input id="afSupplierPayAmount" type="number" min="0" step="1" value="${Number(record.supplierBalance || 0)}" style="width:100%;padding:10px;margin:6px 0 14px;box-sizing:border-box">
+      <label>Payment Method</label>
+      <select id="afSupplierPayMethod" style="width:100%;padding:10px;margin:6px 0 14px;box-sizing:border-box">
+        <option>Cash</option><option>Mobile Money</option><option>Bank Transfer</option><option>Cheque</option>
+      </select>
+      <label>Reference / Transaction No. (optional)</label>
+      <input id="afSupplierPayReference" type="text" style="width:100%;padding:10px;margin:6px 0 14px;box-sizing:border-box">
+      <div style="display:flex;gap:10px">
+        <button id="afSaveSupplierPayment" style="flex:1;padding:11px;border:0;border-radius:7px;background:#0b5d3b;color:white;font-weight:bold;cursor:pointer">Save Payment</button>
+        <button id="afCancelSupplierPayment" style="flex:1;padding:11px;border:1px solid #ccc;border-radius:7px;background:white;cursor:pointer">Cancel</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.querySelector("#afCancelSupplierPayment").onclick = () => modal.remove();
+  modal.querySelector("#afSaveSupplierPayment").onclick = () => {
+    const amount = Math.max(Number(modal.querySelector("#afSupplierPayAmount").value) || 0, 0);
+    if (amount <= 0) { alert("Please enter the payment amount."); return; }
+    try {
+      const payment = afPostSupplierPayment(record, {
+        amount,
+        method: modal.querySelector("#afSupplierPayMethod").value,
+        reference: modal.querySelector("#afSupplierPayReference").value.trim(),
+        date: modal.querySelector("#afSupplierPayDate").value
+      });
+      modal.remove();
+      alert("Supplier payment saved successfully.\n\nPayment No: " + payment.paymentNo + "\nAmount: " + afMaterialMoney(payment.amount) + "\nOutstanding: " + afMaterialMoney(record.supplierBalance || 0) + "\nStatus: " + record.supplierPaymentStatus);
+      const recordsModal = document.querySelector('[data-af-material-records-modal="1"]');
+      if (recordsModal) recordsModal.remove();
+      viewMaterialRecords();
+    } catch (error) {
+      alert(error.message || "Unable to save supplier payment.");
+    }
+  };
+}
+
 function viewMaterialRecords() {
   const records = afMaterialReadRecords();
   const modal = document.createElement("div");
+  modal.setAttribute("data-af-material-records-modal", "1");
 
   modal.style.cssText = `
     position:fixed;
@@ -17287,6 +17551,8 @@ function viewMaterialRecords() {
 
       if (isClient) {
         afMaterialRecalculateClientService(record);
+      } else {
+        afRefreshSupplierPaymentSummary(record);
       }
 
       const status =
@@ -17300,7 +17566,7 @@ function viewMaterialRecords() {
                     "-"
                   )
             )
-          : (record.batchStatus || "-");
+          : ((record.batchStatus || "-") + " • " + (record.supplierPaymentStatus || "Unpaid"));
 
       rows += `
       <tr>
@@ -17330,8 +17596,8 @@ function viewMaterialRecords() {
         <td>${afMaterialEscape(service)}</td>
         <td>${Number(record.actualPelletWeight || record.pelletWeight || 0).toLocaleString()} kg</td>
         <td>${isClient ? afMaterialMoney(record.serviceTotalDue || 0) : afMaterialMoney(record.totalCost || 0)}</td>
-        <td>${isClient ? afMaterialMoney(record.serviceAmountPaid || 0) : "-"}</td>
-        <td>${isClient ? afMaterialMoney(record.serviceBalance || 0) : "-"}</td>
+        <td>${isClient ? afMaterialMoney(record.serviceAmountPaid || 0) : afMaterialMoney(record.supplierAmountPaid || 0)}</td>
+        <td>${isClient ? afMaterialMoney(record.serviceBalance || 0) : afMaterialMoney(record.supplierBalance || 0)}</td>
         <td>
           <div style="margin-bottom:5px;font-size:11px;font-weight:bold">
             ${afMaterialEscape(status)}
@@ -17344,6 +17610,16 @@ function viewMaterialRecords() {
               background:#0b5d3b;color:white;cursor:pointer;
             "
           >✏ Edit</button>
+
+          ${!isClient ? `
+          <button
+            onclick="afOpenSupplierPaymentModal(${JSON.stringify(record.id)})"
+            style="
+              padding:7px 12px;border:0;border-radius:6px;
+              background:#1565c0;color:white;cursor:pointer;margin-left:5px;
+            "
+          >💳 Supplier Payment</button>
+          ` : ""}
 
           <button
             onclick="deleteMaterialRecord(${JSON.stringify(record.id)})"
@@ -86142,6 +86418,7 @@ function afARPaymentBook(methodGroup) {
     const customerPayments = afARReadArray("afCustomerPayments");
     const expenses = afARExpenses();
     const materialRecords = afARReadArray("materialRecords");
+    const supplierPayments = afARReadArray("supplierPayments");
 
     const cashMethods = ["cash", "mobile money"];
     const bankMethods = ["bank transfer", "cheque"];
@@ -86195,6 +86472,21 @@ function afARPaymentBook(methodGroup) {
                 received: Number(payment.amount || 0),
                 paid: 0
             });
+        });
+    });
+
+    supplierPayments.forEach(record => {
+        if (afARIsCancelled(record)) return;
+        const method = afARPaymentMethod(record).toLowerCase();
+        if (!wanted.includes(method)) return;
+
+        entries.push({
+            date: afARDateValue(record.date || record.recordedAt),
+            reference: record.paymentNo || record.reference || record.batchNumber || "",
+            particulars: "Supplier payment - " + (record.supplierName || "Supplier") + (record.batchNumber ? " (" + record.batchNumber + ")" : ""),
+            method: afARPaymentMethod(record),
+            received: 0,
+            paid: Number(record.amount || 0)
         });
     });
 
@@ -86408,37 +86700,73 @@ function afAROpenDebtorsLedger() {
 
 function afAROpenCreditorsLedger() {
     const suppliers = afARReadArray("afSuppliers");
-    const purchases = afARReadArray("afSupplierPurchases");
+    const materials = afARReadArray("materialRecords").filter(r =>
+        String(r.materialSource || "").toLowerCase() !== "client" && !afARIsCancelled(r)
+    );
+    const payments = afARReadArray("supplierPayments").filter(r => !afARIsCancelled(r));
 
-    const rows = suppliers.map(supplier => {
-        const supplierPurchases = purchases.filter(p => String(p.supplierId) === String(supplier.id));
-        const purchasesValue = supplierPurchases.reduce(
-            (sum, p) => sum + Number(p.totalCost || p.materialCost || 0),
-            0
-        );
-
-        return {
+    const supplierMap = new Map();
+    suppliers.forEach(supplier => {
+        supplierMap.set(String(supplier.id), {
+            supplierId: supplier.id,
             supplier: supplier.name || "",
             phone: supplier.phone || "",
             material: supplier.material || "",
-            purchases: purchasesValue,
-            payments: "Not yet linked",
-            balance: "Pending supplier-payment posting"
-        };
-    }).sort((a, b) => b.purchases - a.purchases);
+            purchases: 0,
+            payments: 0,
+            balance: 0
+        });
+    });
+
+    materials.forEach(record => {
+        const key = String(record.supplierId || "NAME:" + String(record.supplierName || "Unknown Supplier").toLowerCase());
+        if (!supplierMap.has(key)) {
+            supplierMap.set(key, {
+                supplierId: record.supplierId || "",
+                supplier: record.supplierName || "Unknown Supplier",
+                phone: "",
+                material: record.materialType || "",
+                purchases: 0,
+                payments: 0,
+                balance: 0
+            });
+        }
+        supplierMap.get(key).purchases += afSupplierMaterialDue(record);
+    });
+
+    payments.forEach(payment => {
+        let key = String(payment.supplierId || "NAME:" + String(payment.supplierName || "Unknown Supplier").toLowerCase());
+        if (!supplierMap.has(key)) {
+            supplierMap.set(key, {
+                supplierId: payment.supplierId || "",
+                supplier: payment.supplierName || "Unknown Supplier",
+                phone: "",
+                material: payment.materialType || "",
+                purchases: 0,
+                payments: 0,
+                balance: 0
+            });
+        }
+        supplierMap.get(key).payments += Number(payment.amount || 0);
+    });
+
+    const rows = Array.from(supplierMap.values()).map(row => ({
+        ...row,
+        balance: Math.max(row.purchases - row.payments, 0)
+    })).filter(row => row.purchases > 0 || row.payments > 0)
+      .sort((a, b) => b.balance - a.balance || a.supplier.localeCompare(b.supplier));
 
     afAROpenTableReport({
         id: "afCreditorsLedgerModal",
         title: "Supplier / Creditors Ledger",
-        subtitle: "Supplier purchase position",
-        note: "Supplier purchases are already available. Supplier payment records are not yet posted as a separate linked accounting stream, so this screen does not invent a creditor balance. The final balance will become automatic when supplier payments are connected.",
+        subtitle: "Supplier purchases, instalment payments and outstanding balances",
         columns: [
             { label: "Supplier", key: "supplier" },
             { label: "Phone", key: "phone" },
             { label: "Material", key: "material" },
             { label: "Purchase Value", value: r => afARMoney(r.purchases), csv: r => r.purchases },
-            { label: "Recorded Payments", key: "payments" },
-            { label: "Balance", key: "balance" }
+            { label: "Recorded Payments", value: r => afARMoney(r.payments), csv: r => r.payments },
+            { label: "Balance", value: r => afARMoney(r.balance), csv: r => r.balance }
         ],
         rows
     });
