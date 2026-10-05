@@ -15991,7 +15991,11 @@ manageEmployeeAccounts();
 function afMaterialReadRecords() {
   try {
     const value = JSON.parse(localStorage.getItem("materialRecords") || "[]");
-    return Array.isArray(value) ? value : [];
+    const rows = Array.isArray(value) ? value : [];
+    if (typeof afIsRecycledTransactionRecord === "function") {
+      return rows.filter(record => !afIsRecycledTransactionRecord(record));
+    }
+    return rows;
   } catch (error) {
     console.error("Material records read failed:", error);
     return [];
@@ -28099,6 +28103,32 @@ function afRecycleBinSave(rows) {
   localStorage.setItem(AF_RECYCLE_BIN_KEY, JSON.stringify(Array.isArray(rows) ? rows : []));
 }
 
+function afRecycleNorm(value) {
+  return String(value == null ? "" : value).trim().toUpperCase();
+}
+
+function afRecycleTransactionMatches(record, item) {
+  if (!record || !item) return false;
+  const pack = item.package || {};
+  const archived = Array.isArray(pack.materialRecords)
+    ? pack.materialRecords
+    : (pack.materialRecord ? [pack.materialRecord] : []);
+  const ids = new Set(archived.map(r => afRecycleNorm(r && r.id)).filter(Boolean));
+  const batches = new Set([
+    item.transactionNo,
+    ...archived.flatMap(r => [r && r.batchNumber, r && r.serviceJobNumber])
+  ].map(afRecycleNorm).filter(Boolean));
+  const recordId = afRecycleNorm(record.id || record.materialRecordId);
+  const recordBatch = afRecycleNorm(record.batchNumber || record.serviceJobNumber || record.kbNumber);
+  if (recordId && ids.has(recordId)) return true;
+  if (recordBatch && batches.has(recordBatch)) return true;
+  return false;
+}
+
+function afIsRecycledTransactionRecord(record) {
+  return afRecycleBinRead().some(item => afRecycleTransactionMatches(record, item));
+}
+
 function afRecycleEscape(value) {
   return String(value == null ? "" : value)
     .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
@@ -28133,12 +28163,15 @@ function afRecycleBinRestore(recycleId) {
   const item = bin.find(x=>String(x.recycleId)===String(recycleId));
   if (!item) return alert("Recycle Bin item not found.");
   const pack = item.package || {};
-  const material = pack.materialRecord;
-  if (material) {
-    const active = afMaterialReadRecords();
-    const clash = active.some(r=>String(r.id)===String(material.id) || (material.batchNumber && String(r.batchNumber||"")===String(material.batchNumber)));
+  const archivedMaterials = Array.isArray(pack.materialRecords) ? pack.materialRecords : (pack.materialRecord ? [pack.materialRecord] : []);
+  if (archivedMaterials.length) {
+    let active=[]; try{active=JSON.parse(localStorage.getItem("materialRecords")||"[]")||[];}catch(e){}
+    if(!Array.isArray(active)) active=[];
+    const clash = archivedMaterials.some(material => active.some(r=>String(r.id)===String(material.id) || (material.batchNumber && String(r.batchNumber||"")===String(material.batchNumber))));
     if (clash) return alert("Restore stopped because this transaction/batch already exists in active records.");
-    active.push(material); afMaterialSaveRecords(active);
+    active.push(...archivedMaterials);
+    localStorage.setItem("materialRecords",JSON.stringify(active));
+    localStorage.setItem("clientMaterialRecords",JSON.stringify(active.filter(r=>String(r.materialSource||"").toLowerCase()==="client")));
   }
   const restoreUnique=(key,items)=>{
     if (!Array.isArray(items) || !items.length) return;
@@ -28188,12 +28221,32 @@ function deleteMaterialRecord(id) {
   if(reason===null) return;
   if(!String(reason).trim()) return alert("Please enter a reason for deletion.");
 
+  let rawMaterials=[]; try{rawMaterials=JSON.parse(localStorage.getItem("materialRecords")||"[]")||[];}catch(e){}
   let supplierPayments=[]; try{supplierPayments=JSON.parse(localStorage.getItem("supplierPayments")||"[]")||[];}catch(e){}
   let supplierPurchases=[]; try{supplierPurchases=JSON.parse(localStorage.getItem("afSupplierPurchases")||"[]")||[];}catch(e){}
-  const linkedPayments=Array.isArray(supplierPayments)?supplierPayments.filter(p=>String(p.materialRecordId||"")===String(record.id||"")||(batch&&String(p.batchNumber||"").trim()===batch)):[];
-  const linkedPurchases=Array.isArray(supplierPurchases)?supplierPurchases.filter(p=>String(p.materialRecordId||"")===String(record.id||"")||(batch&&String(p.batchNumber||"").trim()===batch)):[];
+  if(!Array.isArray(rawMaterials)) rawMaterials=[];
+  if(!Array.isArray(supplierPayments)) supplierPayments=[];
+  if(!Array.isArray(supplierPurchases)) supplierPurchases=[];
 
-  if(!confirm("MOVE TO RECYCLE BIN\n\nTransaction: "+(batch||"-")+"\nParty: "+(record.supplierName||record.clientName||"-")+"\nAmount: "+afMaterialMoney(isClient?(record.serviceTotalDue||0):(record.totalCost||0))+"\nLinked supplier payments: "+linkedPayments.length+"\n\nIt will disappear from all active accounts and reports but can be restored by the Director.\n\nContinue?")) return;
+  const sameTransaction = row => {
+    if(!row) return false;
+    if(String(row.id||row.materialRecordId||"")===String(record.id||"")) return true;
+    const rowBatch=String(row.batchNumber||row.serviceJobNumber||row.kbNumber||"").trim();
+    return !!batch && rowBatch===batch;
+  };
+  const linkedMaterials=rawMaterials.filter(sameTransaction);
+  const linkedMaterialIds=new Set(linkedMaterials.map(r=>String(r.id||"")).filter(Boolean));
+  const linkedPurchases=supplierPurchases.filter(p=>
+    linkedMaterialIds.has(String(p.materialRecordId||"")) || sameTransaction(p)
+  );
+  const linkedPurchaseIds=new Set(linkedPurchases.map(p=>String(p.id||p.purchaseId||"")).filter(Boolean));
+  const linkedPayments=supplierPayments.filter(p=>
+    linkedMaterialIds.has(String(p.materialRecordId||"")) ||
+    linkedPurchaseIds.has(String(p.purchaseId||"")) ||
+    sameTransaction(p)
+  );
+
+  if(!confirm("MOVE TO RECYCLE BIN\n\nTransaction: "+(batch||"-")+"\nParty: "+(record.supplierName||record.clientName||"-")+"\nAmount: "+afMaterialMoney(isClient?(record.serviceTotalDue||0):(record.totalCost||0))+"\nLinked material records: "+linkedMaterials.length+"\nLinked supplier payments: "+linkedPayments.length+"\n\nIt will disappear from all active accounts and reports but can be restored by the Director.\n\nContinue?")) return;
 
   const recycleItem={
     recycleId:"RB-"+Date.now()+"-"+Math.random().toString(36).slice(2,7).toUpperCase(),
@@ -28201,14 +28254,20 @@ function deleteMaterialRecord(id) {
     transactionNo:batch||String(record.id||""), party:record.supplierName||record.clientName||"",
     amount:Number(isClient?(record.serviceTotalDue||0):(record.totalCost||0)), reason:String(reason).trim(),
     deletedAt:new Date().toISOString(), deletedBy:user.fullName||user.employeeName||user.name||user.employeeId||"Director",
-    package:{materialRecord:JSON.parse(JSON.stringify(record)),supplierPayments:JSON.parse(JSON.stringify(linkedPayments)),supplierPurchases:JSON.parse(JSON.stringify(linkedPurchases))}
+    package:{
+      materialRecord:JSON.parse(JSON.stringify(record)),
+      materialRecords:JSON.parse(JSON.stringify(linkedMaterials)),
+      supplierPayments:JSON.parse(JSON.stringify(linkedPayments)),
+      supplierPurchases:JSON.parse(JSON.stringify(linkedPurchases))
+    }
   };
   const bin=afRecycleBinRead(); bin.push(recycleItem); afRecycleBinSave(bin);
 
-  afMaterialSaveRecords(records.filter(x=>String(x.id)!==String(record.id)));
+  localStorage.setItem("materialRecords",JSON.stringify(rawMaterials.filter(x=>!linkedMaterials.includes(x))));
+  localStorage.setItem("clientMaterialRecords",JSON.stringify(rawMaterials.filter(x=>!linkedMaterials.includes(x)).filter(r=>String(r.materialSource||"").toLowerCase()==="client")));
   if(!isClient){
-    localStorage.setItem("supplierPayments",JSON.stringify((Array.isArray(supplierPayments)?supplierPayments:[]).filter(p=>!linkedPayments.includes(p))));
-    localStorage.setItem("afSupplierPurchases",JSON.stringify((Array.isArray(supplierPurchases)?supplierPurchases:[]).filter(p=>!linkedPurchases.includes(p))));
+    localStorage.setItem("supplierPayments",JSON.stringify(supplierPayments.filter(p=>!linkedPayments.includes(p))));
+    localStorage.setItem("afSupplierPurchases",JSON.stringify(supplierPurchases.filter(p=>!linkedPurchases.includes(p))));
   }
   const open=document.getElementById("afMaterialRecordsModal"); if(open) open.remove();
   alert("Transaction moved to Recycle Bin and removed from all active accounts and reports.");
@@ -86498,8 +86557,8 @@ function afARPaymentMethod(record) {
 function afARPaymentBook(methodGroup) {
     const customerPayments = afARReadArray("afCustomerPayments");
     const expenses = afARExpenses();
-    const materialRecords = afARReadArray("materialRecords");
-    const supplierPayments = afARReadArray("supplierPayments");
+    const materialRecords = afARReadArray("materialRecords").filter(record => !afIsRecycledTransactionRecord(record));
+    const supplierPayments = afARReadArray("supplierPayments").filter(record => !afIsRecycledTransactionRecord(record));
 
     const cashMethods = ["cash", "mobile money"];
     const bankMethods = ["bank transfer", "cheque"];
@@ -86681,6 +86740,7 @@ function afAROpenPurchasesRegister() {
      */
     const rows = afARReadArray("materialRecords")
         .filter(record =>
+            !afIsRecycledTransactionRecord(record) &&
             String(record.materialSource || "").toLowerCase() !== "client" &&
             !afARIsCancelled(record)
         )
@@ -86783,9 +86843,11 @@ function afAROpenDebtorsLedger() {
 function afAROpenCreditorsLedger() {
     const suppliers = afARReadArray("afSuppliers");
     const materials = afARReadArray("materialRecords").filter(r =>
+        !afIsRecycledTransactionRecord(r) &&
         String(r.materialSource || "").toLowerCase() !== "client" && !afARIsCancelled(r)
     );
     const payments = afARReadArray("supplierPayments").filter(r =>
+        !afIsRecycledTransactionRecord(r) &&
         !afARIsCancelled(r) &&
         materials.some(material =>
             String(r.materialRecordId || "") === String(material.id || "") ||
