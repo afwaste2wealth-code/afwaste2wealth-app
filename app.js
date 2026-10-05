@@ -17297,7 +17297,11 @@ function viewMaterialRecords() {
       rows += `
       <tr>
         <td>${afMaterialEscape(record.date || "-")}</td>
-        <td>${afMaterialEscape(record.batchNumber || "-")}</td>
+        <td>${
+           isClient
+           ?
+           afMaterialEscape(record.serviceJobNumber || "-")}</td>
+           afMaterialEscape(record.batchNumber || "-")}</td>           
         <td>${afMaterialEscape(source)}</td>
         <td>
           ${
