@@ -28073,66 +28073,126 @@ function editMaterialRecord(id) {
 
 function deleteMaterialRecord(id) {
   const records = afMaterialReadRecords();
-
-  const record = records.find(
-    item => String(item.id) === String(id)
-  );
+  const record = records.find(item => String(item.id) === String(id));
 
   if (!record) {
     alert("Material record not found.");
     return;
   }
 
-  const hasPayments =
-    Array.isArray(record.servicePaymentHistory) &&
-    record.servicePaymentHistory.some(
-      payment => Number(payment.amount || 0) > 0
-    );
+  const isClient = String(record.materialSource || "").toLowerCase() === "client";
+  const currentUser = afMaterialCurrentUser();
+  const role = String(currentUser.role || "").toLowerCase();
 
-  if (hasPayments) {
-    const role = String(
-      afMaterialCurrentUser().role || ""
-    ).toLowerCase();
+  /* Client-processing jobs keep their existing payment-history protection. */
+  if (isClient) {
+    const hasPayments =
+      Array.isArray(record.servicePaymentHistory) &&
+      record.servicePaymentHistory.some(payment => Number(payment.amount || 0) > 0);
 
-    if (role !== "director") {
+    if (hasPayments && role !== "director") {
       alert(
         "This client processing job has payment history.\n\n" +
         "Only the Director can delete it."
       );
       return;
     }
+
+    const confirmed = confirm(
+      hasPayments
+        ? "WARNING: This record has client payment history.\n\nDeleting it will also remove those service-payment records from the Material In account.\n\nContinue?"
+        : "Are you sure you want to delete this material record?"
+    );
+    if (!confirmed) return;
+
+    afMaterialSaveRecords(records.filter(item => String(item.id) !== String(id)));
+  } else {
+    /* Company KB purchase deletion is a Director-only accounting reversal. */
+    if (role !== "director") {
+      alert(
+        "Only the Director can delete a company material purchase and reverse its linked accounts."
+      );
+      return;
+    }
+
+    const batch = String(record.batchNumber || "").trim();
+    let washingRecords = [];
+    let productionRecords = [];
+    try { washingRecords = JSON.parse(localStorage.getItem("washingShiftRecords") || "[]") || []; } catch (e) {}
+    try { productionRecords = JSON.parse(localStorage.getItem("productionRecords") || "[]") || []; } catch (e) {}
+
+    const washingLinked = Array.isArray(washingRecords) && washingRecords.some(w => {
+      const candidates = [w.batchNumber, w.sourceBatchNumber, w.masterBatchNumber]
+        .map(v => String(v || "").trim());
+      return batch && candidates.includes(batch);
+    });
+
+    const productionLinked = Array.isArray(productionRecords) && productionRecords.some(p => {
+      if (!batch) return false;
+      if ([p.batchNumber, p.sourceBatchNumber, p.masterBatchNumber]
+          .map(v => String(v || "").trim()).includes(batch)) return true;
+      const sources = Array.isArray(p.washedSources) ? p.washedSources : [];
+      return sources.some(src => String(src.sourceBatchNumber || "").trim() === batch);
+    });
+
+    if (washingLinked || productionLinked || Number(record.totalWashedKg || 0) > 0) {
+      alert(
+        "PURCHASE CANNOT BE DELETED YET\n\n" +
+        "Batch " + (batch || "-") + " already has linked washing or production activity.\n\n" +
+        "Reverse the downstream washing/production records first. This protection prevents stock and production history from becoming incorrect."
+      );
+      return;
+    }
+
+    const linkedPayments = afSupplierPaymentReadAll().filter(payment =>
+      String(payment.materialRecordId || "") === String(record.id || "") ||
+      (batch && String(payment.batchNumber || "") === batch)
+    );
+    const paidTotal = linkedPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+
+    const confirmed = confirm(
+      "DIRECTOR — DELETE PURCHASE & REVERSE ALL LINKAGES\n\n" +
+      "Batch: " + (batch || "-") + "\n" +
+      "Supplier: " + (record.supplierName || "-") + "\n" +
+      "Purchase value: " + afMaterialMoney(record.totalCost || 0) + "\n" +
+      "Supplier payments to reverse: " + afMaterialMoney(paidTotal) + "\n\n" +
+      "This will remove the purchase from Material Records, Purchases Register and Creditors Ledger, and remove all supplier payments for this purchase from the Cash/Bank Books.\n\n" +
+      "Continue?"
+    );
+    if (!confirmed) return;
+
+    /* 1. Remove the authoritative company material purchase. */
+    afMaterialSaveRecords(records.filter(item => String(item.id) !== String(id)));
+
+    /* 2. Remove every supplier-payment instalment linked to this purchase. */
+    const remainingPayments = afSupplierPaymentReadAll().filter(payment =>
+      !(String(payment.materialRecordId || "") === String(record.id || "") ||
+        (batch && String(payment.batchNumber || "") === batch))
+    );
+    afSupplierPaymentSaveAll(remainingPayments);
+
+    /* 3. Remove mirror purchase rows so no orphan/duplicate remains. */
+    let purchases = [];
+    try { purchases = JSON.parse(localStorage.getItem("afSupplierPurchases") || "[]") || []; } catch (e) {}
+    if (!Array.isArray(purchases)) purchases = [];
+    purchases = purchases.filter(purchase =>
+      !(String(purchase.materialRecordId || "") === String(record.id || "") ||
+        (batch && String(purchase.batchNumber || "") === batch))
+    );
+    localStorage.setItem("afSupplierPurchases", JSON.stringify(purchases));
   }
 
-  const confirmed = confirm(
-    hasPayments
-      ? (
-          "WARNING: This record has client payment history.\n\n" +
-          "Deleting it will also remove those service-payment records " +
-          "from the Material In account.\n\nContinue?"
-        )
-      : "Are you sure you want to delete this material record?"
+  const openModal = document.getElementById("afMaterialRecordsModal");
+  if (openModal) openModal.remove();
+
+  alert(
+    isClient
+      ? "Material record deleted successfully."
+      : "Purchase deleted and all linked accounting entries reversed successfully."
   );
-
-  if (!confirmed) return;
-
-  const updated = records.filter(
-    item => String(item.id) !== String(id)
-  );
-
-  afMaterialSaveRecords(updated);
-
-  const openModal =
-    document.getElementById("afMaterialRecordsModal");
-
-  if (openModal) {
-    openModal.remove();
-  }
-
-  alert("Material record deleted successfully.");
 
   viewMaterialRecords();
 }
-
 
 /* =========================================================
    MOBILE NAVIGATION
@@ -86587,48 +86647,43 @@ function afAROpenSalesRegister() {
 }
 
 function afAROpenPurchasesRegister() {
-    let rows = afARReadArray("afSupplierPurchases");
-    const suppliers = afARReadArray("afSuppliers");
-
-    if (!rows.length) {
-        rows = afARReadArray("materialRecords")
-            .filter(record =>
-                String(record.materialSource || "").toLowerCase() !== "client" &&
-                !afARIsCancelled(record)
-            )
-            .map(record => ({
-                date: record.date || record.purchaseDate || record.createdAt,
-                supplierName: record.supplierName || record.supplier || "",
-                materialType: record.materialType || "Kavera",
-                grossKg: Number(record.grossKg || record.weightKg || record.quantityKg || 0),
-                acceptedKg: Number(record.acceptedKg || record.netKg || record.grossKg || 0),
-                pricePerKg: Number(record.pricePerKg || record.unitPrice || 0),
-                totalCost: Number(record.totalCost || record.purchaseCost || record.amount || 0)
-            }));
-    } else {
-        rows = rows.map(record => ({
-            ...record,
-            supplierName:
-                record.supplierName ||
-                suppliers.find(s => String(s.id) === String(record.supplierId))?.name ||
-                "Unknown Supplier"
-        }));
-    }
-
-    rows = rows.slice().sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+    /*
+     * Company materialRecords are the authoritative purchase source.
+     * afSupplierPurchases is only a linked mirror and is deliberately not
+     * merged here; merging both sources caused the same KB purchase to appear twice.
+     */
+    const rows = afARReadArray("materialRecords")
+        .filter(record =>
+            String(record.materialSource || "").toLowerCase() !== "client" &&
+            !afARIsCancelled(record)
+        )
+        .map(record => ({
+            materialRecordId: record.id,
+            batchNumber: record.batchNumber || "",
+            date: record.date || record.purchaseDate || record.createdAt,
+            supplierId: record.supplierId || "",
+            supplierName: record.supplierName || record.supplier || "Unknown Supplier",
+            materialType: record.materialType || "Kavera",
+            grossKg: Number(record.grossWeight || record.grossKg || record.weightKg || record.quantityKg || 0),
+            acceptedKg: Number(record.netWeight ?? record.openingBatchKg ?? record.acceptedKg ?? 0),
+            pricePerKg: Number(record.pricePerKg || record.unitPrice || 0),
+            totalCost: Number(record.totalCost || record.purchaseCost || record.amount || 0)
+        }))
+        .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
 
     afAROpenTableReport({
         id: "afPurchasesRegisterModal",
         title: "Purchases Register",
-        subtitle: "Raw material and supplier purchase history",
+        subtitle: "Raw material and supplier purchase history — one row per KB purchase",
         columns: [
             { label: "Date", value: r => afARFormatDate(r.date || r.createdAt) },
+            { label: "Batch", value: r => r.batchNumber || "" },
             { label: "Supplier", value: r => r.supplierName || "" },
             { label: "Material", value: r => r.materialType || "" },
             { label: "Gross KG", value: r => Number(r.grossKg || 0).toLocaleString(), csv: r => Number(r.grossKg || 0) },
             { label: "Accepted KG", value: r => Number(r.acceptedKg || 0).toLocaleString(), csv: r => Number(r.acceptedKg || 0) },
             { label: "Price/KG", value: r => afARMoney(r.pricePerKg || 0), csv: r => Number(r.pricePerKg || 0) },
-            { label: "Total Cost", value: r => afARMoney(r.totalCost || r.materialCost || 0), csv: r => Number(r.totalCost || r.materialCost || 0) }
+            { label: "Total Cost", value: r => afARMoney(r.totalCost || 0), csv: r => Number(r.totalCost || 0) }
         ],
         rows
     });
