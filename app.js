@@ -16108,7 +16108,10 @@ function afMaterialRecalculateClientService(record) {
       ? pelletKg * pelletRate
       : 0;
 
-  const subtotal = washingCharge + pelletizingCharge;
+  const truckCost = Math.max(Number(record.serviceTruckCost || 0), 0);
+  const miscellaneousExpenses = Math.max(Number(record.serviceMiscExpenses || 0), 0);
+
+  const subtotal = washingCharge + pelletizingCharge + truckCost + miscellaneousExpenses;
   const discount = Math.max(
     0,
     Math.min(Number(record.serviceDiscount || 0), subtotal)
@@ -16335,6 +16338,10 @@ ${header}
     <td>Pelletizing: ${Number(record.actualPelletWeight || 0).toLocaleString()} kg × ${afMaterialMoney(record.pelletizingRatePerKg || 0)}/kg</td>
     <td class="right">${afMaterialMoney(record.pelletizingCharge || 0)}</td>
   </tr>
+  <tr><td>Truck Cost</td><td class="right">${afMaterialMoney(record.serviceTruckCost || 0)}</td></tr>
+  <tr><td>Truck Particulars</td><td class="right">${afMaterialEscape(record.serviceTruckParticulars || "-")}</td></tr>
+  <tr><td>Miscellaneous Expenses</td><td class="right">${afMaterialMoney(record.serviceMiscExpenses || 0)}</td></tr>
+  <tr><td>Miscellaneous Reason</td><td class="right">${afMaterialEscape(record.serviceMiscReason || "-")}</td></tr>
   <tr><td>Gross Service Charge</td><td class="right">${afMaterialMoney(record.serviceSubtotal || 0)}</td></tr>
   <tr><td>Discount</td><td class="right">${afMaterialMoney(record.serviceDiscount || 0)}</td></tr>
   <tr><td><b>Net Service Charge</b></td><td class="right"><b>${afMaterialMoney(record.serviceTotalDue || 0)}</b></td></tr>
@@ -16499,6 +16506,15 @@ function recordMaterialIn() {
         </p>
       </div>
 
+      <label>Truck Cost (UGX)</label>
+      <input id="serviceTruckCost" type="number" min="0" step="1" value="0" style="width:100%;padding:10px;margin:6px 0 14px">
+      <label>Truck Particulars</label>
+      <input id="serviceTruckParticulars" type="text" placeholder="e.g. Fuso collection trip" style="width:100%;padding:10px;margin:6px 0 14px">
+      <label>Miscellaneous Expenses / Charges (UGX)</label>
+      <input id="serviceMiscExpenses" type="number" min="0" step="1" value="0" style="width:100%;padding:10px;margin:6px 0 14px">
+      <label>Reason for Miscellaneous Expense / Charge</label>
+      <input id="serviceMiscReason" type="text" placeholder="e.g. Bought packing bags" style="width:100%;padding:10px;margin:6px 0 14px">
+
       <label>Discount (UGX)</label>
       <input id="serviceDiscount" type="number" min="0" step="1" value="0"
         style="width:100%;padding:10px;margin:6px 0 14px">
@@ -16525,6 +16541,8 @@ function recordMaterialIn() {
       ">
         <b>Washing Charge:</b> <span id="washingChargePreview">UGX 0</span><br><br>
         <b>Pelletizing Charge:</b> <span id="pelletChargePreview">UGX 0</span><br><br>
+        <b>Truck Cost:</b> <span id="serviceTruckCostPreview">UGX 0</span><br><br>
+        <b>Miscellaneous:</b> <span id="serviceMiscPreview">UGX 0</span><br><br>
         <b>Gross Service Charge:</b> <span id="serviceSubtotalPreview">UGX 0</span><br><br>
         <b>Discount:</b> <span id="serviceDiscountPreview">UGX 0</span><br><br>
         <b>Net Service Charge:</b> <span id="serviceTotalDuePreview">UGX 0</span><br><br>
@@ -16576,6 +16594,8 @@ function recordMaterialIn() {
   const washingRate = modal.querySelector("#washingRatePerKg");
   const pelletWeight = modal.querySelector("#pelletWeight");
   const pelletRate = modal.querySelector("#pelletizingRatePerKg");
+  const truckCost = modal.querySelector("#serviceTruckCost");
+  const miscExpenses = modal.querySelector("#serviceMiscExpenses");
   const discount = modal.querySelector("#serviceDiscount");
   const paidNow = modal.querySelector("#serviceAmountPaidNow");
 
@@ -16658,7 +16678,9 @@ function recordMaterialIn() {
         ? pelletsKg * pelletRateValue
         : 0;
 
-    const subtotal = washingCharge + pelletCharge;
+    const truckCostValue = Math.max(Number(truckCost.value) || 0, 0);
+    const miscValue = Math.max(Number(miscExpenses.value) || 0, 0);
+    const subtotal = washingCharge + pelletCharge + truckCostValue + miscValue;
     const discountValue = Math.min(
       Math.max(Number(discount.value) || 0, 0),
       subtotal
@@ -16671,6 +16693,8 @@ function recordMaterialIn() {
       afMaterialMoney(washingCharge);
     modal.querySelector("#pelletChargePreview").textContent =
       afMaterialMoney(pelletCharge);
+    modal.querySelector("#serviceTruckCostPreview").textContent = afMaterialMoney(truckCostValue);
+    modal.querySelector("#serviceMiscPreview").textContent = afMaterialMoney(miscValue);
     modal.querySelector("#serviceSubtotalPreview").textContent =
       afMaterialMoney(subtotal);
     modal.querySelector("#serviceDiscountPreview").textContent =
@@ -16695,6 +16719,8 @@ function recordMaterialIn() {
     washingRate,
     pelletWeight,
     pelletRate,
+    truckCost,
+    miscExpenses,
     discount,
     paidNow
   ].forEach(input => {
@@ -16818,6 +16844,10 @@ function recordMaterialIn() {
 
         washingRatePerKg: washingRateValue,
         pelletizingRatePerKg: pelletRateValue,
+        serviceTruckCost: Math.max(Number(truckCost.value) || 0, 0),
+        serviceTruckParticulars: modal.querySelector("#serviceTruckParticulars").value.trim(),
+        serviceMiscExpenses: Math.max(Number(miscExpenses.value) || 0, 0),
+        serviceMiscReason: modal.querySelector("#serviceMiscReason").value.trim(),
         serviceDiscount: Number(discount.value) || 0,
 
         servicePaymentHistory: [],
@@ -27176,6 +27206,15 @@ function editMaterialRecord(id) {
             </div>
           </div>
 
+          <label>Truck Cost (UGX)</label>
+          <input id="editServiceTruckCost" type="number" min="0" step="1" value="${Number(record.serviceTruckCost || 0)}" style="width:100%;padding:10px;margin:6px 0 14px">
+          <label>Truck Particulars</label>
+          <input id="editServiceTruckParticulars" type="text" value="${afMaterialEscape(record.serviceTruckParticulars || "")}" style="width:100%;padding:10px;margin:6px 0 14px">
+          <label>Miscellaneous Expenses / Charges (UGX)</label>
+          <input id="editServiceMiscExpenses" type="number" min="0" step="1" value="${Number(record.serviceMiscExpenses || 0)}" style="width:100%;padding:10px;margin:6px 0 14px">
+          <label>Reason for Miscellaneous Expense / Charge</label>
+          <input id="editServiceMiscReason" type="text" value="${afMaterialEscape(record.serviceMiscReason || "")}" style="width:100%;padding:10px;margin:6px 0 14px">
+
           <label>Discount (UGX)</label>
           <input id="editServiceDiscount" type="number" min="0" step="1"
             value="${Number(record.serviceDiscount || 0)}"
@@ -27186,6 +27225,8 @@ function editMaterialRecord(id) {
           ">
             <b>Washing Charge:</b> <span id="editWashingChargePreview">${afMaterialMoney(record.washingCharge || 0)}</span><br><br>
             <b>Pelletizing Charge:</b> <span id="editPelletChargePreview">${afMaterialMoney(record.pelletizingCharge || 0)}</span><br><br>
+            <b>Truck Cost:</b> <span id="editTruckCostPreview">${afMaterialMoney(record.serviceTruckCost || 0)}</span><br><br>
+            <b>Miscellaneous:</b> <span id="editMiscPreview">${afMaterialMoney(record.serviceMiscExpenses || 0)}</span><br><br>
             <b>Gross Service Charge:</b> <span id="editSubtotalPreview">${afMaterialMoney(record.serviceSubtotal || 0)}</span><br><br>
             <b>Discount:</b> <span id="editDiscountPreview">${afMaterialMoney(record.serviceDiscount || 0)}</span><br><br>
             <b>Net Service Charge:</b> <span id="editTotalDuePreview">${afMaterialMoney(record.serviceTotalDue || 0)}</span><br><br>
@@ -27368,8 +27409,10 @@ function editMaterialRecord(id) {
         ? pelletKg * pelletRate
         : 0;
 
+    const truckCostValue = Math.max(Number(modal.querySelector("#editServiceTruckCost").value || 0), 0);
+    const miscValue = Math.max(Number(modal.querySelector("#editServiceMiscExpenses").value || 0), 0);
     const subtotal =
-      washingCharge + pelletCharge;
+      washingCharge + pelletCharge + truckCostValue + miscValue;
 
     const discount =
       Math.min(
@@ -27397,6 +27440,8 @@ function editMaterialRecord(id) {
     modal.querySelector("#editPelletChargePreview").textContent =
       afMaterialMoney(pelletCharge);
 
+    modal.querySelector("#editTruckCostPreview").textContent = afMaterialMoney(truckCostValue);
+    modal.querySelector("#editMiscPreview").textContent = afMaterialMoney(miscValue);
     modal.querySelector("#editSubtotalPreview").textContent =
       afMaterialMoney(subtotal);
 
@@ -27419,6 +27464,8 @@ function editMaterialRecord(id) {
       "#editWashingRate",
       "#editPelletWeight",
       "#editPelletRate",
+      "#editServiceTruckCost",
+      "#editServiceMiscExpenses",
       "#editServiceDiscount"
     ].forEach(selector => {
       modal.querySelector(selector)?.addEventListener(
@@ -27472,6 +27519,10 @@ function editMaterialRecord(id) {
       record.pelletWeight = pelletKg;
       record.actualPelletWeight = pelletKg;
       record.pelletizingRatePerKg = pelletRate;
+      record.serviceTruckCost = Math.max(Number(modal.querySelector("#editServiceTruckCost").value || 0), 0);
+      record.serviceTruckParticulars = modal.querySelector("#editServiceTruckParticulars").value.trim();
+      record.serviceMiscExpenses = Math.max(Number(modal.querySelector("#editServiceMiscExpenses").value || 0), 0);
+      record.serviceMiscReason = modal.querySelector("#editServiceMiscReason").value.trim();
       record.serviceDiscount =
         Number(modal.querySelector("#editServiceDiscount").value || 0);
 
