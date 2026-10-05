@@ -16285,19 +16285,20 @@ function afMaterialPrintServiceReceipt(record, payment) {
     typeof window.afSmartPrintHeader === "function"
       ? window.afSmartPrintHeader()
       : "<h2>A&F Wekavera Ltd</h2><div>Waste2Wealth Solutions</div>";
-
   const footer =
     typeof window.afSmartPrintFooter === "function"
       ? window.afSmartPrintFooter()
-      : "";
-
-  popup.document.write(`
+     : "";
+ 
+   popup.document.write(`
 <!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
 <title>${afMaterialEscape(payment.receiptNo || "Service Receipt")}</title>
 <style>
+${typeof window.afSmartPrintStyles === "function"
+  ? window.afSmartPrintStyles() : ""}
   body{font-family:Arial,sans-serif;color:#222;margin:0;padding:22px}
   .title{text-align:center;margin:12px 0 18px}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:7px 22px}
