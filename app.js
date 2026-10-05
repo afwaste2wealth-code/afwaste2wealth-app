@@ -16727,6 +16727,13 @@ function recordMaterialIn() {
   ].forEach(input => {
     input.addEventListener("input", calculateClientService);
   });
+modal.querySelector("#addSupplierFromMaterial").onclick = () => {
+  if (typeof afAddSupplierForm === "function") {
+afAddSupplierForm();
+  } else {
+    alert("Supplier form is not available.");
+  }
+};
 
   modal.querySelector("#cancelMaterial").onclick = () => {
     modal.remove();
