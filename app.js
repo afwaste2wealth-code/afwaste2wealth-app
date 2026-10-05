@@ -4984,6 +4984,13 @@ ${getShiftSettingsSummary()}
 <span>Configure Team of the Month scoring</span>
 </button>
 
+<button id="afRecycleBinBtn"
+          style="${systemSettingsButtonStyle()}">
+♻️
+<strong>Recycle Bin</strong>
+<span>Director restore or permanently delete transactions</span>
+</button>
+
 </div>
 
 </div>
@@ -5042,6 +5049,11 @@ modal.querySelector("#teamPerformanceBtn").onclick = () => {
 modal.remove();
 manageTeamPerformanceSettings();
   };
+
+modal.querySelector("#afRecycleBinBtn").onclick = () => {
+  modal.remove();
+  afRecycleBinOpen();
+};
 
 modal.querySelector("#employeeAccountsBtn").onclick = () => {
 modal.remove();
@@ -28071,126 +28083,135 @@ function editMaterialRecord(id) {
   refreshEditPreview();
 }
 
-function deleteMaterialRecord(id) {
-  const records = afMaterialReadRecords();
-  const record = records.find(item => String(item.id) === String(id));
+/* =========================================================
+   A&F RECYCLE BIN — LINKED TRANSACTION SAFETY
+   ========================================================= */
+const AF_RECYCLE_BIN_KEY = "afRecycleBin";
 
-  if (!record) {
-    alert("Material record not found.");
+function afRecycleBinRead() {
+  try {
+    const rows = JSON.parse(localStorage.getItem(AF_RECYCLE_BIN_KEY) || "[]");
+    return Array.isArray(rows) ? rows : [];
+  } catch (e) { return []; }
+}
+
+function afRecycleBinSave(rows) {
+  localStorage.setItem(AF_RECYCLE_BIN_KEY, JSON.stringify(Array.isArray(rows) ? rows : []));
+}
+
+function afRecycleEscape(value) {
+  return String(value == null ? "" : value)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/'/g,"&#039;");
+}
+
+function afRecycleBinOpen() {
+  const user = typeof afMaterialCurrentUser === "function" ? afMaterialCurrentUser() : {};
+  if (String(user.role || "").toLowerCase() !== "director") {
+    alert("Only the Director can access the Recycle Bin.");
     return;
   }
+  const old = document.getElementById("afRecycleBinModal");
+  if (old) old.remove();
+  const rows = afRecycleBinRead().slice().sort((a,b)=>String(b.deletedAt||"").localeCompare(String(a.deletedAt||"")));
+  const modal = document.createElement("div");
+  modal.id = "afRecycleBinModal";
+  modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.58);display:flex;align-items:center;justify-content:center;z-index:100000;font-family:Arial,sans-serif;padding:10px";
+  modal.innerHTML = `<div style="background:white;width:1100px;max-width:98%;max-height:94vh;overflow:auto;border-radius:14px;padding:22px;box-shadow:0 10px 40px rgba(0,0,0,.3)">
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:15px"><div><h2 style="margin:0;color:#0b5d3b">♻️ Recycle Bin</h2><div style="font-size:12px;color:#666;margin-top:4px">Director only • Deleted transactions are excluded from all active accounts and reports</div></div><button id="afCloseRecycleBin" style="padding:8px 14px;border:1px solid #ccc;border-radius:7px;background:white;cursor:pointer">✕ Close</button></div>
+    <div style="overflow:auto"><table style="width:100%;min-width:900px;border-collapse:collapse;font-size:12px"><thead><tr style="background:#eef8f2"><th style="padding:9px;text-align:left">Deleted</th><th style="padding:9px;text-align:left">Type</th><th style="padding:9px;text-align:left">Transaction</th><th style="padding:9px;text-align:left">Party</th><th style="padding:9px;text-align:left">Amount</th><th style="padding:9px;text-align:left">Reason</th><th style="padding:9px;text-align:left">Deleted By</th><th style="padding:9px;text-align:left">Action</th></tr></thead><tbody>
+    ${rows.length ? rows.map(item=>`<tr style="border-bottom:1px solid #eee"><td style="padding:9px">${afRecycleEscape(item.deletedAt ? new Date(item.deletedAt).toLocaleString() : "-")}</td><td style="padding:9px">${afRecycleEscape(item.type||"Transaction")}</td><td style="padding:9px;font-weight:bold">${afRecycleEscape(item.transactionNo||"-")}</td><td style="padding:9px">${afRecycleEscape(item.party||"-")}</td><td style="padding:9px">${typeof afMaterialMoney === "function" ? afMaterialMoney(item.amount||0) : Number(item.amount||0).toLocaleString()}</td><td style="padding:9px">${afRecycleEscape(item.reason||"-")}</td><td style="padding:9px">${afRecycleEscape(item.deletedBy||"-")}</td><td style="padding:9px;white-space:nowrap"><button onclick="afRecycleBinRestore('${afRecycleEscape(item.recycleId)}')" style="padding:7px 10px;border:0;border-radius:6px;background:#0b5d3b;color:white;cursor:pointer">↩ Restore</button><button onclick="afRecycleBinDeletePermanent('${afRecycleEscape(item.recycleId)}')" style="padding:7px 10px;border:0;border-radius:6px;background:#b42318;color:white;cursor:pointer;margin-left:5px">Delete Permanently</button></td></tr>`).join("") : `<tr><td colspan="8" style="padding:28px;text-align:center;color:#666">Recycle Bin is empty.</td></tr>`}
+    </tbody></table></div></div>`;
+  document.body.appendChild(modal);
+  modal.querySelector("#afCloseRecycleBin").onclick=()=>modal.remove();
+}
 
-  const isClient = String(record.materialSource || "").toLowerCase() === "client";
-  const currentUser = afMaterialCurrentUser();
-  const role = String(currentUser.role || "").toLowerCase();
+function afRecycleBinRestore(recycleId) {
+  const user = afMaterialCurrentUser();
+  if (String(user.role||"").toLowerCase() !== "director") return alert("Only the Director can restore transactions.");
+  const bin = afRecycleBinRead();
+  const item = bin.find(x=>String(x.recycleId)===String(recycleId));
+  if (!item) return alert("Recycle Bin item not found.");
+  const pack = item.package || {};
+  const material = pack.materialRecord;
+  if (material) {
+    const active = afMaterialReadRecords();
+    const clash = active.some(r=>String(r.id)===String(material.id) || (material.batchNumber && String(r.batchNumber||"")===String(material.batchNumber)));
+    if (clash) return alert("Restore stopped because this transaction/batch already exists in active records.");
+    active.push(material); afMaterialSaveRecords(active);
+  }
+  const restoreUnique=(key,items)=>{
+    if (!Array.isArray(items) || !items.length) return;
+    let active=[]; try { active=JSON.parse(localStorage.getItem(key)||"[]")||[]; } catch(e){}
+    if (!Array.isArray(active)) active=[];
+    items.forEach(row=>{ const id=String(row.id||row.paymentNo||row.purchaseId||""); if(!active.some(x=>String(x.id||x.paymentNo||x.purchaseId||"")===id && id)) active.push(row); });
+    localStorage.setItem(key,JSON.stringify(active));
+  };
+  restoreUnique("supplierPayments", pack.supplierPayments);
+  restoreUnique("afSupplierPurchases", pack.supplierPurchases);
+  afRecycleBinSave(bin.filter(x=>String(x.recycleId)!==String(recycleId)));
+  const modal=document.getElementById("afRecycleBinModal"); if(modal) modal.remove();
+  alert("Transaction restored successfully to all linked active records.");
+  afRecycleBinOpen();
+}
 
-  /* Client-processing jobs keep their existing payment-history protection. */
-  if (isClient) {
-    const hasPayments =
-      Array.isArray(record.servicePaymentHistory) &&
-      record.servicePaymentHistory.some(payment => Number(payment.amount || 0) > 0);
+function afRecycleBinDeletePermanent(recycleId) {
+  const user=afMaterialCurrentUser();
+  if(String(user.role||"").toLowerCase()!=="director") return alert("Only the Director can permanently delete transactions.");
+  const bin=afRecycleBinRead(); const item=bin.find(x=>String(x.recycleId)===String(recycleId));
+  if(!item) return alert("Recycle Bin item not found.");
+  if(!confirm("PERMANENT DELETE\n\n"+(item.transactionNo||"Transaction")+" will be permanently removed from the Recycle Bin and cannot be restored.\n\nContinue?")) return;
+  afRecycleBinSave(bin.filter(x=>String(x.recycleId)!==String(recycleId)));
+  const modal=document.getElementById("afRecycleBinModal"); if(modal) modal.remove();
+  alert("Transaction permanently deleted."); afRecycleBinOpen();
+}
 
-    if (hasPayments && role !== "director") {
-      alert(
-        "This client processing job has payment history.\n\n" +
-        "Only the Director can delete it."
-      );
-      return;
-    }
+function deleteMaterialRecord(id) {
+  const records=afMaterialReadRecords();
+  const record=records.find(item=>String(item.id)===String(id));
+  if(!record) return alert("Material record not found.");
+  const user=afMaterialCurrentUser();
+  if(String(user.role||"").toLowerCase()!=="director") return alert("Only the Director can move important transactions to the Recycle Bin.");
+  const isClient=String(record.materialSource||"").toLowerCase()==="client";
+  const batch=String(record.batchNumber||record.serviceJobNumber||"").trim();
 
-    const confirmed = confirm(
-      hasPayments
-        ? "WARNING: This record has client payment history.\n\nDeleting it will also remove those service-payment records from the Material In account.\n\nContinue?"
-        : "Are you sure you want to delete this material record?"
-    );
-    if (!confirmed) return;
-
-    afMaterialSaveRecords(records.filter(item => String(item.id) !== String(id)));
-  } else {
-    /* Company KB purchase deletion is a Director-only accounting reversal. */
-    if (role !== "director") {
-      alert(
-        "Only the Director can delete a company material purchase and reverse its linked accounts."
-      );
-      return;
-    }
-
-    const batch = String(record.batchNumber || "").trim();
-    let washingRecords = [];
-    let productionRecords = [];
-    try { washingRecords = JSON.parse(localStorage.getItem("washingShiftRecords") || "[]") || []; } catch (e) {}
-    try { productionRecords = JSON.parse(localStorage.getItem("productionRecords") || "[]") || []; } catch (e) {}
-
-    const washingLinked = Array.isArray(washingRecords) && washingRecords.some(w => {
-      const candidates = [w.batchNumber, w.sourceBatchNumber, w.masterBatchNumber]
-        .map(v => String(v || "").trim());
-      return batch && candidates.includes(batch);
-    });
-
-    const productionLinked = Array.isArray(productionRecords) && productionRecords.some(p => {
-      if (!batch) return false;
-      if ([p.batchNumber, p.sourceBatchNumber, p.masterBatchNumber]
-          .map(v => String(v || "").trim()).includes(batch)) return true;
-      const sources = Array.isArray(p.washedSources) ? p.washedSources : [];
-      return sources.some(src => String(src.sourceBatchNumber || "").trim() === batch);
-    });
-
-    if (washingLinked || productionLinked || Number(record.totalWashedKg || 0) > 0) {
-      alert(
-        "PURCHASE CANNOT BE DELETED YET\n\n" +
-        "Batch " + (batch || "-") + " already has linked washing or production activity.\n\n" +
-        "Reverse the downstream washing/production records first. This protection prevents stock and production history from becoming incorrect."
-      );
-      return;
-    }
-
-    const linkedPayments = afSupplierPaymentReadAll().filter(payment =>
-      String(payment.materialRecordId || "") === String(record.id || "") ||
-      (batch && String(payment.batchNumber || "") === batch)
-    );
-    const paidTotal = linkedPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-
-    const confirmed = confirm(
-      "DIRECTOR — DELETE PURCHASE & REVERSE ALL LINKAGES\n\n" +
-      "Batch: " + (batch || "-") + "\n" +
-      "Supplier: " + (record.supplierName || "-") + "\n" +
-      "Purchase value: " + afMaterialMoney(record.totalCost || 0) + "\n" +
-      "Supplier payments to reverse: " + afMaterialMoney(paidTotal) + "\n\n" +
-      "This will remove the purchase from Material Records, Purchases Register and Creditors Ledger, and remove all supplier payments for this purchase from the Cash/Bank Books.\n\n" +
-      "Continue?"
-    );
-    if (!confirmed) return;
-
-    /* 1. Remove the authoritative company material purchase. */
-    afMaterialSaveRecords(records.filter(item => String(item.id) !== String(id)));
-
-    /* 2. Remove every supplier-payment instalment linked to this purchase. */
-    const remainingPayments = afSupplierPaymentReadAll().filter(payment =>
-      !(String(payment.materialRecordId || "") === String(record.id || "") ||
-        (batch && String(payment.batchNumber || "") === batch))
-    );
-    afSupplierPaymentSaveAll(remainingPayments);
-
-    /* 3. Remove mirror purchase rows so no orphan/duplicate remains. */
-    let purchases = [];
-    try { purchases = JSON.parse(localStorage.getItem("afSupplierPurchases") || "[]") || []; } catch (e) {}
-    if (!Array.isArray(purchases)) purchases = [];
-    purchases = purchases.filter(purchase =>
-      !(String(purchase.materialRecordId || "") === String(record.id || "") ||
-        (batch && String(purchase.batchNumber || "") === batch))
-    );
-    localStorage.setItem("afSupplierPurchases", JSON.stringify(purchases));
+  if(!isClient){
+    let washing=[],production=[];
+    try{washing=JSON.parse(localStorage.getItem("washingShiftRecords")||"[]")||[];}catch(e){}
+    try{production=JSON.parse(localStorage.getItem("productionRecords")||"[]")||[];}catch(e){}
+    const washingLinked=Array.isArray(washing)&&washing.some(w=>batch&&[w.batchNumber,w.sourceBatchNumber,w.masterBatchNumber].map(v=>String(v||"").trim()).includes(batch));
+    const productionLinked=Array.isArray(production)&&production.some(p=>batch&&([p.batchNumber,p.sourceBatchNumber,p.masterBatchNumber].map(v=>String(v||"").trim()).includes(batch)||(Array.isArray(p.washedSources)&&p.washedSources.some(src=>String(src.sourceBatchNumber||"").trim()===batch))));
+    if(washingLinked||productionLinked||Number(record.totalWashedKg||0)>0) return alert("TRANSACTION CANNOT BE MOVED TO RECYCLE BIN YET\n\nBatch "+(batch||"-")+" has linked washing or production activity.\n\nReverse the downstream activity first so stock history remains correct.");
   }
 
-  const openModal = document.getElementById("afMaterialRecordsModal");
-  if (openModal) openModal.remove();
+  const reason=prompt("Reason for moving "+(batch||"this transaction")+" to the Recycle Bin:","");
+  if(reason===null) return;
+  if(!String(reason).trim()) return alert("Please enter a reason for deletion.");
 
-  alert(
-    isClient
-      ? "Material record deleted successfully."
-      : "Purchase deleted and all linked accounting entries reversed successfully."
-  );
+  let supplierPayments=[]; try{supplierPayments=JSON.parse(localStorage.getItem("supplierPayments")||"[]")||[];}catch(e){}
+  let supplierPurchases=[]; try{supplierPurchases=JSON.parse(localStorage.getItem("afSupplierPurchases")||"[]")||[];}catch(e){}
+  const linkedPayments=Array.isArray(supplierPayments)?supplierPayments.filter(p=>String(p.materialRecordId||"")===String(record.id||"")||(batch&&String(p.batchNumber||"").trim()===batch)):[];
+  const linkedPurchases=Array.isArray(supplierPurchases)?supplierPurchases.filter(p=>String(p.materialRecordId||"")===String(record.id||"")||(batch&&String(p.batchNumber||"").trim()===batch)):[];
 
+  if(!confirm("MOVE TO RECYCLE BIN\n\nTransaction: "+(batch||"-")+"\nParty: "+(record.supplierName||record.clientName||"-")+"\nAmount: "+afMaterialMoney(isClient?(record.serviceTotalDue||0):(record.totalCost||0))+"\nLinked supplier payments: "+linkedPayments.length+"\n\nIt will disappear from all active accounts and reports but can be restored by the Director.\n\nContinue?")) return;
+
+  const recycleItem={
+    recycleId:"RB-"+Date.now()+"-"+Math.random().toString(36).slice(2,7).toUpperCase(),
+    type:isClient?"Client Processing":"Supplier Purchase",
+    transactionNo:batch||String(record.id||""), party:record.supplierName||record.clientName||"",
+    amount:Number(isClient?(record.serviceTotalDue||0):(record.totalCost||0)), reason:String(reason).trim(),
+    deletedAt:new Date().toISOString(), deletedBy:user.fullName||user.employeeName||user.name||user.employeeId||"Director",
+    package:{materialRecord:JSON.parse(JSON.stringify(record)),supplierPayments:JSON.parse(JSON.stringify(linkedPayments)),supplierPurchases:JSON.parse(JSON.stringify(linkedPurchases))}
+  };
+  const bin=afRecycleBinRead(); bin.push(recycleItem); afRecycleBinSave(bin);
+
+  afMaterialSaveRecords(records.filter(x=>String(x.id)!==String(record.id)));
+  if(!isClient){
+    localStorage.setItem("supplierPayments",JSON.stringify((Array.isArray(supplierPayments)?supplierPayments:[]).filter(p=>!linkedPayments.includes(p))));
+    localStorage.setItem("afSupplierPurchases",JSON.stringify((Array.isArray(supplierPurchases)?supplierPurchases:[]).filter(p=>!linkedPurchases.includes(p))));
+  }
+  const open=document.getElementById("afMaterialRecordsModal"); if(open) open.remove();
+  alert("Transaction moved to Recycle Bin and removed from all active accounts and reports.");
   viewMaterialRecords();
 }
 
@@ -86537,6 +86558,12 @@ function afARPaymentBook(methodGroup) {
 
     supplierPayments.forEach(record => {
         if (afARIsCancelled(record)) return;
+        const linkedActivePurchase = materialRecords.some(material =>
+            String(material.materialSource || "").toLowerCase() !== "client" &&
+            (String(record.materialRecordId || "") === String(material.id || "") ||
+             (record.batchNumber && String(record.batchNumber || "").trim() === String(material.batchNumber || "").trim()))
+        );
+        if (!linkedActivePurchase) return;
         const method = afARPaymentMethod(record).toLowerCase();
         if (!wanted.includes(method)) return;
 
@@ -86758,7 +86785,13 @@ function afAROpenCreditorsLedger() {
     const materials = afARReadArray("materialRecords").filter(r =>
         String(r.materialSource || "").toLowerCase() !== "client" && !afARIsCancelled(r)
     );
-    const payments = afARReadArray("supplierPayments").filter(r => !afARIsCancelled(r));
+    const payments = afARReadArray("supplierPayments").filter(r =>
+        !afARIsCancelled(r) &&
+        materials.some(material =>
+            String(r.materialRecordId || "") === String(material.id || "") ||
+            (r.batchNumber && String(r.batchNumber || "").trim() === String(material.batchNumber || "").trim())
+        )
+    );
 
     const supplierMap = new Map();
     suppliers.forEach(supplier => {
@@ -89501,6 +89534,7 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
     "expenseRecords",
     "afSupplierPurchases",
     "supplierPayments",
+    "afRecycleBin",
     "attendanceRecords",
     "employeeAdvances",
     "employeeDeductions",
@@ -92991,6 +93025,11 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
 
     supplierPayments: {
       label: "Supplier Payments",
+      kind: "array"
+    },
+
+    afRecycleBin: {
+      label: "Recycle Bin",
       kind: "array"
     },
 
