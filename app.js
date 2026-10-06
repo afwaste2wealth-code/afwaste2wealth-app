@@ -98983,39 +98983,153 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
 
     if (!config) return;
 
-    if (
-      config.kind ===
-      "array"
-    ) {
+    /*
+     * IMPORTANT CLOUD REFRESH GUARD
+     * --------------------------------
+     * Realtime/cloud sync can send a record that is already identical to the
+     * local cache. Previously we wrote it again and refreshed the Director
+     * dashboard anyway. That made Supplier Performance and News visibly blink
+     * even though no business data had changed.
+     *
+     * Compare the current local value with the incoming cloud value first.
+     * If they are identical, clear the pending marker but do not rewrite the
+     * cache and do not redraw the dashboard.
+     */
+    if (config.kind === "array") {
+      const id =
+        String(
+          row?.source_record_id ||
+          ""
+        );
+
+      const records =
+        masterReadValue(
+          moduleKey
+        );
+
+      const list =
+        Array.isArray(records)
+          ? records
+          : [];
+
+      const index =
+        list.findIndex(
+          (record, recordIndex) =>
+            masterRecordId(
+              moduleKey,
+              record,
+              recordIndex
+            ) === id
+        );
+
+      let incoming =
+        row?.payload &&
+        typeof row.payload === "object"
+          ? masterClone(row.payload)
+          : {};
+
+      let current =
+        index >= 0
+          ? masterClone(list[index])
+          : null;
+
+      /*
+       * passwordHash is deliberately device-local and is not stored in cloud.
+       * Ignore it when deciding whether an employee record actually changed.
+       */
+      if (
+        moduleKey === "employees" &&
+        current &&
+        typeof current === "object"
+      ) {
+        delete current.passwordHash;
+      }
+
+      const unchanged =
+        index >= 0 &&
+        JSON.stringify(current) ===
+          JSON.stringify(incoming);
+
+      if (unchanged) {
+        masterClearPending(
+          moduleKey,
+          id
+        );
+        masterClearDeleted(
+          moduleKey,
+          id
+        );
+        return;
+      }
+
       masterMergeArrayRecord(
         moduleKey,
         row
       );
+
     } else if (
-      config.kind ===
-      "scalar"
+      config.kind === "scalar"
     ) {
-      masterWriteValue(
-        moduleKey,
+      const incomingValue =
         row?.payload?.value ??
         config.defaultValue ??
-        0
+        0;
+
+      const currentValue =
+        masterReadValue(
+          moduleKey
+        );
+
+      if (
+        JSON.stringify(currentValue) ===
+        JSON.stringify(incomingValue)
+      ) {
+        masterClearPending(
+          moduleKey,
+          "__value__"
+        );
+        return;
+      }
+
+      masterWriteValue(
+        moduleKey,
+        incomingValue
       );
 
       masterClearPending(
         moduleKey,
         "__value__"
       );
+
     } else {
-      masterWriteValue(
-        moduleKey,
+      const incomingValue =
         (
           row?.payload &&
           typeof row.payload ===
             "object"
         )
           ? row.payload
-          : {}
+          : {};
+
+      const currentValue =
+        masterReadValue(
+          moduleKey
+        );
+
+      if (
+        JSON.stringify(currentValue) ===
+        JSON.stringify(incomingValue)
+      ) {
+        masterClearPending(
+          moduleKey,
+          "__object__"
+        );
+        return;
+      }
+
+      masterWriteValue(
+        moduleKey,
+        incomingValue
       );
 
       masterClearPending(
@@ -99024,6 +99138,9 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
       );
     }
 
+    /*
+     * Only genuine cloud changes reach this point.
+     */
     refreshAfterMasterRemote(
       moduleKey
     );
@@ -103404,7 +103521,14 @@ afSMRenderDashboardCard
 
 window.addEventListener(
     "af-cloud-master-updated",
-afSMRenderDashboardCard
+    event => {
+      if (
+        event?.detail?.module ===
+        "afUpcomingEvents"
+      ) {
+        afSMRenderDashboardCard();
+      }
+    }
   );
 
 document.addEventListener(
