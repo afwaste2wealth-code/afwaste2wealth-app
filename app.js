@@ -89300,10 +89300,24 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
       supplier &&
       supplier.parentElement
     ) {
-      supplier.parentElement.insertBefore(
-        card,
-        supplier
-      );
+      /*
+       * NO-BLINK GUARD:
+       * positionCard() runs every 5 seconds. Moving an existing News card
+       * again when it is already directly above Supplier Performance creates
+       * a childList mutation and wakes dashboard observers.
+       *
+       * Only move News when its parent/position is genuinely wrong.
+       */
+      const alreadyCorrect =
+        card.parentElement === supplier.parentElement &&
+        card.nextElementSibling === supplier;
+
+      if (!alreadyCorrect) {
+        supplier.parentElement.insertBefore(
+          card,
+          supplier
+        );
+      }
 
       card.style.width = "100%";
       card.style.maxWidth = "100%";
@@ -89321,10 +89335,19 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
       checklist &&
       checklist.parentElement
     ) {
-      checklist.insertAdjacentElement(
-        "afterend",
-        card
-      );
+      /*
+       * Same no-blink protection for the Secretary dashboard.
+       */
+      const alreadyCorrect =
+        card.parentElement === checklist.parentElement &&
+        checklist.nextElementSibling === card;
+
+      if (!alreadyCorrect) {
+        checklist.insertAdjacentElement(
+          "afterend",
+          card
+        );
+      }
 
       card.style.width =
         checklist.style.width || "40%";
