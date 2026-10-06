@@ -92930,6 +92930,670 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
   );
 })();
 
+
+/* =========================================================
+   A&F PERFORMANCE HISTORY + PERFORMANCE REWARDS
+   - Director-only controls on Supplier / Client Performance
+   - Month-by-month performance history
+   - Reward records
+   - Reward cost posts automatically to Expenses
+   - afPerformanceRewards is included in Master Cloud Sync
+   ========================================================= */
+(function connectAFPerformanceHistoryAndRewards() {
+  "use strict";
+
+  if (window.__afPerformanceHistoryRewardsInstalled) return;
+  window.__afPerformanceHistoryRewardsInstalled = true;
+
+  const REWARD_KEY = "afPerformanceRewards";
+
+  function readArray(key) {
+    try {
+      const value = JSON.parse(localStorage.getItem(key) || "[]");
+      return Array.isArray(value) ? value : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function writeArray(key, value) {
+    localStorage.setItem(key, JSON.stringify(Array.isArray(value) ? value : []));
+  }
+
+  function esc(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function money(value) {
+    return (Number(value) || 0).toLocaleString();
+  }
+
+  function currentUser() {
+    try {
+      if (typeof getAFCurrentUser === "function") return getAFCurrentUser() || {};
+    } catch (_) {}
+    try {
+      return JSON.parse(localStorage.getItem("currentUser") || "{}") || {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function isDirector() {
+    return String(currentUser().role || "").toLowerCase() === "director";
+  }
+
+  function parseDate(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return null;
+
+    let match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      const d = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+      return isNaN(d.getTime()) ? null : d;
+    }
+
+    match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (match) {
+      const d = new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
+      return isNaN(d.getTime()) ? null : d;
+    }
+
+    const d = new Date(raw);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  function monthKey(date) {
+    if (!date) return "";
+    return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0");
+  }
+
+  function monthLabel(key) {
+    const match = String(key || "").match(/^(\d{4})-(\d{2})$/);
+    if (!match) return key || "";
+    return new Date(Number(match[1]), Number(match[2]) - 1, 1)
+      .toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  }
+
+  function startOfWeek(date) {
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const day = d.getDay() || 7;
+    d.setDate(d.getDate() - day + 1);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  function endOfWeek(date) {
+    const d = startOfWeek(date);
+    d.setDate(d.getDate() + 6);
+    d.setHours(23, 59, 59, 999);
+    return d;
+  }
+
+  function companyPurchases() {
+    return readArray("materialRecords")
+      .filter(record =>
+        String(record.materialSource || "").toLowerCase() !== "client" &&
+        String(record.status || "").toUpperCase() !== "CANCELLED"
+      )
+      .map(record => {
+        const gross = Number(
+          record.grossWeight ?? record.grossKg ?? record.weightKg ?? record.quantityKg ?? 0
+        ) || 0;
+
+        const accepted = Number(
+          record.netWeight ?? record.openingBatchKg ?? record.acceptedKg ?? 0
+        ) || 0;
+
+        const price = Number(record.pricePerKg ?? record.unitPrice ?? 0) || 0;
+        const materialCost = Number(
+          record.materialCost ?? record.purchaseCost ?? (accepted * price)
+        ) || 0;
+
+        return {
+          date: record.date || record.purchaseDate || record.createdAt || "",
+          supplierId: String(record.supplierId || "").trim(),
+          name: String(record.supplierName || record.supplier || "Unknown Supplier").trim(),
+          gross,
+          accepted,
+          dirt: Math.max(gross - accepted, 0),
+          value: materialCost
+        };
+      });
+  }
+
+  function poleSales() {
+    return readArray("afDeliveryRecords")
+      .filter(record =>
+        String(record.deliveryType || "").toLowerCase() === "poles" &&
+        String(record.status || "").toUpperCase() !== "CANCELLED"
+      )
+      .map(record => {
+        let qty = Number(record.totalPoles || record.quantity || 0) || 0;
+        if (qty <= 0 && Array.isArray(record.items)) {
+          qty = record.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+        }
+
+        const value = Number(
+          record.finalSaleTotal ??
+          record.netSaleTotal ??
+          record.saleAmount ??
+          record.grossSaleTotal ??
+          record.totalValue ??
+          0
+        ) || 0;
+
+        return {
+          date: record.date || record.createdAt || "",
+          customerId: String(record.customerId || "").trim(),
+          name: String(record.customerName || record.clientName || "Unknown Client").trim(),
+          qty,
+          value
+        };
+      });
+  }
+
+  function periodFilter(date, period, selectedMonth) {
+    if (!date) return false;
+    const now = new Date();
+
+    if (period === "overall") return true;
+    if (period === "monthHistory") return monthKey(date) === selectedMonth;
+    if (period === "month") return monthKey(date) === monthKey(now);
+
+    return date >= startOfWeek(now) && date <= endOfWeek(now);
+  }
+
+  function supplierWinner(period, selectedMonth) {
+    const totals = {};
+
+    companyPurchases().forEach(record => {
+      const date = parseDate(record.date);
+      if (!periodFilter(date, period, selectedMonth)) return;
+
+      const key = record.supplierId || record.name.toLowerCase();
+      if (!key) return;
+
+      if (!totals[key]) {
+        totals[key] = {
+          name: record.name,
+          quantity: 0,
+          value: 0,
+          deliveries: 0,
+          gross: 0,
+          dirt: 0
+        };
+      }
+
+      totals[key].quantity += record.accepted;
+      totals[key].value += record.value;
+      totals[key].deliveries += 1;
+      totals[key].gross += record.gross;
+      totals[key].dirt += record.dirt;
+    });
+
+    const winner = Object.values(totals)
+      .sort((a, b) => b.quantity - a.quantity || b.value - a.value)[0] || null;
+
+    if (winner) {
+      winner.dirtPercent = winner.gross > 0 ? (winner.dirt / winner.gross) * 100 : 0;
+    }
+
+    return winner;
+  }
+
+  function clientWinners(period, selectedMonth) {
+    const totals = {};
+
+    poleSales().forEach(record => {
+      const date = parseDate(record.date);
+      if (!periodFilter(date, period, selectedMonth)) return;
+
+      const key = record.customerId || record.name.toLowerCase();
+      if (!key) return;
+
+      if (!totals[key]) {
+        totals[key] = { name: record.name, quantity: 0, value: 0, deliveries: 0 };
+      }
+
+      totals[key].quantity += record.qty;
+      totals[key].value += record.value;
+      totals[key].deliveries += 1;
+    });
+
+    const rows = Object.values(totals);
+
+    return {
+      quantityWinner: rows.slice().sort(
+        (a, b) => b.quantity - a.quantity || b.value - a.value
+      )[0] || null,
+      revenueWinner: rows.slice().sort(
+        (a, b) => b.value - a.value || b.quantity - a.quantity
+      )[0] || null
+    };
+  }
+
+  function availableMonths(type) {
+    const source = type === "supplier" ? companyPurchases() : poleSales();
+    const keys = new Set();
+
+    source.forEach(record => {
+      const date = parseDate(record.date);
+      if (date) keys.add(monthKey(date));
+    });
+
+    return Array.from(keys).filter(Boolean).sort().reverse();
+  }
+
+  function rewardRows(type, month) {
+    return readArray(REWARD_KEY)
+      .filter(r =>
+        (!type || r.recipientType === type) &&
+        (!month || r.performanceMonth === month)
+      )
+      .sort((a, b) => String(b.awardDate || "").localeCompare(String(a.awardDate || "")));
+  }
+
+  function removeModal(id) {
+    document.getElementById(id)?.remove();
+  }
+
+  function openHistory(type) {
+    if (!isDirector()) return;
+
+    const title = type === "supplier" ? "Supplier Performance History" : "Client Performance History";
+    const months = availableMonths(type);
+    const initialMonth = months[0] || monthKey(new Date());
+
+    removeModal("afPerformanceHistoryModal");
+
+    const modal = document.createElement("div");
+    modal.id = "afPerformanceHistoryModal";
+    modal.style.cssText =
+      "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:18px;";
+
+    modal.innerHTML = `
+      <div style="background:#fff;width:min(900px,96vw);max-height:92vh;overflow:auto;border-radius:14px;padding:20px;">
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;">
+          <div>
+            <h2 style="margin:0;color:#0b5d3b;">📊 ${esc(title)}</h2>
+            <div style="font-size:12px;color:#666;margin-top:4px;">Historical winner, quantity, business value and rewards.</div>
+          </div>
+          <button id="afPHClose" style="border:0;background:#eee;border-radius:8px;padding:8px 12px;cursor:pointer;">✕ Close</button>
+        </div>
+
+        <div style="margin-top:16px;display:flex;gap:10px;align-items:end;flex-wrap:wrap;">
+          <label style="font-size:12px;font-weight:bold;">Month / Year<br>
+            <select id="afPHMonth" style="padding:9px;min-width:200px;border:1px solid #ccc;border-radius:7px;">
+              ${months.length
+                ? months.map(k => `<option value="${esc(k)}">${esc(monthLabel(k))}</option>`).join("")
+                : `<option value="${esc(initialMonth)}">${esc(monthLabel(initialMonth))}</option>`}
+            </select>
+          </label>
+          <button id="afPHAward" style="padding:9px 14px;border:0;border-radius:7px;background:#0b5d3b;color:#fff;font-weight:bold;cursor:pointer;">🏆 Award Reward</button>
+        </div>
+
+        <div id="afPHResult" style="margin-top:16px;"></div>
+        <div id="afPHRewards" style="margin-top:18px;"></div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const monthSelect = modal.querySelector("#afPHMonth");
+
+    function render() {
+      const selectedMonth = monthSelect.value;
+
+      if (type === "supplier") {
+        const winner = supplierWinner("monthHistory", selectedMonth);
+
+        modal.querySelector("#afPHResult").innerHTML = winner ? `
+          <div style="border:1px solid #d8e6de;border-radius:10px;padding:14px;">
+            <div style="font-size:12px;color:#8a6500;font-weight:bold;">🏆 Supplier of ${esc(monthLabel(selectedMonth))}</div>
+            <div style="font-size:20px;color:#0b5d3b;font-weight:bold;margin:5px 0 12px;">${esc(winner.name)}</div>
+            <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;font-size:12px;">
+              <div>Accepted<br><b>${money(winner.quantity)} kg</b></div>
+              <div>Purchase Value<br><b>UGX ${money(winner.value)}</b></div>
+              <div>Deliveries<br><b>${money(winner.deliveries)}</b></div>
+              <div>Average Dirt<br><b>${(Number(winner.dirtPercent)||0).toFixed(1)}%</b></div>
+            </div>
+          </div>` :
+          `<div style="padding:15px;border:1px solid #eee;border-radius:10px;color:#777;">No supplier purchases recorded in ${esc(monthLabel(selectedMonth))}.</div>`;
+      } else {
+        const winners = clientWinners("monthHistory", selectedMonth);
+        const card = (label, winner) => winner ? `
+          <div style="border:1px solid #d8e6de;border-radius:10px;padding:14px;">
+            <div style="font-size:12px;color:#8a6500;font-weight:bold;">🏆 ${esc(label)}</div>
+            <div style="font-size:18px;color:#0b5d3b;font-weight:bold;margin:5px 0 10px;">${esc(winner.name)}</div>
+            <div style="font-size:12px;">Poles: <b>${money(winner.quantity)}</b><br>Sales Value: <b>UGX ${money(winner.value)}</b><br>Deliveries: <b>${money(winner.deliveries)}</b></div>
+          </div>` :
+          `<div style="padding:15px;border:1px solid #eee;border-radius:10px;color:#777;">No pole sales recorded.</div>`;
+
+        modal.querySelector("#afPHResult").innerHTML = `
+          <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;">
+            ${card("Top Client by Pole Quantity", winners.quantityWinner)}
+            ${card("Top Client by Revenue", winners.revenueWinner)}
+          </div>`;
+      }
+
+      const rewards = rewardRows(type, selectedMonth);
+      modal.querySelector("#afPHRewards").innerHTML = `
+        <h3 style="margin:0 0 8px;color:#0b5d3b;">🎁 Rewards for ${esc(monthLabel(selectedMonth))}</h3>
+        ${rewards.length ? `
+          <div style="overflow:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;">
+              <thead><tr style="background:#f4f7f5;">
+                <th style="padding:8px;text-align:left;">Date</th>
+                <th style="padding:8px;text-align:left;">Recipient</th>
+                <th style="padding:8px;text-align:left;">Reward</th>
+                <th style="padding:8px;text-align:right;">Reward Cost</th>
+                <th style="padding:8px;text-align:left;">Performance</th>
+              </tr></thead>
+              <tbody>${rewards.map(r => `
+                <tr style="border-top:1px solid #eee;">
+                  <td style="padding:8px;">${esc(r.awardDate)}</td>
+                  <td style="padding:8px;"><b>${esc(r.recipientName)}</b></td>
+                  <td style="padding:8px;">${esc(r.rewardItem)} × ${money(r.rewardQuantity)}</td>
+                  <td style="padding:8px;text-align:right;">UGX ${money(r.totalRewardCost)}</td>
+                  <td style="padding:8px;">${money(r.performanceQuantity)} ${r.recipientType === "supplier" ? "kg" : "poles"} / UGX ${money(r.performanceValue)}</td>
+                </tr>`).join("")}
+              </tbody>
+            </table>
+          </div>` : `<div style="font-size:12px;color:#777;">No rewards recorded for this period.</div>`}
+      `;
+    }
+
+    monthSelect.onchange = render;
+    modal.querySelector("#afPHClose").onclick = () => modal.remove();
+    modal.querySelector("#afPHAward").onclick = () =>
+      openReward(type, "monthHistory", monthSelect.value, render);
+
+    render();
+  }
+
+  function expenseNumber(date, records) {
+    const cleanDate = String(date || "").replaceAll("-", "");
+    const count = records.filter(r => String(r.date || "") === String(date || "")).length;
+    return "EXP-" + cleanDate + "-" + String(count + 1).padStart(3, "0");
+  }
+
+  function openReward(type, period = "month", selectedMonth = "", afterSave) {
+    if (!isDirector()) {
+      alert("Only the Director can award performance rewards.");
+      return;
+    }
+
+    let winner;
+    let winnerReason = "";
+
+    if (type === "supplier") {
+      winner = supplierWinner(period, selectedMonth);
+      winnerReason = "Best Supplier";
+    } else {
+      const winners = clientWinners(period, selectedMonth);
+      winner = winners.quantityWinner;
+      winnerReason = "Top Client by Pole Quantity";
+    }
+
+    if (!winner) {
+      alert("There is no qualifying performance record for this period.");
+      return;
+    }
+
+    const now = new Date();
+    const awardDate =
+      now.getFullYear() + "-" +
+      String(now.getMonth() + 1).padStart(2, "0") + "-" +
+      String(now.getDate()).padStart(2, "0");
+
+    const performanceMonth =
+      period === "monthHistory"
+        ? selectedMonth
+        : period === "month"
+          ? monthKey(now)
+          : "";
+
+    const periodLabel =
+      period === "week" ? "Current Week" :
+      period === "overall" ? "Overall / All-Time" :
+      period === "monthHistory" ? monthLabel(selectedMonth) :
+      "Current Month";
+
+    removeModal("afPerformanceRewardModal");
+
+    const modal = document.createElement("div");
+    modal.id = "afPerformanceRewardModal";
+    modal.style.cssText =
+      "position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100000;display:flex;align-items:center;justify-content:center;padding:18px;";
+
+    modal.innerHTML = `
+      <div style="background:#fff;width:min(650px,96vw);max-height:92vh;overflow:auto;border-radius:14px;padding:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+          <h2 style="margin:0;color:#0b5d3b;">🏆 Award Performance Reward</h2>
+          <button id="afPRClose" style="border:0;background:#eee;border-radius:8px;padding:8px 12px;">✕</button>
+        </div>
+
+        <div style="margin-top:12px;padding:12px;background:#f4f8f5;border-radius:9px;font-size:13px;">
+          <b>${esc(winner.name)}</b><br>
+          ${esc(winnerReason)} — ${esc(periodLabel)}<br>
+          Performance: <b>${money(winner.quantity)} ${type === "supplier" ? "kg" : "poles"}</b><br>
+          Business Value: <b>UGX ${money(winner.value)}</b>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:15px;">
+          <label>Award Date<br><input id="afPRAwardDate" type="date" value="${esc(awardDate)}" style="width:100%;padding:9px;box-sizing:border-box;"></label>
+          <label>Reward Item<br>
+            <select id="afPRItem" style="width:100%;padding:9px;">
+              <option>Company Branded T-Shirt</option>
+              <option>Overall</option>
+              <option>Safety Boots</option>
+              <option>Reflector Jacket</option>
+              <option>Cap</option>
+              <option>Other Reward</option>
+            </select>
+          </label>
+          <label>Quantity<br><input id="afPRQty" type="number" min="1" step="1" value="1" style="width:100%;padding:9px;box-sizing:border-box;"></label>
+          <label>Unit Cost (UGX)<br><input id="afPRUnitCost" type="number" min="0" step="100" value="" placeholder="e.g. 35000" style="width:100%;padding:9px;box-sizing:border-box;"></label>
+          <label>Payment Method<br>
+            <select id="afPRMethod" style="width:100%;padding:9px;">
+              <option>Cash</option>
+              <option>Mobile Money</option>
+              <option>Bank Transfer</option>
+              <option>Cheque</option>
+            </select>
+          </label>
+          <label>Payment Reference<br><input id="afPRReference" type="text" placeholder="Optional" style="width:100%;padding:9px;box-sizing:border-box;"></label>
+        </div>
+
+        <label style="display:block;margin-top:12px;">Notes<br>
+          <textarea id="afPRNotes" rows="2" style="width:100%;padding:9px;box-sizing:border-box;" placeholder="Optional remarks"></textarea>
+        </label>
+
+        <div id="afPRTotal" style="margin-top:12px;font-weight:bold;color:#0b5d3b;">Reward Cost: UGX 0</div>
+
+        <div style="margin-top:16px;display:flex;justify-content:flex-end;gap:8px;">
+          <button id="afPRCancel" style="padding:10px 14px;border:1px solid #ccc;border-radius:8px;background:#fff;">Cancel</button>
+          <button id="afPRSave" style="padding:10px 14px;border:0;border-radius:8px;background:#0b5d3b;color:#fff;font-weight:bold;">💾 Save Reward & Expense</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const qtyInput = modal.querySelector("#afPRQty");
+    const costInput = modal.querySelector("#afPRUnitCost");
+    const totalBox = modal.querySelector("#afPRTotal");
+
+    function updateTotal() {
+      const total = (Number(qtyInput.value) || 0) * (Number(costInput.value) || 0);
+      totalBox.textContent = "Reward Cost: UGX " + money(total);
+    }
+
+    qtyInput.oninput = updateTotal;
+    costInput.oninput = updateTotal;
+    modal.querySelector("#afPRClose").onclick = () => modal.remove();
+    modal.querySelector("#afPRCancel").onclick = () => modal.remove();
+
+    modal.querySelector("#afPRSave").onclick = () => {
+      const date = modal.querySelector("#afPRAwardDate").value;
+      const rewardItem = modal.querySelector("#afPRItem").value;
+      const rewardQuantity = Number(qtyInput.value) || 0;
+      const unitCost = Number(costInput.value) || 0;
+      const totalRewardCost = rewardQuantity * unitCost;
+      const paymentMethod = modal.querySelector("#afPRMethod").value;
+      const paymentReference = modal.querySelector("#afPRReference").value.trim();
+      const notes = modal.querySelector("#afPRNotes").value.trim();
+
+      if (!date) return alert("Please select the award date.");
+      if (rewardQuantity <= 0) return alert("Please enter a valid reward quantity.");
+      if (unitCost <= 0) return alert("Please enter the actual unit cost of the reward.");
+
+      const user = currentUser();
+      const rewards = readArray(REWARD_KEY);
+      const rewardId = "RWD-" + Date.now();
+
+      rewards.push({
+        id: rewardId,
+        awardDate: date,
+        recipientType: type,
+        recipientName: winner.name,
+        performancePeriod: period,
+        performancePeriodLabel: periodLabel,
+        performanceMonth,
+        performanceQuantity: Number(winner.quantity) || 0,
+        performanceValue: Number(winner.value) || 0,
+        performanceReason: winnerReason,
+        rewardItem,
+        rewardQuantity,
+        unitCost,
+        totalRewardCost,
+        paymentMethod,
+        paymentReference,
+        notes,
+        status: "COMPLETED",
+        awardedByEmployeeId: user.employeeId || "",
+        awardedByName: user.fullName || user.employeeName || "",
+        awardedByRole: user.role || "",
+        createdAt: new Date().toISOString()
+      });
+
+      writeArray(REWARD_KEY, rewards);
+
+      /*
+       * Accounting linkage:
+       * Every issued reward is also a normal company expense.
+       * This makes it appear in Expense Register, Cash/Bank Book
+       * and the existing expense-based reports.
+       */
+      const expenses =
+        readArray("expenses").length
+          ? readArray("expenses")
+          : readArray("expenseRecords");
+
+      const expNo = expenseNumber(date, expenses);
+
+      expenses.push({
+        id: Date.now() + 1,
+        expenseNumber: expNo,
+        date,
+        category: "Performance Rewards",
+        payee: winner.name,
+        description:
+          rewardItem + " performance reward - " +
+          winnerReason + " (" + periodLabel + ")",
+        amount: totalRewardCost,
+        paymentMethod,
+        reference: paymentReference || rewardId,
+        notes:
+          "Performance: " + money(winner.quantity) +
+          (type === "supplier" ? " kg" : " poles") +
+          "; Business value: UGX " + money(winner.value) +
+          (notes ? "; " + notes : ""),
+        status: "COMPLETED",
+        performanceRewardId: rewardId,
+        recordedByEmployeeId: user.employeeId || "",
+        recordedByName: user.fullName || user.employeeName || "",
+        recordedByRole: user.role || "",
+        createdAt: new Date().toISOString()
+      });
+
+      writeArray("expenses", expenses);
+      writeArray("expenseRecords", expenses);
+
+      alert(
+        "Performance reward recorded successfully.\n\n" +
+        "Recipient: " + winner.name + "\n" +
+        "Reward: " + rewardItem + " × " + rewardQuantity + "\n" +
+        "Expense: UGX " + money(totalRewardCost) + "\n" +
+        "Expense No: " + expNo
+      );
+
+      modal.remove();
+
+      if (typeof afterSave === "function") afterSave();
+    };
+  }
+
+  function addControls(cardId, type) {
+    const card = document.getElementById(cardId);
+    if (!card || card.querySelector(".afPerformanceHistoryRewardControls")) return;
+
+    const controls = document.createElement("div");
+    controls.className = "afPerformanceHistoryRewardControls";
+    controls.style.cssText =
+      "display:flex;gap:7px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid #e7ece9;";
+
+    controls.innerHTML = `
+      <button class="afPHHistoryBtn" style="border:1px solid #0b5d3b;background:#fff;color:#0b5d3b;border-radius:7px;padding:7px 9px;font-size:11px;font-weight:bold;cursor:pointer;">📊 Performance History</button>
+      <button class="afPHAwardBtn" style="border:0;background:#0b5d3b;color:#fff;border-radius:7px;padding:7px 9px;font-size:11px;font-weight:bold;cursor:pointer;">🏆 Award Reward</button>
+    `;
+
+    card.appendChild(controls);
+
+    controls.querySelector(".afPHHistoryBtn").onclick = () => openHistory(type);
+    controls.querySelector(".afPHAwardBtn").onclick = () => {
+      const choice = prompt(
+        "Award reward for which performance period?\n\n" +
+        "1 = Current Week\n" +
+        "2 = Current Month\n" +
+        "3 = Overall / All-Time",
+        "2"
+      );
+
+      if (choice === null) return;
+
+      const period =
+        String(choice).trim() === "1" ? "week" :
+        String(choice).trim() === "3" ? "overall" :
+        "month";
+
+      openReward(type, period);
+    };
+  }
+
+  function installControls() {
+    if (!isDirector()) return;
+    addControls("afSupplierPerformanceDashboardCard", "supplier");
+    addControls("afClientPerformanceDashboardCard", "client");
+  }
+
+  const observer = new MutationObserver(() => installControls());
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+
+  document.addEventListener("DOMContentLoaded", () => setTimeout(installControls, 400));
+  setTimeout(installControls, 700);
+
+  window.openAFSupplierPerformanceHistory = () => openHistory("supplier");
+  window.openAFClientPerformanceHistory = () => openHistory("client");
+})();
+
+
 /* =========================================================
    A&F WEKAVERA LTD - CLOUD SYNC MASTER (STAGES 1 - 5)
    Supabase secure multi-device master data bridge
@@ -93317,6 +93981,11 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
     },
     afUpcomingEvents: {
       label: "Upcoming Events",
+      kind: "array"
+    },
+
+    afPerformanceRewards: {
+      label: "Performance Rewards",
       kind: "array"
     }
 
