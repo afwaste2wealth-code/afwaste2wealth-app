@@ -93224,6 +93224,12 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
   function openHistory(type) {
     if (!isDirector()) return;
 
+    /*
+     * Ignore rapid repeated clicks while the same history window is open.
+     * This prevents duplicate work and duplicate modals.
+     */
+    if (document.getElementById("afPerformanceHistoryModal")) return;
+
     const title =
       type === "supplier"
         ? "Supplier Performance History"
@@ -93235,8 +93241,6 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
      * the modal is visible, so the Director never waits for the window
      * itself to appear.
      */
-    removeModal("afPerformanceHistoryModal");
-
     const modal = document.createElement("div");
     modal.id = "afPerformanceHistoryModal";
     modal.style.cssText =
@@ -93357,10 +93361,11 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
      * Defer all history calculations until the browser has painted
      * the modal. This is the key speed improvement.
      */
-    setTimeout(() => {
-      if (!document.body.contains(modal)) return;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!document.body.contains(modal)) return;
 
-      const months = availableMonths(type);
+        const months = availableMonths(type);
       const currentMonth = monthKey(new Date());
 
       /*
@@ -93392,8 +93397,9 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
       awardButton.disabled = false;
       awardButton.style.opacity = "1";
 
-      render();
-    }, 0);
+        render();
+      });
+    });
   }
 
   function expenseNumber(date, records) {
@@ -93571,9 +93577,13 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
        * and the existing expense-based reports.
        */
       const expenses =
-        readArray("expenses").length
-          ? readArray("expenses")
-          : readArray("expenseRecords");
+        typeof window.getAFExpenseRecords === "function"
+          ? window.getAFExpenseRecords()
+          : (
+              readArray("expenses").length
+                ? readArray("expenses")
+                : readArray("expenseRecords")
+            );
 
       const expNo = expenseNumber(date, expenses);
 
@@ -93668,22 +93678,26 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
    * could make the large Director dashboard sluggish. We now schedule at
    * most one lightweight check per 250 ms.
    */
-  let afPerformanceInstallTimer = null;
+  let afPerformanceInstallPending = false;
 
   function scheduleInstallControls() {
-    if (afPerformanceInstallTimer) return;
+    if (afPerformanceInstallPending) return;
+    afPerformanceInstallPending = true;
 
-    afPerformanceInstallTimer = setTimeout(() => {
-      afPerformanceInstallTimer = null;
+    requestAnimationFrame(() => {
+      afPerformanceInstallPending = false;
       installControls();
-    }, 250);
+    });
   }
 
   const observer = new MutationObserver(scheduleInstallControls);
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  observer.observe(document.body || document.documentElement, {
+    childList: true,
+    subtree: true
+  });
 
-  document.addEventListener("DOMContentLoaded", () => setTimeout(installControls, 250));
-  setTimeout(installControls, 500);
+  document.addEventListener("DOMContentLoaded", installControls);
+  setTimeout(installControls, 100);
 
   window.openAFSupplierPerformanceHistory = () => openHistory("supplier");
   window.openAFClientPerformanceHistory = () => openHistory("client");
@@ -93691,53 +93705,11 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
   window.openAFClientPerformanceReward = () => openReward("client", "month");
 
   /*
-   * Robust delegated click handling.
-   * The Director dashboard can redraw its performance cards after this
-   * module installs. Delegation keeps History / Award Reward working even
-   * when those buttons are recreated by a dashboard refresh.
+   * Buttons use their own direct handlers.
+   * The lightweight observer below re-installs controls if either
+   * performance card is redrawn.
    */
-  document.addEventListener("click", function afPerformanceActionClick(event) {
-    const historyButton = event.target.closest(".afPHHistoryBtn");
-    const awardButton = event.target.closest(".afPHAwardBtn");
 
-    if (!historyButton && !awardButton) return;
-
-    const card = event.target.closest(
-      "#afSupplierPerformanceDashboardCard, #afClientPerformanceDashboardCard"
-    );
-
-    if (!card) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    const type =
-      card.id === "afSupplierPerformanceDashboardCard"
-        ? "supplier"
-        : "client";
-
-    if (historyButton) {
-      openHistory(type);
-      return;
-    }
-
-    const choice = prompt(
-      "Award reward for which performance period?\n\n" +
-      "1 = Current Week\n" +
-      "2 = Current Month\n" +
-      "3 = Overall / All-Time",
-      "2"
-    );
-
-    if (choice === null) return;
-
-    const period =
-      String(choice).trim() === "1" ? "week" :
-      String(choice).trim() === "3" ? "overall" :
-      "month";
-
-    openReward(type, period);
-  }, true);
 })();
 
 
