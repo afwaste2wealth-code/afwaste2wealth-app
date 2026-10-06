@@ -75054,6 +75054,8 @@ afParseDate(p.date);
 
         if (!date) return false;
 
+        if (period === "overall") return true;
+
         return period === "week"
           ? afInCurrentWeek(date)
           : afInCurrentMonth(date);
@@ -75352,6 +75354,9 @@ afSupplierWinner("week");
 const monthWinner =
 afSupplierWinner("month");
 
+const overallWinner =
+afSupplierWinner("overall");
+
 
     let card = old;
 
@@ -75418,6 +75423,11 @@ weekWinner
         ${afWinnerHTML(
           "Supplier of the Month",
 monthWinner
+        )}
+
+        ${afWinnerHTML(
+          "Overall Best Supplier",
+overallWinner
         )}
 
 </div>
@@ -75788,6 +75798,10 @@ d.setHours(
 const now =
       new Date();
 
+
+    if (period === "overall") {
+      return true;
+    }
 
     if (period === "week") {
 
@@ -76289,6 +76303,11 @@ afClientWinners(
         "month"
       );
 
+const overall =
+afClientWinners(
+        "overall"
+      );
+
 
     let card =
       old;
@@ -76356,6 +76375,11 @@ display:grid;
         ${afClientPeriodCard(
           "Client of the Month",
           month
+        )}
+
+        ${afClientPeriodCard(
+          "Overall Best Client",
+          overall
         )}
 
 </div>
