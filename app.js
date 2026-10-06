@@ -15991,11 +15991,7 @@ manageEmployeeAccounts();
 function afMaterialReadRecords() {
   try {
     const value = JSON.parse(localStorage.getItem("materialRecords") || "[]");
-    const rows = Array.isArray(value) ? value : [];
-    if (typeof afIsRecycledTransactionRecord === "function") {
-      return rows.filter(record => !afIsRecycledTransactionRecord(record));
-    }
-    return rows;
+    return Array.isArray(value) ? value : [];
   } catch (error) {
     console.error("Material records read failed:", error);
     return [];
@@ -16495,6 +16491,16 @@ function recordMaterialIn() {
       <input id="transportCost" type="number" min="0" step="1" value="0"
         style="width:100%;padding:10px;margin:6px 0 14px">
 
+      <label>Miscellaneous Expenses (UGX)</label>
+      <input id="companyMiscExpenses" type="number" min="0" step="1" value="0"
+        placeholder="e.g. loading, packaging bags, market dues"
+        style="width:100%;padding:10px;margin:6px 0 14px">
+
+      <label>Reason / Particulars for Miscellaneous Expense</label>
+      <input id="companyMiscReason" type="text"
+        placeholder="Required when miscellaneous expense is above zero"
+        style="width:100%;padding:10px;margin:6px 0 14px">
+
       <div style="border-top:1px solid #d9e8df;margin:8px 0 14px;padding-top:14px">
         <b style="color:#0b5d3b">Supplier Payment</b>
         <div style="font-size:12px;color:#666;margin:5px 0 12px">
@@ -16599,6 +16605,7 @@ function recordMaterialIn() {
       <b>Net Usable Weight / Opening KB Stock:</b> <span id="netWeight">0 kg</span><br><br>
       <b>Material Cost / Supplier Amount Due:</b> <span id="materialCost">UGX 0</span><br><br>
       <b>Transport Cost:</b> <span id="companyTransportPreview">UGX 0</span><br><br>
+      <b>Miscellaneous Expenses:</b> <span id="companyMiscPreview">UGX 0</span><br><br>
       <b>Total Purchase Cost:</b> <span id="totalCost">UGX 0</span><br><br>
       <b>Paid to Supplier Now:</b> <span id="supplierPaidPreview">UGX 0</span><br><br>
       <b>Supplier Balance:</b> <span id="supplierBalancePreview">UGX 0</span>
@@ -16634,6 +16641,7 @@ function recordMaterialIn() {
   const dirt = modal.querySelector("#dirtPercent");
   const price = modal.querySelector("#pricePerKg");
   const transport = modal.querySelector("#transportCost");
+  const companyMiscExpenses = modal.querySelector("#companyMiscExpenses");
   const supplierPaidNow = modal.querySelector("#supplierAmountPaidNow");
   const washingRate = modal.querySelector("#washingRatePerKg");
   const pelletWeight = modal.querySelector("#pelletWeight");
@@ -16678,12 +16686,13 @@ function recordMaterialIn() {
     const g = Number(gross.value) || 0;
     const d = Number(dirt.value) || 0;
     const p = Number(price.value) || 0;
-    const t = Number(transport.value) || 0;
+    const t = Math.max(Number(transport.value) || 0, 0);
+    const m = Math.max(Number(companyMiscExpenses.value) || 0, 0);
 
     const dirtKg = g * (d / 100);
     const net = g - dirtKg;
     const materialCost = net * p;
-    const total = materialCost + t;
+    const total = materialCost + t + m;
 
     modal.querySelector("#summaryGrossWeight").textContent =
       g.toLocaleString() + " kg";
@@ -16701,6 +16710,8 @@ function recordMaterialIn() {
       afMaterialMoney(materialCost);
     modal.querySelector("#companyTransportPreview").textContent =
       afMaterialMoney(t);
+    modal.querySelector("#companyMiscPreview").textContent =
+      afMaterialMoney(m);
     modal.querySelector("#totalCost").textContent =
       afMaterialMoney(total);
     modal.querySelector("#supplierPaidPreview").textContent =
@@ -16762,7 +16773,7 @@ function recordMaterialIn() {
   source.addEventListener("change", updateForm);
   clientService.addEventListener("change", updateForm);
 
-  [gross, dirt, price, transport, supplierPaidNow].forEach(input => {
+  [gross, dirt, price, transport, companyMiscExpenses, supplierPaidNow].forEach(input => {
     input.addEventListener("input", calculateCompanyMaterial);
   });
 
@@ -17015,8 +17026,14 @@ afAddSupplierForm();
     const purchasePrice =
       Number(price.value) || 0;
 
-    const transportCost =
-      Number(transport.value) || 0;
+    const transportCost = Math.max(Number(transport.value) || 0, 0);
+    const companyMiscExpense = Math.max(Number(companyMiscExpenses.value) || 0, 0);
+    const companyMiscReason = modal.querySelector("#companyMiscReason").value.trim();
+
+    if (companyMiscExpense > 0 && !companyMiscReason) {
+      alert("Please enter the reason / particulars for the miscellaneous expense.");
+      return;
+    }
 
     const materialCost = netKg * purchasePrice;
     const initialSupplierPayment = Math.max(Number(supplierPaidNow.value) || 0, 0);
@@ -17085,10 +17102,13 @@ afAddSupplierForm();
 
       pricePerKg: purchasePrice,
       transportCost,
+      miscellaneousExpenses: companyMiscExpense,
+      miscellaneousReason: companyMiscReason,
       materialCost,
       totalCost:
         materialCost +
-        transportCost,
+        transportCost +
+        companyMiscExpense,
 
       supplierAmountPaid: initialSupplierPayment,
       supplierBalance: Math.max(materialCost - initialSupplierPayment, 0),
@@ -17404,6 +17424,8 @@ function afEnsureSupplierPurchaseFromMaterial(record) {
     pricePerKg: Number(record.pricePerKg || 0),
     materialCost: afSupplierMaterialDue(record),
     transportCost: Number(record.transportCost || 0),
+    miscellaneousExpenses: Number(record.miscellaneousExpenses || 0),
+    miscellaneousReason: record.miscellaneousReason || "",
     totalCost: Number(record.totalCost || 0),
     updatedAt: new Date().toISOString()
   });
@@ -27600,6 +27622,16 @@ function editMaterialRecord(id) {
             value="${Number(record.transportCost || 0)}"
             style="width:100%;padding:10px;margin:6px 0 14px">
 
+          <label>Miscellaneous Expenses (UGX)</label>
+          <input id="editCompanyMiscExpenses" type="number" min="0" step="1"
+            value="${Number(record.miscellaneousExpenses || 0)}"
+            style="width:100%;padding:10px;margin:6px 0 14px">
+
+          <label>Reason / Particulars for Miscellaneous Expense</label>
+          <input id="editCompanyMiscReason" type="text"
+            value="${afMaterialEscape(record.miscellaneousReason || "")}"
+            style="width:100%;padding:10px;margin:6px 0 14px">
+
           <div id="editCompanySummary" style="
             background:#eef8f2;padding:15px;border-radius:8px;margin:15px 0;
           ">
@@ -27640,13 +27672,15 @@ function editMaterialRecord(id) {
       const pricePerKg =
         Number(modal.querySelector("#editPricePerKg")?.value || 0);
       const transportCost =
-        Number(modal.querySelector("#editTransportCost")?.value || 0);
+        Math.max(Number(modal.querySelector("#editTransportCost")?.value || 0), 0);
+      const miscExpense =
+        Math.max(Number(modal.querySelector("#editCompanyMiscExpenses")?.value || 0), 0);
 
       const netKg =
         grossKg * (1 - dirtPercent / 100);
 
       const totalCost =
-        (netKg * pricePerKg) + transportCost;
+        (netKg * pricePerKg) + transportCost + miscExpense;
 
       const netPreview =
         modal.querySelector("#editCompanyNetPreview");
@@ -27873,7 +27907,8 @@ function editMaterialRecord(id) {
       "#editGrossWeight",
       "#editDirtPercent",
       "#editPricePerKg",
-      "#editTransportCost"
+      "#editTransportCost",
+      "#editCompanyMiscExpenses"
     ].forEach(selector => {
       modal.querySelector(selector)?.addEventListener(
         "input",
@@ -28008,7 +28043,16 @@ function editMaterialRecord(id) {
         Number(modal.querySelector("#editPricePerKg").value || 0);
 
       const transportCost =
-        Number(modal.querySelector("#editTransportCost").value || 0);
+        Math.max(Number(modal.querySelector("#editTransportCost").value || 0), 0);
+      const miscExpense =
+        Math.max(Number(modal.querySelector("#editCompanyMiscExpenses").value || 0), 0);
+      const miscReason =
+        modal.querySelector("#editCompanyMiscReason").value.trim();
+
+      if (miscExpense > 0 && !miscReason) {
+        alert("Please enter the reason / particulars for the miscellaneous expense.");
+        return;
+      }
 
       const netKg =
         grossKg * (1 - dirtPercent / 100);
@@ -28043,9 +28087,12 @@ function editMaterialRecord(id) {
 
       record.pricePerKg = pricePerKg;
       record.transportCost = transportCost;
+      record.miscellaneousExpenses = miscExpense;
+      record.miscellaneousReason = miscReason;
       record.totalCost =
         (netKg * pricePerKg) +
-        transportCost;
+        transportCost +
+        miscExpense;
 
       record.pelletWeight = 0;
       record.actualPelletWeight = 0;
@@ -28103,32 +28150,6 @@ function afRecycleBinSave(rows) {
   localStorage.setItem(AF_RECYCLE_BIN_KEY, JSON.stringify(Array.isArray(rows) ? rows : []));
 }
 
-function afRecycleNorm(value) {
-  return String(value == null ? "" : value).trim().toUpperCase();
-}
-
-function afRecycleTransactionMatches(record, item) {
-  if (!record || !item) return false;
-  const pack = item.package || {};
-  const archived = Array.isArray(pack.materialRecords)
-    ? pack.materialRecords
-    : (pack.materialRecord ? [pack.materialRecord] : []);
-  const ids = new Set(archived.map(r => afRecycleNorm(r && r.id)).filter(Boolean));
-  const batches = new Set([
-    item.transactionNo,
-    ...archived.flatMap(r => [r && r.batchNumber, r && r.serviceJobNumber])
-  ].map(afRecycleNorm).filter(Boolean));
-  const recordId = afRecycleNorm(record.id || record.materialRecordId);
-  const recordBatch = afRecycleNorm(record.batchNumber || record.serviceJobNumber || record.kbNumber);
-  if (recordId && ids.has(recordId)) return true;
-  if (recordBatch && batches.has(recordBatch)) return true;
-  return false;
-}
-
-function afIsRecycledTransactionRecord(record) {
-  return afRecycleBinRead().some(item => afRecycleTransactionMatches(record, item));
-}
-
 function afRecycleEscape(value) {
   return String(value == null ? "" : value)
     .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
@@ -28163,15 +28184,12 @@ function afRecycleBinRestore(recycleId) {
   const item = bin.find(x=>String(x.recycleId)===String(recycleId));
   if (!item) return alert("Recycle Bin item not found.");
   const pack = item.package || {};
-  const archivedMaterials = Array.isArray(pack.materialRecords) ? pack.materialRecords : (pack.materialRecord ? [pack.materialRecord] : []);
-  if (archivedMaterials.length) {
-    let active=[]; try{active=JSON.parse(localStorage.getItem("materialRecords")||"[]")||[];}catch(e){}
-    if(!Array.isArray(active)) active=[];
-    const clash = archivedMaterials.some(material => active.some(r=>String(r.id)===String(material.id) || (material.batchNumber && String(r.batchNumber||"")===String(material.batchNumber))));
+  const material = pack.materialRecord;
+  if (material) {
+    const active = afMaterialReadRecords();
+    const clash = active.some(r=>String(r.id)===String(material.id) || (material.batchNumber && String(r.batchNumber||"")===String(material.batchNumber)));
     if (clash) return alert("Restore stopped because this transaction/batch already exists in active records.");
-    active.push(...archivedMaterials);
-    localStorage.setItem("materialRecords",JSON.stringify(active));
-    localStorage.setItem("clientMaterialRecords",JSON.stringify(active.filter(r=>String(r.materialSource||"").toLowerCase()==="client")));
+    active.push(material); afMaterialSaveRecords(active);
   }
   const restoreUnique=(key,items)=>{
     if (!Array.isArray(items) || !items.length) return;
@@ -28221,32 +28239,12 @@ function deleteMaterialRecord(id) {
   if(reason===null) return;
   if(!String(reason).trim()) return alert("Please enter a reason for deletion.");
 
-  let rawMaterials=[]; try{rawMaterials=JSON.parse(localStorage.getItem("materialRecords")||"[]")||[];}catch(e){}
   let supplierPayments=[]; try{supplierPayments=JSON.parse(localStorage.getItem("supplierPayments")||"[]")||[];}catch(e){}
   let supplierPurchases=[]; try{supplierPurchases=JSON.parse(localStorage.getItem("afSupplierPurchases")||"[]")||[];}catch(e){}
-  if(!Array.isArray(rawMaterials)) rawMaterials=[];
-  if(!Array.isArray(supplierPayments)) supplierPayments=[];
-  if(!Array.isArray(supplierPurchases)) supplierPurchases=[];
+  const linkedPayments=Array.isArray(supplierPayments)?supplierPayments.filter(p=>String(p.materialRecordId||"")===String(record.id||"")||(batch&&String(p.batchNumber||"").trim()===batch)):[];
+  const linkedPurchases=Array.isArray(supplierPurchases)?supplierPurchases.filter(p=>String(p.materialRecordId||"")===String(record.id||"")||(batch&&String(p.batchNumber||"").trim()===batch)):[];
 
-  const sameTransaction = row => {
-    if(!row) return false;
-    if(String(row.id||row.materialRecordId||"")===String(record.id||"")) return true;
-    const rowBatch=String(row.batchNumber||row.serviceJobNumber||row.kbNumber||"").trim();
-    return !!batch && rowBatch===batch;
-  };
-  const linkedMaterials=rawMaterials.filter(sameTransaction);
-  const linkedMaterialIds=new Set(linkedMaterials.map(r=>String(r.id||"")).filter(Boolean));
-  const linkedPurchases=supplierPurchases.filter(p=>
-    linkedMaterialIds.has(String(p.materialRecordId||"")) || sameTransaction(p)
-  );
-  const linkedPurchaseIds=new Set(linkedPurchases.map(p=>String(p.id||p.purchaseId||"")).filter(Boolean));
-  const linkedPayments=supplierPayments.filter(p=>
-    linkedMaterialIds.has(String(p.materialRecordId||"")) ||
-    linkedPurchaseIds.has(String(p.purchaseId||"")) ||
-    sameTransaction(p)
-  );
-
-  if(!confirm("MOVE TO RECYCLE BIN\n\nTransaction: "+(batch||"-")+"\nParty: "+(record.supplierName||record.clientName||"-")+"\nAmount: "+afMaterialMoney(isClient?(record.serviceTotalDue||0):(record.totalCost||0))+"\nLinked material records: "+linkedMaterials.length+"\nLinked supplier payments: "+linkedPayments.length+"\n\nIt will disappear from all active accounts and reports but can be restored by the Director.\n\nContinue?")) return;
+  if(!confirm("MOVE TO RECYCLE BIN\n\nTransaction: "+(batch||"-")+"\nParty: "+(record.supplierName||record.clientName||"-")+"\nAmount: "+afMaterialMoney(isClient?(record.serviceTotalDue||0):(record.totalCost||0))+"\nLinked supplier payments: "+linkedPayments.length+"\n\nIt will disappear from all active accounts and reports but can be restored by the Director.\n\nContinue?")) return;
 
   const recycleItem={
     recycleId:"RB-"+Date.now()+"-"+Math.random().toString(36).slice(2,7).toUpperCase(),
@@ -28254,20 +28252,14 @@ function deleteMaterialRecord(id) {
     transactionNo:batch||String(record.id||""), party:record.supplierName||record.clientName||"",
     amount:Number(isClient?(record.serviceTotalDue||0):(record.totalCost||0)), reason:String(reason).trim(),
     deletedAt:new Date().toISOString(), deletedBy:user.fullName||user.employeeName||user.name||user.employeeId||"Director",
-    package:{
-      materialRecord:JSON.parse(JSON.stringify(record)),
-      materialRecords:JSON.parse(JSON.stringify(linkedMaterials)),
-      supplierPayments:JSON.parse(JSON.stringify(linkedPayments)),
-      supplierPurchases:JSON.parse(JSON.stringify(linkedPurchases))
-    }
+    package:{materialRecord:JSON.parse(JSON.stringify(record)),supplierPayments:JSON.parse(JSON.stringify(linkedPayments)),supplierPurchases:JSON.parse(JSON.stringify(linkedPurchases))}
   };
   const bin=afRecycleBinRead(); bin.push(recycleItem); afRecycleBinSave(bin);
 
-  localStorage.setItem("materialRecords",JSON.stringify(rawMaterials.filter(x=>!linkedMaterials.includes(x))));
-  localStorage.setItem("clientMaterialRecords",JSON.stringify(rawMaterials.filter(x=>!linkedMaterials.includes(x)).filter(r=>String(r.materialSource||"").toLowerCase()==="client")));
+  afMaterialSaveRecords(records.filter(x=>String(x.id)!==String(record.id)));
   if(!isClient){
-    localStorage.setItem("supplierPayments",JSON.stringify(supplierPayments.filter(p=>!linkedPayments.includes(p))));
-    localStorage.setItem("afSupplierPurchases",JSON.stringify(supplierPurchases.filter(p=>!linkedPurchases.includes(p))));
+    localStorage.setItem("supplierPayments",JSON.stringify((Array.isArray(supplierPayments)?supplierPayments:[]).filter(p=>!linkedPayments.includes(p))));
+    localStorage.setItem("afSupplierPurchases",JSON.stringify((Array.isArray(supplierPurchases)?supplierPurchases:[]).filter(p=>!linkedPurchases.includes(p))));
   }
   const open=document.getElementById("afMaterialRecordsModal"); if(open) open.remove();
   alert("Transaction moved to Recycle Bin and removed from all active accounts and reports.");
@@ -86557,8 +86549,8 @@ function afARPaymentMethod(record) {
 function afARPaymentBook(methodGroup) {
     const customerPayments = afARReadArray("afCustomerPayments");
     const expenses = afARExpenses();
-    const materialRecords = afARReadArray("materialRecords").filter(record => !afIsRecycledTransactionRecord(record));
-    const supplierPayments = afARReadArray("supplierPayments").filter(record => !afIsRecycledTransactionRecord(record));
+    const materialRecords = afARReadArray("materialRecords");
+    const supplierPayments = afARReadArray("supplierPayments");
 
     const cashMethods = ["cash", "mobile money"];
     const bankMethods = ["bank transfer", "cheque"];
@@ -86740,7 +86732,6 @@ function afAROpenPurchasesRegister() {
      */
     const rows = afARReadArray("materialRecords")
         .filter(record =>
-            !afIsRecycledTransactionRecord(record) &&
             String(record.materialSource || "").toLowerCase() !== "client" &&
             !afARIsCancelled(record)
         )
@@ -86754,6 +86745,9 @@ function afAROpenPurchasesRegister() {
             grossKg: Number(record.grossWeight || record.grossKg || record.weightKg || record.quantityKg || 0),
             acceptedKg: Number(record.netWeight ?? record.openingBatchKg ?? record.acceptedKg ?? 0),
             pricePerKg: Number(record.pricePerKg || record.unitPrice || 0),
+            transportCost: Number(record.transportCost || 0),
+            miscellaneousExpenses: Number(record.miscellaneousExpenses || 0),
+            miscellaneousReason: record.miscellaneousReason || "",
             totalCost: Number(record.totalCost || record.purchaseCost || record.amount || 0)
         }))
         .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
@@ -86770,6 +86764,9 @@ function afAROpenPurchasesRegister() {
             { label: "Gross KG", value: r => Number(r.grossKg || 0).toLocaleString(), csv: r => Number(r.grossKg || 0) },
             { label: "Accepted KG", value: r => Number(r.acceptedKg || 0).toLocaleString(), csv: r => Number(r.acceptedKg || 0) },
             { label: "Price/KG", value: r => afARMoney(r.pricePerKg || 0), csv: r => Number(r.pricePerKg || 0) },
+            { label: "Transport", value: r => afARMoney(r.transportCost || 0), csv: r => Number(r.transportCost || 0) },
+            { label: "Misc.", value: r => afARMoney(r.miscellaneousExpenses || 0), csv: r => Number(r.miscellaneousExpenses || 0) },
+            { label: "Misc. Reason", value: r => r.miscellaneousReason || "" },
             { label: "Total Cost", value: r => afARMoney(r.totalCost || 0), csv: r => Number(r.totalCost || 0) }
         ],
         rows
@@ -86843,11 +86840,9 @@ function afAROpenDebtorsLedger() {
 function afAROpenCreditorsLedger() {
     const suppliers = afARReadArray("afSuppliers");
     const materials = afARReadArray("materialRecords").filter(r =>
-        !afIsRecycledTransactionRecord(r) &&
         String(r.materialSource || "").toLowerCase() !== "client" && !afARIsCancelled(r)
     );
     const payments = afARReadArray("supplierPayments").filter(r =>
-        !afIsRecycledTransactionRecord(r) &&
         !afARIsCancelled(r) &&
         materials.some(material =>
             String(r.materialRecordId || "") === String(material.id || "") ||
