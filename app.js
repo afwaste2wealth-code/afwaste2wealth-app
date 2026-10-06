@@ -75457,45 +75457,30 @@ afRenderSupplierPerformance,
 
 
   /*
-   * Watch dashboard redraws, but IGNORE mutations inside the Supplier
-   * Performance card itself. This prevents the History/Reward controls
-   * from causing a render loop (visible as blinking on hover/click).
+   * IMPORTANT: Do NOT rebuild Supplier Performance on every DOM mutation.
+   * That created a feedback loop with History/Reward controls and other
+   * dashboard cards. Only restore the card if a dashboard redraw removed it.
    */
-  new MutationObserver(function(mutations) {
+  let afSupplierPresencePending = false;
 
-    const card =
-      document.getElementById(CARD_ID);
+  new MutationObserver(function () {
+    if (afSupplierPresencePending) return;
+    afSupplierPresencePending = true;
 
-    const externalMutation =
-      mutations.some(function(mutation) {
+    requestAnimationFrame(function () {
+      afSupplierPresencePending = false;
 
-        if (!card) return true;
+      const letters = document.getElementById("afCompanyLettersDashboardCard");
+      const card = document.getElementById(CARD_ID);
 
-        /*
-         * If the mutation happened inside the Supplier Performance card,
-         * it does not require the whole supplier card to be rebuilt.
-         */
-        if (
-          mutation.target === card ||
-          card.contains(mutation.target)
-        ) {
-          return false;
-        }
-
-        return true;
-      });
-
-    if (externalMutation) {
-      afScheduleSupplierRender();
-    }
-
-  }).observe(
-document.body,
-    {
-      childList: true,
-      subtree: true
-    }
-  );
+      if (letters && !card) {
+        afRenderSupplierPerformance();
+      }
+    });
+  }).observe(document.body, {
+    childList: true,
+    subtree: true
+  });
 
 
   /*
@@ -75597,13 +75582,11 @@ column.appendChild(
 
     /*
      * Move Supplier Performance immediately underneath Company Letters
-     * ONLY when it is not already in the correct position.
-     *
-     * Calling appendChild repeatedly on an element that is already there
-     * creates fresh DOM mutations and can keep the dashboard in a loop.
+     * ONLY if it is not already there. Re-appending an existing node creates
+     * needless DOM mutations and was one cause of dashboard "dancing".
      */
     if (
-      performance.parentNode !== column ||
+      performance.parentElement !== column ||
       letters.nextElementSibling !== performance
     ) {
       letters.insertAdjacentElement(
@@ -75642,18 +75625,38 @@ afFixSupplierPerformancePosition,
 
   new MutationObserver(function () {
 
-clearTimeout(timer);
+    if (timer) return;
 
-    timer = setTimeout(
-afFixSupplierPerformancePosition,
-      100
-    );
+    timer = setTimeout(function () {
+      timer = null;
+
+      const letters =
+        document.getElementById("afCompanyLettersDashboardCard");
+
+      const performance =
+        document.getElementById("afSupplierPerformanceDashboardCard");
+
+      if (!letters || !performance) return;
+
+      const column =
+        document.getElementById("afDirectorRightPerformanceColumn");
+
+      const alreadyCorrect =
+        column &&
+        letters.parentElement === column &&
+        performance.parentElement === column &&
+        letters.nextElementSibling === performance;
+
+      if (!alreadyCorrect) {
+        afFixSupplierPerformancePosition();
+      }
+    }, 120);
 
   }).observe(
 document.body,
     {
-childList:true,
-subtree:true
+      childList:true,
+      subtree:true
     }
   );
 
@@ -76476,15 +76479,33 @@ afRenderClientPerformance,
   }
 
 
-  new MutationObserver(
-afScheduleClientPerformance
-  ).observe(
-document.body,
-    {
-childList:true,
-subtree:true
-    }
-  );
+  /*
+   * Do not rebuild Client Performance on every DOM mutation.
+   * Restore it only if a dashboard redraw removed the card.
+   */
+  let afClientPresencePending = false;
+
+  new MutationObserver(function () {
+    if (afClientPresencePending) return;
+    afClientPresencePending = true;
+
+    requestAnimationFrame(function () {
+      afClientPresencePending = false;
+
+      const supplierCard =
+        document.getElementById("afSupplierPerformanceDashboardCard");
+
+      const clientCard =
+        document.getElementById(CARD_ID);
+
+      if (supplierCard && !clientCard) {
+        afRenderClientPerformance();
+      }
+    });
+  }).observe(document.body, {
+    childList:true,
+    subtree:true
+  });
 
 
 window.addEventListener(
@@ -93264,12 +93285,6 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
   function openHistory(type) {
     if (!isDirector()) return;
 
-    /*
-     * Ignore rapid repeated clicks while the same history window is open.
-     * This prevents duplicate work and duplicate modals.
-     */
-    if (document.getElementById("afPerformanceHistoryModal")) return;
-
     const title =
       type === "supplier"
         ? "Supplier Performance History"
@@ -93281,6 +93296,8 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
      * the modal is visible, so the Director never waits for the window
      * itself to appear.
      */
+    removeModal("afPerformanceHistoryModal");
+
     const modal = document.createElement("div");
     modal.id = "afPerformanceHistoryModal";
     modal.style.cssText =
@@ -93617,13 +93634,9 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
        * and the existing expense-based reports.
        */
       const expenses =
-        typeof window.getAFExpenseRecords === "function"
-          ? window.getAFExpenseRecords()
-          : (
-              readArray("expenses").length
-                ? readArray("expenses")
-                : readArray("expenseRecords")
-            );
+        readArray("expenses").length
+          ? readArray("expenses")
+          : readArray("expenseRecords");
 
       const expNo = expenseNumber(date, expenses);
 
@@ -93713,10 +93726,9 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
   }
 
   /*
-   * Throttled dashboard observer.
-   * The old observer ran installControls after every DOM mutation, which
-   * could make the large Director dashboard sluggish. We now schedule at
-   * most one lightweight check per 250 ms.
+   * Lightweight presence observer.
+   * It never rebuilds a working card. It only restores missing controls after
+   * a genuine dashboard redraw, so hovering/clicking cannot trigger a loop.
    */
   let afPerformanceInstallPending = false;
 
@@ -93724,9 +93736,23 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
     if (afPerformanceInstallPending) return;
     afPerformanceInstallPending = true;
 
-    requestAnimationFrame(() => {
+    requestAnimationFrame(function () {
       afPerformanceInstallPending = false;
-      installControls();
+
+      const supplierCard =
+        document.getElementById("afSupplierPerformanceDashboardCard");
+      const clientCard =
+        document.getElementById("afClientPerformanceDashboardCard");
+
+      const supplierMissing =
+        supplierCard && !supplierCard.querySelector(".afPerformanceControls");
+
+      const clientMissing =
+        clientCard && !clientCard.querySelector(".afPerformanceControls");
+
+      if (supplierMissing || clientMissing) {
+        installControls();
+      }
     });
   }
 
@@ -93736,8 +93762,10 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
     subtree: true
   });
 
-  document.addEventListener("DOMContentLoaded", installControls);
-  setTimeout(installControls, 100);
+  document.addEventListener("DOMContentLoaded", function () {
+    setTimeout(installControls, 150);
+  });
+  setTimeout(installControls, 350);
 
   window.openAFSupplierPerformanceHistory = () => openHistory("supplier");
   window.openAFClientPerformanceHistory = () => openHistory("client");
@@ -93745,9 +93773,8 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
   window.openAFClientPerformanceReward = () => openReward("client", "month");
 
   /*
-   * Buttons use their own direct handlers.
-   * The lightweight observer below re-installs controls if either
-   * performance card is redrawn.
+   * Direct button handlers are sufficient. Duplicate delegated click
+   * handling was removed to avoid double execution.
    */
 
 })();
@@ -103347,9 +103374,16 @@ const fresh = wrapper.firstElementChild;
     if (!fresh) return;
 
     if (existing) {
-existing.replaceWith(fresh);
+      /*
+       * Do not replace an identical card. replaceWith() creates a DOM mutation,
+       * which used to wake multiple dashboard observers and contribute to the
+       * visible "dancing".
+       */
+      if (existing.innerHTML !== fresh.innerHTML) {
+        existing.replaceWith(fresh);
+      }
     } else {
-host.appendChild(fresh);
+      host.appendChild(fresh);
     }
   }
 
@@ -103382,12 +103416,21 @@ setTimeout(afSMRenderDashboardCard, 1500);
   );
 
 const observer = new MutationObserver(() => {
-clearTimeout(window.__afSMRenderTimer);
+    clearTimeout(window.__afSMRenderTimer);
 
-    window.__afSMRenderTimer = setTimeout(
-afSMRenderDashboardCard,
-      180
-    );
+    window.__afSMRenderTimer = setTimeout(() => {
+      /*
+       * Upcoming-event/cloud events already refresh changed content.
+       * DOM observation is needed only to restore the card after a dashboard
+       * redraw, not to replace it after every unrelated mutation.
+       */
+      if (
+        afSMCanView() &&
+        !document.getElementById("afSocialMarketingDashboardCard")
+      ) {
+        afSMRenderDashboardCard();
+      }
+    }, 180);
   });
 
 const startObserver = () => {
