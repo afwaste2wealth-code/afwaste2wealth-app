@@ -39932,6 +39932,28 @@ display:none;
 ></div>
 
 <div style="
+display:flex;
+justify-content:flex-end;
+margin-bottom:12px;
+">
+<button
+  id="afPerformanceWinnersHistoryBtn"
+  type="button"
+  style="
+    border:1px solid #0b5d3b;
+    background:white;
+    color:#0b5d3b;
+    padding:9px 13px;
+    border-radius:8px;
+    font-weight:bold;
+    cursor:pointer;
+  "
+>
+🏆 Performance Winners History
+</button>
+</div>
+
+<div style="
 overflow:auto;
           border:1px solid #ddd;
           border-radius:9px;
@@ -40004,6 +40026,17 @@ text-align:left;
 document.body.appendChild(
       modal
     );
+
+const winnersHistoryButton =
+modal.querySelector(
+  "#afPerformanceWinnersHistoryBtn"
+);
+
+if (winnersHistoryButton) {
+  winnersHistoryButton.onclick = () => {
+    openAFPerformanceWinnersHistory();
+  };
+}
 
 
 const periodSelect =
@@ -93013,6 +93046,395 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
     "A&F Go Live / Security / Install / Update connected."
   );
 })();
+
+
+/* =========================================================
+   PERFORMANCE WINNERS HISTORY
+   Best Employee + Best Team confirmed month-end history
+   ========================================================= */
+
+function openAFPerformanceWinnersHistory() {
+  const currentUser =
+    typeof getAFCurrentUser === "function"
+      ? getAFCurrentUser()
+      : null;
+
+  if (!currentUser || currentUser.role !== "Director") {
+    alert("Only the Director can view the full Performance Winners History.");
+    return;
+  }
+
+  let winners = [];
+
+  try {
+    const saved = JSON.parse(
+      localStorage.getItem("afMonthEndWinners") || "[]"
+    );
+
+    winners = Array.isArray(saved) ? saved : [];
+  } catch (error) {
+    console.error("Unable to read Performance Winners History:", error);
+    winners = [];
+  }
+
+  winners = [...winners].sort((a, b) => {
+    const aIndex =
+      Number(a.year || 0) * 12 +
+      Number(a.month || 0);
+
+    const bIndex =
+      Number(b.year || 0) * 12 +
+      Number(b.month || 0);
+
+    return bIndex - aIndex;
+  });
+
+  const money = amount =>
+    typeof formatPayrollMoney === "function"
+      ? formatPayrollMoney(amount)
+      : "UGX " + Number(amount || 0).toLocaleString();
+
+  const employeeWins = {};
+
+  winners.forEach(item => {
+    const key =
+      String(item.bestEmployeeId || "") ||
+      String(item.bestEmployeeName || "");
+
+    if (!key) return;
+
+    if (!employeeWins[key]) {
+      employeeWins[key] = {
+        employeeId: item.bestEmployeeId || "",
+        employeeName: item.bestEmployeeName || "",
+        wins: 0,
+        totalPrize: 0
+      };
+    }
+
+    employeeWins[key].wins += 1;
+    employeeWins[key].totalPrize +=
+      Number(item.bestEmployeePrize || 0);
+  });
+
+  const employeeLeaderboard =
+    Object.values(employeeWins).sort((a, b) =>
+      b.wins - a.wins ||
+      b.totalPrize - a.totalPrize ||
+      String(a.employeeName).localeCompare(
+        String(b.employeeName)
+      )
+    );
+
+  const modal = document.createElement("div");
+  modal.id = "afPerformanceWinnersHistoryModal";
+
+  modal.style.cssText = `
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.6);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    z-index:100002;
+    padding:10px;
+    font-family:Arial,sans-serif;
+  `;
+
+  modal.innerHTML = `
+    <div style="
+      width:1100px;
+      max-width:98%;
+      max-height:94vh;
+      overflow:auto;
+      background:white;
+      border-radius:14px;
+      padding:22px;
+      box-shadow:0 10px 40px rgba(0,0,0,.35);
+    ">
+
+      <div style="
+        display:flex;
+        justify-content:space-between;
+        gap:12px;
+        align-items:center;
+        margin-bottom:16px;
+      ">
+        <div>
+          <h2 style="margin:0;color:#0b5d3b;">
+            🏆 Performance Winners History
+          </h2>
+          <div style="margin-top:5px;color:#666;font-size:13px;">
+            Confirmed Best Employee and Best Team month-end awards
+          </div>
+        </div>
+
+        <button
+          id="afClosePerformanceWinnersHistory"
+          type="button"
+          style="
+            border:0;
+            background:#eee;
+            padding:9px 13px;
+            border-radius:7px;
+            cursor:pointer;
+            font-weight:bold;
+          "
+        >
+          ✕ Close
+        </button>
+      </div>
+
+      ${
+        !winners.length
+          ? `
+            <div style="
+              padding:22px;
+              background:#f7f7f7;
+              border-radius:9px;
+              text-align:center;
+              color:#666;
+            ">
+              No confirmed month-end winners have been recorded yet.
+            </div>
+          `
+          : `
+            <div style="
+              display:grid;
+              grid-template-columns:
+                repeat(3,minmax(180px,1fr));
+              gap:10px;
+              margin-bottom:18px;
+            ">
+              <div style="
+                border:1px solid #ddd;
+                border-radius:9px;
+                padding:13px;
+                background:#fafcfb;
+              ">
+                <div style="font-size:12px;color:#666;">
+                  Months Confirmed
+                </div>
+                <div style="
+                  margin-top:4px;
+                  font-size:23px;
+                  font-weight:bold;
+                  color:#0b5d3b;
+                ">
+                  ${winners.length}
+                </div>
+              </div>
+
+              <div style="
+                border:1px solid #ddd;
+                border-radius:9px;
+                padding:13px;
+                background:#fafcfb;
+              ">
+                <div style="font-size:12px;color:#666;">
+                  Most Best Employee Wins
+                </div>
+                <div style="
+                  margin-top:4px;
+                  font-size:17px;
+                  font-weight:bold;
+                  color:#0b5d3b;
+                ">
+                  ${
+                    employeeLeaderboard[0]
+                      ? escapeText(
+                          employeeLeaderboard[0].employeeName
+                        )
+                      : "—"
+                  }
+                </div>
+                <div style="margin-top:3px;font-size:12px;color:#666;">
+                  ${
+                    employeeLeaderboard[0]
+                      ? employeeLeaderboard[0].wins +
+                        " win(s)"
+                      : ""
+                  }
+                </div>
+              </div>
+
+              <div style="
+                border:1px solid #ddd;
+                border-radius:9px;
+                padding:13px;
+                background:#fafcfb;
+              ">
+                <div style="font-size:12px;color:#666;">
+                  Total Best Employee Prizes
+                </div>
+                <div style="
+                  margin-top:4px;
+                  font-size:18px;
+                  font-weight:bold;
+                  color:#0b5d3b;
+                ">
+                  ${money(
+                    winners.reduce(
+                      (sum, item) =>
+                        sum +
+                        Number(
+                          item.bestEmployeePrize || 0
+                        ),
+                      0
+                    )
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <h3 style="color:#0b5d3b;margin:0 0 9px;">
+              🥇 Best Employee Record
+            </h3>
+
+            <div style="
+              overflow:auto;
+              border:1px solid #ddd;
+              border-radius:9px;
+              margin-bottom:20px;
+            ">
+              <table style="
+                width:100%;
+                min-width:850px;
+                border-collapse:collapse;
+                font-size:13px;
+              ">
+                <thead>
+                  <tr style="background:#eaf5ee;text-align:left;">
+                    <th style="padding:10px;">Employee</th>
+                    <th style="padding:10px;">Employee ID</th>
+                    <th style="padding:10px;">Times Won</th>
+                    <th style="padding:10px;">Total Cash Prizes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${employeeLeaderboard.map(item => `
+                    <tr style="border-bottom:1px solid #eee;">
+                      <td style="padding:10px;font-weight:bold;">
+                        ${escapeText(item.employeeName || "")}
+                      </td>
+                      <td style="padding:10px;">
+                        ${escapeText(item.employeeId || "—")}
+                      </td>
+                      <td style="padding:10px;">
+                        ${item.wins}
+                      </td>
+                      <td style="padding:10px;">
+                        ${money(item.totalPrize)}
+                      </td>
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
+            </div>
+
+            <h3 style="color:#0b5d3b;margin:0 0 9px;">
+              📅 Month-by-Month Winners
+            </h3>
+
+            <div style="
+              overflow:auto;
+              border:1px solid #ddd;
+              border-radius:9px;
+            ">
+              <table style="
+                width:100%;
+                min-width:1150px;
+                border-collapse:collapse;
+                font-size:13px;
+              ">
+                <thead>
+                  <tr style="background:#0b5d3b;color:white;text-align:left;">
+                    <th style="padding:10px;">Month</th>
+                    <th style="padding:10px;">Best Employee</th>
+                    <th style="padding:10px;">Score</th>
+                    <th style="padding:10px;">Employee Prize</th>
+                    <th style="padding:10px;">Best Team</th>
+                    <th style="padding:10px;">Team Score</th>
+                    <th style="padding:10px;">Team Prize</th>
+                    <th style="padding:10px;">Confirmed By</th>
+                    <th style="padding:10px;">Confirmed At</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${winners.map(item => {
+                    const confirmedAt =
+                      item.confirmedAt
+                        ? new Date(
+                            item.confirmedAt
+                          ).toLocaleString()
+                        : "—";
+
+                    return `
+                      <tr style="border-bottom:1px solid #eee;">
+                        <td style="padding:10px;font-weight:bold;">
+                          ${escapeText(
+                            item.label ||
+                            item.periodKey ||
+                            ""
+                          )}
+                        </td>
+                        <td style="padding:10px;">
+                          ${escapeText(
+                            item.bestEmployeeName || ""
+                          )}
+                        </td>
+                        <td style="padding:10px;">
+                          ${Number(
+                            item.bestEmployeeScore || 0
+                          ).toFixed(1)}%
+                        </td>
+                        <td style="padding:10px;">
+                          ${money(
+                            item.bestEmployeePrize
+                          )}
+                        </td>
+                        <td style="padding:10px;">
+                          ${escapeText(
+                            item.bestTeamName || ""
+                          )}
+                        </td>
+                        <td style="padding:10px;">
+                          ${Number(
+                            item.bestTeamScore || 0
+                          ).toFixed(1)}%
+                        </td>
+                        <td style="padding:10px;">
+                          ${money(
+                            item.bestTeamPrize
+                          )}
+                        </td>
+                        <td style="padding:10px;">
+                          ${escapeText(
+                            item.confirmedBy || "Director"
+                          )}
+                        </td>
+                        <td style="padding:10px;">
+                          ${escapeText(confirmedAt)}
+                        </td>
+                      </tr>
+                    `;
+                  }).join("")}
+                </tbody>
+              </table>
+            </div>
+          `
+      }
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  modal.querySelector(
+    "#afClosePerformanceWinnersHistory"
+  ).onclick = () => {
+    modal.remove();
+  };
+}
 
 
 /* =========================================================
