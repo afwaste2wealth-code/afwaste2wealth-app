@@ -93591,6 +93591,57 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
 
   window.openAFSupplierPerformanceHistory = () => openHistory("supplier");
   window.openAFClientPerformanceHistory = () => openHistory("client");
+  window.openAFSupplierPerformanceReward = () => openReward("supplier", "month");
+  window.openAFClientPerformanceReward = () => openReward("client", "month");
+
+  /*
+   * Robust delegated click handling.
+   * The Director dashboard can redraw its performance cards after this
+   * module installs. Delegation keeps History / Award Reward working even
+   * when those buttons are recreated by a dashboard refresh.
+   */
+  document.addEventListener("click", function afPerformanceActionClick(event) {
+    const historyButton = event.target.closest(".afPHHistoryBtn");
+    const awardButton = event.target.closest(".afPHAwardBtn");
+
+    if (!historyButton && !awardButton) return;
+
+    const card = event.target.closest(
+      "#afSupplierPerformanceDashboardCard, #afClientPerformanceDashboardCard"
+    );
+
+    if (!card) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const type =
+      card.id === "afSupplierPerformanceDashboardCard"
+        ? "supplier"
+        : "client";
+
+    if (historyButton) {
+      openHistory(type);
+      return;
+    }
+
+    const choice = prompt(
+      "Award reward for which performance period?\n\n" +
+      "1 = Current Week\n" +
+      "2 = Current Month\n" +
+      "3 = Overall / All-Time",
+      "2"
+    );
+
+    if (choice === null) return;
+
+    const period =
+      String(choice).trim() === "1" ? "week" :
+      String(choice).trim() === "3" ? "overall" :
+      "month";
+
+    openReward(type, period);
+  }, true);
 })();
 
 
