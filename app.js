@@ -16487,9 +16487,36 @@ function recordMaterialIn() {
         placeholder="Company material purchase rate"
         style="width:100%;padding:10px;margin:6px 0 14px">
 
+      <label>Transport Type</label>
+      <select id="transportType" style="width:100%;padding:10px;margin:6px 0 14px">
+        <option value="none">No Transport Cost</option>
+        <option value="company">Company Truck</option>
+        <option value="hired">Hired Truck</option>
+        <option value="supplier">Supplier Transport / Included</option>
+      </select>
+
       <label>Transport Cost (UGX)</label>
       <input id="transportCost" type="number" min="0" step="1" value="0"
         style="width:100%;padding:10px;margin:6px 0 14px">
+
+      <div id="hiredTransportSection" style="display:none;border-left:3px solid #0b5d3b;padding-left:12px;margin:0 0 14px">
+        <label>Truck Owner / Payee / Truck Particulars</label>
+        <input id="transportPayee" type="text" placeholder="Name, truck registration or transporter"
+          style="width:100%;padding:10px;margin:6px 0 14px">
+
+        <label>Amount Paid Now for Truck Hire (UGX)</label>
+        <input id="transportAmountPaid" type="number" min="0" step="1" value="0"
+          style="width:100%;padding:10px;margin:6px 0 14px">
+
+        <label>Transport Payment Method</label>
+        <select id="transportPaymentMethod" style="width:100%;padding:10px;margin:6px 0 14px">
+          <option>Cash</option><option>Mobile Money</option><option>Bank Transfer</option><option>Cheque</option>
+        </select>
+
+        <label>Transport Payment Reference (optional)</label>
+        <input id="transportPaymentReference" type="text"
+          style="width:100%;padding:10px;margin:6px 0 14px">
+      </div>
 
       <label>Miscellaneous Expenses (UGX)</label>
       <input id="companyMiscExpenses" type="number" min="0" step="1" value="0"
@@ -16640,7 +16667,10 @@ function recordMaterialIn() {
   const gross = modal.querySelector("#grossWeight");
   const dirt = modal.querySelector("#dirtPercent");
   const price = modal.querySelector("#pricePerKg");
+  const transportType = modal.querySelector("#transportType");
   const transport = modal.querySelector("#transportCost");
+  const hiredTransportSection = modal.querySelector("#hiredTransportSection");
+  const transportAmountPaid = modal.querySelector("#transportAmountPaid");
   const companyMiscExpenses = modal.querySelector("#companyMiscExpenses");
   const supplierPaidNow = modal.querySelector("#supplierAmountPaidNow");
   const washingRate = modal.querySelector("#washingRatePerKg");
@@ -16688,6 +16718,11 @@ function recordMaterialIn() {
     const p = Number(price.value) || 0;
     const t = Math.max(Number(transport.value) || 0, 0);
     const m = Math.max(Number(companyMiscExpenses.value) || 0, 0);
+    const transportMode = transportType.value;
+    hiredTransportSection.style.display = transportMode === "hired" ? "block" : "none";
+    if (transportMode === "none" || transportMode === "supplier") {
+      transport.value = 0;
+    }
 
     const dirtKg = g * (d / 100);
     const net = g - dirtKg;
@@ -16773,9 +16808,10 @@ function recordMaterialIn() {
   source.addEventListener("change", updateForm);
   clientService.addEventListener("change", updateForm);
 
-  [gross, dirt, price, transport, companyMiscExpenses, supplierPaidNow].forEach(input => {
+  [gross, dirt, price, transport, transportAmountPaid, companyMiscExpenses, supplierPaidNow].forEach(input => {
     input.addEventListener("input", calculateCompanyMaterial);
   });
+  transportType.addEventListener("change", calculateCompanyMaterial);
 
   [
     gross,
@@ -17026,7 +17062,20 @@ afAddSupplierForm();
     const purchasePrice =
       Number(price.value) || 0;
 
-    const transportCost = Math.max(Number(transport.value) || 0, 0);
+    const transportMode = transportType.value || "none";
+    const transportCost = (transportMode === "none" || transportMode === "supplier")
+      ? 0 : Math.max(Number(transport.value) || 0, 0);
+    const transportPayee = modal.querySelector("#transportPayee").value.trim();
+    const transportPaidNow = transportMode === "hired"
+      ? Math.max(Number(modal.querySelector("#transportAmountPaid").value) || 0, 0) : 0;
+    const transportPaymentMethod = modal.querySelector("#transportPaymentMethod").value || "Cash";
+    const transportPaymentReference = modal.querySelector("#transportPaymentReference").value.trim();
+    if (transportMode === "hired" && transportCost > 0 && !transportPayee) {
+      alert("Please enter the truck owner / payee / truck particulars."); return;
+    }
+    if (transportPaidNow > transportCost) {
+      alert("Truck hire payment cannot exceed the transport cost (" + afMaterialMoney(transportCost) + ")."); return;
+    }
     const companyMiscExpense = Math.max(Number(companyMiscExpenses.value) || 0, 0);
     const companyMiscReason = modal.querySelector("#companyMiscReason").value.trim();
 
@@ -17101,7 +17150,13 @@ afAddSupplierForm();
       batchBalanceKg: Number(netKg.toFixed(2)),
 
       pricePerKg: purchasePrice,
+      transportType: transportMode,
       transportCost,
+      transportPayee,
+      transportAmountPaid: transportPaidNow,
+      transportBalance: Math.max(transportCost - transportPaidNow, 0),
+      transportPaymentMethod,
+      transportPaymentReference,
       miscellaneousExpenses: companyMiscExpense,
       miscellaneousReason: companyMiscReason,
       materialCost,
@@ -17423,7 +17478,12 @@ function afEnsureSupplierPurchaseFromMaterial(record) {
     acceptedKg: Number(record.netWeight ?? record.openingBatchKg ?? 0),
     pricePerKg: Number(record.pricePerKg || 0),
     materialCost: afSupplierMaterialDue(record),
+    transportType: record.transportType || "none",
     transportCost: Number(record.transportCost || 0),
+    transportPayee: record.transportPayee || "",
+    transportAmountPaid: Number(record.transportAmountPaid || 0),
+    transportPaymentMethod: record.transportPaymentMethod || "",
+    transportPaymentReference: record.transportPaymentReference || "",
     miscellaneousExpenses: Number(record.miscellaneousExpenses || 0),
     miscellaneousReason: record.miscellaneousReason || "",
     totalCost: Number(record.totalCost || 0),
@@ -86604,6 +86664,23 @@ function afARPaymentBook(methodGroup) {
                 received: Number(payment.amount || 0),
                 paid: 0
             });
+        });
+    });
+
+    materialRecords.forEach(record => {
+        if (String(record.materialSource || "").toLowerCase() === "client") return;
+        if (String(record.transportType || "").toLowerCase() !== "hired") return;
+        const paid = Number(record.transportAmountPaid || 0);
+        if (paid <= 0) return;
+        const method = String(record.transportPaymentMethod || "Cash").trim().toLowerCase();
+        if (!wanted.includes(method)) return;
+        entries.push({
+            date: afARDateValue(record.date || record.recordedAt),
+            reference: record.transportPaymentReference || record.batchNumber || "",
+            particulars: "Hired truck - " + (record.transportPayee || "Transporter") + (record.batchNumber ? " (" + record.batchNumber + ")" : ""),
+            method: record.transportPaymentMethod || "Cash",
+            received: 0,
+            paid
         });
     });
 
