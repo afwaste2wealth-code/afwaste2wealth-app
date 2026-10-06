@@ -93179,15 +93179,33 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
   }
 
   function availableMonths(type) {
+    /*
+     * Build one continuous month list from the earliest transaction
+     * up to the current month. This lets History show months with
+     * no activity without repeatedly scanning records on every click.
+     */
     const source = type === "supplier" ? companyPurchases() : poleSales();
-    const keys = new Set();
+    const dates = source
+      .map(record => parseDate(record.date))
+      .filter(Boolean)
+      .sort((a, b) => a - b);
 
-    source.forEach(record => {
-      const date = parseDate(record.date);
-      if (date) keys.add(monthKey(date));
-    });
+    const now = new Date();
+    const end = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    return Array.from(keys).filter(Boolean).sort().reverse();
+    const start = dates.length
+      ? new Date(dates[0].getFullYear(), dates[0].getMonth(), 1)
+      : new Date(now.getFullYear(), 0, 1);
+
+    const keys = [];
+    const cursor = new Date(start);
+
+    while (cursor <= end) {
+      keys.push(monthKey(cursor));
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+
+    return keys.reverse();
   }
 
   function rewardRows(type, month) {
@@ -93206,10 +93224,17 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
   function openHistory(type) {
     if (!isDirector()) return;
 
-    const title = type === "supplier" ? "Supplier Performance History" : "Client Performance History";
-    const months = availableMonths(type);
-    const initialMonth = months[0] || monthKey(new Date());
+    const title =
+      type === "supplier"
+        ? "Supplier Performance History"
+        : "Client Performance History";
 
+    /*
+     * OPEN THE WINDOW FIRST.
+     * Heavy record calculations are deliberately deferred until after
+     * the modal is visible, so the Director never waits for the window
+     * itself to appear.
+     */
     removeModal("afPerformanceHistoryModal");
 
     const modal = document.createElement("div");
@@ -93229,16 +93254,22 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
 
         <div style="margin-top:16px;display:flex;gap:10px;align-items:end;flex-wrap:wrap;">
           <label style="font-size:12px;font-weight:bold;">Month / Year<br>
-            <select id="afPHMonth" style="padding:9px;min-width:200px;border:1px solid #ccc;border-radius:7px;">
-              ${months.length
-                ? months.map(k => `<option value="${esc(k)}">${esc(monthLabel(k))}</option>`).join("")
-                : `<option value="${esc(initialMonth)}">${esc(monthLabel(initialMonth))}</option>`}
+            <select id="afPHMonth" disabled
+              style="padding:9px;min-width:200px;border:1px solid #ccc;border-radius:7px;">
+              <option>Loading months...</option>
             </select>
           </label>
-          <button id="afPHAward" style="padding:9px 14px;border:0;border-radius:7px;background:#0b5d3b;color:#fff;font-weight:bold;cursor:pointer;">🏆 Award Reward</button>
+          <button id="afPHAward" disabled
+            style="padding:9px 14px;border:0;border-radius:7px;background:#0b5d3b;color:#fff;font-weight:bold;cursor:pointer;opacity:.55;">
+            🏆 Award Reward
+          </button>
         </div>
 
-        <div id="afPHResult" style="margin-top:16px;"></div>
+        <div id="afPHResult" style="margin-top:16px;">
+          <div style="padding:15px;border:1px solid #eee;border-radius:10px;color:#777;">
+            Loading performance history...
+          </div>
+        </div>
         <div id="afPHRewards" style="margin-top:18px;"></div>
       </div>
     `;
@@ -93246,14 +93277,20 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
     document.body.appendChild(modal);
 
     const monthSelect = modal.querySelector("#afPHMonth");
+    const awardButton = modal.querySelector("#afPHAward");
+    const resultBox = modal.querySelector("#afPHResult");
+    const rewardsBox = modal.querySelector("#afPHRewards");
+
+    modal.querySelector("#afPHClose").onclick = () => modal.remove();
 
     function render() {
       const selectedMonth = monthSelect.value;
+      if (!selectedMonth) return;
 
       if (type === "supplier") {
         const winner = supplierWinner("monthHistory", selectedMonth);
 
-        modal.querySelector("#afPHResult").innerHTML = winner ? `
+        resultBox.innerHTML = winner ? `
           <div style="border:1px solid #d8e6de;border-radius:10px;padding:14px;">
             <div style="font-size:12px;color:#8a6500;font-weight:bold;">🏆 Supplier of ${esc(monthLabel(selectedMonth))}</div>
             <div style="font-size:20px;color:#0b5d3b;font-weight:bold;margin:5px 0 12px;">${esc(winner.name)}</div>
@@ -93267,6 +93304,7 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
           `<div style="padding:15px;border:1px solid #eee;border-radius:10px;color:#777;">No supplier purchases recorded in ${esc(monthLabel(selectedMonth))}.</div>`;
       } else {
         const winners = clientWinners("monthHistory", selectedMonth);
+
         const card = (label, winner) => winner ? `
           <div style="border:1px solid #d8e6de;border-radius:10px;padding:14px;">
             <div style="font-size:12px;color:#8a6500;font-weight:bold;">🏆 ${esc(label)}</div>
@@ -93275,7 +93313,7 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
           </div>` :
           `<div style="padding:15px;border:1px solid #eee;border-radius:10px;color:#777;">No pole sales recorded.</div>`;
 
-        modal.querySelector("#afPHResult").innerHTML = `
+        resultBox.innerHTML = `
           <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;">
             ${card("Top Client by Pole Quantity", winners.quantityWinner)}
             ${card("Top Client by Revenue", winners.revenueWinner)}
@@ -93283,7 +93321,7 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
       }
 
       const rewards = rewardRows(type, selectedMonth);
-      modal.querySelector("#afPHRewards").innerHTML = `
+      rewardsBox.innerHTML = `
         <h3 style="margin:0 0 8px;color:#0b5d3b;">🎁 Rewards for ${esc(monthLabel(selectedMonth))}</h3>
         ${rewards.length ? `
           <div style="overflow:auto;">
@@ -93305,16 +93343,57 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
                 </tr>`).join("")}
               </tbody>
             </table>
-          </div>` : `<div style="font-size:12px;color:#777;">No rewards recorded for this period.</div>`}
+          </div>` :
+          `<div style="font-size:12px;color:#777;">No rewards recorded for this period.</div>`}
       `;
     }
 
     monthSelect.onchange = render;
-    modal.querySelector("#afPHClose").onclick = () => modal.remove();
-    modal.querySelector("#afPHAward").onclick = () =>
+
+    awardButton.onclick = () =>
       openReward(type, "monthHistory", monthSelect.value, render);
 
-    render();
+    /*
+     * Defer all history calculations until the browser has painted
+     * the modal. This is the key speed improvement.
+     */
+    setTimeout(() => {
+      if (!document.body.contains(modal)) return;
+
+      const months = availableMonths(type);
+      const currentMonth = monthKey(new Date());
+
+      /*
+       * Default to the latest month that actually contains a transaction,
+       * while still providing every month through the current month.
+       */
+      const source = type === "supplier" ? companyPurchases() : poleSales();
+      const activeMonths = Array.from(
+        new Set(
+          source
+            .map(record => parseDate(record.date))
+            .filter(Boolean)
+            .map(monthKey)
+        )
+      ).sort().reverse();
+
+      const initialMonth =
+        activeMonths[0] ||
+        months[0] ||
+        currentMonth;
+
+      monthSelect.innerHTML = months
+        .map(k =>
+          `<option value="${esc(k)}"${k === initialMonth ? " selected" : ""}>${esc(monthLabel(k))}</option>`
+        )
+        .join("");
+
+      monthSelect.disabled = false;
+      awardButton.disabled = false;
+      awardButton.style.opacity = "1";
+
+      render();
+    }, 0);
   }
 
   function expenseNumber(date, records) {
@@ -93583,11 +93662,28 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
     addControls("afClientPerformanceDashboardCard", "client");
   }
 
-  const observer = new MutationObserver(() => installControls());
+  /*
+   * Throttled dashboard observer.
+   * The old observer ran installControls after every DOM mutation, which
+   * could make the large Director dashboard sluggish. We now schedule at
+   * most one lightweight check per 250 ms.
+   */
+  let afPerformanceInstallTimer = null;
+
+  function scheduleInstallControls() {
+    if (afPerformanceInstallTimer) return;
+
+    afPerformanceInstallTimer = setTimeout(() => {
+      afPerformanceInstallTimer = null;
+      installControls();
+    }, 250);
+  }
+
+  const observer = new MutationObserver(scheduleInstallControls);
   observer.observe(document.documentElement, { childList: true, subtree: true });
 
-  document.addEventListener("DOMContentLoaded", () => setTimeout(installControls, 400));
-  setTimeout(installControls, 700);
+  document.addEventListener("DOMContentLoaded", () => setTimeout(installControls, 250));
+  setTimeout(installControls, 500);
 
   window.openAFSupplierPerformanceHistory = () => openHistory("supplier");
   window.openAFClientPerformanceHistory = () => openHistory("client");
