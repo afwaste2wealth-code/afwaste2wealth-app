@@ -75456,12 +75456,43 @@ afRenderSupplierPerformance,
   }
 
 
-  new MutationObserver(
-afScheduleSupplierRender
-  ).observe(
+  /*
+   * Watch dashboard redraws, but IGNORE mutations inside the Supplier
+   * Performance card itself. This prevents the History/Reward controls
+   * from causing a render loop (visible as blinking on hover/click).
+   */
+  new MutationObserver(function(mutations) {
+
+    const card =
+      document.getElementById(CARD_ID);
+
+    const externalMutation =
+      mutations.some(function(mutation) {
+
+        if (!card) return true;
+
+        /*
+         * If the mutation happened inside the Supplier Performance card,
+         * it does not require the whole supplier card to be rebuilt.
+         */
+        if (
+          mutation.target === card ||
+          card.contains(mutation.target)
+        ) {
+          return false;
+        }
+
+        return true;
+      });
+
+    if (externalMutation) {
+      afScheduleSupplierRender();
+    }
+
+  }).observe(
 document.body,
     {
-childList: true,
+      childList: true,
       subtree: true
     }
   );
@@ -75565,12 +75596,21 @@ column.appendChild(
 
 
     /*
-     * Move Supplier Performance immediately
-     * underneath Company Letters.
+     * Move Supplier Performance immediately underneath Company Letters
+     * ONLY when it is not already in the correct position.
+     *
+     * Calling appendChild repeatedly on an element that is already there
+     * creates fresh DOM mutations and can keep the dashboard in a loop.
      */
-column.appendChild(
-      performance
-    );
+    if (
+      performance.parentNode !== column ||
+      letters.nextElementSibling !== performance
+    ) {
+      letters.insertAdjacentElement(
+        "afterend",
+        performance
+      );
+    }
 
 
     /*
