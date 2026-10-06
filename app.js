@@ -74929,17 +74929,17 @@ afCurrentUser().role || ""
 
   function afPurchases() {
     try {
-      if (typeof afGetSupplierPurchases === "function") {
-        return afGetSupplierPurchases() || [];
-      }
-
-      return JSON.parse(
-localStorage.getItem("afSupplierPurchases") || "[]"
-      ) || [];
-
-    } catch (e) {
-      return [];
-    }
+      const records = JSON.parse(localStorage.getItem("materialRecords") || "[]") || [];
+      if (!Array.isArray(records)) return [];
+      return records.filter(record => String(record.materialSource || "").toLowerCase() !== "client" && String(record.status || "").toUpperCase() !== "CANCELLED").map(record => {
+        const grossKg = Number(record.grossWeight ?? record.grossKg ?? record.weightKg ?? record.quantityKg ?? 0) || 0;
+        const acceptedKg = Number(record.netWeight ?? record.openingBatchKg ?? record.acceptedKg ?? 0) || 0;
+        const dirtKg = Math.max(grossKg - acceptedKg, 0);
+        const pricePerKg = Number(record.pricePerKg ?? record.unitPrice ?? 0) || 0;
+        const materialCost = Number(record.materialCost ?? record.purchaseCost ?? (acceptedKg * pricePerKg)) || 0;
+        return { ...record, date: record.date || record.purchaseDate || record.createdAt || "", supplierId: record.supplierId || "", supplierName: record.supplierName || record.supplier || "Unknown Supplier", grossKg, dirtKg, acceptedKg, totalCost: materialCost };
+      });
+    } catch (e) { console.error("Supplier Performance purchase read error:", e); return []; }
   }
 
 
@@ -74959,25 +74959,12 @@ localStorage.getItem("afSupplierPurchases") || "[]"
      ----------------------------- */
 
   function afParseDate(value) {
-
-    if (!value) return null;
-
-const parts =
-      String(value).split("-");
-
-    if (parts.length === 3) {
-      return new Date(
-        Number(parts[0]),
-        Number(parts[1]) - 1,
-        Number(parts[2])
-      );
-    }
-
-const d = new Date(value);
-
-    return isNaN(d.getTime())
-      ? null
-      : d;
+    const raw = String(value || "").trim(); if (!raw) return null;
+    let match = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (match) { const d = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])); return isNaN(d.getTime()) ? null : d; }
+    match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (match) { const d = new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1])); return isNaN(d.getTime()) ? null : d; }
+    const d = new Date(raw); return isNaN(d.getTime()) ? null : d;
   }
 
 
@@ -75079,15 +75066,14 @@ const totals = {};
 
 filtered.forEach(p => {
 
-const supplierId =
-        String(
-p.supplierId || ""
-        );
+const supplierId = String(p.supplierId || "").trim();
+const supplierName = String(p.supplierName || "").trim();
+const supplierKey = supplierId || supplierName.toLowerCase();
 
-      if (!supplierId) return;
+      if (!supplierKey) return;
 
 
-      if (!totals[supplierId]) {
+      if (!totals[supplierKey]) {
 
 const supplier =
 suppliers.find(s =>
@@ -75096,7 +75082,7 @@ supplierId
           );
 
 
-        totals[supplierId] = {
+        totals[supplierKey] = {
 
 supplierId,
 
@@ -75121,7 +75107,7 @@ purchaseValue: 0
 
 
 const item =
-        totals[supplierId];
+        totals[supplierKey];
 
 
 item.deliveries += 1;
@@ -75660,7 +75646,7 @@ const CARD_ID =
     try {
 
       if (
-typeofgetAFCurrentUser ===
+typeof getAFCurrentUser ===
         "function"
       ) {
 
@@ -75730,35 +75716,12 @@ localStorage.getItem(
      ===================================================== */
 
   function afClientParseDate(value) {
-
-    if (!value) return null;
-
-
-const parts =
-      String(value).split("-");
-
-
-    if (parts.length === 3) {
-
-      return new Date(
-        Number(parts[0]),
-        Number(parts[1]) - 1,
-        Number(parts[2])
-      );
-
-    }
-
-
-const date =
-      new Date(value);
-
-
-    return isNaN(
-date.getTime()
-    )
-      ? null
-      : date;
-
+    const raw = String(value || "").trim(); if (!raw) return null;
+    let match = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (match) { const d = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])); return isNaN(d.getTime()) ? null : d; }
+    match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (match) { const d = new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1])); return isNaN(d.getTime()) ? null : d; }
+    const d = new Date(raw); return isNaN(d.getTime()) ? null : d;
   }
 
 
@@ -75896,7 +75859,7 @@ record.status ||
 
 const date =
 afClientParseDate(
-record.date
+record.date || record.saleDate || record.createdAt
           );
 
 
@@ -75916,6 +75879,7 @@ record.date
 const name =
           String(
 record.customerName ||
+            record.clientName ||
             "Unknown Client"
           ).trim();
 
