@@ -7914,6 +7914,22 @@ font-weight:bold;
 </button>
 
 <button
+        id="attendanceHistoryCorrect"
+        style="
+          border:0;
+          background:#7a4b00;
+color:white;
+          padding:12px 18px;
+          border-radius:8px;
+cursor:pointer;
+font-weight:bold;
+          margin-left:6px;
+        "
+>
+        Attendance History / Correct
+</button>
+
+<button
         id="viewAttendanceSummary"
         style="
           border:0;
@@ -8221,6 +8237,12 @@ modal.remove();
   };
 
 modal.querySelector(
+    "#attendanceHistoryCorrect"
+  ).onclick = () => {
+    openAFAttendanceHistoryCorrection();
+  };
+
+modal.querySelector(
     "#viewAttendanceSummary"
   ).onclick = () => {
 const employeeId =
@@ -8290,6 +8312,380 @@ summary.netOvertimeMinutes /
     );
   };
 }
+/* =========================================================
+   ATTENDANCE HISTORY / CORRECTION / DELETION
+   Director controls changes; every change keeps an audit trail.
+   ========================================================= */
+
+function getAFAttendanceDeletionAudit() {
+  try {
+    const saved = JSON.parse(
+      localStorage.getItem("afAttendanceDeletionAudit") || "[]"
+    );
+    return Array.isArray(saved) ? saved : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function saveAFAttendanceDeletionAudit(records) {
+  localStorage.setItem(
+    "afAttendanceDeletionAudit",
+    JSON.stringify(Array.isArray(records) ? records : [])
+  );
+}
+
+function afAttendanceCurrentUserName() {
+  const user =
+    typeof getAFCurrentUser === "function"
+      ? getAFCurrentUser()
+      : null;
+
+  return (
+    user?.employeeName ||
+    user?.fullName ||
+    user?.username ||
+    "Director"
+  );
+}
+
+function afAttendanceRefreshPayroll(employeeId, dateText) {
+  if (!employeeId || !dateText) return;
+
+  const date = new Date(dateText + "T00:00:00");
+  if (Number.isNaN(date.getTime())) return;
+
+  if (
+    typeof calculateEmployeePayroll === "function" &&
+    typeof saveCalculatedPayroll === "function"
+  ) {
+    const payroll = calculateEmployeePayroll(
+      employeeId,
+      date.getFullYear(),
+      date.getMonth()
+    );
+
+    if (payroll) {
+      saveCalculatedPayroll(payroll);
+    }
+  }
+}
+
+function openAFAttendanceHistoryCorrection() {
+  const records = [...getAttendanceRecords()].sort((a, b) =>
+    String(b.date || "").localeCompare(String(a.date || "")) ||
+    Number(b.id || 0) - Number(a.id || 0)
+  );
+
+  const isDirector =
+    typeof getAFCurrentRole === "function" &&
+    getAFCurrentRole() === "Director";
+
+  const modal = document.createElement("div");
+  modal.style.cssText = `
+    position:fixed;inset:0;background:rgba(0,0,0,.6);
+    display:flex;align-items:center;justify-content:center;
+    z-index:100005;padding:10px;font-family:Arial,sans-serif;
+  `;
+
+  modal.innerHTML = `
+    <div style="width:1150px;max-width:98%;max-height:94vh;overflow:auto;
+      background:white;border-radius:14px;padding:22px;box-shadow:0 10px 40px rgba(0,0,0,.35);">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;">
+        <div>
+          <h2 style="margin:0;color:#0b5d3b;">Attendance History / Correct</h2>
+          <div style="font-size:12px;color:#666;margin-top:4px;">
+            Review attendance records. Only the Director can edit or delete saved attendance.
+          </div>
+        </div>
+        <button id="afCloseAttendanceHistory" style="border:0;background:#eee;padding:9px 13px;border-radius:7px;cursor:pointer;font-weight:bold;">✕ Close</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 190px;gap:10px;margin-bottom:12px;">
+        <input id="afAttendanceHistorySearch" placeholder="Search employee, ID, team or status" style="${settingsInputStyle()}">
+        <input id="afAttendanceHistoryDate" type="date" style="${settingsInputStyle()}">
+      </div>
+
+      <div style="overflow:auto;border:1px solid #ddd;border-radius:9px;">
+        <table style="width:100%;min-width:1080px;border-collapse:collapse;font-size:12px;">
+          <thead><tr style="background:#eaf5ee;text-align:left;">
+            <th style="padding:9px;">Date</th><th style="padding:9px;">Employee</th>
+            <th style="padding:9px;">Team</th><th style="padding:9px;">Status</th>
+            <th style="padding:9px;">Time In</th><th style="padding:9px;">Time Out</th>
+            <th style="padding:9px;">Worked</th><th style="padding:9px;">Shortfall</th>
+            <th style="padding:9px;">Overtime</th><th style="padding:9px;">Corrections</th>
+            <th style="padding:9px;">Action</th>
+          </tr></thead>
+          <tbody id="afAttendanceHistoryRows"></tbody>
+        </table>
+      </div>
+    </div>`;
+
+  document.body.appendChild(modal);
+
+  const search = modal.querySelector("#afAttendanceHistorySearch");
+  const dateFilter = modal.querySelector("#afAttendanceHistoryDate");
+  const rows = modal.querySelector("#afAttendanceHistoryRows");
+
+  function hours(minutes) {
+    return (Number(minutes || 0) / 60).toFixed(2) + " h";
+  }
+
+  function renderRows() {
+    const q = String(search.value || "").trim().toLowerCase();
+    const d = dateFilter.value;
+
+    const filtered = records.filter(record => {
+      if (d && record.date !== d) return false;
+      if (!q) return true;
+      return [record.employeeName, record.employeeId, record.teamName, record.status]
+        .some(value => String(value || "").toLowerCase().includes(q));
+    });
+
+    rows.innerHTML = filtered.length ? filtered.map(record => `
+      <tr style="border-bottom:1px solid #eee;">
+        <td style="padding:9px;">${escapeSettingsText(record.date || "")}</td>
+        <td style="padding:9px;"><b>${escapeSettingsText(record.employeeName || "")}</b><br><span style="color:#777;">${escapeSettingsText(record.employeeId || "")}</span></td>
+        <td style="padding:9px;">${escapeSettingsText(record.teamName || "")}</td>
+        <td style="padding:9px;">${escapeSettingsText(record.status || "")}</td>
+        <td style="padding:9px;">${escapeSettingsText(record.timeIn || "—")}</td>
+        <td style="padding:9px;">${escapeSettingsText(record.timeOut || "—")}</td>
+        <td style="padding:9px;">${hours(record.workedMinutes)}</td>
+        <td style="padding:9px;">${hours(record.shortfallMinutes)}</td>
+        <td style="padding:9px;">${hours(record.overtimeMinutes)}</td>
+        <td style="padding:9px;">${Array.isArray(record.correctionHistory) ? record.correctionHistory.length : 0}</td>
+        <td style="padding:9px;white-space:nowrap;">
+          ${isDirector ? `
+            <button class="afAttendanceCorrectBtn" data-id="${escapeSettingsText(String(record.id))}" style="border:0;background:#0d6efd;color:white;padding:7px 9px;border-radius:6px;cursor:pointer;font-weight:bold;">Correct</button>
+            <button class="afAttendanceDeleteBtn" data-id="${escapeSettingsText(String(record.id))}" style="border:0;background:#b42318;color:white;padding:7px 9px;border-radius:6px;cursor:pointer;font-weight:bold;margin-left:4px;">Delete</button>
+          ` : `<span style="color:#777;">Director only</span>`}
+        </td>
+      </tr>`).join("") : `
+      <tr><td colspan="11" style="padding:28px;text-align:center;color:#666;">No attendance records found.</td></tr>`;
+
+    if (isDirector) {
+      rows.querySelectorAll(".afAttendanceCorrectBtn").forEach(button => {
+        button.onclick = () => {
+          openAFAttendanceCorrectionEditor(button.dataset.id, () => {
+            modal.remove();
+            openAFAttendanceHistoryCorrection();
+          });
+        };
+      });
+
+      rows.querySelectorAll(".afAttendanceDeleteBtn").forEach(button => {
+        button.onclick = () => {
+          deleteAFAttendanceRecord(button.dataset.id, () => {
+            modal.remove();
+            openAFAttendanceHistoryCorrection();
+          });
+        };
+      });
+    }
+  }
+
+  search.oninput = renderRows;
+  dateFilter.onchange = renderRows;
+  modal.querySelector("#afCloseAttendanceHistory").onclick = () => modal.remove();
+  renderRows();
+}
+
+function openAFAttendanceCorrectionEditor(recordId, onSaved) {
+  if (
+    typeof getAFCurrentRole !== "function" ||
+    getAFCurrentRole() !== "Director"
+  ) {
+    alert("Only the Director can correct attendance records.");
+    return;
+  }
+
+  const records = getAttendanceRecords();
+  const record = records.find(item => String(item.id) === String(recordId));
+  if (!record) {
+    alert("Attendance record not found.");
+    return;
+  }
+
+  const modal = document.createElement("div");
+  modal.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,.62);display:flex;align-items:center;justify-content:center;z-index:100010;padding:10px;font-family:Arial,sans-serif;`;
+  modal.innerHTML = `
+    <div style="width:650px;max-width:96%;max-height:94vh;overflow:auto;background:white;border-radius:14px;padding:22px;">
+      <h2 style="margin-top:0;color:#0b5d3b;">Correct Attendance</h2>
+      <div style="background:#f5f5f5;padding:10px;border-radius:8px;margin-bottom:14px;"><b>${escapeSettingsText(record.employeeName || "")}</b> — ${escapeSettingsText(record.employeeId || "")}</div>
+      <label>Date</label><input id="afCorrectAttendanceDate" type="date" value="${escapeSettingsText(record.date || "")}" style="${settingsInputStyle()}"><br><br>
+      <label>Status</label><select id="afCorrectAttendanceStatus" style="${settingsInputStyle()}"><option value="Present" ${record.status === "Present" ? "selected" : ""}>Present</option><option value="Absent" ${record.status === "Absent" ? "selected" : ""}>Absent</option></select><br><br>
+      <div id="afCorrectAttendanceTimes">
+        <label>Time In</label><input id="afCorrectTimeIn" type="time" value="${escapeSettingsText(record.timeIn || "")}" style="${settingsInputStyle()}"><br><br>
+        <label>Time Out</label><input id="afCorrectTimeOut" type="time" value="${escapeSettingsText(record.timeOut || "")}" style="${settingsInputStyle()}"><br><br>
+      </div>
+      <div id="afCorrectAttendanceAbsence">
+        <label>Absence Reason</label><select id="afCorrectAbsenceReason" style="${settingsInputStyle()}">
+          ${["","Sick","Approved Leave","Permission","Unapproved Absence","Other"].map(v => `<option value="${escapeSettingsText(v)}" ${String(record.absenceReason || "") === v ? "selected" : ""}>${escapeSettingsText(v || "Select reason")}</option>`).join("")}
+        </select><br><br>
+      </div>
+      <label>Remarks</label><textarea id="afCorrectAttendanceRemarks" rows="3" style="${settingsInputStyle()}">${escapeSettingsText(record.remarks || "")}</textarea><br><br>
+      <label><b>Reason for Correction *</b></label><textarea id="afAttendanceCorrectionReason" rows="3" style="${settingsInputStyle()}" placeholder="Explain why this attendance is being corrected"></textarea><br><br>
+      <button id="afSaveAttendanceCorrection" style="border:0;background:#0b5d3b;color:white;padding:11px 15px;border-radius:8px;cursor:pointer;font-weight:bold;">Save Correction</button>
+      <button id="afCancelAttendanceCorrection" style="border:0;background:#6c757d;color:white;padding:11px 15px;border-radius:8px;cursor:pointer;font-weight:bold;margin-left:6px;">Cancel</button>
+    </div>`;
+
+  document.body.appendChild(modal);
+  const status = modal.querySelector("#afCorrectAttendanceStatus");
+  const times = modal.querySelector("#afCorrectAttendanceTimes");
+  const absence = modal.querySelector("#afCorrectAttendanceAbsence");
+
+  function updateAreas() {
+    const absent = status.value === "Absent";
+    times.style.display = absent ? "none" : "block";
+    absence.style.display = absent ? "block" : "none";
+  }
+  status.onchange = updateAreas;
+  updateAreas();
+  modal.querySelector("#afCancelAttendanceCorrection").onclick = () => modal.remove();
+
+  modal.querySelector("#afSaveAttendanceCorrection").onclick = () => {
+    const newDate = modal.querySelector("#afCorrectAttendanceDate").value;
+    const newStatus = status.value;
+    const correctionReason = modal.querySelector("#afAttendanceCorrectionReason").value.trim();
+    let timeIn = "", timeOut = "", absenceReason = "";
+
+    if (!newDate || !correctionReason) {
+      alert("Date and Reason for Correction are required.");
+      return;
+    }
+
+    if (newStatus === "Present") {
+      timeIn = modal.querySelector("#afCorrectTimeIn").value;
+      timeOut = modal.querySelector("#afCorrectTimeOut").value;
+      if (!timeIn || !timeOut) {
+        alert("Please enter Time In and Time Out.");
+        return;
+      }
+    } else {
+      absenceReason = modal.querySelector("#afCorrectAbsenceReason").value;
+      if (!absenceReason) {
+        alert("Please select the absence reason.");
+        return;
+      }
+    }
+
+    const duplicate = records.some(item =>
+      String(item.id) !== String(record.id) &&
+      String(item.employeeId) === String(record.employeeId) &&
+      item.date === newDate
+    );
+    if (duplicate) {
+      alert("Another attendance record already exists for this employee on that date.");
+      return;
+    }
+
+    const shifts = typeof getShiftSettings === "function" ? getShiftSettings() : [];
+    let shift = Array.isArray(shifts) ? shifts.find(item =>
+      String(item.id || "") === String(record.shiftId || "") ||
+      String(item.name || "").toLowerCase() === String(record.shiftName || "").toLowerCase()
+    ) : null;
+    if (!shift) shift = getAttendanceShift(getEmployeeTeamForAttendance(record.employeeId));
+    if (!shift) {
+      alert("A valid shift could not be found for recalculation.");
+      return;
+    }
+
+    const calc = calculateAttendanceTimes(shift, timeIn, timeOut, newStatus);
+    const before = JSON.parse(JSON.stringify(record));
+    delete before.correctionHistory;
+
+    const history = Array.isArray(record.correctionHistory) ? [...record.correctionHistory] : [];
+    history.push({
+      correctedAt: new Date().toISOString(),
+      correctedBy: afAttendanceCurrentUserName(),
+      reason: correctionReason,
+      before
+    });
+
+    const oldDate = record.date;
+    Object.assign(record, {
+      date: newDate,
+      status: newStatus,
+      timeIn,
+      timeOut,
+      absenceReason,
+      remarks: modal.querySelector("#afCorrectAttendanceRemarks").value.trim(),
+      workedMinutes: calc.workedMinutes,
+      shortfallMinutes: calc.shortfallMinutes,
+      overtimeMinutes: calc.overtimeMinutes,
+      lateMinutes: calc.lateMinutes,
+      earlyLeaveMinutes: calc.earlyLeaveMinutes,
+      correctionHistory: history,
+      lastCorrectedAt: new Date().toISOString(),
+      lastCorrectedBy: afAttendanceCurrentUserName(),
+      lastCorrectionReason: correctionReason
+    });
+
+    saveAttendanceRecords(records);
+    afAttendanceRefreshPayroll(record.employeeId, oldDate);
+    if (newDate !== oldDate) afAttendanceRefreshPayroll(record.employeeId, newDate);
+
+    alert("Attendance corrected successfully. The original values were kept in the audit history.");
+    modal.remove();
+    if (typeof onSaved === "function") onSaved();
+  };
+}
+
+function deleteAFAttendanceRecord(recordId, onDeleted) {
+  if (
+    typeof getAFCurrentRole !== "function" ||
+    getAFCurrentRole() !== "Director"
+  ) {
+    alert("Only the Director can delete attendance records.");
+    return;
+  }
+
+  const records = getAttendanceRecords();
+  const index = records.findIndex(item => String(item.id) === String(recordId));
+  if (index < 0) {
+    alert("Attendance record not found.");
+    return;
+  }
+
+  const record = records[index];
+  const reason = prompt(
+    "Reason for deleting this attendance record:\n\n" +
+    (record.employeeName || record.employeeId || "Employee") +
+    " — " + (record.date || "")
+  );
+
+  if (reason === null) return;
+  if (!String(reason).trim()) {
+    alert("A deletion reason is required.");
+    return;
+  }
+
+  const confirmed = confirm(
+    "Delete this attendance record?\n\n" +
+    (record.employeeName || record.employeeId || "Employee") +
+    " — " + (record.date || "") +
+    "\n\nThe active record will be removed, but a permanent audit copy will be kept."
+  );
+  if (!confirmed) return;
+
+  const audit = getAFAttendanceDeletionAudit();
+  audit.push({
+    id: "ATT-DEL-" + Date.now(),
+    deletedAt: new Date().toISOString(),
+    deletedBy: afAttendanceCurrentUserName(),
+    reason: String(reason).trim(),
+    record: JSON.parse(JSON.stringify(record))
+  });
+
+  saveAFAttendanceDeletionAudit(audit);
+  records.splice(index, 1);
+  saveAttendanceRecords(records);
+  afAttendanceRefreshPayroll(record.employeeId, record.date);
+
+  alert("Wrong attendance deleted. An audit copy has been kept.");
+  if (typeof onDeleted === "function") onDeleted();
+}
+
 /* =========================================================
    MANAGER READ-ONLY STAFF & HR VIEWS
    Teams • Shifts • Attendance
@@ -89775,6 +90171,7 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
     "supplierPayments",
     "afRecycleBin",
     "attendanceRecords",
+    "afAttendanceDeletionAudit",
     "employeeAdvances",
     "employeeDeductions",
     "advanceRecoveries",
@@ -94468,6 +94865,11 @@ function openAFPerformanceWinnersHistory() {
 
     attendanceRecords: {
       label: "Attendance",
+      kind: "array"
+    },
+
+    afAttendanceDeletionAudit: {
+      label: "Attendance Deletion Audit",
       kind: "array"
     },
 
@@ -101658,6 +102060,7 @@ function openAFPerformanceWinnersHistory() {
 
     "factoryTeams",
     "attendanceRecords",
+    "afAttendanceDeletionAudit",
     "employeeAdvances",
     "employeeDeductions",
     "advanceRecoveries",
