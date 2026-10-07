@@ -8448,8 +8448,20 @@ function openAFAttendanceHistoryCorrection() {
         <td style="padding:9px;"><b>${escapeSettingsText(record.employeeName || "")}</b><br><span style="color:#777;">${escapeSettingsText(record.employeeId || "")}</span></td>
         <td style="padding:9px;">${escapeSettingsText(record.teamName || "")}</td>
         <td style="padding:9px;">${escapeSettingsText(record.status || "")}</td>
-        <td style="padding:9px;">${escapeSettingsText(record.timeIn || "—")}</td>
-        <td style="padding:9px;">${escapeSettingsText(record.timeOut || "—")}</td>
+        <td style="padding:9px;">${escapeSettingsText(
+          record.timeIn
+            ? (typeof window.formatAFTime === "function"
+                ? window.formatAFTime(record.timeIn)
+                : record.timeIn)
+            : "—"
+        )}</td>
+        <td style="padding:9px;">${escapeSettingsText(
+          record.timeOut
+            ? (typeof window.formatAFTime === "function"
+                ? window.formatAFTime(record.timeOut)
+                : record.timeOut)
+            : "—"
+        )}</td>
         <td style="padding:9px;">${hours(record.workedMinutes)}</td>
         <td style="padding:9px;">${hours(record.shortfallMinutes)}</td>
         <td style="padding:9px;">${hours(record.overtimeMinutes)}</td>
@@ -8766,38 +8778,17 @@ function afManagerFormatTime(time) {
     return "—";
   }
 
-const parts =
-    String(time).split(":");
-
-  if (parts.length< 2) {
-    return afManagerEscape(time);
+  if (
+    typeof window !== "undefined" &&
+    typeof window.formatAFTime === "function"
+  ) {
+    return afManagerEscape(
+      window.formatAFTime(time)
+    );
   }
 
-  let hour =
-    Number(parts[0]);
-
-const minute =
-    parts[1];
-
-const period =
-    hour >= 12 ? "PM" : "AM";
-
-  hour =
-    hour % 12;
-
-  if (hour === 0) {
-    hour = 12;
-  }
-
-  return (
-    hour +
-    ":" +
-    minute +
-    " " +
-    period
-  );
+  return afManagerEscape(time);
 }
-
 
 function afManagerPercent(
   value,
