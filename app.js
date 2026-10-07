@@ -7837,21 +7837,11 @@ employee.fullName
 
 <div id="attendanceTimeArea">
 
-<label>Time In</label>
-<input
-          id="attendanceTimeIn"
-          type="time"
-          style="${settingsInputStyle()}"
->
+<div id="attendanceTimeInField"></div>
 
 <br><br>
 
-<label>Time Out</label>
-<input
-          id="attendanceTimeOut"
-          type="time"
-          style="${settingsInputStyle()}"
->
+<div id="attendanceTimeOutField"></div>
 
 </div>
 
@@ -7992,6 +7982,213 @@ modal.querySelector(
       "#absenceReasonArea"
     );
 
+  /*
+   * Attendance time entry follows the Director's global
+   * 12/24-hour clock setting.
+   *
+   * IMPORTANT:
+   * Values are still converted to HH:MM (24-hour) before
+   * saving so all existing attendance/payroll calculations
+   * continue to work unchanged.
+   */
+  function afAttendanceUses12HourClock() {
+    try {
+      if (
+        typeof window.getAFSystemSettings === "function"
+      ) {
+        const settings =
+          window.getAFSystemSettings() || {};
+
+        return String(settings.timeFormat) === "12";
+      }
+
+      const settings =
+        JSON.parse(
+          localStorage.getItem(
+            "afSystemSettings"
+          ) || "{}"
+        );
+
+      return String(settings.timeFormat) === "12";
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function afAttendancePad2(value) {
+    return String(value).padStart(2, "0");
+  }
+
+  function afAttendanceBuildTimeField(
+    containerId,
+    fieldPrefix,
+    label
+  ) {
+    const container =
+      modal.querySelector("#" + containerId);
+
+    if (!container) {
+      return;
+    }
+
+    if (!afAttendanceUses12HourClock()) {
+      container.innerHTML = `
+<label>${label}</label>
+<input
+          id="${fieldPrefix}"
+          type="time"
+          style="${settingsInputStyle()}"
+>
+      `;
+      return;
+    }
+
+    const hourOptions =
+      Array.from(
+        { length: 12 },
+        (_, index) => {
+          const hour = index + 1;
+          const value =
+            afAttendancePad2(hour);
+
+          return `
+<option value="${value}">
+            ${value}
+</option>
+          `;
+        }
+      ).join("");
+
+    const minuteOptions =
+      Array.from(
+        { length: 60 },
+        (_, minute) => {
+          const value =
+            afAttendancePad2(minute);
+
+          return `
+<option value="${value}">
+            ${value}
+</option>
+          `;
+        }
+      ).join("");
+
+    container.innerHTML = `
+<label>${label}</label>
+
+<div style="
+          display:grid;
+          grid-template-columns:1fr 1fr 1fr;
+          gap:8px;
+          margin-top:6px;
+        ">
+
+<select
+          id="${fieldPrefix}Hour"
+          style="${settingsInputStyle()}"
+>
+<option value="">Hour</option>
+          ${hourOptions}
+</select>
+
+<select
+          id="${fieldPrefix}Minute"
+          style="${settingsInputStyle()}"
+>
+<option value="">Minutes</option>
+          ${minuteOptions}
+</select>
+
+<select
+          id="${fieldPrefix}Period"
+          style="${settingsInputStyle()}"
+>
+<option value="">AM / PM</option>
+<option value="AM">AM</option>
+<option value="PM">PM</option>
+</select>
+
+</div>
+      `;
+  }
+
+  function afAttendanceReadTime(fieldPrefix) {
+    if (!afAttendanceUses12HourClock()) {
+      const input =
+        modal.querySelector(
+          "#" + fieldPrefix
+        );
+
+      return input
+        ? input.value
+        : "";
+    }
+
+    const hourInput =
+      modal.querySelector(
+        "#" + fieldPrefix + "Hour"
+      );
+
+    const minuteInput =
+      modal.querySelector(
+        "#" + fieldPrefix + "Minute"
+      );
+
+    const periodInput =
+      modal.querySelector(
+        "#" + fieldPrefix + "Period"
+      );
+
+    if (
+      !hourInput ||
+      !minuteInput ||
+      !periodInput ||
+      !hourInput.value ||
+      minuteInput.value === "" ||
+      !periodInput.value
+    ) {
+      return "";
+    }
+
+    let hour =
+      Number(hourInput.value);
+
+    const minute =
+      Number(minuteInput.value);
+
+    const period =
+      periodInput.value;
+
+    if (period === "AM") {
+      if (hour === 12) {
+        hour = 0;
+      }
+    } else if (period === "PM") {
+      if (hour !== 12) {
+        hour += 12;
+      }
+    }
+
+    return (
+      afAttendancePad2(hour) +
+      ":" +
+      afAttendancePad2(minute)
+    );
+  }
+
+  afAttendanceBuildTimeField(
+    "attendanceTimeInField",
+    "attendanceTimeIn",
+    "Time In"
+  );
+
+  afAttendanceBuildTimeField(
+    "attendanceTimeOutField",
+    "attendanceTimeOut",
+    "Time Out"
+  );
+
   function updateEmployeeInfo() {
 const employeeId =
 employeeSelect.value;
@@ -8118,14 +8315,14 @@ getAttendanceShift(team);
 
     if (status === "Present") {
 timeIn =
-modal.querySelector(
-          "#attendanceTimeIn"
-        ).value;
+afAttendanceReadTime(
+          "attendanceTimeIn"
+        );
 
 timeOut =
-modal.querySelector(
-          "#attendanceTimeOut"
-        ).value;
+afAttendanceReadTime(
+          "attendanceTimeOut"
+        );
 
       if (!timeIn || !timeOut) {
         alert(
