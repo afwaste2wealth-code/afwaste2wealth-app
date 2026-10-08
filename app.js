@@ -43913,14 +43913,22 @@ justify-content:center;
   }
 function isRecognitionEligible(result) {
 
+  /*
+   * The main performance engine already calculates a fair normalized
+   * final score from whichever performance components are actually
+   * applicable to the employee for the selected period.
+   *
+   * Recognition must therefore not require Output + Attendance +
+   * Quality all at the same time. That old rule caused valid employees
+   * with real attendance/performance records to be shown as
+   * "No qualifying data yet".
+   */
   return Boolean(
     result &&
-result.output&&
-result.output.applicable === true &&
-result.attendance&&
-result.attendance.applicable === true &&
-result.quality&&
-result.quality.applicable === true
+    result.finalScore !== null &&
+    result.finalScore !== undefined &&
+    Number.isFinite(Number(result.finalScore)) &&
+    Number(result.applicableWeight || 0) > 0
   );
 }
 
