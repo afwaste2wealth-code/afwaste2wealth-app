@@ -95056,6 +95056,11 @@ function openAFPerformanceWinnersHistory() {
       kind: "array"
     },
 
+    afLabourCapacitySettings: {
+      label: "Labour Capacity Settings",
+      kind: "object"
+    },
+
     afAttendanceDeletionAudit: {
       label: "Attendance Deletion Audit",
       kind: "array"
@@ -104615,3 +104620,278 @@ console.log(
     "A&F Social Media + Upcoming Events connected."
   );
 })();
+
+/* =========================================================
+   A&F ATTENDANCE + LABOUR PRODUCTIVITY REPORT
+   Added to master: individual printing, manager remarks,
+   workforce baseline, all-employee summary and factory
+   output/financial productivity per labour hour.
+   ========================================================= */
+
+function afLabourReadArray(key) {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || "[]");
+    return Array.isArray(value) ? value : [];
+  } catch (_) { return []; }
+}
+
+function afLabourEsc(value) {
+  const div = document.createElement("div");
+  div.textContent = String(value ?? "");
+  return div.innerHTML;
+}
+
+function afLabourMonthKey(dateValue) {
+  return String(dateValue || "").slice(0, 7);
+}
+
+function afLabourHours(minutes) {
+  return Number(minutes || 0) / 60;
+}
+
+function afLabourFormatHours(value) {
+  return Number(value || 0).toFixed(2) + " h";
+}
+
+function afLabourMoney(value) {
+  return "UGX " + Math.round(Number(value || 0)).toLocaleString();
+}
+
+function afLabourRating(percent) {
+  const p = Number(percent || 0);
+  if (p >= 95) return "Excellent";
+  if (p >= 85) return "Very Good";
+  if (p >= 75) return "Good";
+  if (p >= 60) return "Poor";
+  return "Very Poor";
+}
+
+function afLabourGetBaselines() {
+  try {
+    const value = JSON.parse(localStorage.getItem("afLabourCapacitySettings") || "{}");
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  } catch (_) { return {}; }
+}
+
+function afLabourDefaultHoursPerDay() {
+  const shifts = typeof getShiftSettings === "function" ? getShiftSettings() : afLabourReadArray("shiftSettings");
+  const active = shifts.filter(shift => String(shift.status || "active").toLowerCase() === "active");
+  const values = active.map(shift => Number(shift.normalHours || 0)).filter(value => value > 0);
+  if (!values.length) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function afLabourRecordScheduledMinutes(record) {
+  const shifts = typeof getShiftSettings === "function" ? getShiftSettings() : afLabourReadArray("shiftSettings");
+  const shift = shifts.find(item =>
+    String(item.id || "") === String(record.shiftId || "") ||
+    String(item.name || "").toLowerCase() === String(record.shiftName || "").toLowerCase()
+  );
+  if (shift && Number(shift.normalHours || 0) > 0) return Number(shift.normalHours) * 60;
+  const worked = Number(record.workedMinutes || 0);
+  const shortfall = Number(record.shortfallMinutes || 0);
+  const overtime = Number(record.overtimeMinutes || 0);
+  return Math.max(worked + shortfall - overtime, 0);
+}
+
+function afLabourMonthData(monthKey) {
+  const attendance = afLabourReadArray("attendanceRecords").filter(record => afLabourMonthKey(record.date) === monthKey);
+  const employees = typeof getEmployees === "function" ? getEmployees() : afLabourReadArray("employees");
+  const activeEmployees = employees.filter(employee => String(employee.employmentStatus || "").toLowerCase() === "active");
+  const byEmployee = new Map();
+
+  attendance.forEach(record => {
+    const id = String(record.employeeId || "");
+    if (!id) return;
+    if (!byEmployee.has(id)) byEmployee.set(id, []);
+    byEmployee.get(id).push(record);
+  });
+
+  const employeeRows = [];
+  const employeeIds = new Set([...activeEmployees.map(e => String(e.employeeId || "")), ...byEmployee.keys()]);
+  employeeIds.forEach(id => {
+    const employee = employees.find(e => String(e.employeeId || "") === id) || {};
+    const records = byEmployee.get(id) || [];
+    const present = records.filter(r => String(r.status || "").toLowerCase() === "present").length;
+    const absent = records.filter(r => String(r.status || "").toLowerCase() === "absent").length;
+    const lateDays = records.filter(r => Number(r.lateMinutes || 0) > 0).length;
+    const workedMinutes = records.reduce((s, r) => s + Number(r.workedMinutes || 0), 0);
+    const scheduledMinutes = records.reduce((s, r) => s + afLabourRecordScheduledMinutes(r), 0);
+    const shortfallMinutes = Math.max(scheduledMinutes - Math.min(workedMinutes, scheduledMinutes), 0);
+    const overtimeMinutes = records.reduce((s, r) => s + Number(r.overtimeMinutes || 0), 0);
+    const attendancePct = records.length ? (present / records.length) * 100 : 0;
+    const achievementPct = scheduledMinutes > 0 ? (workedMinutes / scheduledMinutes) * 100 : 0;
+    const teamName = records.find(r => r.teamName)?.teamName || "";
+    employeeRows.push({
+      employeeId: id,
+      fullName: employee.fullName || records[0]?.employeeName || id,
+      passportPhoto: employee.passportPhoto || "",
+      teamName,
+      workDays: records.length,
+      present, absent, lateDays,
+      workedMinutes, scheduledMinutes, shortfallMinutes, overtimeMinutes,
+      attendancePct, achievementPct,
+      rating: afLabourRating(achievementPct)
+    });
+  });
+
+  employeeRows.sort((a,b) => a.fullName.localeCompare(b.fullName));
+  const actualLabourHours = attendance.reduce((s,r) => s + afLabourHours(r.workedMinutes), 0);
+  const actualScheduledHours = attendance.reduce((s,r) => s + afLabourHours(afLabourRecordScheduledMinutes(r)), 0);
+  const overtimeHours = attendance.reduce((s,r) => s + afLabourHours(r.overtimeMinutes), 0);
+  const lostLabourHours = Math.max(actualScheduledHours - Math.min(actualLabourHours, actualScheduledHours), 0);
+
+  const washing = afLabourReadArray("washingShiftRecords").filter(r =>
+    afLabourMonthKey(r.date) === monthKey &&
+    (r.washingComplete === true || String(r.targetStatus || "").toUpperCase() === "COMPLETED")
+  );
+  const washedKg = washing.reduce((s,r) => s + Number(r.actualWashedKg || 0), 0);
+
+  const production = afLabourReadArray("productionRecords").filter(r => afLabourMonthKey(r.date) === monthKey && String(r.productionStatus || "COMPLETED").toUpperCase() !== "CANCELLED");
+  const poleKg = production.reduce((s,r) => s + Number(r.productionWeight || 0), 0);
+  const poles = production.reduce((s,r) => s + Number(r.totalPoles || 0), 0);
+
+  const clientMaterial = afLabourReadArray("materialRecords").filter(r =>
+    afLabourMonthKey(r.date || r.recordedAt) === monthKey &&
+    String(r.materialSource || "").toLowerCase() === "client" &&
+    String(r.status || "").toUpperCase() !== "CANCELLED"
+  );
+  const clientPelletKg = clientMaterial.reduce((s,r) => s + Number(r.actualPelletWeight ?? r.pelletWeight ?? 0), 0);
+  const companyPellets = afLabourReadArray("afCompanyPelletRecords").filter(r => afLabourMonthKey(r.date || r.createdAt || r.recordedAt) === monthKey && String(r.status || "").toUpperCase() !== "CANCELLED");
+  const companyPelletKg = companyPellets.reduce((s,r) => s + Number(r.actualPelletWeight ?? r.pelletKg ?? r.outputKg ?? r.pelletWeight ?? 0), 0);
+  const pelletKg = clientPelletKg + companyPelletKg;
+
+  let revenue = 0;
+  let expenses = 0;
+  const year = Number(monthKey.slice(0,4));
+  const monthIndex = Number(monthKey.slice(5,7)) - 1;
+  try {
+    if (typeof getAFProfitLossData === "function") {
+      const pl = getAFProfitLossData(year);
+      const month = pl?.months?.[monthIndex];
+      if (month) {
+        revenue = Number(month.salesRevenue || 0);
+        expenses = Number(month.operatingExpenses || 0) + Number(month.materialPurchases || 0);
+      }
+    }
+  } catch (error) { console.warn("Labour productivity P&L read:", error); }
+
+  const baselines = afLabourGetBaselines();
+  const baseline = baselines[monthKey] || {};
+  const targetEmployees = Number(baseline.targetEmployees || 0);
+  const minimumEmployees = Number(baseline.minimumEmployees || 0);
+  const plannedWorkDays = Number(baseline.plannedWorkDays || 0);
+  const standardHoursPerDay = Number(baseline.standardHoursPerDay || afLabourDefaultHoursPerDay() || 0);
+  const targetLabourHours = targetEmployees * plannedWorkDays * standardHoursPerDay;
+  const workforceAvailabilityPct = targetEmployees > 0 ? (activeEmployees.length / targetEmployees) * 100 : 0;
+  const labourCapacityPct = targetLabourHours > 0 ? (actualLabourHours / targetLabourHours) * 100 : 0;
+
+  return {
+    monthKey, attendance, employees, activeEmployees, employeeRows,
+    actualLabourHours, actualScheduledHours, overtimeHours, lostLabourHours,
+    washedKg, pelletKg, poleKg, poles, revenue, expenses,
+    minimumEmployees, targetEmployees, plannedWorkDays, standardHoursPerDay,
+    targetLabourHours, workforceAvailabilityPct, labourCapacityPct,
+    workforceShortage: Math.max(targetEmployees - activeEmployees.length, 0),
+    belowMinimum: minimumEmployees > 0 && activeEmployees.length < minimumEmployees
+  };
+}
+
+function afLabourOpenBaselineEditor(monthKey, onSaved) {
+  if (typeof getAFCurrentRole === "function" && getAFCurrentRole() !== "Director") {
+    alert("Only the Director can set the monthly labour baseline.");
+    return;
+  }
+  const saved = afLabourGetBaselines();
+  const current = saved[monthKey] || {};
+  const modal = document.createElement("div");
+  modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100020;display:flex;align-items:center;justify-content:center;padding:10px;font-family:Arial,sans-serif;";
+  modal.innerHTML = `<div style="background:white;width:520px;max-width:96%;border-radius:14px;padding:22px;">
+    <h2 style="margin-top:0;color:#0b5d3b;">Monthly Labour Baseline — ${afLabourEsc(monthKey)}</h2>
+    <p style="background:#eef8f2;padding:10px;border-radius:8px;font-size:13px;">These figures measure workforce shortage and the factory's labour-capacity achievement.</p>
+    <label>Minimum Required Employees</label><input id="afMinEmp" type="number" min="1" value="${Number(current.minimumEmployees || 0) || ""}" style="${settingsInputStyle()}"><br><br>
+    <label>Target / Maximum Employees</label><input id="afTargetEmp" type="number" min="1" value="${Number(current.targetEmployees || 0) || ""}" style="${settingsInputStyle()}"><br><br>
+    <label>Planned Working Days in Month</label><input id="afPlanDays" type="number" min="1" max="31" value="${Number(current.plannedWorkDays || 0) || ""}" style="${settingsInputStyle()}"><br><br>
+    <label>Standard Hours per Employee per Day</label><input id="afStdHours" type="number" min="0.1" step="0.25" value="${Number(current.standardHoursPerDay || afLabourDefaultHoursPerDay() || 0).toFixed(2)}" style="${settingsInputStyle()}"><br><br>
+    <div style="display:flex;gap:8px;justify-content:flex-end;"><button id="afCancelBase" style="padding:10px 14px;border:1px solid #aaa;background:white;border-radius:7px;">Cancel</button><button id="afSaveBase" style="padding:10px 14px;border:0;background:#0b5d3b;color:white;border-radius:7px;font-weight:bold;">Save Baseline</button></div>
+  </div>`;
+  document.body.appendChild(modal);
+  modal.querySelector("#afCancelBase").onclick = () => modal.remove();
+  modal.querySelector("#afSaveBase").onclick = () => {
+    const minimumEmployees = Number(modal.querySelector("#afMinEmp").value || 0);
+    const targetEmployees = Number(modal.querySelector("#afTargetEmp").value || 0);
+    const plannedWorkDays = Number(modal.querySelector("#afPlanDays").value || 0);
+    const standardHoursPerDay = Number(modal.querySelector("#afStdHours").value || 0);
+    if (!minimumEmployees || !targetEmployees || !plannedWorkDays || !standardHoursPerDay) { alert("Complete all four baseline fields."); return; }
+    if (minimumEmployees > targetEmployees) { alert("Minimum Required Employees cannot be greater than Target Employees."); return; }
+    saved[monthKey] = { minimumEmployees, targetEmployees, plannedWorkDays, standardHoursPerDay, updatedAt:new Date().toISOString() };
+    localStorage.setItem("afLabourCapacitySettings", JSON.stringify(saved));
+    modal.remove();
+    if (typeof onSaved === "function") onSaved();
+  };
+}
+
+function afLabourPrintHtml(title, bodyHtml) {
+  const w = window.open("", "_blank");
+  if (!w) { alert("Printing window was blocked. Please allow pop-ups for this application and try again."); return; }
+  w.document.open();
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${afLabourEsc(title)}</title><style>
+    body{font-family:Arial,sans-serif;color:#172b22;margin:22px;font-size:12px}.head{text-align:center;border-bottom:3px solid #0b5d3b;padding-bottom:10px;margin-bottom:15px}.head h1{margin:0;color:#0b5d3b;font-size:22px}.head .trade{font-weight:bold;letter-spacing:1px}.muted{color:#666}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin:10px 0}.card{border:1px solid #cfded6;border-radius:7px;padding:8px}.card b{display:block;font-size:14px;margin-top:3px}table{width:100%;border-collapse:collapse;margin-top:10px;font-size:10px}th,td{border:1px solid #bbb;padding:5px;text-align:left;vertical-align:middle}th{background:#eaf5ee}.photo{width:42px;height:50px;object-fit:cover;border:1px solid #aaa;border-radius:4px}.sig{display:grid;grid-template-columns:1fr 1fr 1fr;gap:30px;margin-top:35px}.sig div{border-top:1px solid #555;padding-top:5px}.warn{color:#b42318;font-weight:bold}.good{color:#0b5d3b;font-weight:bold}@media print{button{display:none}.cards{break-inside:avoid}thead{display:table-header-group}}
+  </style></head><body><div class="head"><h1>A&F Wekavera Ltd</h1><div class="trade">WASTE2WEALTH SOLUTIONS</div><div>Turning Waste into Value • Mbalala, Mukono</div></div>${bodyHtml}<script>window.onload=function(){setTimeout(function(){window.print();},300);};<\/script></body></html>`);
+  w.document.close();
+}
+
+function afLabourPrintIndividual(employeeId, monthKey) {
+  const data = afLabourMonthData(monthKey);
+  const row = data.employeeRows.find(item => String(item.employeeId) === String(employeeId));
+  if (!row) { alert("No attendance records were found for that employee in the selected month."); return; }
+  const records = data.attendance.filter(r => String(r.employeeId) === String(employeeId)).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  const photo = row.passportPhoto ? `<img class="photo" style="width:90px;height:110px" src="${row.passportPhoto}">` : `<div style="width:90px;height:110px;border:1px solid #aaa;display:flex;align-items:center;justify-content:center;">No Photo</div>`;
+  const body = `<h2>Individual Attendance Report</h2><div style="display:flex;gap:15px;align-items:center;">${photo}<div><b style="font-size:17px;">${afLabourEsc(row.fullName)}</b><br>Employee ID: ${afLabourEsc(row.employeeId)}<br>Team: ${afLabourEsc(row.teamName || "—")}<br>Period: ${afLabourEsc(monthKey)}</div></div>
+    <div class="cards"><div class="card">Work Days<b>${row.workDays}</b></div><div class="card">Present / Absent<b>${row.present} / ${row.absent}</b></div><div class="card">Actual Hours<b>${afLabourFormatHours(afLabourHours(row.workedMinutes))}</b></div><div class="card">Achievement<b>${row.achievementPct.toFixed(1)}% — ${row.rating}</b></div></div>
+    <table><thead><tr><th>Date</th><th>Status</th><th>Time In</th><th>Time Out</th><th>Worked</th><th>Shortfall</th><th>Overtime</th><th>Manager Remarks</th></tr></thead><tbody>${records.map(r=>`<tr><td>${afLabourEsc(typeof window.formatAFDate==="function"?window.formatAFDate(r.date):r.date)}</td><td>${afLabourEsc(r.status)}</td><td>${afLabourEsc(r.timeIn?(typeof window.formatAFTime==="function"?window.formatAFTime(r.timeIn):r.timeIn):"—")}</td><td>${afLabourEsc(r.timeOut?(typeof window.formatAFTime==="function"?window.formatAFTime(r.timeOut):r.timeOut):"—")}</td><td>${afLabourFormatHours(afLabourHours(r.workedMinutes))}</td><td>${afLabourFormatHours(afLabourHours(r.shortfallMinutes))}</td><td>${afLabourFormatHours(afLabourHours(r.overtimeMinutes))}</td><td>${afLabourEsc(r.remarks || "—")}</td></tr>`).join("")}</tbody></table>
+    <div class="sig"><div>Prepared / Printed By</div><div>Manager / HR Signature</div><div>Director Signature</div></div>`;
+  afLabourPrintHtml("Attendance - " + row.fullName, body);
+}
+
+function afLabourPrintSummary(monthKey) {
+  const d = afLabourMonthData(monthKey);
+  const safePerHour = (value) => d.actualLabourHours > 0 ? value / d.actualLabourHours : 0;
+  const baselineWarning = !d.targetEmployees || !d.plannedWorkDays || !d.standardHoursPerDay ? `<p class="warn">Monthly labour baseline is not fully configured. Target-capacity percentages require the Director to set the baseline.</p>` : "";
+  const body = `<h2>Attendance & Factory Labour Productivity Summary — ${afLabourEsc(monthKey)}</h2>${baselineWarning}
+    <div class="cards"><div class="card">Minimum / Target Employees<b>${d.minimumEmployees || "—"} / ${d.targetEmployees || "—"}</b></div><div class="card">Actual Active Workforce<b>${d.activeEmployees.length}${d.belowMinimum?' — BELOW MINIMUM':''}</b></div><div class="card">Workforce Availability<b>${d.targetEmployees?d.workforceAvailabilityPct.toFixed(1)+'%':'—'}</b></div><div class="card">Workforce Shortage<b>${d.targetEmployees?d.workforceShortage:'—'}</b></div><div class="card">Target Labour Hours<b>${d.targetLabourHours?afLabourFormatHours(d.targetLabourHours):'—'}</b></div><div class="card">Actual Labour Hours<b>${afLabourFormatHours(d.actualLabourHours)}</b></div><div class="card">Lost Labour Hours<b>${afLabourFormatHours(d.lostLabourHours)}</b></div><div class="card">Labour Capacity Achievement<b>${d.targetLabourHours?d.labourCapacityPct.toFixed(1)+'%':'—'}</b></div></div>
+    <h3>Factory Output & Financial Productivity per Labour Hour</h3><div class="cards"><div class="card">Washed Kg<b>${d.washedKg.toFixed(2)} kg</b><span>${safePerHour(d.washedKg).toFixed(2)} kg/hr</span></div><div class="card">Pellet Kg<b>${d.pelletKg.toFixed(2)} kg</b><span>${safePerHour(d.pelletKg).toFixed(2)} kg/hr</span></div><div class="card">Pole Output<b>${d.poles.toLocaleString()} poles / ${d.poleKg.toFixed(2)} kg</b><span>${safePerHour(d.poles).toFixed(3)} poles/hr • ${safePerHour(d.poleKg).toFixed(2)} kg/hr</span></div><div class="card">Revenue<b>${afLabourMoney(d.revenue)}</b><span>${afLabourMoney(safePerHour(d.revenue))}/hr</span></div><div class="card">Expenses + COGS<b>${afLabourMoney(d.expenses)}</b><span>${afLabourMoney(safePerHour(d.expenses))}/hr</span></div><div class="card">Net Contribution<b>${afLabourMoney(d.revenue-d.expenses)}</b><span>${afLabourMoney(safePerHour(d.revenue-d.expenses))}/hr</span></div></div>
+    <h3>All Employees</h3><table><thead><tr><th>Photo</th><th>Employee</th><th>Team</th><th>Work Days</th><th>Present</th><th>Absent</th><th>Late</th><th>Actual Hrs</th><th>Shortfall</th><th>OT</th><th>Attendance</th><th>Hours Achievement</th><th>Rating</th></tr></thead><tbody>${d.employeeRows.map(r=>`<tr><td>${r.passportPhoto?`<img class="photo" src="${r.passportPhoto}">`:"—"}</td><td><b>${afLabourEsc(r.fullName)}</b><br>${afLabourEsc(r.employeeId)}</td><td>${afLabourEsc(r.teamName||"—")}</td><td>${r.workDays}</td><td>${r.present}</td><td>${r.absent}</td><td>${r.lateDays}</td><td>${afLabourHours(r.workedMinutes).toFixed(2)}</td><td>${afLabourHours(r.shortfallMinutes).toFixed(2)}</td><td>${afLabourHours(r.overtimeMinutes).toFixed(2)}</td><td>${r.attendancePct.toFixed(1)}%</td><td>${r.achievementPct.toFixed(1)}%</td><td><b>${r.rating}</b></td></tr>`).join("")}</tbody></table>
+    <div class="sig"><div>Prepared / Printed By</div><div>Manager / HR Signature</div><div>Director Signature</div></div>`;
+  afLabourPrintHtml("Labour Productivity Summary " + monthKey, body);
+}
+
+function openAFAttendanceHistoryCorrection() {
+  const records = [...getAttendanceRecords()].sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")) || Number(b.id||0)-Number(a.id||0));
+  const isDirector = typeof getAFCurrentRole === "function" && getAFCurrentRole() === "Director";
+  const now = new Date();
+  const currentMonth = now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0");
+  const modal = document.createElement("div");
+  modal.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100005;padding:10px;font-family:Arial,sans-serif;";
+  modal.innerHTML=`<div style="width:1320px;max-width:98%;max-height:94vh;overflow:auto;background:white;border-radius:14px;padding:22px;box-shadow:0 10px 40px rgba(0,0,0,.35);">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;"><div><h2 style="margin:0;color:#0b5d3b;">Attendance History / Correct</h2><div style="font-size:12px;color:#666;margin-top:4px;">Review, print and analyse attendance. Only the Director can edit or delete saved attendance.</div></div><button id="afCloseAttendanceHistory" style="border:0;background:#eee;padding:9px 13px;border-radius:7px;cursor:pointer;font-weight:bold;">✕ Close</button></div>
+    <div style="display:grid;grid-template-columns:1fr 180px 180px;gap:10px;margin-bottom:10px;"><input id="afAttendanceHistorySearch" placeholder="Search employee, ID, team or status" style="${settingsInputStyle()}"><input id="afAttendanceHistoryDate" type="date" style="${settingsInputStyle()}"><input id="afAttendanceHistoryMonth" type="month" value="${currentMonth}" style="${settingsInputStyle()}"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;"><button id="afPrintIndividualAttendance" style="border:0;background:#0d6efd;color:white;padding:9px 12px;border-radius:7px;font-weight:bold;cursor:pointer;">🖨 Print Individual</button><button id="afPrintAllAttendance" style="border:0;background:#0b5d3b;color:white;padding:9px 12px;border-radius:7px;font-weight:bold;cursor:pointer;">📊 All Employees + Labour Productivity</button>${isDirector?`<button id="afSetLabourBaseline" style="border:0;background:#7a4b00;color:white;padding:9px 12px;border-radius:7px;font-weight:bold;cursor:pointer;">⚙ Set Monthly Labour Baseline</button>`:""}</div>
+    <div style="overflow:auto;border:1px solid #ddd;border-radius:9px;"><table style="width:100%;min-width:1260px;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#eaf5ee;text-align:left;"><th style="padding:9px;">Date</th><th style="padding:9px;">Employee</th><th style="padding:9px;">Team</th><th style="padding:9px;">Status</th><th style="padding:9px;">Time In</th><th style="padding:9px;">Time Out</th><th style="padding:9px;">Worked</th><th style="padding:9px;">Shortfall</th><th style="padding:9px;">Overtime</th><th style="padding:9px;">Manager Remarks</th><th style="padding:9px;">Corrections</th><th style="padding:9px;">Action</th></tr></thead><tbody id="afAttendanceHistoryRows"></tbody></table></div>
+  </div>`;
+  document.body.appendChild(modal);
+  const search=modal.querySelector("#afAttendanceHistorySearch"), dateFilter=modal.querySelector("#afAttendanceHistoryDate"), monthFilter=modal.querySelector("#afAttendanceHistoryMonth"), rows=modal.querySelector("#afAttendanceHistoryRows");
+  let currentFiltered=[];
+  const h=m=>(Number(m||0)/60).toFixed(2)+" h";
+  function renderRows(){
+    const q=String(search.value||"").trim().toLowerCase(), d=dateFilter.value, month=monthFilter.value;
+    currentFiltered=records.filter(record=>{ if(d&&record.date!==d)return false; if(!d&&month&&afLabourMonthKey(record.date)!==month)return false; if(!q)return true; return [record.employeeName,record.employeeId,record.teamName,record.status,record.remarks].some(v=>String(v||"").toLowerCase().includes(q)); });
+    rows.innerHTML=currentFiltered.length?currentFiltered.map(record=>`<tr style="border-bottom:1px solid #eee;"><td style="padding:9px;">${afLabourEsc(typeof window.formatAFDate==="function"?window.formatAFDate(record.date):record.date)}</td><td style="padding:9px;"><b>${afLabourEsc(record.employeeName||"")}</b><br><span style="color:#777;">${afLabourEsc(record.employeeId||"")}</span></td><td style="padding:9px;">${afLabourEsc(record.teamName||"")}</td><td style="padding:9px;">${afLabourEsc(record.status||"")}</td><td style="padding:9px;">${afLabourEsc(record.timeIn?(typeof window.formatAFTime==="function"?window.formatAFTime(record.timeIn):record.timeIn):"—")}</td><td style="padding:9px;">${afLabourEsc(record.timeOut?(typeof window.formatAFTime==="function"?window.formatAFTime(record.timeOut):record.timeOut):"—")}</td><td style="padding:9px;">${h(record.workedMinutes)}</td><td style="padding:9px;">${h(record.shortfallMinutes)}</td><td style="padding:9px;">${h(record.overtimeMinutes)}</td><td style="padding:9px;max-width:220px;white-space:normal;">${afLabourEsc(record.remarks||"—")}</td><td style="padding:9px;">${Array.isArray(record.correctionHistory)?record.correctionHistory.length:0}</td><td style="padding:9px;white-space:nowrap;">${isDirector?`<button class="afAttendanceCorrectBtn" data-id="${afLabourEsc(String(record.id))}" style="border:0;background:#0d6efd;color:white;padding:7px 9px;border-radius:6px;cursor:pointer;font-weight:bold;">Correct</button><button class="afAttendanceDeleteBtn" data-id="${afLabourEsc(String(record.id))}" style="border:0;background:#b42318;color:white;padding:7px 9px;border-radius:6px;cursor:pointer;font-weight:bold;margin-left:4px;">Delete</button>`:`<span style="color:#777;">Director only</span>`}</td></tr>`).join(""):`<tr><td colspan="12" style="padding:28px;text-align:center;color:#666;">No attendance records found.</td></tr>`;
+    if(isDirector){ rows.querySelectorAll(".afAttendanceCorrectBtn").forEach(button=>button.onclick=()=>openAFAttendanceCorrectionEditor(button.dataset.id,()=>{modal.remove();openAFAttendanceHistoryCorrection();})); rows.querySelectorAll(".afAttendanceDeleteBtn").forEach(button=>button.onclick=()=>deleteAFAttendanceRecord(button.dataset.id,()=>{modal.remove();openAFAttendanceHistoryCorrection();})); }
+  }
+  search.oninput=renderRows; dateFilter.onchange=()=>{if(dateFilter.value) monthFilter.value=afLabourMonthKey(dateFilter.value);renderRows();}; monthFilter.onchange=()=>{dateFilter.value="";renderRows();};
+  modal.querySelector("#afPrintIndividualAttendance").onclick=()=>{ const ids=[...new Set(currentFiltered.map(r=>String(r.employeeId||"")).filter(Boolean))]; if(ids.length!==1){alert(ids.length?"Please search/filter until only one employee is shown, then print again.":"No employee attendance is available to print.");return;} afLabourPrintIndividual(ids[0],monthFilter.value||afLabourMonthKey(currentFiltered[0]?.date)); };
+  modal.querySelector("#afPrintAllAttendance").onclick=()=>{ if(!monthFilter.value){alert("Select a month first.");return;} afLabourPrintSummary(monthFilter.value); };
+  const baseBtn=modal.querySelector("#afSetLabourBaseline"); if(baseBtn) baseBtn.onclick=()=>{if(!monthFilter.value){alert("Select a month first.");return;} afLabourOpenBaselineEditor(monthFilter.value,renderRows);};
+  modal.querySelector("#afCloseAttendanceHistory").onclick=()=>modal.remove(); renderRows();
+}
