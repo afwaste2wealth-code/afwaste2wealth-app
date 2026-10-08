@@ -1080,6 +1080,24 @@ Mbalala Town, Mukono • Factory Management System
 </div>
 
 
+
+<script>
+/* A&F OFFLINE APP SHELL
+   After one successful online visit, the service worker keeps the application
+   files available so the factory system can open without internet. */
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("./service-worker.js")
+      .then(function (registration) {
+        registration.update().catch(function () {});
+      })
+      .catch(function (error) {
+        console.warn("A&F offline service worker registration failed:", error);
+      });
+  });
+}
+</script>
+
 <script src="app.js?v=20260930-customeredit1"></script>
 
 
