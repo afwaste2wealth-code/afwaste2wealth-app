@@ -51930,6 +51930,8 @@ record.payee || "-"
 ${afExpenseEscape(
 record.description || "-"
 )}
+${record.vehicleName ? `<div style="font-size:10px;color:#0b5d3b;margin-top:3px;"><b>Vehicle:</b> ${afExpenseEscape(record.vehicleName)}</div>` : ""}
+${record.vehicleComment ? `<div style="font-size:10px;color:#666;margin-top:2px;">${afExpenseEscape(record.vehicleComment)}</div>` : ""}
 </td>
 
 <td style="
@@ -52376,6 +52378,27 @@ box-sizing:border-box;
 
 </div>
 
+<div>
+<label>Vehicle (Optional)</label>
+<select id="afExpenseVehicle" style="width:100%;box-sizing:border-box;padding:9px;margin-top:5px;">
+<option value="">Not vehicle related</option>
+${(JSON.parse(localStorage.getItem("afFleetVehicles") || "[]"))
+  .filter(v => String(v.status || "Active").toLowerCase() !== "disposed")
+  .map(v => `<option value="${afExpenseEscape(v.id)}">${afExpenseEscape((v.name || v.makeModel || "Vehicle") + (v.registrationNumber ? " — " + v.registrationNumber : ""))}</option>`)
+  .join("")}
+</select>
+</div>
+
+<div>
+<label>Fuel Litres (Optional)</label>
+<input id="afExpenseFuelLitres" type="number" min="0" step="0.01" placeholder="e.g. 60" style="width:100%;box-sizing:border-box;padding:9px;margin-top:5px;">
+</div>
+
+<div>
+<label>Odometer KM (Optional)</label>
+<input id="afExpenseOdometer" type="number" min="0" step="1" placeholder="Current km" style="width:100%;box-sizing:border-box;padding:9px;margin-top:5px;">
+</div>
+
 </div>
 
 
@@ -52422,6 +52445,11 @@ box-sizing:border-box;
   "
 ></textarea>
 
+</div>
+
+<div style="margin-top:12px;">
+<label>Vehicle Comment / Remarks <span style="color:#777;">(Optional)</span></label>
+<input id="afExpenseVehicleComment" type="text" placeholder="e.g. Fuel for Kiteezi delivery" style="width:100%;box-sizing:border-box;padding:9px;margin-top:5px;">
 </div>
 
 
@@ -52665,6 +52693,11 @@ modal.querySelector(
   "#afExpenseNotes"
 ).value = "";
 
+modal.querySelector("#afExpenseVehicle").value = "";
+modal.querySelector("#afExpenseFuelLitres").value = "";
+modal.querySelector("#afExpenseOdometer").value = "";
+modal.querySelector("#afExpenseVehicleComment").value = "";
+
 
 modal.querySelector(
   "#afSaveExpense"
@@ -52754,6 +52787,17 @@ const notes =
 modal.querySelector(
   "#afExpenseNotes"
 ).value.trim();
+
+const vehicleId = modal.querySelector("#afExpenseVehicle").value;
+const fuelLitres = Number(modal.querySelector("#afExpenseFuelLitres").value || 0);
+const odometerKm = Number(modal.querySelector("#afExpenseOdometer").value || 0);
+const vehicleComment = modal.querySelector("#afExpenseVehicleComment").value.trim();
+const vehicleRecord = (JSON.parse(localStorage.getItem("afFleetVehicles") || "[]"))
+  .find(v => String(v.id) === String(vehicleId));
+const vehicleName = vehicleRecord
+  ? ((vehicleRecord.name || vehicleRecord.makeModel || "Vehicle") +
+     (vehicleRecord.registrationNumber ? " — " + vehicleRecord.registrationNumber : ""))
+  : "";
 
 
   if (!date) {
@@ -52891,6 +52935,12 @@ description;
 record.notes =
 notes;
 
+record.vehicleId = vehicleId;
+record.vehicleName = vehicleName;
+record.fuelLitres = fuelLitres;
+record.odometerKm = odometerKm;
+record.vehicleComment = vehicleComment;
+
 record.editedAt =
 new Date()
   .toISOString();
@@ -52955,6 +53005,12 @@ paymentMethod,
   reference,
 
   notes,
+
+  vehicleId,
+  vehicleName,
+  fuelLitres,
+  odometerKm,
+  vehicleComment,
 
   status:
   "COMPLETED",
@@ -53115,6 +53171,11 @@ modal.querySelector(
   "#afExpenseNotes"
 ).value =
 record.notes || "";
+
+modal.querySelector("#afExpenseVehicle").value = record.vehicleId || "";
+modal.querySelector("#afExpenseFuelLitres").value = Number(record.fuelLitres || 0) || "";
+modal.querySelector("#afExpenseOdometer").value = Number(record.odometerKm || 0) || "";
+modal.querySelector("#afExpenseVehicleComment").value = record.vehicleComment || "";
 
 
 modal.querySelector(
@@ -95454,6 +95515,21 @@ function openAFPerformanceWinnersHistory() {
     afPerformanceRewards: {
       label: "Performance Rewards",
       kind: "array"
+    },
+
+    afFleetVehicles: {
+      label: "Fleet Vehicles",
+      kind: "array"
+    },
+
+    afFleetKmRecords: {
+      label: "Fleet Weekly KM Records",
+      kind: "array"
+    },
+
+    afFleetServiceRecords: {
+      label: "Fleet Service & Repair Records",
+      kind: "array"
     }
 
   };
@@ -105043,6 +105119,25 @@ function afLabourMonthData(monthKey) {
   const companyPelletKg = companyPellets.reduce((s,r) => s + Number(r.actualPelletWeight ?? r.pelletKg ?? r.outputKg ?? r.pelletWeight ?? 0), 0);
   const pelletKg = clientPelletKg + companyPelletKg;
 
+  /*
+   * Management electricity analysis only.
+   * Reads the actual UEDCL expense already posted in Expenses.
+   * These allocations DO NOT create or change any financial record.
+   */
+  const electricityExpenses = afLabourReadArray("expenses").filter(r => {
+    if (afLabourMonthKey(r.date) !== monthKey) return false;
+    if (String(r.status || "COMPLETED").toUpperCase() === "CANCELLED") return false;
+    const category = String(r.category || "").toLowerCase();
+    const text = [r.payee, r.description, r.notes].map(v => String(v || "").toLowerCase()).join(" ");
+    return category.includes("electricity") && (text.includes("uedcl") || text.includes("electric"));
+  });
+  const uedclBill = electricityExpenses.reduce((s,r) => s + Number(r.amount || 0), 0);
+  const finishedProductionKg = poleKg + pelletKg;
+  const electricityCostPerKg = finishedProductionKg > 0 ? uedclBill / finishedProductionKg : 0;
+  const electricityAllocatedToPoles = poleKg * electricityCostPerKg;
+  const electricityAllocatedToPellets = pelletKg * electricityCostPerKg;
+  const electricityPerPole = poles > 0 ? electricityAllocatedToPoles / poles : 0;
+
   let revenue = 0;
   let expenses = 0;
   const year = Number(monthKey.slice(0,4));
@@ -105072,6 +105167,8 @@ function afLabourMonthData(monthKey) {
     monthKey, attendance, employees, workforceEmployees, activeEmployees, employeeRows,
     actualLabourHours, actualScheduledHours, overtimeHours, lostLabourHours,
     washedKg, pelletKg, poleKg, poles, revenue, expenses,
+    uedclBill, finishedProductionKg, electricityCostPerKg,
+    electricityAllocatedToPoles, electricityAllocatedToPellets, electricityPerPole,
     minimumEmployees, targetEmployees, plannedWorkDays, standardHoursPerDay,
     targetLabourHours, workforceAvailabilityPct, labourCapacityPct,
     workforceShortage: Math.max(targetEmployees - activeEmployees.length, 0),
@@ -105145,6 +105242,14 @@ function afLabourPrintSummary(monthKey) {
   const body = `<h2>Attendance & Factory Labour Productivity Summary — ${afLabourEsc(monthKey)}</h2>${baselineWarning}
     <div class="cards"><div class="card">Minimum / Target Employees<b>${d.minimumEmployees || "—"} / ${d.targetEmployees || "—"}</b></div><div class="card">Actual Active Workforce<b>${d.activeEmployees.length}${d.belowMinimum?' — BELOW MINIMUM':''}</b></div><div class="card">Workforce Availability<b>${d.targetEmployees?d.workforceAvailabilityPct.toFixed(1)+'%':'—'}</b></div><div class="card">Workforce Shortage<b>${d.targetEmployees?d.workforceShortage:'—'}</b></div><div class="card">Target Labour Hours<b>${d.targetLabourHours?afLabourFormatHours(d.targetLabourHours):'—'}</b></div><div class="card">Actual Labour Hours<b>${afLabourFormatHours(d.actualLabourHours)}</b></div><div class="card">Lost Labour Hours<b>${afLabourFormatHours(d.lostLabourHours)}</b></div><div class="card">Labour Capacity Achievement<b>${d.targetLabourHours?d.labourCapacityPct.toFixed(1)+'%':'—'}</b></div></div>
     <h3>Factory Output & Financial Productivity per Labour Hour</h3><div class="cards"><div class="card">Washed Kg<b>${d.washedKg.toFixed(2)} kg</b><span>${safePerHour(d.washedKg).toFixed(2)} kg/hr</span></div><div class="card">Pellet Kg<b>${d.pelletKg.toFixed(2)} kg</b><span>${safePerHour(d.pelletKg).toFixed(2)} kg/hr</span></div><div class="card">Pole Output<b>${d.poles.toLocaleString()} poles / ${d.poleKg.toFixed(2)} kg</b><span>${safePerHour(d.poles).toFixed(3)} poles/hr • ${safePerHour(d.poleKg).toFixed(2)} kg/hr</span></div><div class="card">Revenue<b>${afLabourMoney(d.revenue)}</b><span>${afLabourMoney(safePerHour(d.revenue))}/hr</span></div><div class="card">Expenses + COGS<b>${afLabourMoney(d.expenses)}</b><span>${afLabourMoney(safePerHour(d.expenses))}/hr</span></div><div class="card">Net Contribution<b>${afLabourMoney(d.revenue-d.expenses)}</b><span>${afLabourMoney(safePerHour(d.revenue-d.expenses))}/hr</span></div></div>
+    <h3>Electricity Production Analysis <span style="font-size:11px;font-weight:normal;">(Management analysis only — no financial posting)</span></h3>
+    <div class="cards">
+      <div class="card">UEDCL Bill Used<b>${afLabourMoney(d.uedclBill)}</b><span>Read from recorded UEDCL electricity expense</span></div>
+      <div class="card">Finished Production Weight<b>${d.finishedProductionKg.toFixed(2)} kg</b><span>Poles ${d.poleKg.toFixed(2)} kg + Pellets ${d.pelletKg.toFixed(2)} kg</span></div>
+      <div class="card">Electricity Cost / Kg<b>${d.finishedProductionKg > 0 && d.uedclBill > 0 ? afLabourMoney(d.electricityCostPerKg) + "/kg" : "—"}</b><span>UEDCL bill ÷ finished production kg</span></div>
+      <div class="card">Electricity / Pole<b>${d.poles > 0 && d.uedclBill > 0 ? afLabourMoney(d.electricityPerPole) + "/pole" : "—"}</b><span>Based on actual pole production weight</span></div>
+      <div class="card">Pellet Electricity<b>${d.pelletKg > 0 && d.uedclBill > 0 ? afLabourMoney(d.electricityCostPerKg) + "/kg" : "—"}</b><span>Same monthly electricity rate per finished kg</span></div>
+    </div>
     <h3>All Employees</h3><table><thead><tr><th>Photo</th><th>Employee</th><th>Team</th><th>Work Days</th><th>Present</th><th>Absent</th><th>Late</th><th>Actual Hrs</th><th>Shortfall</th><th>OT</th><th>Attendance</th><th>Hours Achievement</th><th>Rating</th></tr></thead><tbody>${d.employeeRows.map(r=>`<tr><td>${r.passportPhoto?`<img class="photo" src="${r.passportPhoto}">`:"—"}</td><td><b>${afLabourEsc(r.fullName)}</b><br>${afLabourEsc(r.employeeId)}</td><td>${afLabourEsc(r.teamName||"—")}</td><td>${r.workDays}</td><td>${r.present}</td><td>${r.absent}</td><td>${r.lateDays}</td><td>${afLabourHours(r.workedMinutes).toFixed(2)}</td><td>${afLabourHours(r.shortfallMinutes).toFixed(2)}</td><td>${afLabourHours(r.overtimeMinutes).toFixed(2)}</td><td>${r.attendancePct.toFixed(1)}%</td><td>${r.achievementPct.toFixed(1)}%</td><td><b>${r.rating}</b></td></tr>`).join("")}</tbody></table>
     <div class="sig"><div>Prepared / Printed By</div><div>Manager / HR Signature</div><div>Director Signature</div></div>`;
   afLabourPrintHtml("Labour Productivity Summary " + monthKey, body);
@@ -105179,3 +105284,246 @@ function openAFAttendanceHistoryCorrection() {
   const baseBtn=modal.querySelector("#afSetLabourBaseline"); if(baseBtn) baseBtn.onclick=()=>{if(!monthFilter.value){alert("Select a month first.");return;} afLabourOpenBaselineEditor(monthFilter.value,renderRows);};
   modal.querySelector("#afCloseAttendanceHistory").onclick=()=>modal.remove(); renderRows();
 }
+
+
+/* =========================================================
+   A&F FLEET & VEHICLE MAINTENANCE
+   Vehicle register + weekly KM + service/repairs + alerts
+   Vehicle costs link to the existing Expenses system.
+   ========================================================= */
+(function connectAFFleetMaintenance() {
+  const VEHICLE_KEY = "afFleetVehicles";
+  const KM_KEY = "afFleetKmRecords";
+  const SERVICE_KEY = "afFleetServiceRecords";
+
+  const read = (key) => {
+    try {
+      const v = JSON.parse(localStorage.getItem(key) || "[]");
+      return Array.isArray(v) ? v : [];
+    } catch (_) { return []; }
+  };
+  const write = (key, value) => localStorage.setItem(key, JSON.stringify(value));
+  const esc = (v) => String(v ?? "")
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/'/g,"&#039;");
+  const money = (v) => "UGX " + Math.round(Number(v || 0)).toLocaleString();
+  const user = () => {
+    try { return typeof getAFCurrentUser === "function" ? (getAFCurrentUser() || {}) : {}; }
+    catch (_) { return {}; }
+  };
+  const isDirector = () => String(user().role || "").toLowerCase() === "director";
+  const canUse = () => ["director","secretary"].includes(String(user().role || "").toLowerCase());
+
+  function vehicleLabel(v) {
+    return (v.name || v.makeModel || "Vehicle") +
+      (v.registrationNumber ? " — " + v.registrationNumber : "");
+  }
+
+  function currentKm(vehicle) {
+    const kms = read(KM_KEY).filter(r => String(r.vehicleId) === String(vehicle.id));
+    const lastKm = kms.reduce((m,r) => Math.max(m, Number(r.endingKm || 0)), 0);
+    return Math.max(Number(vehicle.currentKm || 0), lastKm);
+  }
+
+  function serviceState(v) {
+    const km = currentKm(v);
+    const next = Number(v.nextServiceKm || 0);
+    if (!next) return {status:"NOT SET", remaining:null, km};
+    const remaining = next - km;
+    if (remaining <= 0) return {status:"DUE", remaining, km};
+    if (remaining <= 1000) return {status:"APPROACHING", remaining, km};
+    return {status:"OK", remaining, km};
+  }
+
+  function postFleetExpense(service, vehicle) {
+    if (!service.totalCost || service.expenseId) return service;
+    const expenses = (() => {
+      try {
+        const a = JSON.parse(localStorage.getItem("expenses") || "[]");
+        return Array.isArray(a) ? a : [];
+      } catch (_) { return []; }
+    })();
+    const expenseId = Date.now() + Math.floor(Math.random()*1000);
+    const dateClean = String(service.date || "").replace(/-/g,"");
+    const sameDate = expenses.filter(e => String(e.date||"") === String(service.date||"")).length;
+    const expenseNumber = "EXP-" + dateClean + "-" + String(sameDate + 1).padStart(3,"0");
+    expenses.push({
+      id: expenseId,
+      expenseNumber,
+      date: service.date,
+      category: "Repairs & Maintenance",
+      payee: service.garage || service.mechanic || "Vehicle maintenance",
+      description: service.type + " — " + vehicleLabel(vehicle),
+      amount: Number(service.totalCost || 0),
+      paymentMethod: service.paymentMethod || "Cash",
+      reference: service.reference || "",
+      notes: service.items || "",
+      vehicleId: vehicle.id,
+      vehicleName: vehicleLabel(vehicle),
+      fuelLitres: 0,
+      odometerKm: Number(service.odometerKm || 0),
+      vehicleComment: service.comment || "",
+      sourceModule: "fleetService",
+      sourceRecordId: service.id,
+      status: "COMPLETED",
+      recordedByEmployeeId: user().employeeId || "",
+      recordedByName: user().fullName || user().employeeName || "",
+      recordedByRole: user().role || "",
+      createdAt: new Date().toISOString()
+    });
+    localStorage.setItem("expenses", JSON.stringify(expenses));
+    localStorage.setItem("expenseRecords", JSON.stringify(expenses));
+    service.expenseId = expenseId;
+    return service;
+  }
+
+  function openFleet() {
+    if (!canUse()) {
+      alert("Fleet & Vehicle Maintenance is available to the Director and Secretary.");
+      return;
+    }
+    document.getElementById("afFleetModal")?.remove();
+    const vehicles = read(VEHICLE_KEY);
+    const kmRecords = read(KM_KEY);
+    const services = read(SERVICE_KEY);
+    const modal = document.createElement("div");
+    modal.id = "afFleetModal";
+    modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100050;padding:12px;overflow:auto;font-family:Arial,sans-serif;";
+    const options = vehicles.map(v => `<option value="${esc(v.id)}">${esc(vehicleLabel(v))}</option>`).join("");
+    const vehicleRows = vehicles.length ? vehicles.map(v => {
+      const s = serviceState(v);
+      const badge = s.status === "DUE" ? "🔴 DUE" : s.status === "APPROACHING" ? "🟠 APPROACHING" : s.status === "OK" ? "🟢 OK" : "⚪ NOT SET";
+      return `<tr>
+        <td>${esc(vehicleLabel(v))}</td><td>${esc(v.type || "—")}</td>
+        <td>${Number(s.km||0).toLocaleString()} km</td>
+        <td>${Number(v.nextServiceKm||0) ? Number(v.nextServiceKm).toLocaleString()+" km" : "—"}</td>
+        <td><b>${badge}</b>${s.remaining !== null ? `<div style="font-size:10px;color:#666;">${s.remaining >= 0 ? s.remaining.toLocaleString()+" km remaining" : Math.abs(s.remaining).toLocaleString()+" km overdue"}</div>` : ""}</td>
+        <td>${esc(v.status || "Active")}</td>
+      </tr>`;
+    }).join("") : `<tr><td colspan="6" style="padding:22px;text-align:center;color:#666;">No vehicles registered. Use + Add Vehicle.</td></tr>`;
+
+    const kmRows = kmRecords.slice().sort((a,b)=>String(b.weekEnding||"").localeCompare(String(a.weekEnding||""))).slice(0,30).map(r => {
+      const v = vehicles.find(x=>String(x.id)===String(r.vehicleId));
+      return `<tr><td>${esc(r.weekEnding||"")}</td><td>${esc(v?vehicleLabel(v):"Vehicle")}</td><td>${Number(r.startingKm||0).toLocaleString()}</td><td>${Number(r.endingKm||0).toLocaleString()}</td><td><b>${Math.max(Number(r.endingKm||0)-Number(r.startingKm||0),0).toLocaleString()} km</b></td><td>${esc(r.comment||"—")}</td></tr>`;
+    }).join("") || `<tr><td colspan="6" style="padding:18px;text-align:center;color:#666;">No weekly kilometre records yet.</td></tr>`;
+
+    const serviceRows = services.slice().sort((a,b)=>String(b.date||"").localeCompare(String(a.date||""))).slice(0,30).map(r => {
+      const v=vehicles.find(x=>String(x.id)===String(r.vehicleId));
+      return `<tr><td>${esc(r.date||"")}</td><td>${esc(v?vehicleLabel(v):"Vehicle")}</td><td>${esc(r.type||"")}</td><td>${Number(r.odometerKm||0).toLocaleString()} km</td><td>${esc(r.items||"—")}</td><td>${money(r.totalCost)}</td><td>${esc(r.comment||"—")}</td></tr>`;
+    }).join("") || `<tr><td colspan="7" style="padding:18px;text-align:center;color:#666;">No service or repair records yet.</td></tr>`;
+
+    modal.innerHTML = `<div style="max-width:1200px;margin:15px auto;background:white;border-radius:14px;padding:20px;">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;"><div><h2 style="margin:0;color:#0b5d3b;">🚗 Fleet & Vehicle Maintenance</h2><div style="font-size:12px;color:#666;margin-top:4px;">Vehicle register, weekly kilometres, preventive service and repair history</div></div><button id="afFleetClose" style="border:0;background:#444;color:white;padding:9px 13px;border-radius:7px;cursor:pointer;">✕ Close</button></div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:16px 0;">
+        <button id="afFleetAddVehicle" style="border:0;background:#0b5d3b;color:white;padding:10px 13px;border-radius:7px;font-weight:bold;cursor:pointer;">+ Add Vehicle</button>
+        <button id="afFleetAddKm" ${vehicles.length?"":"disabled"} style="border:0;background:#0d6efd;color:white;padding:10px 13px;border-radius:7px;font-weight:bold;cursor:pointer;">📍 Weekly KM Record</button>
+        <button id="afFleetAddService" ${vehicles.length?"":"disabled"} style="border:0;background:#7a4b00;color:white;padding:10px 13px;border-radius:7px;font-weight:bold;cursor:pointer;">🔧 Record Service / Repair</button>
+      </div>
+
+      <h3 style="color:#0b5d3b;">Vehicle Register & Service Status</h3>
+      <div style="overflow:auto;border:1px solid #ddd;border-radius:8px;"><table style="width:100%;min-width:800px;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#eaf5ee;text-align:left;"><th style="padding:9px;">Vehicle</th><th>Type</th><th>Current KM</th><th>Next Service</th><th>Service Status</th><th>Status</th></tr></thead><tbody>${vehicleRows}</tbody></table></div>
+
+      <h3 style="color:#0b5d3b;margin-top:20px;">Recent Weekly KM Records</h3>
+      <div style="overflow:auto;border:1px solid #ddd;border-radius:8px;"><table style="width:100%;min-width:850px;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f4f4f4;text-align:left;"><th style="padding:9px;">Week Ending</th><th>Vehicle</th><th>Starting KM</th><th>Ending KM</th><th>Distance</th><th>Comment</th></tr></thead><tbody>${kmRows}</tbody></table></div>
+
+      <h3 style="color:#0b5d3b;margin-top:20px;">Service & Repair History</h3>
+      <div style="overflow:auto;border:1px solid #ddd;border-radius:8px;"><table style="width:100%;min-width:950px;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f4f4f4;text-align:left;"><th style="padding:9px;">Date</th><th>Vehicle</th><th>Type</th><th>Odometer</th><th>Items / Work</th><th>Cost</th><th>Comment</th></tr></thead><tbody>${serviceRows}</tbody></table></div>
+    </div>`;
+    document.body.appendChild(modal);
+    modal.querySelector("#afFleetClose").onclick=()=>modal.remove();
+
+    modal.querySelector("#afFleetAddVehicle").onclick=()=>{
+      const name=prompt("Vehicle name (e.g. Fuso, Benz, Regius, Motorbike):"); if(!name?.trim())return;
+      const reg=prompt("Registration number:") || "";
+      const type=prompt("Vehicle type (Truck, Car, Motorbike, etc.):") || "";
+      const model=prompt("Make / Model (optional):") || "";
+      const fuel=prompt("Fuel type (Diesel / Petrol / Other):") || "";
+      const current=Number(prompt("Current odometer KM:", "0")||0);
+      const last=Number(prompt("Last service KM (0 if unknown):","0")||0);
+      const interval=Number(prompt("Service interval in KM (e.g. 5000):","5000")||0);
+      const next=Number(prompt("Next service KM:", last&&interval?String(last+interval):"0")||0);
+      const list=read(VEHICLE_KEY);
+      list.push({id:"VEH-"+Date.now(),name:name.trim(),registrationNumber:reg.trim(),type:type.trim(),makeModel:model.trim(),fuelType:fuel.trim(),currentKm:current,lastServiceKm:last,serviceIntervalKm:interval,nextServiceKm:next,status:"Active",createdAt:new Date().toISOString()});
+      write(VEHICLE_KEY,list); openFleet(); renderDashboardAlert();
+    };
+
+    modal.querySelector("#afFleetAddKm").onclick=()=>{
+      const id=prompt("Enter vehicle registration number or name:\n\n"+vehicles.map(v=>vehicleLabel(v)).join("\n"));
+      const v=vehicles.find(x=>[x.registrationNumber,x.name,vehicleLabel(x)].some(y=>String(y||"").toLowerCase()===String(id||"").trim().toLowerCase()));
+      if(!v){alert("Vehicle not found.");return;}
+      const previous=currentKm(v);
+      const start=Number(prompt("Starting KM:",String(previous))||0);
+      const end=Number(prompt("Ending KM:","")||0);
+      if(end<start){alert("Ending KM cannot be lower than Starting KM.");return;}
+      const week=prompt("Week ending date (YYYY-MM-DD):",new Date().toISOString().slice(0,10)); if(!week)return;
+      const comment=prompt("Comment / Remarks (optional):")||"";
+      const list=read(KM_KEY); list.push({id:"KM-"+Date.now(),vehicleId:v.id,weekEnding:week,startingKm:start,endingKm:end,comment:comment.trim(),recordedAt:new Date().toISOString()}); write(KM_KEY,list);
+      const all=read(VEHICLE_KEY); const target=all.find(x=>String(x.id)===String(v.id)); if(target)target.currentKm=end; write(VEHICLE_KEY,all);
+      openFleet(); renderDashboardAlert();
+    };
+
+    modal.querySelector("#afFleetAddService").onclick=()=>{
+      const id=prompt("Enter vehicle registration number or name:\n\n"+vehicles.map(v=>vehicleLabel(v)).join("\n"));
+      const v=vehicles.find(x=>[x.registrationNumber,x.name,vehicleLabel(x)].some(y=>String(y||"").toLowerCase()===String(id||"").trim().toLowerCase()));
+      if(!v){alert("Vehicle not found.");return;}
+      const type=prompt("Type: Scheduled Service or Repair?","Scheduled Service")||"Service";
+      const date=prompt("Service / repair date (YYYY-MM-DD):",new Date().toISOString().slice(0,10)); if(!date)return;
+      const odo=Number(prompt("Odometer KM:",String(currentKm(v)))||0);
+      const garage=prompt("Garage / Mechanic / Supplier:")||"";
+      const items=prompt("Items used / work done (e.g. engine oil, oil filter, labour):")||"";
+      const parts=Number(prompt("Parts / materials cost (UGX):","0")||0);
+      const labour=Number(prompt("Labour cost (UGX):","0")||0);
+      const other=Number(prompt("Other cost (UGX):","0")||0);
+      const method=prompt("Payment method (Cash, Mobile Money, Bank Transfer, Cheque, Credit):","Cash")||"Cash";
+      const comment=prompt("Comment / Remarks (optional):")||"";
+      const total=parts+labour+other;
+      let record={id:"SRV-"+Date.now(),vehicleId:v.id,type:type.trim(),date,odometerKm:odo,garage:garage.trim(),items:items.trim(),partsCost:parts,labourCost:labour,otherCost:other,totalCost:total,paymentMethod:method.trim(),comment:comment.trim(),createdAt:new Date().toISOString()};
+      record=postFleetExpense(record,v);
+      const list=read(SERVICE_KEY); list.push(record); write(SERVICE_KEY,list);
+      if(String(type).toLowerCase().includes("service")){
+        const all=read(VEHICLE_KEY); const target=all.find(x=>String(x.id)===String(v.id));
+        if(target){target.lastServiceKm=odo; const interval=Number(target.serviceIntervalKm||0); if(interval)target.nextServiceKm=odo+interval; target.currentKm=Math.max(Number(target.currentKm||0),odo);}
+        write(VEHICLE_KEY,all);
+      }
+      alert("Service / repair saved."+ (total ? "\nExpense posted once under Repairs & Maintenance: "+money(total) : ""));
+      openFleet(); renderDashboardAlert();
+    };
+  }
+
+  function renderDashboardAlert() {
+    const role=String(user().role||"").toLowerCase();
+    const existing=document.getElementById("afFleetDashboardAlert");
+    if(!["director","secretary"].includes(role)){ if(existing)existing.remove(); return; }
+    const main=document.querySelector("#mainApplication .main");
+    if(!main)return;
+    const vehicles=read(VEHICLE_KEY);
+    const alerts=vehicles.map(v=>({v,s:serviceState(v)})).filter(x=>["DUE","APPROACHING"].includes(x.s.status));
+    if(!alerts.length){ if(existing)existing.remove(); return; }
+    const html=alerts.map(({v,s})=>`<div style="padding:7px 0;border-bottom:1px solid #eee;"><b>${s.status==="DUE"?"🔴":"🟠"} ${esc(vehicleLabel(v))}</b> — ${s.status==="DUE" ? "SERVICE DUE" : "Service approaching"}<div style="font-size:11px;color:#666;">Current ${Number(s.km).toLocaleString()} km • Due ${Number(v.nextServiceKm||0).toLocaleString()} km • ${s.remaining<0?Math.abs(s.remaining).toLocaleString()+" km overdue":s.remaining.toLocaleString()+" km remaining"}</div></div>`).join("");
+    let card=existing;
+    if(!card){card=document.createElement("section");card.id="afFleetDashboardAlert";card.className="card";card.style.cssText="margin:12px 0;border-left:4px solid #d97706;";main.prepend(card);}
+    const next=`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;"><div><div class="title">🚗 Vehicle Service Alerts</div>${html}</div><button type="button" onclick="openAFFleetMaintenance()" style="border:0;background:#0b5d3b;color:white;padding:8px 11px;border-radius:7px;cursor:pointer;">Open Fleet</button></div>`;
+    if(card.innerHTML!==next)card.innerHTML=next;
+  }
+
+  function installFleetButtons() {
+    document.querySelectorAll("button[onclick*=\"openRoleModule('expenses')\"]").forEach(expBtn=>{
+      const parent=expBtn.parentElement;
+      if(parent && !parent.querySelector(".afFleetOpenButton")){
+        const b=document.createElement("button"); b.className=(expBtn.className||"")+" afFleetOpenButton"; b.type="button"; b.innerHTML="🚗 Fleet & Vehicle Maintenance"; b.onclick=openFleet; b.style.cssText=expBtn.style.cssText; parent.appendChild(b);
+      }
+    });
+  }
+
+  window.openAFFleetMaintenance=openFleet;
+  window.renderAFFleetDashboardAlert=renderDashboardAlert;
+
+  let timer=null;
+  const observer=new MutationObserver(()=>{
+    clearTimeout(timer);
+    timer=setTimeout(()=>{installFleetButtons();renderDashboardAlert();},250);
+  });
+  observer.observe(document.body,{childList:true,subtree:true});
+  setTimeout(()=>{installFleetButtons();renderDashboardAlert();},500);
+})();
