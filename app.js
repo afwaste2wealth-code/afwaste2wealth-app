@@ -14184,6 +14184,19 @@ font-weight:bold;
   ">
 📄 Print Blank Employee Form
 </button>
+<button id="formerEmployeesBtn"
+  style="
+    border:0;
+    background:#6c757d;
+color:white;
+    padding:11px 15px;
+    border-radius:8px;
+cursor:pointer;
+font-weight:bold;
+    margin-left:8px;
+  ">
+👥 Former Employees
+</button>
 
 </div>
 
@@ -14235,7 +14248,10 @@ const list =
 modal.querySelector("#employeeList");
 
 const employees =
-getEmployees();
+getEmployees().filter(employee => {
+  const status = String(employee.employmentStatus || "active").toLowerCase();
+  return !["discontinued", "resigned", "terminated"].includes(status);
+});
 
     if (!employees.length) {
 
@@ -14329,11 +14345,10 @@ employee.role
 </td>
 
 <td style="padding:10px;">
-                  ${
-employee.employmentStatus === "active"
-                      ? "Active"
-                      : "Inactive"
-                  }
+                  ${escapeSettingsText(
+                    String(employee.employmentStatus || "active")
+                      .replace(/\b\w/g, c => c.toUpperCase())
+                  )}
 </td>
 
 <td style="padding:10px;">
@@ -14438,6 +14453,13 @@ printBlankEmployeeForm();
 };
 
 modal.querySelector(
+  "#formerEmployeesBtn"
+).onclick = () => {
+  modal.remove();
+  openFormerEmployees();
+};
+
+modal.querySelector(
     "#backEmployeeSettings"
   ).onclick = () => {
 
@@ -14455,6 +14477,140 @@ modal.remove();
 
 
 renderEmployees();
+}
+
+
+function openFormerEmployees() {
+  const endedStatuses = ["discontinued", "resigned", "terminated"];
+  const employees = getEmployees().filter(employee =>
+    endedStatuses.includes(
+      String(employee.employmentStatus || "").toLowerCase()
+    )
+  );
+
+  const old = document.getElementById("formerEmployeesModal");
+  if (old) old.remove();
+
+  const modal = document.createElement("div");
+  modal.id = "formerEmployeesModal";
+  modal.style.cssText = `
+    position:fixed; inset:0; z-index:100000;
+    background:rgba(0,0,0,.55); overflow:auto;
+    padding:20px;
+  `;
+
+  modal.innerHTML = `
+    <div style="
+      max-width:1050px; margin:20px auto; background:white;
+      border-radius:12px; padding:20px;
+      box-shadow:0 8px 30px rgba(0,0,0,.25);
+    ">
+      <div style="
+        display:flex; justify-content:space-between;
+        align-items:center; gap:12px; margin-bottom:18px;
+      ">
+        <div>
+          <h2 style="margin:0;color:#0b5d3b;">Former Employees</h2>
+          <div style="color:#666;font-size:13px;margin-top:5px;">
+            Discontinued, resigned and terminated employees
+          </div>
+        </div>
+        <div style="
+          background:#f3f4f6; padding:8px 12px;
+          border-radius:8px; font-weight:bold;
+        ">
+          Total: ${employees.length}
+        </div>
+      </div>
+
+      ${employees.length ? `
+        <div style="overflow:auto;border:1px solid #ddd;border-radius:9px;">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead>
+              <tr style="background:#eef8f2;text-align:left;">
+                <th style="padding:10px;">ID</th>
+                <th style="padding:10px;">Employee</th>
+                <th style="padding:10px;">Position</th>
+                <th style="padding:10px;">Status</th>
+                <th style="padding:10px;">Last Working Date</th>
+                <th style="padding:10px;">Exit Reason</th>
+                <th style="padding:10px;">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${employees.map(employee => `
+                <tr style="border-top:1px solid #eee;">
+                  <td style="padding:10px;"><b>${escapeSettingsText(employee.employeeId || "")}</b></td>
+                  <td style="padding:10px;">
+                    ${escapeSettingsText(employee.fullName || "")}
+                    <div style="color:#777;font-size:11px;margin-top:3px;">
+                      ${escapeSettingsText(employee.phone || "")}
+                    </div>
+                  </td>
+                  <td style="padding:10px;">${escapeSettingsText(employee.position || "")}</td>
+                  <td style="padding:10px;">
+                    <b>${escapeSettingsText(
+                      String(employee.employmentStatus || "")
+                        .replace(/\b\w/g, c => c.toUpperCase())
+                    )}</b>
+                  </td>
+                  <td style="padding:10px;">${escapeSettingsText(employee.lastWorkingDate || "—")}</td>
+                  <td style="padding:10px;">${escapeSettingsText(employee.exitReason || "—")}</td>
+                  <td style="padding:10px;">
+                    <button type="button"
+                      onclick="editEmployeeAsDirector('${employee.employeeId}')"
+                      style="
+                        border:0;background:#0b5d3b;color:white;
+                        padding:7px 12px;border-radius:6px;
+                        cursor:pointer;font-weight:bold;
+                      ">
+                      View / Edit
+                    </button>
+                  </td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      ` : `
+        <div style="
+          padding:28px;text-align:center;background:#f5f5f5;
+          border-radius:9px;color:#666;
+        ">
+          No former employees yet.
+        </div>
+      `}
+
+      <div style="display:flex;gap:10px;margin-top:20px;">
+        <button id="backToEmployeeAccounts"
+          style="
+            flex:1;padding:11px;border:1px solid #0b5d3b;
+            background:white;color:#0b5d3b;border-radius:8px;
+            cursor:pointer;font-weight:bold;
+          ">
+          Back to Employee Accounts
+        </button>
+        <button id="closeFormerEmployees"
+          style="
+            flex:1;padding:11px;border:0;background:#555;
+            color:white;border-radius:8px;cursor:pointer;
+          ">
+          Close
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  modal.querySelector("#backToEmployeeAccounts").onclick = () => {
+    modal.remove();
+    manageEmployeeAccounts();
+  };
+
+  modal.querySelector("#closeFormerEmployees").onclick = () => {
+    modal.remove();
+  };
 }
 
 function printBlankEmployeeForm() {
@@ -39881,6 +40037,26 @@ scores.length
     employee,
     range
   ) {
+
+const rankingRole = String(
+  employee?.role ||
+  employee?.systemRole ||
+  employee?.userRole ||
+  ""
+).trim().toLowerCase();
+
+if (rankingRole === "secretary") {
+  return {
+    employee,
+    output: { applicable: false, score: null },
+    attendance: { applicable: false, score: null },
+    quality: { applicable: false, score: null },
+    finalScore: null,
+    applicableWeight: 0,
+    excludedFromRanking: true,
+    exclusionReason: "Secretary"
+  };
+}
 
 const weights =
 getPerformanceWeights();
