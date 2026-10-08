@@ -15168,20 +15168,45 @@ display:grid;
             id="editEmployeeStatus"
             style="${settingsInputStyle()}"
 >
+${[
+              ["active", "Active"],
+              ["discontinued", "Discontinued"],
+              ["resigned", "Resigned"],
+              ["terminated", "Terminated"],
+              ["suspended", "Suspended"],
+              ["inactive", "Inactive"]
+            ].map(([value, label]) => `
 <option
-              value="active"
-              ${employee.employmentStatus === "active" ? "selected" : ""}
+              value="${value}"
+              ${String(employee.employmentStatus || "active").toLowerCase() === value ? "selected" : ""}
 >
-              Active
+              ${label}
 </option>
-
-<option
-              value="inactive"
-              ${employee.employmentStatus === "inactive" ? "selected" : ""}
->
-              Inactive
-</option>
+            `).join("")}
 </select>
+</div>
+
+<div>
+<label>Last Working Date</label>
+<input
+            id="editEmployeeLastWorkingDate"
+            type="date"
+            value="${escapeSettingsText(employee.lastWorkingDate || "")}"
+            style="${settingsInputStyle()}"
+>
+<div style="font-size:11px;color:#666;margin-top:4px;">
+Required when employment is Discontinued, Resigned or Terminated.
+</div>
+</div>
+
+<div>
+<label>Discontinuation / Exit Reason</label>
+<input
+            id="editEmployeeExitReason"
+            value="${escapeSettingsText(employee.exitReason || "")}"
+            placeholder="e.g. Resigned, contract ended, terminated"
+            style="${settingsInputStyle()}"
+>
 </div>
 
 <div>
@@ -15449,6 +15474,16 @@ modal.querySelector(
           "#editEmployeeStatus"
         ).value,
 
+lastWorkingDate:
+modal.querySelector(
+          "#editEmployeeLastWorkingDate"
+        ).value,
+
+exitReason:
+modal.querySelector(
+          "#editEmployeeExitReason"
+        ).value.trim(),
+
 monthlyAllowance:
         Number(
 modal.querySelector(
@@ -15456,6 +15491,20 @@ modal.querySelector(
           ).value
         ) || 0
     };
+
+    const exitStatuses = ["discontinued", "resigned", "terminated"];
+    if (
+      exitStatuses.includes(String(updatedEmployee.employmentStatus || "").toLowerCase()) &&
+      !updatedEmployee.lastWorkingDate
+    ) {
+      alert("Please enter the employee's Last Working Date.");
+      return;
+    }
+
+    if (String(updatedEmployee.employmentStatus || "").toLowerCase() === "active") {
+      updatedEmployee.lastWorkingDate = "";
+      updatedEmployee.exitReason = "";
+    }
 
     if (
       !updatedEmployee.fullName ||
@@ -16508,6 +16557,12 @@ dateJoined,
 
 employmentStatus:
 employmentStatus,
+
+lastWorkingDate:
+        "",
+
+exitReason:
+        "",
 
 monthlyAllowance:
         Number(
@@ -85686,6 +85741,8 @@ b.textContent = "Calculate Payroll";
               <div><b>Employment Type:</b> ${esc(employee.employmentType || "—")}</div>
               <div><b>Date Joined:</b> ${esc(localDate(employee.dateJoined))}</div>
               <div><b>Status:</b> ${esc(employee.employmentStatus || "—")}</div>
+              <div><b>Last Working Date:</b> ${esc(employee.lastWorkingDate || "—")}</div>
+              <div><b>Exit Reason:</b> ${esc(employee.exitReason || "—")}</div>
               <div><b>Phone:</b> ${esc(employee.phone || "—")}</div>
               <div><b>NIN:</b> ${esc(employee.nin || "—")}</div>
               <div><b>Address:</b> ${esc(employee.residentialAddress || "—")}</div>
@@ -104697,7 +104754,45 @@ function afLabourRecordScheduledMinutes(record) {
 function afLabourMonthData(monthKey) {
   const attendance = afLabourReadArray("attendanceRecords").filter(record => afLabourMonthKey(record.date) === monthKey);
   const employees = typeof getEmployees === "function" ? getEmployees() : afLabourReadArray("employees");
-  const activeEmployees = employees.filter(employee => String(employee.employmentStatus || "").toLowerCase() === "active");
+  const monthStart = new Date(monthKey + "-01T00:00:00");
+  const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0, 23, 59, 59, 999);
+
+  function employeeStartedByMonthEnd(employee) {
+    if (!employee.dateJoined) return true;
+    const joined = new Date(String(employee.dateJoined) + "T00:00:00");
+    return !Number.isNaN(joined.getTime()) && joined <= monthEnd;
+  }
+
+  function employeeExitDate(employee) {
+    if (!employee.lastWorkingDate) return null;
+    const date = new Date(String(employee.lastWorkingDate) + "T23:59:59");
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  function employeeWasInWorkforceDuringMonth(employee) {
+    if (!employeeStartedByMonthEnd(employee)) return false;
+    const status = String(employee.employmentStatus || "active").toLowerCase();
+    const exit = employeeExitDate(employee);
+
+    if (status === "active") return true;
+    if (["discontinued", "resigned", "terminated"].includes(status)) {
+      return !!exit && exit >= monthStart;
+    }
+    if (status === "suspended") {
+      return !!(byEmployee && byEmployee.get(String(employee.employeeId || ""))?.length);
+    }
+    return false;
+  }
+
+  function employeeActiveAtMonthEnd(employee) {
+    if (!employeeStartedByMonthEnd(employee)) return false;
+    const status = String(employee.employmentStatus || "active").toLowerCase();
+    if (status === "active") return true;
+    const exit = employeeExitDate(employee);
+    return ["discontinued", "resigned", "terminated"].includes(status) &&
+      !!exit && exit > monthEnd;
+  }
+
   const byEmployee = new Map();
 
   attendance.forEach(record => {
@@ -104707,8 +104802,11 @@ function afLabourMonthData(monthKey) {
     byEmployee.get(id).push(record);
   });
 
+  const workforceEmployees = employees.filter(employeeWasInWorkforceDuringMonth);
+  const activeEmployees = employees.filter(employeeActiveAtMonthEnd);
+
   const employeeRows = [];
-  const employeeIds = new Set([...activeEmployees.map(e => String(e.employeeId || "")), ...byEmployee.keys()]);
+  const employeeIds = new Set([...workforceEmployees.map(e => String(e.employeeId || "")), ...byEmployee.keys()]);
   employeeIds.forEach(id => {
     const employee = employees.find(e => String(e.employeeId || "") === id) || {};
     const records = byEmployee.get(id) || [];
@@ -104787,12 +104885,14 @@ function afLabourMonthData(monthKey) {
   const labourCapacityPct = targetLabourHours > 0 ? (actualLabourHours / targetLabourHours) * 100 : 0;
 
   return {
-    monthKey, attendance, employees, activeEmployees, employeeRows,
+    monthKey, attendance, employees, workforceEmployees, activeEmployees, employeeRows,
     actualLabourHours, actualScheduledHours, overtimeHours, lostLabourHours,
     washedKg, pelletKg, poleKg, poles, revenue, expenses,
     minimumEmployees, targetEmployees, plannedWorkDays, standardHoursPerDay,
     targetLabourHours, workforceAvailabilityPct, labourCapacityPct,
     workforceShortage: Math.max(targetEmployees - activeEmployees.length, 0),
+    workforceUtilised: new Set(attendance.map(record => String(record.employeeId || "")).filter(Boolean)).size,
+    workforceInMonth: workforceEmployees.length,
     belowMinimum: minimumEmployees > 0 && activeEmployees.length < minimumEmployees
   };
 }
