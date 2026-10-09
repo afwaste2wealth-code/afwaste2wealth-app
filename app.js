@@ -359,6 +359,32 @@ text-align:center;
 
 document.body.appendChild(loginScreen);
 
+  /* Approved A&F recycled-poles and fencing login artwork.
+     Keep the existing employee ID, password and cloud-login hooks intact. */
+  const afVisualStyle = document.createElement("style");
+  afVisualStyle.id = "afApprovedLoginVisualStyle";
+  afVisualStyle.textContent = `
+    #afLoginScreen { background:linear-gradient(135deg,#b8e2dd,#eaf6ef) !important; }
+    #afLoginScreen > div { width:1200px !important; min-height:680px !important;
+      grid-template-columns:1.12fr .88fr !important; }
+    #afLoginScreen > div > div:first-child {
+      background:#075334 url("af-login-visual.png") center center / 100% 100% no-repeat !important;
+      padding:0 !important;
+    }
+    #afLoginScreen > div > div:first-child > * { visibility:hidden !important; }
+    #afLoginScreen > div > div:last-child { padding:48px 52px !important; }
+    @media(max-width:760px) {
+      #afLoginScreen > div { display:block !important; min-height:0 !important; }
+      #afLoginScreen > div > div:first-child { display:block !important;
+        height:215px !important; background-size:100% auto !important;
+        background-position:center top !important; }
+      #afLoginScreen > div > div:last-child { padding:28px 24px !important; }
+    }
+  `;
+  document.getElementById("afApprovedLoginVisualStyle")?.remove();
+  document.head.appendChild(afVisualStyle);
+
+
 
   /* ---------- SHOW / HIDE PASSWORD ---------- */
 
