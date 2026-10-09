@@ -30694,6 +30694,22 @@ font-weight:bold;
 </button>
 
 <button
+  id="qdPrintBlank"
+  type="button"
+  style="
+    padding:11px 16px;
+    border:1px solid #0b5d3b;
+background:white;
+    color:#0b5d3b;
+    border-radius:7px;
+cursor:pointer;
+font-weight:bold;
+  "
+>
+🖨 Print Blank Form
+</button>
+
+<button
   id="qdPrintDraft"
   type="button"
   style="
@@ -31016,6 +31032,95 @@ employee.employeeId
 weekStart,
 weekEnd
     };
+  }
+
+
+  function printBlankQualityDisciplineForm() {
+
+const printWindow = window.open("", "_blank");
+
+    if (!printWindow) {
+      alert("Please allow pop-ups so the blank assessment form can be printed.");
+      return;
+    }
+
+const blankScoreRows = criteria.map((item, index) => `
+<tr>
+<td style="text-align:center;">${index + 1}</td>
+<td>${escapeQD(item.label)}</td>
+<td style="height:28px;text-align:center;">&nbsp;</td>
+</tr>
+`).join("");
+
+printWindow.document.write(`
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Blank Employee Quality & Discipline Form</title>
+<style>
+@page { size:A4; margin:11mm; }
+* { box-sizing:border-box; }
+body { font-family:Arial,sans-serif; color:#222; margin:0; font-size:11px; }
+.header { text-align:center; border-bottom:2px solid #0b5d3b; padding-bottom:8px; margin-bottom:10px; }
+.company { font-size:18px; font-weight:bold; color:#0b5d3b; }
+.trading { font-size:11px; margin-top:2px; }
+.title { font-size:14px; font-weight:bold; margin-top:7px; }
+.subtitle { font-size:10px; color:#555; margin-top:2px; }
+table { width:100%; border-collapse:collapse; }
+th, td { border:1px solid #555; padding:6px; vertical-align:middle; }
+th { background:#eef8f2; }
+.details td:first-child { width:22%; font-weight:bold; background:#f7faf8; }
+.details td:nth-child(2) { width:28%; }
+.score-table { margin-top:10px; }
+.score-table th:nth-child(1) { width:7%; }
+.score-table th:nth-child(3) { width:15%; text-align:center; }
+.box { border:1px solid #555; min-height:42px; margin-top:4px; padding:5px; }
+.signatures { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:24px; }
+.signature { border-top:1px solid #333; padding-top:4px; text-align:center; font-size:9px; }
+.guide { margin-top:7px; font-size:9px; }
+.footer { margin-top:10px; text-align:center; font-size:8px; color:#666; }
+.no-print { margin-bottom:8px; }
+@media print { .no-print { display:none; } }
+</style>
+</head>
+<body>
+<div class="no-print"><button onclick="window.print()">🖨 Print Blank Form</button></div>
+<div class="header">
+  <div class="company">A&amp;F WEKAVERA LTD</div>
+  <div class="trading">Waste2Wealth Solutions</div>
+  <div class="title">EMPLOYEE QUALITY &amp; DISCIPLINE – WEEKLY PERFORMANCE ASSESSMENT</div>
+  <div class="subtitle">Blank Manual Assessment Form</div>
+</div>
+<table class="details">
+<tr><td>Employee Name</td><td>&nbsp;</td><td><b>Employee ID</b></td><td>&nbsp;</td></tr>
+<tr><td>Department</td><td>&nbsp;</td><td><b>Position</b></td><td>&nbsp;</td></tr>
+<tr><td>Team</td><td>&nbsp;</td><td><b>Assessment Date</b></td><td>&nbsp;</td></tr>
+<tr><td>Week Start</td><td>&nbsp;</td><td><b>Week End</b></td><td>&nbsp;</td></tr>
+</table>
+<table class="score-table">
+<thead><tr><th>#</th><th>Quality &amp; Discipline Criterion</th><th>Score /10</th></tr></thead>
+<tbody>
+${blankScoreRows}
+<tr><td colspan="2" style="text-align:right;font-weight:bold;background:#eef8f2;">TOTAL SCORE</td><td style="text-align:center;font-weight:bold;">&nbsp;&nbsp;&nbsp; /100</td></tr>
+</tbody>
+</table>
+<div class="guide"><b>Scoring Guide:</b> 0–2 Poor | 3–4 Needs Improvement | 5–6 Satisfactory | 7–8 Good | 9–10 Excellent</div>
+<div style="margin-top:8px;"><b>Assessor Comments</b><div class="box"></div></div>
+<div style="margin-top:7px;"><b>Employee Comments</b><div class="box"></div></div>
+<div style="margin-top:7px;"><b>Corrective Action / Follow-up Required</b><div class="box"></div></div>
+<div class="signatures">
+  <div class="signature">Assessor Signature / Date</div>
+  <div class="signature">Employee Signature / Date</div>
+  <div class="signature">Director / HR Review / Date</div>
+</div>
+<div class="footer">A&amp;F Wekavera Ltd • Waste2Wealth Solutions • Employee Quality &amp; Discipline Record</div>
+</body>
+</html>
+`);
+
+printWindow.document.close();
+printWindow.focus();
   }
 
 
@@ -31443,6 +31548,13 @@ modal.querySelector(
     "#closeQDForm"
   ).onclick = () => {
 modal.remove();
+  };
+
+
+modal.querySelector(
+    "#qdPrintBlank"
+  ).onclick = () => {
+printBlankQualityDisciplineForm();
   };
 
 
