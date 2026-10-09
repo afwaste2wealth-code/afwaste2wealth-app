@@ -20963,6 +20963,12 @@ display:block;
 </option>
 </select>
 
+<label style="display:block;margin-top:4px"><b>Actual Washing Date *</b></label>
+<input id="washingActualDate" type="date" required
+ style="width:100%;box-sizing:border-box;padding:10px;margin:6px 0 18px">
+<div style="font-size:12px;color:#666;margin:-10px 0 18px">
+ Select the day the kavera was physically washed, even if entered later.
+</div>
 
 <div style="
 display:grid;
@@ -21587,6 +21593,10 @@ achievement.toFixed(2);
   }
 
 
+modal.querySelector("#washingActualDate").value =
+  new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
+    .toISOString().slice(0, 10);
+
 modal.querySelector(
     "#washingTargetRecord"
   ).onchange =
@@ -21645,6 +21655,15 @@ activeShifts.find(
         return;
       }
 
+
+const actualWashingDate = modal.querySelector("#washingActualDate").value;
+const todayLocal = new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
+  .toISOString().slice(0, 10);
+if (!/^\d{4}-\d{2}-\d{2}$/.test(actualWashingDate) ||
+    !Number.isFinite(Date.parse(actualWashingDate)) || actualWashingDate > todayLocal) {
+  alert("Select a valid actual washing date, not a future date.");
+  return;
+}
 
 const kgTaken =
         Number(
@@ -21833,6 +21852,12 @@ localStorage.getItem(
       /*
        * Update the original target record.
        */
+// Preserve the original target date independently from the actual work date.
+selectedRecord.targetDate = selectedRecord.targetDate || selectedRecord.date || "";
+selectedRecord.washingDate = actualWashingDate;
+// Existing washing reports use record.date, so align it with actual washing.
+selectedRecord.date = actualWashingDate;
+
 selectedRecord.washingSubBatchNumber =
 washingSubBatchNumber;
 
@@ -21918,6 +21943,8 @@ currentUser.role || "";
 
 selectedRecord.completedAt =
         new Date().toISOString();
+selectedRecord.enteredAt = selectedRecord.completedAt;
+selectedRecord.entryLocked = true;
 
 
       /*
@@ -22124,6 +22151,11 @@ loadWashingShifts();
 function editWashingRecord(
 recordId
 ) {
+
+if (typeof getAFCurrentRole !== "function" || getAFCurrentRole() !== "Director") {
+  alert("Access denied. Only the Director can correct saved washing records.");
+  return;
+}
 
 const records =
 getWashingShiftRecords();
@@ -22708,6 +22740,7 @@ newTarget
 
 record.date =
 newDate;
+record.washingDate = newDate;
 
 
 record.shift =
