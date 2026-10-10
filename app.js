@@ -12737,9 +12737,8 @@ font-weight:bold;
 <div id="payrollResult"
         style="margin-top:18px;"></div>
 
-<h3 style="margin-top:30px;">
-        Payroll History
-</h3>
+<h3 style="margin-top:30px;">Payroll History</h3>
+${String((JSON.parse(localStorage.getItem("currentUser") || "{}")).role || "").toLowerCase() === "director" ? `<button type="button" onclick="afViewDeletedPayrollPayments()" style="padding:8px 12px;background:#eee;border:1px solid #ccc;border-radius:7px">View Deleted / Reversed Payments</button>` : ""}
 
 <div style="overflow:auto;">
 <table style="
@@ -12888,6 +12887,7 @@ cursor:pointer;
       ">
       Print Payslip
 </button>
+${String((JSON.parse(localStorage.getItem("currentUser") || "{}")).role || "").toLowerCase() === "director" && Number(record.amountPaid || 0) > 0 ? `<button onclick="afReversePayrollPayment('${record.id}')" style="background:#a12c2c;color:white;border:0;padding:7px 10px;border-radius:6px;cursor:pointer">Reverse Payment</button>` : ""}
 
     ${
       Number(record.balance || 0) > 0
@@ -18730,7 +18730,7 @@ overflow:auto;
         line-height:1.5;
       ">
         Select a pole category and enter the
-        Director-approved finished weight for
+        Director-approved finished and unwashed kavera weights for
         one pole.
 </div>
 
@@ -18758,7 +18758,7 @@ overflow:auto;
 </select>
 
 <label>
-<b>Standard Weight — KG per Pole</b>
+<b>Finished Pole Weight — KG per Pole</b>
 </label>
 
 <input
@@ -18774,6 +18774,9 @@ box-sizing:border-box;
           margin:6px 0 16px;
         "
 >
+
+<label><b>Unwashed Kavera Standard — KG per Finished Pole</b></label>
+<input id="standardUnwashedWeight" type="number" min="0" step="0.01" placeholder="Enter approved original dirty kavera KG" style="width:100%;box-sizing:border-box;padding:11px;margin:6px 0 16px;">
 
 <div
         id="standardWeightStatus"
@@ -18834,8 +18837,9 @@ text-align:left;
                 padding:9px;
 text-align:center;
               ">
-                Standard KG / Pole
+                Finished KG / Pole
 </th>
+<th style="border:1px solid #ddd;padding:9px;text-align:center">Unwashed KG / Pole</th>
 </tr>
 </thead>
 
@@ -18882,6 +18886,7 @@ modal.querySelector(
       "#standardPoleWeight"
     );
 
+const unwashedInput = modal.querySelector("#standardUnwashedWeight");
 const status =
 modal.querySelector(
       "#standardWeightStatus"
@@ -18900,10 +18905,8 @@ getSavedWeights();
 tableBody.innerHTML =
 poleCategories.map(category => {
 
-const weight =
-          Number(
-savedWeights[category.key] || 0
-          );
+const weight = Number(savedWeights[category.key] || 0);
+const unwashed = Number((JSON.parse(localStorage.getItem("afUnwashedPoleStandards") || "{}"))[category.key] || 0);
 
         return `
 <tr>
@@ -18925,7 +18928,7 @@ font-weight:bold;
                   ? weight.toFixed(2) + " KG"
                   : "Not Set"
               }
-</td>
+</td><td style="border:1px solid #ddd;padding:9px;text-align:center;font-weight:bold">${unwashed > 0 ? unwashed.toFixed(2) + " KG" : "Not Set"}</td>
 </tr>
         `;
       }).join("");
@@ -18939,6 +18942,7 @@ categorySelect.value;
     if (!key) {
 
 weightInput.value = "";
+unwashedInput.value = "";
 
 status.textContent =
         "Select a pole category.";
@@ -18948,6 +18952,8 @@ status.textContent =
 
 const savedWeights =
 getSavedWeights();
+const unwashedStandards = JSON.parse(localStorage.getItem("afUnwashedPoleStandards") || "{}");
+unwashedInput.value = unwashedStandards[key] || "";
 
 const currentWeight =
       Number(
@@ -18967,6 +18973,7 @@ currentWeight.toFixed(2) +
     } else {
 
 weightInput.value = "";
+unwashedInput.value = "";
 
 status.textContent =
         "No standard weight has been set for this category.";
@@ -18988,8 +18995,8 @@ poleCategories.find(
         item =>item.key === key
       );
 
-const weight =
-      Number(weightInput.value) || 0;
+const weight = Number(weightInput.value) || 0;
+const unwashedWeight = Number(unwashedInput.value) || 0;
 
     if (!category) {
 
@@ -19009,6 +19016,18 @@ const weight =
       return;
     }
 
+if (unwashedWeight <= 0) { alert("Enter the Director-approved unwashed kavera KG per pole."); return; }
+const oldUnwashed = JSON.parse(localStorage.getItem("afUnwashedPoleStandards") || "{}");
+const oldFinished = getSavedWeights();
+if ((Number(oldUnwashed[key]) > 0 && Number(oldUnwashed[key]) !== unwashedWeight) || (Number(oldFinished[key]) > 0 && Number(oldFinished[key]) !== weight)) {
+  const reason = prompt("Reason for changing the approved pole standards:");
+  if (!reason || !reason.trim()) return;
+  const history = JSON.parse(localStorage.getItem("afPoleStandardAudit") || "[]");
+  history.push({category:key,oldFinished:Number(oldFinished[key]||0),newFinished:weight,oldUnwashed:Number(oldUnwashed[key]||0),newUnwashed:unwashedWeight,reason:reason.trim(),changedAt:new Date().toISOString(),changedBy:currentUser.employeeId||currentUser.fullName||"Director"});
+  localStorage.setItem("afPoleStandardAudit",JSON.stringify(history));
+}
+oldUnwashed[key] = Number(unwashedWeight.toFixed(2));
+localStorage.setItem("afUnwashedPoleStandards",JSON.stringify(oldUnwashed));
 const savedWeights =
 getSavedWeights();
 
@@ -19045,7 +19064,7 @@ renderStandardsTable();
 category.name +
       "\n" +
 weight.toFixed(2) +
-      " KG per pole"
+      " finished KG per pole; " + unwashedWeight.toFixed(2) + " unwashed KG per pole"
     );
   };
 
@@ -20963,12 +20982,6 @@ display:block;
 </option>
 </select>
 
-<label style="display:block;margin-top:4px"><b>Actual Washing Date *</b></label>
-<input id="washingActualDate" type="date" required
- style="width:100%;box-sizing:border-box;padding:10px;margin:6px 0 18px">
-<div style="font-size:12px;color:#666;margin:-10px 0 18px">
- Select the day the kavera was physically washed, even if entered later.
-</div>
 
 <div style="
 display:grid;
@@ -21593,10 +21606,6 @@ achievement.toFixed(2);
   }
 
 
-modal.querySelector("#washingActualDate").value =
-  new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
-    .toISOString().slice(0, 10);
-
 modal.querySelector(
     "#washingTargetRecord"
   ).onchange =
@@ -21655,15 +21664,6 @@ activeShifts.find(
         return;
       }
 
-
-const actualWashingDate = modal.querySelector("#washingActualDate").value;
-const todayLocal = new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
-  .toISOString().slice(0, 10);
-if (!/^\d{4}-\d{2}-\d{2}$/.test(actualWashingDate) ||
-    !Number.isFinite(Date.parse(actualWashingDate)) || actualWashingDate > todayLocal) {
-  alert("Select a valid actual washing date, not a future date.");
-  return;
-}
 
 const kgTaken =
         Number(
@@ -21852,12 +21852,6 @@ localStorage.getItem(
       /*
        * Update the original target record.
        */
-// Preserve the original target date independently from the actual work date.
-selectedRecord.targetDate = selectedRecord.targetDate || selectedRecord.date || "";
-selectedRecord.washingDate = actualWashingDate;
-// Existing washing reports use record.date, so align it with actual washing.
-selectedRecord.date = actualWashingDate;
-
 selectedRecord.washingSubBatchNumber =
 washingSubBatchNumber;
 
@@ -21943,8 +21937,6 @@ currentUser.role || "";
 
 selectedRecord.completedAt =
         new Date().toISOString();
-selectedRecord.enteredAt = selectedRecord.completedAt;
-selectedRecord.entryLocked = true;
 
 
       /*
@@ -22151,11 +22143,6 @@ loadWashingShifts();
 function editWashingRecord(
 recordId
 ) {
-
-if (typeof getAFCurrentRole !== "function" || getAFCurrentRole() !== "Director") {
-  alert("Access denied. Only the Director can correct saved washing records.");
-  return;
-}
 
 const records =
 getWashingShiftRecords();
@@ -22740,7 +22727,6 @@ newTarget
 
 record.date =
 newDate;
-record.washingDate = newDate;
 
 
 record.shift =
@@ -25979,6 +25965,9 @@ const productionRecord = {
 Date.now(),
 
       date,
+      actualProductionDate: date,
+      actualDateEnteredAt: new Date().toISOString(),
+      actualDateEnteredBy: (() => { try { const u = JSON.parse(localStorage.getItem("currentUser") || "null"); return u ? { employeeId: u.employeeId, fullName: u.fullName, role: u.role } : null; } catch(e) { return null; } })(),
 
 shiftId:
 selectedShift.id,
@@ -38345,9 +38334,7 @@ font-weight:bold;
         margin-bottom:12px;
         line-height:1.5;
       ">
-        Select the production target set by
-        the Director. Date, shift and target
-        quantity will be locked automatically.
+        Select the Director-approved target. The planned date and target quantity remain unchanged. Enter the ACTUAL production date separately; it is saved once with the production record.
 </div>
 
 
@@ -38584,7 +38571,7 @@ selectedTarget.shiftId || ""
 
 
 dateInput.disabled =
-          true;
+          false;
 
 
 shiftSelect.disabled =
@@ -38771,14 +38758,12 @@ event.stopImmediatePropagation();
          * Protect against any later manual
          * changes to Date or Shift.
          */
-dateInput.value =
-selectedTarget.date || "";
-
-
-shiftSelect.value =
-          String(
-selectedTarget.shiftId || ""
-          );
+/* Actual date is user-entered, not forced to the planned date. */
+        if (!dateInput.value) {
+          event.preventDefault(); event.stopImmediatePropagation();
+          alert("Select the actual production date before saving."); return;
+        }
+        shiftSelect.value = String(selectedTarget.shiftId || "");
 
 
 const recordsBefore =
@@ -38842,13 +38827,6 @@ newRecords.length - 1
              */
             if (
               String(
-newRecord.date || ""
-              ) !==
-              String(
-selectedTarget.date || ""
-              ) ||
-
-              String(
 newRecord.shiftId || ""
               ) !==
               String(
@@ -38864,7 +38842,18 @@ console.error(
             }
 
 
-completeProductionTarget(
+/* Keep planned and actual dates independently in the saved record. */
+            newRecord.plannedProductionDate = selectedTarget.date;
+            newRecord.actualProductionDate = newRecord.date;
+            newRecord.productionDateLocked = true;
+            newRecord.productionTargetId = selectedTarget.id;
+            const updatedRecords = getProductionRecords();
+            const updatedIndex = updatedRecords.findIndex(r => String(r.id) === String(newRecord.id));
+            if (updatedIndex !== -1) {
+              updatedRecords[updatedIndex] = newRecord;
+              localStorage.setItem("productionRecords", JSON.stringify(updatedRecords));
+            }
+            completeProductionTarget(
 selectedTarget.id,
 newRecord
             );
@@ -105698,3 +105687,145 @@ function openAFAttendanceHistoryCorrection() {
   observer.observe(document.body,{childList:true,subtree:true});
   setTimeout(()=>{installFleetButtons();renderDashboardAlert();},500);
 })();
+
+/* =========================================================
+   DIRECTOR-ONLY ACTUAL PRODUCTION DATE CORRECTION
+   Run openAFProductionDateCorrection() from Director tools.
+   ========================================================= */
+window.openAFProductionDateCorrection = function () {
+  let user;
+  try { user = JSON.parse(localStorage.getItem("currentUser") || "null"); } catch(e) { user = null; }
+  if (!user || user.role !== "Director") { alert("Only the Director can correct a saved production date."); return; }
+  const records = JSON.parse(localStorage.getItem("productionRecords") || "[]");
+  const id = prompt("Enter the Production Record ID to correct:");
+  if (id === null) return;
+  const record = records.find(r => String(r.id) === id.trim());
+  if (!record) { alert("Production record not found."); return; }
+  const oldDate = record.actualProductionDate || record.date;
+  const newDate = prompt("Correct actual production date (YYYY-MM-DD):", oldDate);
+  if (newDate === null) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate) || Number.isNaN(Date.parse(newDate)) || new Date(newDate + "T12:00:00").toISOString().slice(0,10) !== newDate) {
+    alert("Enter a valid date in YYYY-MM-DD format."); return;
+  }
+  if (newDate === oldDate) { alert("No change to save."); return; }
+  const reason = prompt("Reason for correction (required):");
+  if (!reason || !reason.trim()) { alert("A correction reason is required."); return; }
+  if (!confirm("Correct actual production date from " + oldDate + " to " + newDate + "?")) return;
+  record.productionDateAudit = Array.isArray(record.productionDateAudit) ? record.productionDateAudit : [];
+  record.productionDateAudit.push({ oldDate, newDate, reason: reason.trim(), correctedAt: new Date().toISOString(), correctedBy: { employeeId: user.employeeId, fullName: user.fullName, role: user.role } });
+  record.actualProductionDate = newDate;
+  record.date = newDate;
+  record.productionDateLocked = true;
+  localStorage.setItem("productionRecords", JSON.stringify(records));
+  alert("Date corrected. The original date and reason are preserved in the audit history.");
+};
+
+/* Add Director correction action to the Set Production Target window. */
+(function () {
+  const observer = new MutationObserver(() => {
+    let user; try { user = JSON.parse(localStorage.getItem("currentUser") || "null"); } catch(e) { return; }
+    if (!user || user.role !== "Director") return;
+    for (const heading of document.querySelectorAll("h2")) {
+      if (heading.textContent.trim() !== "Set Production Target") continue;
+      const panel = heading.parentElement;
+      if (!panel || panel.querySelector("#afCorrectProductionDateBtn")) continue;
+      const btn = document.createElement("button");
+      btn.id = "afCorrectProductionDateBtn";
+      btn.type = "button";
+      btn.textContent = "Correct Saved Actual Production Date (Director Only)";
+      btn.style.cssText = "display:block;margin:12px 0;padding:10px 12px;border:1px solid #0b5d3b;border-radius:8px;background:#eef8f2;color:#0b5d3b;cursor:pointer;font-weight:bold";
+      btn.onclick = window.openAFProductionDateCorrection;
+      heading.insertAdjacentElement("afterend", btn);
+    }
+  });
+  const start = () => observer.observe(document.body, { childList:true, subtree:true });
+  if (document.body) start(); else document.addEventListener("DOMContentLoaded", start, {once:true});
+})();
+
+
+/* A&F Director Rewards Register — employee/team/client/supplier, cash or physical */
+function afOpenDirectorRewards() {
+  const u = JSON.parse(localStorage.getItem("currentUser") || "{}");
+  if (String(u.role||"").toLowerCase() !== "director") return alert("Director only.");
+  const esc = v => String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const read = () => JSON.parse(localStorage.getItem("afDirectorRewardRegister")||"[]");
+  const modal=document.createElement("div"); modal.id="afDirectorRewardRegisterModal";
+  modal.style.cssText="position:fixed;inset:0;z-index:110000;background:#0009;display:flex;align-items:center;justify-content:center;padding:12px";
+  modal.innerHTML=`<section style="background:white;border-radius:14px;max-width:950px;width:100%;max-height:94vh;overflow:auto;padding:22px;font-family:Arial">
+    <div style="display:flex;justify-content:space-between;gap:12px"><h2>🏆 Director Rewards Management</h2><button id="afRwClose">Close ✕</button></div>
+    <p>Register an approved reward. A saved award is a record of the reward; confirm receipt separately.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+    <label>Category<select id="afRwType"><option>Employee</option><option>Team</option><option>Client</option><option>Supplier</option></select></label>
+    <label>Recipient name<input id="afRwName" placeholder="Enter recipient's registered name" required></label>
+    <label>Reward period<input id="afRwPeriod" type="month"></label>
+    <label>Reward date<input id="afRwDate" type="date"></label>
+    <label>Reward type<select id="afRwKind"><option>Physical Gift</option><option>Cash</option></select></label>
+    <label>Gift / reward description<input id="afRwItem" placeholder="T-shirt, boots, overall, reflector, cash"></label>
+    <label>Quantity<input id="afRwQty" type="number" min="1" step="1" value="1"></label>
+    <label>Unit value (UGX)<input id="afRwCost" type="number" min="0" step="1"></label>
+    <label>Reward status<select id="afRwStatus"><option>Approved / Not Issued</option><option>Issued / Received</option></select></label>
+    <label>Recipient ID (optional)<input id="afRwRecipientId" placeholder="Employee, team or business ID"></label>
+    </div><p><label>Notes / award reason<textarea id="afRwNotes" style="width:100%"></textarea></label></p>
+    <p><b id="afRwTotal">Total value: UGX 0</b></p><button id="afRwSave" style="background:#07693d;color:white;padding:12px;border:0;border-radius:8px">Save Reward</button>
+    <h3>Reward History</h3><div style="overflow:auto"><table style="width:100%;border-collapse:collapse"><thead><tr><th>Date</th><th>Recipient</th><th>Reward</th><th>Value (UGX)</th><th>Status</th></tr></thead><tbody id="afRwHistory"></tbody></table></div>
+    <p style="font-size:12px;color:#666">This register does not automatically post payroll, inventory or cashbook transactions. These must be reconciled before financial posting.</p>
+    </section>`;
+  document.body.appendChild(modal);
+  const $=id=>modal.querySelector("#"+id);
+  const now=new Date(); $("afRwDate").value=now.toLocaleDateString("en-CA"); $("afRwPeriod").value=now.toISOString().slice(0,7);
+  const calc=()=>$("afRwTotal").textContent="Total value: UGX "+((Number($("afRwQty").value)||0)*(Number($("afRwCost").value)||0)).toLocaleString();
+  $("afRwQty").oninput=calc;$("afRwCost").oninput=calc;
+  const render=()=>{$("afRwHistory").innerHTML=read().slice().reverse().map(r=>`<tr style="border-top:1px solid #ddd"><td>${esc(r.date)}</td><td>${esc(r.type)}: ${esc(r.name)}</td><td>${esc(r.qty)} × ${esc(r.item)}</td><td>${Number(r.total).toLocaleString()}</td><td>${esc(r.status)}</td></tr>`).join("")||'<tr><td colspan="5">No rewards yet</td></tr>';};
+  $("afRwClose").onclick=()=>modal.remove();
+  $("afRwSave").onclick=()=>{
+    const name=$("afRwName").value.trim(),qty=Number($("afRwQty").value),cost=Number($("afRwCost").value),item=$("afRwItem").value.trim();
+    if(!name||!item||!$("afRwDate").value||!Number.isInteger(qty)||qty<=0||!Number.isFinite(cost)||cost<=0) return alert("Enter recipient, reward item, date, positive whole quantity and unit cost.");
+    const rows=read();rows.push({id:"AFR-"+Date.now(),type:$("afRwType").value,name,recipientId:$("afRwRecipientId").value.trim(),period:$("afRwPeriod").value,date:$("afRwDate").value,kind:$("afRwKind").value,item,qty,cost,total:qty*cost,status:$("afRwStatus").value,notes:$("afRwNotes").value.trim(),director:u.fullName||u.employeeId||"Director",createdAt:new Date().toISOString()});
+    localStorage.setItem("afDirectorRewardRegister",JSON.stringify(rows));render();alert("Reward registered. Reconcile financial and stock entries separately.");
+  };render();
+}
+/* Attach a discoverable director-only entry to the existing performance screen. */
+(function afInstallDirectorRewardShortcut(){
+ const observer=new MutationObserver(()=>{
+   const u=JSON.parse(localStorage.getItem("currentUser")||"{}");
+   if(String(u.role||"").toLowerCase()!=="director")return;
+   document.querySelectorAll("h2,h3").forEach(h=>{
+     if(!/Employee Performance & Rankings/i.test(h.textContent||""))return;
+     if(h.parentElement.querySelector(".afDirectorRewardsShortcut"))return;
+     const b=document.createElement("button");b.className="afDirectorRewardsShortcut";b.textContent="🏆 Director Rewards Management";
+     b.style.cssText="padding:10px;margin:8px;background:#08633e;color:white;border:0;border-radius:7px;cursor:pointer";
+     b.onclick=afOpenDirectorRewards;h.insertAdjacentElement("afterend",b);
+   });
+ });observer.observe(document.documentElement,{childList:true,subtree:true});
+})();
+
+/* Director-only payment reversal: preserve payroll calculation and full reversal history. */
+function afReversePayrollPayment(payrollId) {
+  const user=JSON.parse(localStorage.getItem("currentUser")||"{}");
+  if(String(user.role||"").toLowerCase()!=="director") return alert("Only the Director may reverse payments.");
+  const records=getPayrollRecords();
+  const index=records.findIndex(r=>String(r.id)===String(payrollId));
+  if(index<0) return alert("Payroll record not found.");
+  const record=records[index];
+  const paid=Number(record.amountPaid||0);
+  if(paid<=0) return alert("No recorded payment to reverse.");
+  const reason=prompt("Why is this recorded payment being reversed? (Required)");
+  if(!reason||!reason.trim())return;
+  if(!confirm("Reverse UGX "+paid.toLocaleString()+" recorded for "+(record.employeeName||record.employeeId)+"? This does not transfer cash."))return;
+  const archive=JSON.parse(localStorage.getItem("afDeletedPayrollPayments")||"[]");
+  archive.push({id:"REV-"+Date.now(),payrollId:String(record.id),employeeId:record.employeeId,employeeName:record.employeeName,amount:paid,reason:reason.trim(),originalRecord:JSON.parse(JSON.stringify(record)),reversedBy:user.fullName||user.employeeId||"Director",reversedAt:new Date().toISOString()});
+  localStorage.setItem("afDeletedPayrollPayments",JSON.stringify(archive));
+  record.amountPaid=0;record.balance=Math.max(0,Number(record.netPayable||0));record.status="UNPAID";record.paymentDate=null;record.updatedAt=new Date().toISOString();
+  records[index]=record;savePayrollRecords(records);
+  alert("Payment reversed and archived in Deleted Items. Check linked expenses/cashbook for reconciliation.");
+  document.querySelectorAll("div[style*='z-index:9999']").forEach(el=>{if(el.textContent.includes("Payroll Ledger"))el.remove();});
+  managePayrollLedger();
+}
+function afViewDeletedPayrollPayments(){
+ const user=JSON.parse(localStorage.getItem("currentUser")||"{}");
+ if(String(user.role||"").toLowerCase()!=="director")return alert("Director only.");
+ const rows=JSON.parse(localStorage.getItem("afDeletedPayrollPayments")||"[]");
+ const esc=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp","<":"&lt",">":"&gt",'"':"&quot","'":"&#39"}[c]));
+ const w=window.open("","_blank");if(!w)return alert("Allow pop-ups to view Deleted Items.");
+ w.document.write("<title>Deleted Payroll Payments</title><h2>Deleted / Reversed Payroll Payments</h2><table border='1' cellpadding='8'><tr><th>Date</th><th>Employee</th><th>Amount UGX</th><th>Reason</th><th>Director</th></tr>"+rows.slice().reverse().map(r=>"<tr><td>"+esc(r.reversedAt)+"</td><td>"+esc(r.employeeName||r.employeeId)+"</td><td>"+Number(r.amount).toLocaleString()+"</td><td>"+esc(r.reason)+"</td><td>"+esc(r.reversedBy)+"</td></tr>").join("")+"</table>");w.document.close();
+}
