@@ -88488,7 +88488,7 @@ function openAFAccountsReports() {
         purchases: afAROpenPurchasesRegister,
         expenses: afAROpenExpenseRegister,
         journal: afAROpenJournalRegister,
-        generalLedger: () => afAROpenAccountingEngineStatus("General Ledger"),
+        generalLedger: () => window.afOpenStagingAccountingReport("generalLedger"),
         debtors: afAROpenDebtorsLedger,
         creditors: afAROpenCreditorsLedger,
         payroll: () => {
@@ -88502,14 +88502,14 @@ function openAFAccountsReports() {
             else alert("Stock & Inventory could not be opened.");
         },
         assets: afAROpenFixedAssets,
-        trialBalance: () => afAROpenAccountingEngineStatus("Trial Balance"),
+        trialBalance: () => window.afOpenStagingAccountingReport("trialBalance"),
         profitLoss: () => {
             modal.remove();
             if (typeof window.openAFProfitLossReport === "function") window.openAFProfitLossReport();
             else alert("Profit & Loss report could not be opened.");
         },
-        balanceSheet: () => afAROpenAccountingEngineStatus("Balance Sheet"),
-        cashFlow: () => afAROpenAccountingEngineStatus("Cash Flow Statement"),
+        balanceSheet: () => window.afOpenStagingAccountingReport("balanceSheet"),
+        cashFlow: () => window.afOpenStagingAccountingReport("cashFlow"),
         production: afAROpenProductionRegister,
         stockMovement: () => {
             modal.remove();
@@ -106203,3 +106203,37 @@ function trialBalance(){const sums=new Map(accounts.map(a=>[a.code,{...a,debit:0
 function report(){const tb=trialBalance();const debit=tb.reduce((s,a)=>s+a.debit,0),credit=tb.reduce((s,a)=>s+a.credit,0);return {status:'STAGING_ONLY_NOT_RECONCILED',accounts:tb,totalDebits:debit,totalCredits:credit,balanced:debit===credit,entryCount:read().entries.length}}
 window.AFAccountingStaging=Object.freeze({chartOfAccounts:()=>copy(accounts),validate,post,reverse,trialBalance,report,export:()=>JSON.stringify(read(),null,2)});
 })();
+
+
+/* READ-ONLY ACCOUNTING DIAGNOSTICS — not certified financial statements.
+   The staging journal is separate from historical operational transactions. */
+window.afOpenStagingAccountingReport = function(kind) {
+  const engine=window.AFAccountingStaging;
+  if(!engine) return alert('Accounting staging module unavailable.');
+  const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const fmt=x=>'UGX '+Number(x||0).toLocaleString('en-UG');
+  let report,accounts,entries;
+  try {report=engine.report();accounts=engine.chartOfAccounts();entries=JSON.parse(engine.export()).entries;}
+  catch(e){return alert('Could not read staging journal: '+e.message)}
+  const titles={generalLedger:'General Ledger',trialBalance:'Trial Balance',balanceSheet:'Balance Sheet',cashFlow:'Cash Flow Statement'};
+  if(!titles[kind])return;
+  let content='';
+  const row=(cells)=>'<tr>'+cells.map(c=>'<td style="border-bottom:1px solid #ddd;padding:8px">'+esc(c)+'</td>').join('')+'</tr>';
+  if(kind==='generalLedger'){
+    content='<p>Journal entries in staging ledger: '+entries.length+'</p><div style="overflow:auto"><table style="width:100%;border-collapse:collapse"><thead><tr><th>Date</th><th>Journal</th><th>Account</th><th>Debit</th><th>Credit</th><th>Source</th></tr></thead><tbody>'+
+      entries.flatMap(e=>e.lines.map(l=>row([e.date,e.id,l.account+' '+(accounts.find(a=>a.code===l.account)?.name||''),fmt(l.debit),fmt(l.credit),e.sourceKey]))).join('')+'</tbody></table></div>';
+  } else if(kind==='trialBalance'){
+    content='<p>Posting totals (not net account balances): '+fmt(report.totalDebits)+' debit / '+fmt(report.totalCredits)+' credit</p><table style="width:100%;border-collapse:collapse"><thead><tr><th>Account</th><th>Debit balance</th><th>Credit balance</th></tr></thead><tbody>'+
+      report.accounts.map(a=>row([a.code+' '+a.name,fmt(Math.max(0,a.balance)),fmt(Math.max(0,-a.balance))])).join('')+'</tbody></table>';
+  } else if(kind==='balanceSheet'){
+    content='<p>A certified Balance Sheet cannot yet be generated: opening balances, inventory valuation, payroll and other source modules have not been reconciled and posted into this ledger.</p>';
+  } else {
+    content='<p>A certified Cash Flow Statement cannot yet be generated: opening cash balances, complete receipts/payments and cash-flow classifications have not been reconciled into this ledger.</p>';
+  }
+  const old=document.getElementById('afStagingAccountingDiagnostic');if(old)old.remove();
+  const modal=document.createElement('div');modal.id='afStagingAccountingDiagnostic';
+  modal.style.cssText='position:fixed;inset:0;background:#0009;z-index:2147483000;overflow:auto;padding:20px';
+  modal.innerHTML='<section style="background:white;color:#183329;max-width:1100px;margin:25px auto;border-radius:12px;padding:22px;font-family:Arial,sans-serif"><button id="afCloseStagingReport" style="float:right">✕ Close</button><h2>'+esc(titles[kind])+'</h2><p style="padding:12px;border:1px solid #c58b24;background:#fff6dd"><strong>STAGING ONLY — NOT RECONCILED.</strong> Historical transactions from the factory modules are NOT included. Do not use this screen for business decisions or statutory reporting.</p>'+content+'</section>';
+  document.body.appendChild(modal);
+  modal.querySelector('#afCloseStagingReport').onclick=()=>modal.remove();
+};
