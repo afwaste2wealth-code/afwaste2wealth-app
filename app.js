@@ -106330,3 +106330,61 @@ window.AFTransactionSchemaAudit=Object.freeze({inspect,open});
 function attach(){if(document.getElementById('afSchemaAuditButton'))return;const b=document.createElement('button');b.id='afSchemaAuditButton';b.type='button';b.textContent='Transaction Schema Audit (Read Only)';b.style.cssText='position:fixed;bottom:58px;right:12px;z-index:2147482000;background:#164b6b;color:white;border:1px solid white;border-radius:8px;padding:10px;font:600 12px Arial;cursor:pointer';b.onclick=open;document.body.appendChild(b)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
 })();
+
+
+/* A&F RECONCILIATION PREVIEW v1 — READ ONLY; NO JOURNAL WRITES */
+(function(){
+'use strict';
+if(window.__afReconciliationPreviewV1)return;
+window.__afReconciliationPreviewV1=true;
+const specs=[
+ ['Purchases','materialRecords','id'],['Purchases mirror','afSupplierPurchases','materialRecordId'],
+ ['Expenses','expenses','id'],['Expenses mirror','expenseRecords','id'],
+ ['Loans','afPettyLoansV1','id'],['Loan events','afPettyLoanLedgerV1','id'],
+ ['Other funds','afOtherFundsV1','id'],['Payroll','payrollRecords','id'],
+ ['Deliveries','afDeliveryRecords','id'],['Sales orders','afSalesOrders','id'],
+ ['Client custody','clientMaterialRecords','id'],['Washing shifts','washingShiftRecords','id'],
+ ['Journal','afJournalEntries','id']
+];
+function read(key){try{const v=JSON.parse(localStorage.getItem(key)||'[]');return Array.isArray(v)?v:null}catch(e){return null}}
+function inspect(){
+ const data={},rows=[];
+ for(const [group,key,idKey] of specs){
+ const records=read(key);data[key]=records;
+ if(!records){rows.push({group,key,count:null,missingIds:null,duplicateIds:null,cancelled:null,problem:'Not an array / invalid JSON'});continue}
+ const seen=new Set();let missingIds=0,duplicateIds=0,cancelled=0,unclassified=0;
+ for(const r of records){const id=r&&r[idKey];if(id===undefined||id===null||String(id).trim()==='')missingIds++;else{const s=String(id);if(seen.has(s))duplicateIds++;seen.add(s)}
+ if(r&&(r.status==='cancelled'||r.status==='Cancelled'||r.cancelledAt||r.state==='cancelled'))cancelled++;
+ if(key==='afOtherFundsV1'&&(!r.type||!r.source))unclassified++;
+ }
+ rows.push({group,key,count:records.length,missingIds,duplicateIds,cancelled,unclassified});
+ }
+ const a=data.materialRecords||[],b=data.afSupplierPurchases||[];
+ const purchaseIds=new Set(a.map(r=>String(r.id)));
+ const purchaseMirrorMatches=b.filter(r=>r.materialRecordId!==undefined&&purchaseIds.has(String(r.materialRecordId))).length;
+ const x=data.expenses||[],y=data.expenseRecords||[];
+ const expenseIds=new Set(x.map(r=>String(r.id)));
+ const expenseMirrorMatches=y.filter(r=>r.id!==undefined&&expenseIds.has(String(r.id))).length;
+ const loans=data.afPettyLoansV1||[],events=data.afPettyLoanLedgerV1||[];
+ const loanIds=new Set(loans.map(r=>String(r.id)));
+ const orphanLoanEvents=events.filter(r=>!loanIds.has(String(r.loanId))).length;
+ const journal=data.afJournalEntries||[];
+ const unbalancedJournal=journal.filter(j=>{
+ const lines=Array.isArray(j.lines)?j.lines:null;if(!lines)return true;
+ const debit=lines.reduce((s,l)=>s+Number(l.debit||0),0),credit=lines.reduce((s,l)=>s+Number(l.credit||0),0);
+ return !Number.isFinite(debit)||!Number.isFinite(credit)||Math.abs(debit-credit)>0.01;
+ }).length;
+ return {status:'READ_ONLY_NOT_RECONCILED',createdAt:new Date().toISOString(),origin:location.origin,
+ rows,checks:{purchaseMirrorMatches,purchaseMirrorTotal:b.length,expenseMirrorMatches,expenseMirrorTotal:y.length,orphanLoanEvents,unbalancedJournal},
+ note:'Counts and diagnostics only. No financial amounts, names or IDs exported. Browser-local data only. Does not prove matching records are identical. No posting performed.'};
+}
+function safe(v){return String(v??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function show(){const u=(()=>{try{return JSON.parse(localStorage.getItem('currentUser')||'null')}catch(e){return null}})();if(!u||u.role!=='Director'){alert('Director access required.');return}
+ const report=inspect();document.getElementById('afReconcileModal')?.remove();const modal=document.createElement('div');modal.id='afReconcileModal';modal.style.cssText='position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,.65);padding:12px;overflow:auto;font:14px Arial';
+ const c=report.checks;
+ modal.innerHTML='<section style="background:white;color:#20372d;border-radius:12px;max-width:1050px;margin:20px auto;padding:20px"><button id="afRecClose" style="float:right">✕ Close</button><h2>Accounting Reconciliation Preview — Read Only</h2><p><b>NOT RECONCILED. NO ACCOUNTING POSTINGS.</b> This compares current browser records only.</p><p>Purchase mirror IDs matched: '+c.purchaseMirrorMatches+'/'+c.purchaseMirrorTotal+'; Expense mirror IDs matched: '+c.expenseMirrorMatches+'/'+c.expenseMirrorTotal+'; Orphan loan events: '+c.orphanLoanEvents+'; Unbalanced/unrecognized journal structures: '+c.unbalancedJournal+'</p><div style="overflow:auto"><table style="width:100%;border-collapse:collapse"><thead><tr><th>Group</th><th>Records</th><th>Missing IDs</th><th>Duplicate IDs</th><th>Cancelled</th><th>Unclassified</th></tr></thead><tbody>'+report.rows.map(r=>'<tr style="border-bottom:1px solid #ddd"><td>'+safe(r.group)+'</td><td>'+safe(r.count)+'</td><td>'+safe(r.missingIds)+'</td><td>'+safe(r.duplicateIds)+'</td><td>'+safe(r.cancelled)+'</td><td>'+safe(r.unclassified)+'</td></tr>').join('')+'</tbody></table></div><p>Matching IDs do not establish equal amounts or settlement. Confirm bank/cash balances and opening balances before activation. Data remains unchanged.</p><button id="afRecDownload" style="background:#0b5d3b;color:white;padding:12px;border:0;border-radius:7px">Download reconciliation preview JSON</button></section>';
+ document.body.appendChild(modal);modal.querySelector('#afRecClose').onclick=()=>modal.remove();modal.querySelector('#afRecDownload').onclick=()=>{const blob=new Blob([JSON.stringify(report,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='AF_Reconciliation_Preview_READ_ONLY.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)};
+}
+function attach(){if(document.getElementById('afReconcileButton'))return;const b=document.createElement('button');b.id='afReconcileButton';b.type='button';b.textContent='Accounting Reconciliation Preview';b.style.cssText='position:fixed;bottom:102px;right:12px;z-index:2147482000;background:#633c13;color:white;border:1px solid white;border-radius:8px;padding:10px;font:600 12px Arial;cursor:pointer';b.onclick=show;document.body.appendChild(b)}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
+})();

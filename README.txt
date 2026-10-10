@@ -1,0 +1,1 @@
+TEST ONLY. Back up live app and browser data. Do not overwrite production before testing. Director login -> brown Accounting Reconciliation Preview button (bottom right). Download JSON and return for review. No ledger postings or financial reconciliation performed.
