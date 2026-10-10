@@ -6693,22 +6693,32 @@ JSON.stringify(awards)
 // GET ONE EMPLOYEE'S AWARDS FOR PAYROLL
 // ------------------------------------------------------
 
-function getEmployeePerformanceAwards(
-employeeId,
-    month,
-    year
-) {
-
-const awards = getPerformanceAwards();
-
-    return awards.filter(
-        award =>
-            String(award.employeeId) === String(employeeId) &&
-            String(award.month) === String(month) &&
-            String(award.year) === String(year)
-    );
+function getEmployeePerformanceAwards(employeeId, month, year) {
+  /* Director-approved cash rewards only. Never post draft or physical gifts. */
+  const period = String(year) + '-' + String(Number(month) + 1).padStart(2, '0');
+  let rewards = [];
+  try { rewards = JSON.parse(localStorage.getItem('afDirectorRewardRegister') || '[]'); } catch (_) {}
+  const employees = getEmployees();
+  const employee = employees.find(e => String(e.employeeId) === String(employeeId));
+  if (!employee) return [];
+  const normalise = x => String(x || '').trim().toLowerCase();
+  const result = [];
+  rewards.forEach(reward => {
+    if (reward.kind !== 'Cash' || !['Approved / Not Issued', 'Issued / Received'].includes(reward.status)) return;
+    if (String(reward.period || '').slice(0, 7) !== period) return;
+    if (reward.type === 'Employee') {
+      if (String(reward.recipientId || '') !== String(employeeId) && normalise(reward.name) !== normalise(employee.fullName)) return;
+      result.push({ id: reward.id, employeeId, month, year, awardType: 'Best Employee of the Month', amount: Number(reward.total) || 0, source: 'Director Reward', rewardStatus: reward.status });
+    } else if (reward.type === 'Team') {
+      /* Freeze membership at approval; never recalculate shares after transfers. */
+      const allocations = Array.isArray(reward.payrollAllocations) ? reward.payrollAllocations : [];
+      const allocation = allocations.find(x => String(x.employeeId) === String(employeeId));
+      if (!allocation) return;
+      result.push({ id: reward.id + '-' + employeeId, employeeId, month, year, awardType: 'Best Team of the Month', teamName: reward.name, amount: Number(allocation.amount) || 0, source: 'Director Reward', rewardStatus: reward.status });
+    }
+  });
+  return result;
 }
-
 
 // ------------------------------------------------------
 // GET TOTAL PERFORMANCE BONUS FOR PAYROLL
@@ -105785,7 +105795,7 @@ function afOpenDirectorRewards(prefillType, prefillName, prefillPeriod) {
     <button id="afRwSave" type="button" style="background:#07693d;color:white;padding:12px;border:0;border-radius:8px;cursor:pointer">Save Reward</button>
   </div>
   <h3>Reward History</h3><div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr><th>Recipient</th><th>Reward</th><th>Value</th><th>Status / Action</th></tr></thead><tbody id="afRwHistory"></tbody></table></div>
-  <p style="font-size:11px;color:#666">Rewards are recorded here only. Payroll, inventory and cashbook entries must be reconciled separately.</p>
+  <p style="font-size:11px;color:#666">Approved employee and team cash rewards are included in payroll calculations. Marking Paid does not add another bonus. Physical gifts require separate inventory/accounting reconciliation.</p>
   </section>`;
   document.body.appendChild(modal);
   const $=id=>modal.querySelector('#'+id);
@@ -105822,7 +105832,23 @@ function afOpenDirectorRewards(prefillType, prefillName, prefillPeriod) {
     const qty=kind==='Cash'?1:Number($('afRwQty').value),cost=Number($('afRwCost').value);
     const item=kind==='Cash'?'Cash':$('afRwGift').value==='Other'?$('afRwOther').value.trim():$('afRwGift').value;
     if(!name||!period||!item||!Number.isInteger(qty)||qty<1||!Number.isFinite(cost)||cost<=0) return alert('Enter the winner, reward, positive quantity and value.');
-    const all=read();all.push({id:'AFR-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),type,name,recipientId:'',period,date:new Date().toLocaleDateString('en-CA'),kind,item,qty,cost,total:qty*cost,status:'Approved / Not Issued',notes:'',director:u.fullName||u.employeeId||'Director',createdAt:new Date().toISOString()});
+    const all=read();
+    if(all.some(r=>r.type===type&&r.kind===kind&&String(r.name).trim().toLowerCase()===name.toLowerCase()&&r.period===period)) return alert('A reward of this type is already recorded for this winner and period. Open Reward History instead.');
+    let payrollAllocations=[];
+    if(type==='Team'&&kind==='Cash') {
+      const team=getTeams().find(t=>String(t.name).trim().toLowerCase()===name.toLowerCase());
+      if(!team) return alert('Winning team not found in Teams & Team Leaders. Please register the team before approving its cash reward.');
+      const ids=[...new Set([...(team.memberEmployeeIds||[]),team.leaderEmployeeId].filter(Boolean).map(String))];
+      const activeIds=new Set(getEmployees().filter(e=>String(e.employmentStatus||'active').toLowerCase()==='active').map(e=>String(e.employeeId)));
+      const eligible=ids.filter(id=>activeIds.has(id)).sort();
+      if(!eligible.length) return alert('No active team members found. Please check team membership.');
+      const total=qty*cost;
+      if(!Number.isInteger(total)) return alert('Cash reward must be a whole number of UGX.');
+      const base=Math.floor(total/eligible.length), remainder=total%eligible.length;
+      payrollAllocations=eligible.map((id,i)=>({employeeId:id,amount:base+(i<remainder?1:0)}));
+      if(!confirm('Approve UGX '+total.toLocaleString('en-UG')+' for '+eligible.length+' team members? Each share will enter payroll for '+period+'.'))return;
+    }
+    all.push({id:'AFR-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),type,name,recipientId:'',period,date:new Date().toLocaleDateString('en-CA'),kind,item,qty,cost,total:qty*cost,payrollAllocations,status:'Approved / Not Issued',notes:'',director:u.fullName||u.employeeId||'Director',createdAt:new Date().toISOString()});
     localStorage.setItem('afDirectorRewardRegister',JSON.stringify(all));render();window.dispatchEvent(new Event('afRewardsUpdated'));
     alert('Reward saved as Approved / Not Issued. Confirm payment or receipt separately.');
   };render();
