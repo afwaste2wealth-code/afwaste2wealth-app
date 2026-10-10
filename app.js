@@ -105829,3 +105829,42 @@ function afViewDeletedPayrollPayments(){
  const w=window.open("","_blank");if(!w)return alert("Allow pop-ups to view Deleted Items.");
  w.document.write("<title>Deleted Payroll Payments</title><h2>Deleted / Reversed Payroll Payments</h2><table border='1' cellpadding='8'><tr><th>Date</th><th>Employee</th><th>Amount UGX</th><th>Reason</th><th>Director</th></tr>"+rows.slice().reverse().map(r=>"<tr><td>"+esc(r.reversedAt)+"</td><td>"+esc(r.employeeName||r.employeeId)+"</td><td>"+Number(r.amount).toLocaleString()+"</td><td>"+esc(r.reason)+"</td><td>"+esc(r.reversedBy)+"</td></tr>").join("")+"</table>");w.document.close();
 }
+
+/* =========================================================
+   DIRECTOR REWARDS — VISIBLE QUICK ACTIONS SHORTCUT
+   ========================================================= */
+(function afInstallRewardsQuickAction() {
+  function install() {
+    let user = null;
+    try { user = JSON.parse(localStorage.getItem('currentUser') || 'null'); } catch (_) {}
+    const director = String(user?.role || '').toLowerCase() === 'director';
+    const quick = document.getElementById('quickActionsCard');
+    if (!quick) return;
+    const old = quick.querySelector('#afDirectorRewardsQuickAction');
+    if (!director) { if (old) old.remove(); return; }
+    if (old) return;
+    const button = document.createElement('button');
+    button.id = 'afDirectorRewardsQuickAction';
+    button.type = 'button';
+    button.innerHTML = '🏆 <strong>Rewards Management</strong>';
+    button.title = 'Award cash or physical gifts to employees, teams, clients and suppliers';
+    button.style.cssText = 'display:block;width:100%;padding:12px 10px;margin-top:10px;background:#0b5d3b;color:white;border:0;border-radius:8px;cursor:pointer;font-weight:bold;text-align:center;';
+    button.addEventListener('click', function () {
+      if (typeof afOpenDirectorRewards === 'function') afOpenDirectorRewards();
+      else alert('Rewards Management is unavailable.');
+    });
+    quick.appendChild(button);
+  }
+  let pending = false;
+  function schedule() {
+    if (pending) return;
+    pending = true;
+    setTimeout(function () { pending = false; install(); }, 200);
+  }
+  function start() {
+    install();
+    new MutationObserver(schedule).observe(document.body, {childList:true, subtree:true});
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, {once:true});
+  else start();
+})();
