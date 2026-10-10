@@ -105761,57 +105761,70 @@ function afWinnerRewardPanel(type,name,period) {
 }
 /* A&F Director Rewards Register — employee/team/client/supplier, cash or physical */
 function afOpenDirectorRewards(prefillType, prefillName, prefillPeriod) {
-  const u = JSON.parse(localStorage.getItem("currentUser") || "{}");
-  if (String(u.role||"").toLowerCase() !== "director") return alert("Director only.");
-  const esc = v => String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-  const read = () => JSON.parse(localStorage.getItem("afDirectorRewardRegister")||"[]");
-  document.getElementById("afDirectorRewardRegisterModal")?.remove();
-  const modal=document.createElement("div"); modal.id="afDirectorRewardRegisterModal";
-  modal.style.cssText="position:fixed;inset:0;z-index:110000;background:#0009;display:flex;align-items:center;justify-content:center;padding:12px";
-  modal.innerHTML=`<section style="background:white;border-radius:14px;max-width:950px;width:100%;max-height:94vh;overflow:auto;padding:22px;font-family:Arial">
-    <div style="display:flex;justify-content:space-between;gap:12px"><h2>🏆 Director Rewards Management</h2><button id="afRwClose">Close ✕</button></div>
-    <p>Register an approved reward. A saved award is a record of the reward; confirm receipt separately.</p>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
-    <label>Category<select id="afRwType"><option>Employee</option><option>Team</option><option>Client</option><option>Supplier</option></select></label>
-    <label>Recipient name<input id="afRwName" placeholder="Enter recipient's registered name" required></label>
-    <label>Reward period<input id="afRwPeriod" type="month"></label>
-    <label>Reward date<input id="afRwDate" type="date"></label>
-    <label>Reward type<select id="afRwKind"><option>Physical Gift</option><option>Cash</option></select></label>
-    <label>Gift / reward description<input id="afRwItem" placeholder="T-shirt, boots, overall, reflector, cash"></label>
-    <label>Quantity<input id="afRwQty" type="number" min="1" step="1" value="1"></label>
-    <label>Unit value (UGX)<input id="afRwCost" type="number" min="0" step="1"></label>
-    <label>Reward status<input value="Approved / Not Issued" disabled title="Receipt must be confirmed separately"></label>
-    <label>Recipient ID (optional)<input id="afRwRecipientId" placeholder="Employee, team or business ID"></label>
-    </div><p><label>Notes / award reason<textarea id="afRwNotes" style="width:100%"></textarea></label></p>
-    <p><b id="afRwTotal">Total value: UGX 0</b></p><button id="afRwSave" style="background:#07693d;color:white;padding:12px;border:0;border-radius:8px">Save Reward</button>
-    <h3>Reward History</h3><div style="overflow:auto"><table style="width:100%;border-collapse:collapse"><thead><tr><th>Date</th><th>Recipient</th><th>Reward</th><th>Value (UGX)</th><th>Status</th><th>Action</th></tr></thead><tbody id="afRwHistory"></tbody></table></div>
-    <p style="font-size:12px;color:#666">This register does not automatically post payroll, inventory or cashbook transactions. These must be reconciled before financial posting.</p>
-    </section>`;
+  const u=JSON.parse(localStorage.getItem('currentUser')||'{}');
+  if(String(u.role||'').toLowerCase()!=='director') return alert('Director only.');
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const read=()=>{try{return JSON.parse(localStorage.getItem('afDirectorRewardRegister')||'[]')}catch(_){return []}};
+  document.getElementById('afDirectorRewardRegisterModal')?.remove();
+  const modal=document.createElement('div');modal.id='afDirectorRewardRegisterModal';
+  modal.style.cssText='position:fixed;inset:0;z-index:110000;background:#0009;display:flex;align-items:center;justify-content:center;padding:12px';
+  modal.innerHTML=`<section style="background:#fff;border-radius:14px;max-width:600px;width:100%;max-height:92vh;overflow:auto;padding:22px;font-family:Arial;color:#172b25">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><h2 style="margin:0">🏆 Award Reward</h2><button type="button" id="afRwClose">Close ✕</button></div>
+  <div style="background:#eef6f0;border-radius:9px;padding:12px;margin:16px 0">
+    <div id="afRwWinner" style="font-weight:bold;margin-bottom:8px"></div>
+    <div id="afRwSelect" style="display:grid;gap:8px"><label>Category <select id="afRwType"><option>Employee</option><option>Team</option><option>Client</option><option>Supplier</option></select></label><label>Recipient name <input id="afRwName" placeholder="Registered winner name" style="width:100%;box-sizing:border-box;padding:8px"></label><label>Reward period <input id="afRwPeriod" type="month"></label></div>
+  </div>
+  <div style="display:grid;gap:12px">
+    <label>Reward type <select id="afRwKind" style="display:block;width:100%;padding:10px"><option>Cash</option><option>Physical Gift</option></select></label>
+    <label id="afRwGiftBox" style="display:none">Gift <select id="afRwGift" style="display:block;width:100%;padding:10px"><option>T-Shirt</option><option>Safety Boots</option><option>Overall</option><option>Reflector</option><option>Other</option></select></label>
+    <label id="afRwOtherBox" style="display:none">Describe gift <input id="afRwOther" style="display:block;width:100%;padding:10px;box-sizing:border-box"></label>
+    <label id="afRwQtyBox" style="display:none">Quantity <input id="afRwQty" type="number" min="1" step="1" value="1" style="display:block;width:100%;padding:10px;box-sizing:border-box"></label>
+    <label id="afRwCostLabel">Cash amount (UGX) <input id="afRwCost" type="number" min="1" step="1" placeholder="Enter amount" style="display:block;width:100%;padding:10px;box-sizing:border-box"></label>
+    <div style="background:#f3f6f4;border-radius:8px;padding:12px;font-weight:bold" id="afRwTotal">Total reward: UGX 0</div>
+    <div style="font-size:13px;color:#53665d">Saving approves the reward; it does not mean it has been paid or received.</div>
+    <button id="afRwSave" type="button" style="background:#07693d;color:white;padding:12px;border:0;border-radius:8px;cursor:pointer">Save Reward</button>
+  </div>
+  <h3>Reward History</h3><div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr><th>Recipient</th><th>Reward</th><th>Value</th><th>Status / Action</th></tr></thead><tbody id="afRwHistory"></tbody></table></div>
+  <p style="font-size:11px;color:#666">Rewards are recorded here only. Payroll, inventory and cashbook entries must be reconciled separately.</p>
+  </section>`;
   document.body.appendChild(modal);
-  const $=id=>modal.querySelector("#"+id);
-  const now=new Date(); $("afRwDate").value=now.toLocaleDateString("en-CA"); $("afRwPeriod").value=now.toISOString().slice(0,7);
-  if(prefillType) $("afRwType").value=prefillType;
-  if(prefillName) {$("afRwName").value=prefillName;$("afRwName").readOnly=true;}
-  if(prefillPeriod) $("afRwPeriod").value=prefillPeriod;
-  const calc=()=>$("afRwTotal").textContent="Total value: UGX "+((Number($("afRwQty").value)||0)*(Number($("afRwCost").value)||0)).toLocaleString();
-  $("afRwQty").oninput=calc;$("afRwCost").oninput=calc;
+  const $=id=>modal.querySelector('#'+id);
+  const today=new Date();$('afRwPeriod').value=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0');
+  if(prefillType) $('afRwType').value=prefillType;
+  if(prefillName) $('afRwName').value=prefillName;
+  if(prefillPeriod) $('afRwPeriod').value=prefillPeriod;
+  const linked=!!(prefillType&&prefillName);
+  if(linked){$('afRwSelect').style.display='none';$('afRwWinner').textContent=`Best ${prefillType} — ${prefillPeriod||$('afRwPeriod').value}: ${prefillName}`;}
+  else $('afRwWinner').textContent='Select a recipient to award';
+  const update=()=>{
+    const gift=$('afRwKind').value==='Physical Gift';
+    $('afRwGiftBox').style.display=gift?'block':'none';$('afRwQtyBox').style.display=gift?'block':'none';
+    $('afRwOtherBox').style.display=gift&&$('afRwGift').value==='Other'?'block':'none';
+    $('afRwCostLabel').firstChild.textContent=gift?'Unit cost (UGX) ':'Cash amount (UGX) ';
+    const qty=gift?Number($('afRwQty').value):1;
+    $('afRwTotal').textContent='Total reward: UGX '+((qty||0)*(Number($('afRwCost').value)||0)).toLocaleString('en-UG');
+  };
+  $('afRwKind').onchange=update;$('afRwGift').onchange=update;$('afRwQty').oninput=update;$('afRwCost').oninput=update;update();
   const render=()=>{
-    $("afRwHistory").innerHTML=read().slice().reverse().map(r=>`<tr style="border-top:1px solid #ddd"><td>${esc(r.date)}</td><td>${esc(r.type)}: ${esc(r.name)}</td><td>${esc(r.qty)} × ${esc(r.item)}</td><td>${Number(r.total).toLocaleString()}</td><td>${esc(r.status)}</td><td>${r.status==='Issued / Received'?'Confirmed':`<button data-receive="${esc(r.id)}" type="button">Confirm ${r.kind==='Cash'?'Payment':'Receipt'}</button>`}</td></tr>`).join("")||'<tr><td colspan="6">No rewards yet</td></tr>';
-    modal.querySelectorAll('[data-receive]').forEach(b=>b.onclick=()=>{
-      if(!confirm('Confirm that this reward has actually been paid or received?'))return;
-      const rows=read(),record=rows.find(r=>r.id===b.dataset.receive);
-      if(!record||record.status==='Issued / Received')return;
-      record.status='Issued / Received';record.receivedAt=new Date().toISOString();record.confirmedBy=u.fullName||u.employeeId||'Director';
-      localStorage.setItem('afDirectorRewardRegister',JSON.stringify(rows));render();
-      window.dispatchEvent(new Event('afRewardsUpdated'));
+    const rows=read().filter(r=>!linked||(r.type===prefillType&&String(r.name).trim().toLowerCase()===String(prefillName).trim().toLowerCase()&&(!prefillPeriod||r.period===prefillPeriod)));
+    $('afRwHistory').innerHTML=rows.slice().reverse().map(r=>`<tr style="border-top:1px solid #ddd"><td style="padding:8px">${esc(r.name)}</td><td>${esc(r.qty)} × ${esc(r.item)}</td><td>UGX ${Number(r.total||0).toLocaleString('en-UG')}</td><td>${esc(r.status)} ${r.status==='Issued / Received'?'':`<button type="button" data-receive="${esc(r.id)}">Confirm ${r.kind==='Cash'?'Paid':'Received'}</button>`}</td></tr>`).join('')||'<tr><td colspan="4">No rewards recorded yet</td></tr>';
+    modal.querySelectorAll('[data-receive]').forEach(button=>button.onclick=()=>{
+      if(!confirm('Confirm this reward was actually paid or received?'))return;
+      const all=read(),r=all.find(x=>x.id===button.dataset.receive);
+      if(!r||r.status==='Issued / Received')return;
+      r.status='Issued / Received';r.receivedAt=new Date().toISOString();r.confirmedBy=u.fullName||u.employeeId||'Director';
+      localStorage.setItem('afDirectorRewardRegister',JSON.stringify(all));render();window.dispatchEvent(new Event('afRewardsUpdated'));
     });
   };
-  $("afRwClose").onclick=()=>modal.remove();
-  $("afRwSave").onclick=()=>{
-    const name=$("afRwName").value.trim(),qty=Number($("afRwQty").value),cost=Number($("afRwCost").value),item=$("afRwItem").value.trim();
-    if(!name||!item||!$("afRwDate").value||!Number.isInteger(qty)||qty<=0||!Number.isFinite(cost)||cost<=0) return alert("Enter recipient, reward item, date, positive whole quantity and unit cost.");
-    const rows=read();rows.push({id:"AFR-"+Date.now(),type:$("afRwType").value,name,recipientId:$("afRwRecipientId").value.trim(),period:$("afRwPeriod").value,date:$("afRwDate").value,kind:$("afRwKind").value,item,qty,cost,total:qty*cost,status:"Approved / Not Issued",notes:$("afRwNotes").value.trim(),director:u.fullName||u.employeeId||"Director",createdAt:new Date().toISOString()});
-    localStorage.setItem("afDirectorRewardRegister",JSON.stringify(rows));render();window.dispatchEvent(new Event("afRewardsUpdated"));alert("Reward approved, but not yet paid or received. Confirm separately after issue.");
+  $('afRwClose').onclick=()=>modal.remove();
+  $('afRwSave').onclick=()=>{
+    const name=$('afRwName').value.trim(),type=$('afRwType').value,period=$('afRwPeriod').value,kind=$('afRwKind').value;
+    const qty=kind==='Cash'?1:Number($('afRwQty').value),cost=Number($('afRwCost').value);
+    const item=kind==='Cash'?'Cash':$('afRwGift').value==='Other'?$('afRwOther').value.trim():$('afRwGift').value;
+    if(!name||!period||!item||!Number.isInteger(qty)||qty<1||!Number.isFinite(cost)||cost<=0) return alert('Enter the winner, reward, positive quantity and value.');
+    const all=read();all.push({id:'AFR-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),type,name,recipientId:'',period,date:new Date().toLocaleDateString('en-CA'),kind,item,qty,cost,total:qty*cost,status:'Approved / Not Issued',notes:'',director:u.fullName||u.employeeId||'Director',createdAt:new Date().toISOString()});
+    localStorage.setItem('afDirectorRewardRegister',JSON.stringify(all));render();window.dispatchEvent(new Event('afRewardsUpdated'));
+    alert('Reward saved as Approved / Not Issued. Confirm payment or receipt separately.');
   };render();
 }
 /* Attach a discoverable director-only entry to the existing performance screen. */
