@@ -12748,7 +12748,7 @@ font-weight:bold;
         style="margin-top:18px;"></div>
 
 <h3 style="margin-top:30px;">Payroll History</h3>
-${String((JSON.parse(localStorage.getItem("currentUser") || "{}")).role || "").toLowerCase() === "director" ? `<button type="button" onclick="afViewDeletedPayrollPayments()" style="padding:8px 12px;background:#eee;border:1px solid #ccc;border-radius:7px">View Deleted / Reversed Payments</button>` : ""}
+${String((JSON.parse(localStorage.getItem("currentUser") || "{}")).role || "").toLowerCase() === "director" ? `<button type="button" onclick="afViewDeletedPayrollPayments()" style="padding:8px 12px;background:#eee;border:1px solid #ccc;border-radius:7px">View Deleted / Reversed Payments</button><button type="button" onclick="afViewDeletedPayrollRecords()" style="padding:8px 12px;margin-left:8px">Deleted Payroll Records</button>` : ""}
 
 <div style="overflow:auto;">
 <table style="
@@ -12898,6 +12898,8 @@ cursor:pointer;
       Print Payslip
 </button>
 ${String((JSON.parse(localStorage.getItem("currentUser") || "{}")).role || "").toLowerCase() === "director" && Number(record.amountPaid || 0) > 0 ? `<button onclick="afReversePayrollPayment('${record.id}')" style="background:#a12c2c;color:white;border:0;padding:7px 10px;border-radius:6px;cursor:pointer">Reverse Payment</button>` : ""}
+${String((JSON.parse(localStorage.getItem("currentUser") || "{}")).role || "").toLowerCase() === "director" && Number(record.amountPaid || 0) === 0 ? `<button onclick="afEditUnpaidPayroll('${record.id}')" style="padding:7px 10px;border-radius:6px;cursor:pointer">Edit</button><button onclick="afDeleteUnpaidPayroll('${record.id}')" style="background:#a12c2c;color:white;border:0;padding:7px 10px;border-radius:6px;cursor:pointer">Delete</button>` : ""}
+
 
     ${
       Number(record.balance || 0) > 0
@@ -105794,7 +105796,7 @@ function afOpenDirectorRewards(prefillType, prefillName, prefillPeriod) {
     <div style="font-size:13px;color:#53665d">Saving approves the reward; it does not mean it has been paid or received.</div>
     <button id="afRwSave" type="button" style="background:#07693d;color:white;padding:12px;border:0;border-radius:8px;cursor:pointer">Save Reward</button>
   </div>
-  <h3>Reward History</h3><div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr><th>Recipient</th><th>Reward</th><th>Value</th><th>Status / Action</th></tr></thead><tbody id="afRwHistory"></tbody></table></div>
+  <h3>Reward History</h3><button type="button" id="afRwDeleted" style="margin-bottom:10px;padding:9px;border:1px solid #888;border-radius:7px;background:white">🗑 Deleted Rewards</button><div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr><th>Recipient</th><th>Reward</th><th>Value</th><th>Status / Action</th></tr></thead><tbody id="afRwHistory"></tbody></table></div>
   <p style="font-size:11px;color:#666">Approved employee and team cash rewards are included in payroll calculations. Marking Paid does not add another bonus. Physical gifts require separate inventory/accounting reconciliation.</p>
   </section>`;
   document.body.appendChild(modal);
@@ -105817,13 +105819,69 @@ function afOpenDirectorRewards(prefillType, prefillName, prefillPeriod) {
   $('afRwKind').onchange=update;$('afRwGift').onchange=update;$('afRwQty').oninput=update;$('afRwCost').oninput=update;update();
   const render=()=>{
     const rows=read().filter(r=>!linked||(r.type===prefillType&&String(r.name).trim().toLowerCase()===String(prefillName).trim().toLowerCase()&&(!prefillPeriod||r.period===prefillPeriod)));
-    $('afRwHistory').innerHTML=rows.slice().reverse().map(r=>`<tr style="border-top:1px solid #ddd"><td style="padding:8px">${esc(r.name)}</td><td>${esc(r.qty)} × ${esc(r.item)}</td><td>UGX ${Number(r.total||0).toLocaleString('en-UG')}</td><td>${esc(r.status)} ${r.status==='Issued / Received'?'':`<button type="button" data-receive="${esc(r.id)}">Confirm ${r.kind==='Cash'?'Paid':'Received'}</button>`}</td></tr>`).join('')||'<tr><td colspan="4">No rewards recorded yet</td></tr>';
+    $('afRwHistory').innerHTML=rows.slice().reverse().map(r=>`<tr style="border-top:1px solid #ddd"><td style="padding:8px">${esc(r.name)}</td><td>${esc(r.qty)} × ${esc(r.item)}</td><td>UGX ${Number(r.total||0).toLocaleString('en-UG')}</td><td>${esc(r.status)} ${r.status==='Issued / Received'?'':`<button type="button" data-receive="${esc(r.id)}">Confirm ${r.kind==='Cash'?'Paid':'Received'}</button> <button type="button" data-edit="${esc(r.id)}">Edit</button> <button type="button" data-delete="${esc(r.id)}">Delete</button>`}</td></tr>`).join('')||'<tr><td colspan="4">No rewards recorded yet</td></tr>';
+    modal.querySelectorAll('[data-edit]').forEach(button=>button.onclick=()=>{
+      const all=read(),r=all.find(x=>x.id===button.dataset.edit);
+      if(!r||r.status==='Issued / Received')return alert('Paid/received rewards require a separate accounting adjustment. They cannot be edited here.');
+      const raw=prompt('Enter corrected TOTAL reward amount (UGX):',String(r.total));
+      if(raw===null)return;
+      const amount=Number(raw);
+      if(!Number.isSafeInteger(amount)||amount<=0)return alert('Enter a positive whole number of UGX.');
+      const reason=prompt('Reason for correction (required):');
+      if(!reason||!reason.trim())return alert('Correction cancelled: reason required.');
+      let allocations=r.payrollAllocations;
+      if(r.kind==='Cash'&&r.type==='Team'){
+        if(!Array.isArray(allocations)||!allocations.length)return alert('Team membership allocations are missing. Do not edit this reward until reconciled.');
+        const ids=allocations.map(a=>String(a.employeeId));
+        const base=Math.floor(amount/ids.length),remainder=amount%ids.length;
+        allocations=ids.map((employeeId,i)=>({employeeId,amount:base+(i<remainder?1:0)}));
+      }
+      if(!confirm('Change reward from UGX '+Number(r.total).toLocaleString()+' to UGX '+amount.toLocaleString()+'? Unpaid payroll bonuses will recalculate.'))return;
+      r.audit=Array.isArray(r.audit)?r.audit:[];
+      r.audit.push({action:'EDIT',previousTotal:r.total,newTotal:amount,reason:reason.trim(),at:new Date().toISOString(),by:u.fullName||u.employeeId||'Director'});
+      r.total=amount;r.cost=r.kind==='Cash'?amount:amount/Number(r.qty||1);
+      if(r.kind==='Cash'&&r.type==='Team')r.payrollAllocations=allocations;
+      localStorage.setItem('afDirectorRewardRegister',JSON.stringify(all));render();window.dispatchEvent(new Event('afRewardsUpdated'));
+    });
+    modal.querySelectorAll('[data-delete]').forEach(button=>button.onclick=()=>{
+      const all=read(),i=all.findIndex(x=>x.id===button.dataset.delete);
+      if(i<0)return;
+      const r=all[i];
+      if(r.status==='Issued / Received')return alert('This reward is already paid/received. Reconcile the payment first; deletion is blocked.');
+      const reason=prompt('Reason for deleting this approved reward (required):');
+      if(!reason||!reason.trim())return alert('Deletion cancelled: reason required.');
+      if(!confirm('Delete this approved reward and remove its unpaid payroll bonus? A copy will be archived.'))return;
+      const archive=JSON.parse(localStorage.getItem('afDeletedDirectorRewards')||'[]');
+      archive.push({...r,deletedAt:new Date().toISOString(),deletedBy:u.fullName||u.employeeId||'Director',deletionReason:reason.trim()});
+      localStorage.setItem('afDeletedDirectorRewards',JSON.stringify(archive));
+      all.splice(i,1);localStorage.setItem('afDirectorRewardRegister',JSON.stringify(all));render();window.dispatchEvent(new Event('afRewardsUpdated'));
+    });
     modal.querySelectorAll('[data-receive]').forEach(button=>button.onclick=()=>{
       if(!confirm('Confirm this reward was actually paid or received?'))return;
       const all=read(),r=all.find(x=>x.id===button.dataset.receive);
       if(!r||r.status==='Issued / Received')return;
       r.status='Issued / Received';r.receivedAt=new Date().toISOString();r.confirmedBy=u.fullName||u.employeeId||'Director';
       localStorage.setItem('afDirectorRewardRegister',JSON.stringify(all));render();window.dispatchEvent(new Event('afRewardsUpdated'));
+    });
+  };
+  $('afRwDeleted').onclick=()=>{
+    const archived=JSON.parse(localStorage.getItem('afDeletedDirectorRewards')||'[]');
+    const panel=document.createElement('div');
+    panel.style.cssText='background:#fff;border:1px solid #ccc;border-radius:10px;padding:12px;margin:12px 0;max-height:280px;overflow:auto';
+    panel.innerHTML='<h3>Deleted Rewards (Director Only)</h3>'+(archived.length?archived.slice().reverse().map(r=>`<div style="border-bottom:1px solid #ddd;padding:8px"><b>${esc(r.name)}</b> — UGX ${Number(r.total).toLocaleString()}<br>Reason: ${esc(r.deletionReason)}<br>Deleted: ${esc(r.deletedAt)} by ${esc(r.deletedBy)}<br><button type="button" data-restore="${esc(r.id)}">Restore</button></div>`).join(''):'No deleted rewards.')+'<button type="button" id="afCloseArchive">Close Archive</button>';
+    modal.querySelector('#afRwArchivePanel')?.remove();panel.id='afRwArchivePanel';$('afRwDeleted').after(panel);
+    panel.querySelector('#afCloseArchive').onclick=()=>panel.remove();
+    panel.querySelectorAll('[data-restore]').forEach(b=>b.onclick=()=>{
+      const archived=JSON.parse(localStorage.getItem('afDeletedDirectorRewards')||'[]');
+      const i=archived.findIndex(r=>r.id===b.dataset.restore);if(i<0)return;
+      const r=archived[i],all=read();
+      if(all.some(x=>x.id===r.id||(x.type===r.type&&x.kind===r.kind&&x.period===r.period&&String(x.name).toLowerCase()===String(r.name).toLowerCase())))return alert('A matching active reward already exists. Restore cancelled.');
+      if(!confirm('Restore this reward as Approved / Not Issued? Its payroll bonus will become active again.'))return;
+      const restored={...r,status:'Approved / Not Issued',audit:[...(r.audit||[]),{action:'RESTORE',at:new Date().toISOString(),by:u.fullName||u.employeeId||'Director'}]};
+      delete restored.deletedAt;delete restored.deletedBy;delete restored.deletionReason;
+      all.push(restored);archived.splice(i,1);
+      localStorage.setItem('afDirectorRewardRegister',JSON.stringify(all));localStorage.setItem('afDeletedDirectorRewards',JSON.stringify(archived));
+      panel.remove();render();window.dispatchEvent(new Event('afRewardsUpdated'));
     });
   };
   $('afRwClose').onclick=()=>modal.remove();
@@ -105957,3 +106015,65 @@ function afViewDeletedPayrollPayments(){
  });}
  window.addEventListener('afRewardsUpdated',refresh);
 })();
+
+/* Director-only corrections for UNPAID payroll calculations.
+   Paid records require payment reversal and reconciliation first. */
+function afPayrollDirectorOnly(){
+  let u={};try{u=JSON.parse(localStorage.getItem('currentUser')||'{}')}catch(_){}
+  if(String(u.role||'').toLowerCase()!=='director'){alert('Director access only.');return null;}
+  return u;
+}
+function afPayrollAudit(action, record, reason, replacement){
+  let log=[];try{log=JSON.parse(localStorage.getItem('afPayrollCorrectionAudit')||'[]')}catch(_){}
+  const u=JSON.parse(localStorage.getItem('currentUser')||'{}');
+  log.push({action,originalRecord:JSON.parse(JSON.stringify(record)),replacementRecord:replacement?JSON.parse(JSON.stringify(replacement)):null,reason,by:u.fullName||u.employeeId||'Director',at:new Date().toISOString()});
+  localStorage.setItem('afPayrollCorrectionAudit',JSON.stringify(log));
+}
+function afDeleteUnpaidPayroll(id){
+  if(!afPayrollDirectorOnly())return;
+  const rows=getPayrollRecords(),i=rows.findIndex(r=>String(r.id)===String(id));
+  if(i<0)return alert('Payroll record not found.');
+  const r=rows[i];
+  if(Number(r.amountPaid||0)!==0)return alert('Paid payroll cannot be deleted. Reconcile the payment first.');
+  const reason=prompt('Reason for deleting this payroll calculation (required):');
+  if(!reason||!reason.trim())return;
+  if(!confirm('Move this unpaid payroll record to Deleted Items?'))return;
+  afPayrollAudit('DELETE',r,reason.trim());
+  let archive=[];try{archive=JSON.parse(localStorage.getItem('afDeletedPayrollRecords')||'[]')}catch(_){}
+  archive.push({record:JSON.parse(JSON.stringify(r)),reason:reason.trim(),deletedAt:new Date().toISOString(),deletedBy:JSON.parse(localStorage.getItem('currentUser')||'{}').fullName||'Director'});
+  localStorage.setItem('afDeletedPayrollRecords',JSON.stringify(archive));
+  rows.splice(i,1);savePayrollRecords(rows);
+  alert('Unpaid payroll moved to Deleted Payroll Records. Reopen Payroll Ledger to refresh.');
+}
+function afEditUnpaidPayroll(id){
+  if(!afPayrollDirectorOnly())return;
+  const rows=getPayrollRecords(),i=rows.findIndex(r=>String(r.id)===String(id));
+  if(i<0)return alert('Payroll record not found.');
+  const old=rows[i];
+  if(Number(old.amountPaid||0)!==0)return alert('Paid payroll is locked. Reverse and reconcile payment first.');
+  const reason=prompt('Reason for correcting this payroll calculation (required):');
+  if(!reason||!reason.trim())return;
+  const earned=prompt('Correct earned allowance (UGX):',String(old.earnedAllowance||0));
+  if(earned===null)return;
+  const deductions=prompt('Correct approved deductions (UGX):',String(old.approvedDeductions||0));
+  if(deductions===null)return;
+  const recovery=prompt('Correct advance recovery (UGX):',String(old.advanceRecovery||0));
+  if(recovery===null)return;
+  const nums=[earned,deductions,recovery].map(Number);
+  if(nums.some(n=>!Number.isFinite(n)||n<0))return alert('Enter valid non-negative amounts.');
+  const r={...old,earnedAllowance:nums[0],approvedDeductions:nums[1],advanceRecovery:nums[2]};
+  const bonus=Number(r.performanceAwardTotal||0);
+  r.netPayable=Math.max(0,nums[0]+bonus-nums[1]-nums[2]);
+  r.balance=r.netPayable;r.status='UNPAID';r.updatedAt=new Date().toISOString();
+  if(!confirm('Save corrected unpaid payroll? Net payable: UGX '+r.netPayable.toLocaleString()+'\nThis does not change underlying attendance, advances or allowance records.'))return;
+  afPayrollAudit('EDIT',old,reason.trim(),r);
+  rows[i]=r;savePayrollRecords(rows);
+  alert('Correction saved with audit history. Reopen Payroll Ledger to refresh.');
+}
+function afViewDeletedPayrollRecords(){
+  if(!afPayrollDirectorOnly())return;
+  let rows=[];try{rows=JSON.parse(localStorage.getItem('afDeletedPayrollRecords')||'[]')}catch(_){}
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const w=window.open('','_blank');if(!w)return alert('Please allow pop-ups.');
+  w.document.write('<title>Deleted Payroll Records</title><h2>Deleted Payroll Records</h2><table border="1" cellpadding="8"><tr><th>Employee</th><th>Month</th><th>Net Payable</th><th>Reason</th><th>Deleted By</th><th>Date</th></tr>'+rows.slice().reverse().map(x=>'<tr><td>'+esc(x.record.employeeName||x.record.employeeId)+'</td><td>'+esc(x.record.monthName)+'</td><td>'+Number(x.record.netPayable||0).toLocaleString()+'</td><td>'+esc(x.reason)+'</td><td>'+esc(x.deletedBy)+'</td><td>'+esc(x.deletedAt)+'</td></tr>').join('')+'</table>');w.document.close();
+}
