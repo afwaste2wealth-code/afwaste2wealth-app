@@ -105756,7 +105756,7 @@ function afWinnerRewardPanel(type,name,period) {
   const status=!matches.length?'Not Set':received===0?'Approved / Not Issued':received<total?'Partially Issued':'Paid / Received';
   const u=JSON.parse(localStorage.getItem('currentUser')||'{}');
   const isDirector=String(u.role||'').toLowerCase()==='director';
-  const btn=isDirector?`<button type="button" style="margin-top:6px;padding:6px;border-radius:6px;background:#0b5d3b;color:white;border:0;cursor:pointer" onclick="afOpenDirectorRewards(${JSON.stringify(type)},${JSON.stringify(name)},${JSON.stringify(period||'')})">Set / View Reward</button>`:'';
+  const btn=isDirector?`<button type="button" style="margin-top:6px;padding:6px;border-radius:6px;background:#0b5d3b;color:white;border:0;cursor:pointer" data-af-reward-type="${esc(type)}" data-af-reward-name="${esc(name)}" data-af-reward-period="${esc(period||'')}">Set / View Reward</button>`:'';
   return `<div class="af-winner-reward" style="margin-top:9px;border-top:1px solid #dce7df;padding-top:8px;font-size:12px"><b>Reward: UGX ${total.toLocaleString('en-UG')}</b><div>Status: ${esc(status)}</div>${btn}</div>`;
 }
 /* A&F Director Rewards Register — employee/team/client/supplier, cash or physical */
@@ -105899,15 +105899,22 @@ function afViewDeletedPayrollPayments(){
   else start();
 })();
 
+/* Delegate dashboard reward clicks: works even when dashboard cards are rebuilt. */
+(function(){
+ document.addEventListener('click',function(event){
+   const button=event.target.closest('button[data-af-reward-type]');
+   if(!button)return;
+   event.preventDefault();event.stopPropagation();
+   afOpenDirectorRewards(button.dataset.afRewardType,button.dataset.afRewardName,button.dataset.afRewardPeriod);
+ },true);
+})();
 /* Refresh award panels without replacing existing dashboard cards. */
 (function(){
  function refresh(){document.querySelectorAll('.af-winner-reward').forEach(el=>{
    const parent=el.parentElement;
-   const button=el.querySelector('button[onclick]');
+   const button=el.querySelector('button[data-af-reward-type]');
    if(!button)return;
-   const match=button.getAttribute('onclick').match(/^afOpenDirectorRewards\((.*)\)$/);
-   if(!match)return;
-   try { const args=JSON.parse('['+match[1]+']');el.outerHTML=afWinnerRewardPanel(...args); }catch(_){}
+   el.outerHTML=afWinnerRewardPanel(button.dataset.afRewardType,button.dataset.afRewardName,button.dataset.afRewardPeriod);
  });}
  window.addEventListener('afRewardsUpdated',refresh);
 })();
