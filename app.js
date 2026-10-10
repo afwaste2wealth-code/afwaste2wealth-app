@@ -106277,3 +106277,56 @@ window.AFReadOnlySourceAudit=Object.freeze({inspect,open:openAudit});
 function attach(){if(document.getElementById('afAuditSourceButton'))return;const b=document.createElement('button');b.id='afAuditSourceButton';b.type='button';b.textContent='Accounting Source Audit (Read Only)';b.style.cssText='position:fixed;bottom:12px;right:12px;z-index:2147482000;background:#075334;color:#fff;border:1px solid white;border-radius:8px;padding:10px;font:600 12px Arial;cursor:pointer';b.onclick=openAudit;document.body.appendChild(b)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
 })();
+
+
+/* A&F TRANSACTION SCHEMA AUDIT v2 — READ ONLY; NO VALUES EXPORTED */
+(function(){
+'use strict';
+const GROUPS={
+ 'Purchases':['materialRecords','afSupplierPurchases','afSuppliers'],
+ 'Sales':['afDeliveryRecords','afSalesOrders','salesRecords'],
+ 'Expenses':['expenses','expenseRecords'],
+ 'Loans and funding':['afPettyLoansV1','afPettyLoanLedgerV1','afPettyLoanAuditV1','afOtherFundsV1','afOtherFundsAuditV1'],
+ 'Payroll':['payrollRecords','employeeAdvances','advanceRecoveries','afPayrollCorrectionAudit'],
+ 'Production and custody':['washingCycles','washingShiftRecords','companyWashedKaveraStock','clientWashedKaveraStock','washedKaveraStock','clientMaterialRecords','productionRecords'],
+ 'Manual journals':['afJournalEntries']
+};
+function typeOf(v){return v===null?'null':Array.isArray(v)?'array':typeof v}
+function inspect(){
+ const rows=[];
+ for(const [group,keys] of Object.entries(GROUPS))for(const key of keys){
+  const raw=localStorage.getItem(key);
+  const row={group,key,shape:'absent',count:null,fields:[],problem:''};
+  if(raw!==null){
+   try{
+    const value=JSON.parse(raw);row.shape=typeOf(value);
+    const records=Array.isArray(value)?value:(value&&typeof value==='object'?[value]:[]);
+    row.count=Array.isArray(value)?value.length:(row.shape==='object'?Object.keys(value).length:null);
+    const fields=new Map();
+    for(const record of records.slice(0,Math.min(50,records.length))){
+     if(!record||typeof record!=='object'||Array.isArray(record))continue;
+     for(const [field,val] of Object.entries(record)){
+      if(!fields.has(field))fields.set(field,new Set());
+      fields.get(field).add(typeOf(val));
+     }
+    }
+    row.fields=[...fields].sort((a,b)=>a[0].localeCompare(b[0])).map(([name,types])=>({name,types:[...types].sort()}));
+   }catch(e){row.shape='invalid JSON';row.problem='JSON parse failed; existing data was not changed';}
+  }
+  rows.push(row);
+ }
+ return {status:'SCHEMA_ONLY_NOT_RECONCILED',createdAt:new Date().toISOString(),origin:location.origin,rows,note:'Metadata only: field names/types and record counts. No record values, names, amounts, IDs, or balances are exported. Only the first 50 records of each group are sampled for field names. Cloud and other devices not included.'};
+}
+function open(){
+ const data=inspect();document.getElementById('afSchemaAuditModal')?.remove();
+ const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const root=document.createElement('div');root.id='afSchemaAuditModal';root.style.cssText='position:fixed;inset:0;overflow:auto;background:#000a;z-index:2147483002;padding:20px;font-family:Arial,sans-serif';
+ root.innerHTML='<section style="max-width:1000px;margin:20px auto;background:white;color:#20372d;border-radius:12px;padding:22px"><button id="afSchemaClose" style="float:right">✕ Close</button><h2>Transaction Schema Audit — Read Only</h2><p><strong>NOT RECONCILED.</strong> No financial values or personal records are exported; no changes or postings occur.</p><p>Record groups inspected: '+data.rows.length+'</p><div style="max-height:55vh;overflow:auto"><table style="width:100%;border-collapse:collapse"><thead><tr><th>Group</th><th>Key</th><th>Type</th><th>Count</th><th>Field names (types)</th></tr></thead><tbody>'+data.rows.map(r=>'<tr style="border-bottom:1px solid #ddd"><td>'+esc(r.group)+'</td><td>'+esc(r.key)+'</td><td>'+esc(r.shape)+'</td><td>'+esc(r.count??'—')+'</td><td style="font-size:12px">'+esc(r.fields.map(f=>f.name+' ('+f.types.join('/')+')').join(', '))+'</td></tr>').join('')+'</tbody></table></div><p>Field names may themselves be custom labels; review the exported report before sharing if your application uses personal information as field names.</p><button id="afSchemaExport">Download schema-only JSON report</button></section>';
+ document.body.appendChild(root);
+ root.querySelector('#afSchemaClose').onclick=()=>root.remove();
+ root.querySelector('#afSchemaExport').onclick=()=>{const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='AF_Transaction_Schema_READ_ONLY.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000)};
+}
+window.AFTransactionSchemaAudit=Object.freeze({inspect,open});
+function attach(){if(document.getElementById('afSchemaAuditButton'))return;const b=document.createElement('button');b.id='afSchemaAuditButton';b.type='button';b.textContent='Transaction Schema Audit (Read Only)';b.style.cssText='position:fixed;bottom:58px;right:12px;z-index:2147482000;background:#164b6b;color:white;border:1px solid white;border-radius:8px;padding:10px;font:600 12px Arial;cursor:pointer';b.onclick=open;document.body.appendChild(b)}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
+})();
