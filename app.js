@@ -106184,3 +106184,22 @@ function nav(){let base=document.getElementById('navPettyLoans');if(!base)return
 window.openAFOtherFunds=render;
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',nav);else nav();setInterval(nav,3000);
 })();
+/* A&F accounting foundation v1 — isolated staging module.
+   Does not migrate or alter existing records; not a production authorization boundary. */
+(function(){'use strict';
+const KEY='afAccountingV1Staging';
+const accounts=[
+['1000','Cash','Asset'],['1010','Bank','Asset'],['1020','Mobile Money','Asset'],['1100','Accounts Receivable','Asset'],['1200','Raw Material Inventory','Asset'],['1210','Work in Progress','Asset'],['1220','Finished Goods','Asset'],['1500','Fixed Assets','Asset'],['1590','Accumulated Depreciation','Contra Asset'],
+['2000','Accounts Payable','Liability'],['2100','Payroll Payable','Liability'],['2200','Director Loan Payable','Liability'],['2210','Other Loans Payable','Liability'],['2300','Taxes Payable','Liability'],['3000','Share Capital','Equity'],['3100','Retained Earnings','Equity'],
+['4000','Sales Revenue','Revenue'],['4100','Other Operating Income','Revenue'],['5000','Cost of Goods Sold','Expense'],['6000','Wages Expense','Expense'],['6100','Operating Expenses','Expense'],['6200','Interest Expense','Expense'],['6300','Depreciation Expense','Expense']
+].map(([code,name,type])=>({code,name,type}));
+const lookup=new Map(accounts.map(a=>[a.code,a]));
+const copy=x=>JSON.parse(JSON.stringify(x));
+function read(){const raw=localStorage.getItem(KEY);if(!raw)return {version:1,entries:[]};const d=JSON.parse(raw);if(d.version!==1||!Array.isArray(d.entries))throw Error('Unsupported ledger format');return d}
+function validate(entry){if(!entry||!/^\d{4}-\d{2}-\d{2}$/.test(entry.date)||!Number.isFinite(Date.parse(entry.date+'T00:00:00Z')))throw Error('Valid transaction date required');if(!entry.sourceType||!entry.sourceId)throw Error('Stable source reference required');if(!Array.isArray(entry.lines)||entry.lines.length<2)throw Error('At least two posting lines required');let debits=0,credits=0;for(const l of entry.lines){if(!lookup.has(String(l.account)))throw Error('Unknown account '+l.account);if(!Number.isSafeInteger(l.debit||0)||!Number.isSafeInteger(l.credit||0)||l.debit<0||l.credit<0||(!(l.debit>0)===!(l.credit>0)))throw Error('Exactly one positive integer UGX amount per line');debits+=l.debit||0;credits+=l.credit||0}if(debits!==credits||debits<=0||!Number.isSafeInteger(debits))throw Error('Journal is not balanced');return true}
+function post(entry){validate(entry);const d=read();const key=String(entry.sourceType)+':'+String(entry.sourceId);if(d.entries.some(e=>e.sourceKey===key))throw Error('Source already posted: '+key);const now=new Date().toISOString();const id='AFJ-'+(d.entries.length+1).toString().padStart(8,'0');const saved={id,sourceKey:key,date:entry.date,memo:String(entry.memo||''),lines:copy(entry.lines),createdAt:now,actor:String(entry.actor||'unverified'),reverses:entry.reverses||null};d.entries.push(saved);localStorage.setItem(KEY,JSON.stringify(d));return copy(saved)}
+function reverse(id,sourceId,date,reason,actor){const d=read();const original=d.entries.find(e=>e.id===id);if(!original)throw Error('Journal not found');if(d.entries.some(e=>e.reverses===id))throw Error('Already reversed');if(!reason||reason.trim().length<5)throw Error('Reason required');return post({sourceType:'reversal',sourceId,date,memo:'Reversal of '+id+': '+reason,actor,reverses:id,lines:original.lines.map(l=>({account:l.account,debit:l.credit||0,credit:l.debit||0}))})}
+function trialBalance(){const sums=new Map(accounts.map(a=>[a.code,{...a,debit:0,credit:0}]));for(const e of read().entries)for(const l of e.lines){const s=sums.get(l.account);s.debit+=l.debit||0;s.credit+=l.credit||0}return [...sums.values()].map(a=>({...a,balance:a.debit-a.credit})).filter(a=>a.debit||a.credit)}
+function report(){const tb=trialBalance();const debit=tb.reduce((s,a)=>s+a.debit,0),credit=tb.reduce((s,a)=>s+a.credit,0);return {status:'STAGING_ONLY_NOT_RECONCILED',accounts:tb,totalDebits:debit,totalCredits:credit,balanced:debit===credit,entryCount:read().entries.length}}
+window.AFAccountingStaging=Object.freeze({chartOfAccounts:()=>copy(accounts),validate,post,reverse,trialBalance,report,export:()=>JSON.stringify(read(),null,2)});
+})();
