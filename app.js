@@ -106051,24 +106051,49 @@ function afEditUnpaidPayroll(id){
   if(i<0)return alert('Payroll record not found.');
   const old=rows[i];
   if(Number(old.amountPaid||0)!==0)return alert('Paid payroll is locked. Reverse and reconcile payment first.');
-  const reason=prompt('Reason for correcting this payroll calculation (required):');
-  if(!reason||!reason.trim())return;
-  const earned=prompt('Correct earned allowance (UGX):',String(old.earnedAllowance||0));
-  if(earned===null)return;
-  const deductions=prompt('Correct approved deductions (UGX):',String(old.approvedDeductions||0));
-  if(deductions===null)return;
-  const recovery=prompt('Correct advance recovery (UGX):',String(old.advanceRecovery||0));
-  if(recovery===null)return;
-  const nums=[earned,deductions,recovery].map(Number);
-  if(nums.some(n=>!Number.isFinite(n)||n<0))return alert('Enter valid non-negative amounts.');
-  const r={...old,earnedAllowance:nums[0],approvedDeductions:nums[1],advanceRecovery:nums[2]};
-  const bonus=Number(r.performanceAwardTotal||0);
-  r.netPayable=Math.max(0,nums[0]+bonus-nums[1]-nums[2]);
-  r.balance=r.netPayable;r.status='UNPAID';r.updatedAt=new Date().toISOString();
-  if(!confirm('Save corrected unpaid payroll? Net payable: UGX '+r.netPayable.toLocaleString()+'\nThis does not change underlying attendance, advances or allowance records.'))return;
-  afPayrollAudit('EDIT',old,reason.trim(),r);
-  rows[i]=r;savePayrollRecords(rows);
-  alert('Correction saved with audit history. Reopen Payroll Ledger to refresh.');
+  document.getElementById('afPayrollCorrectionOverlay')?.remove();
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const overlay=document.createElement('div');
+  overlay.id='afPayrollCorrectionOverlay';
+  overlay.style.cssText='position:fixed;inset:0;z-index:100050;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;padding:14px;font-family:Arial,sans-serif;';
+  const field=(id,label,value)=>`<label style="display:block;font-weight:600;font-size:13px;margin-bottom:10px">${label}<input id="${id}" type="number" min="0" step="1" value="${esc(value)}" style="display:block;box-sizing:border-box;width:100%;padding:11px;margin-top:5px;border:1px solid #bccbc3;border-radius:7px;font-size:15px"></label>`;
+  overlay.innerHTML=`<div role="dialog" aria-modal="true" aria-label="Edit Payroll Record" style="width:540px;max-width:100%;max-height:90vh;overflow:auto;background:white;border-radius:14px;padding:22px;box-sizing:border-box;box-shadow:0 12px 35px #0005">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h2 style="color:#0b5d3b;margin:0 0 12px">Edit Payroll Record</h2><button type="button" id="afPcClose" style="padding:7px 10px">✕ Close</button></div>
+    <p style="margin:0 0 12px;color:#555">${esc(old.employeeName||old.employeeId||'Employee')} · ${esc(old.monthName||old.month||'')} ${esc(old.year||'')}</p>
+    <div style="background:#f0f7f3;padding:10px;border-radius:7px;margin-bottom:14px;font-size:13px">Original: Earned UGX ${Number(old.earnedAllowance||0).toLocaleString()} · Deductions UGX ${Number(old.approvedDeductions||0).toLocaleString()} · Recovery UGX ${Number(old.advanceRecovery||0).toLocaleString()}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px">${field('afPcEarned','Earned allowance (UGX)',old.earnedAllowance||0)}${field('afPcDeductions','Deductions (UGX)',old.approvedDeductions||0)}</div>
+    ${field('afPcRecovery','Advance recovery (UGX)',old.advanceRecovery||0)}
+    <div style="font-size:13px;margin-bottom:8px">Approved performance bonus (unchanged): <b>UGX ${Number(old.performanceAwardTotal||0).toLocaleString()}</b></div>
+    <div id="afPcNet" style="padding:12px;background:#edf7f0;border-radius:8px;font-size:19px;font-weight:bold;color:#0b5d3b;margin-bottom:12px"></div>
+    <label style="display:block;font-weight:600;font-size:13px">Reason for correction (required)<textarea id="afPcReason" rows="3" style="display:block;width:100%;box-sizing:border-box;margin-top:6px;padding:10px;border:1px solid #bccbc3;border-radius:7px" placeholder="Explain the correction"></textarea></label>
+    <p id="afPcError" role="alert" style="color:#b00020;font-size:13px;min-height:16px"></p>
+    <p style="font-size:12px;color:#666">Only this unpaid payroll calculation changes. Attendance, advances and allowance source records remain unchanged. An audit copy is saved.</p>
+    <div style="display:flex;gap:10px;justify-content:flex-end"><button type="button" id="afPcCancel" style="padding:11px 16px">Cancel</button><button type="button" id="afPcSave" style="padding:11px 16px;background:#0b5d3b;color:white;border:0;border-radius:7px">Save Correction</button></div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const $=id=>overlay.querySelector('#'+id);
+  const close=()=>overlay.remove();
+  $('afPcClose').onclick=close;$('afPcCancel').onclick=close;
+  const read=()=>[$('afPcEarned').value,$('afPcDeductions').value,$('afPcRecovery').value].map(v=>v.trim()===''?NaN:Number(v));
+  const calc=()=>{
+    const nums=read();
+    if(nums.some(n=>!Number.isFinite(n)||n<0||!Number.isSafeInteger(n))){$('afPcNet').textContent='Enter valid whole UGX amounts';return null;}
+    const net=nums[0]+Number(old.performanceAwardTotal||0)-nums[1]-nums[2];
+    $('afPcNet').textContent='Net payable: UGX '+Math.max(0,net).toLocaleString()+(net<0?' (recovery exceeds earnings)':'');
+    return {nums,net};
+  };
+  ['afPcEarned','afPcDeductions','afPcRecovery'].forEach(id=>$(id).addEventListener('input',calc));calc();
+  $('afPcSave').onclick=()=>{
+    const result=calc(),reason=$('afPcReason').value.trim();
+    if(!result)return $('afPcError').textContent='Enter valid non-negative whole UGX amounts.';
+    if(result.net<0)return $('afPcError').textContent='Deductions and recovery exceed earnings. Correct the amounts first.';
+    if(!reason)return $('afPcError').textContent='A reason is required.';
+    const [earned,deductions,recovery]=result.nums;
+    const r={...old,earnedAllowance:earned,approvedDeductions:deductions,advanceRecovery:recovery,netPayable:result.net,balance:result.net,status:'UNPAID',updatedAt:new Date().toISOString()};
+    if(!confirm('Save corrected unpaid payroll? Net payable: UGX '+r.netPayable.toLocaleString()))return;
+    try{afPayrollAudit('EDIT',old,reason,r);rows[i]=r;savePayrollRecords(rows);close();alert('Correction saved with audit history. Reopen Payroll Ledger to refresh.');}
+    catch(error){$('afPcError').textContent='Could not save correction: '+error.message;}
+  };
 }
 function afViewDeletedPayrollRecords(){
   if(!afPayrollDirectorOnly())return;
