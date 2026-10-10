@@ -106237,3 +106237,43 @@ window.afOpenStagingAccountingReport = function(kind) {
   document.body.appendChild(modal);
   modal.querySelector('#afCloseStagingReport').onclick=()=>modal.remove();
 };
+
+
+/* A&F READ-ONLY SOURCE INVENTORY AUDIT v1: No accounting postings or data mutation. */
+(function(){
+'use strict';
+const GROUPS={
+ 'Purchases and raw materials':['materialRecords','purchaseRecords','supplierRecords','suppliers'],
+ 'Sales and customers':['salesRecords','customerRecords','clientRecords','customers'],
+ 'Expenses and journals':['expenseRecords','afJournalEntries'],
+ 'Loans and funding':['afPettyLoansV1','afPettyLoanLedgerV1','afPettyLoanAuditV1','afOtherFundsV1','afOtherFundsAuditV1'],
+ 'Production and stock':['productionRecords','washingRecords','stockRecords','inventoryRecords'],
+ 'HR and payroll':['employees','payrollRecords','employeeAdvances','attendanceRecords']
+};
+function inspect(){
+ const rows=[];
+ for(const [group,keys] of Object.entries(GROUPS))for(const key of keys){
+  const raw=localStorage.getItem(key);
+  let shape='absent',count=null,problem='';
+  if(raw!==null){try{const val=JSON.parse(raw);shape=Array.isArray(val)?'array':val===null?'null':typeof val;count=Array.isArray(val)?val.length:(val&&typeof val==='object'?Object.keys(val).length:null)}catch(e){shape='invalid JSON';problem='Unable to parse existing record; do not overwrite';}}
+  rows.push({group,key,shape,count,problem});
+ }
+ const other=[];
+ for(let i=0;i<localStorage.length;i++){
+  const key=localStorage.key(i);
+  if(!rows.some(r=>r.key===key)&&/loan|fund|stock|sale|purch|expense|payroll|ledger|journal|wash|production|cash|bank|asset|capital|advance|supplier|client|material/i.test(key))other.push(key);
+ }
+ return {status:'READ_ONLY_SOURCE_INVENTORY_NOT_RECONCILED',createdAt:new Date().toISOString(),origin:location.origin,rows,otherRelevantKeys:other.sort(),note:'Counts are not financial balances. This report excludes raw personal/financial record values. Cloud records and other devices are not covered.'};
+}
+function openAudit(){
+ const data=inspect(),old=document.getElementById('afReadOnlySourceAudit');if(old)old.remove();
+ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const root=document.createElement('div');root.id='afReadOnlySourceAudit';root.style.cssText='position:fixed;inset:0;overflow:auto;background:#000a;z-index:2147483001;padding:20px;font-family:Arial,sans-serif';
+ root.innerHTML='<section style="max-width:1050px;margin:20px auto;background:#fff;color:#20372d;border-radius:12px;padding:22px"><button id="afAuditClose" style="float:right">✕ Close</button><h2>Accounting Source Inventory — Read Only</h2><p style="background:#fff5db;padding:12px">NOT RECONCILED. This screen inventories browser record groups only. No records are changed, posted or migrated. It is not a financial statement.</p><p>Detected candidate keys: '+data.rows.filter(r=>r.shape!=='absent').length+' / '+data.rows.length+'. Additional matching keys: '+data.otherRelevantKeys.length+'</p><div style="overflow:auto"><table style="width:100%;border-collapse:collapse"><thead><tr><th align="left">Module</th><th align="left">Storage key</th><th align="left">Data type</th><th align="right">Items/fields</th></tr></thead><tbody>'+data.rows.map(r=>'<tr><td>'+esc(r.group)+'</td><td>'+esc(r.key)+'</td><td>'+esc(r.shape)+'</td><td align="right">'+esc(r.count??'—')+'</td></tr>').join('')+'</tbody></table></div><p><strong>Other relevant storage keys:</strong> '+esc(data.otherRelevantKeys.join(', ')||'None found')+'</p><p>Counts are not balances; cloud and other devices are not included.</p><button id="afAuditExport">Download metadata-only JSON report</button></section>';
+ document.body.appendChild(root);root.querySelector('#afAuditClose').onclick=()=>root.remove();
+ root.querySelector('#afAuditExport').onclick=()=>{const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='AF_Source_Inventory_READ_ONLY.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000)};
+}
+window.AFReadOnlySourceAudit=Object.freeze({inspect,open:openAudit});
+function attach(){if(document.getElementById('afAuditSourceButton'))return;const b=document.createElement('button');b.id='afAuditSourceButton';b.type='button';b.textContent='Accounting Source Audit (Read Only)';b.style.cssText='position:fixed;bottom:12px;right:12px;z-index:2147482000;background:#075334;color:#fff;border:1px solid white;border-radius:8px;padding:10px;font:600 12px Arial;cursor:pointer';b.onclick=openAudit;document.body.appendChild(b)}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
+})();
