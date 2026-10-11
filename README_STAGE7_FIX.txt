@@ -1,0 +1,1 @@
+Stage 7 fix: if staging ledger has never been initialized, safely initialize it only after required backup and Director approval. Existing compatible ledger preserved. Incompatible/corrupt ledger blocks posting. No operational cash, stock or supplier payment created. Replace app.js, commit, reload and retry Stage 7 once. Keep backup and send review/receipt.

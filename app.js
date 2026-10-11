@@ -106812,7 +106812,7 @@ function director(){const u=get('currentUser');return u?.role==='Director'?u:nul
 function review(){const errors=[];let ledger=null,materials=null,purchases=null,payments=null,adjustments=null,audit=null;
  try{ledger=get(KEY);materials=arr('materialRecords');purchases=arr('afSupplierPurchases');payments=arr('supplierPayments');adjustments=arr('afSupplierSettlementAdjustmentsV1');audit=get(AUDIT)}catch(e){errors.push('Malformed data: '+e.message)}
  if(!director())errors.push('Director login required.');
- if(!ledger||ledger.version!==1||!Array.isArray(ledger.entries))errors.push('Staging ledger unavailable or incompatible.');
+ if(ledger!==null&&(ledger.version!==1||!Array.isArray(ledger.entries)))errors.push('Existing staging ledger has an incompatible format; posting blocked to protect data.');
  if(!materials||!purchases||!payments||!adjustments)errors.push('Required historical records unavailable.');
  if(audit!==null&&(!Array.isArray(audit)))errors.push('Stage 7 audit register is invalid.');
  const m=materials?.filter(x=>same(x.id,1791244969174)||x.batchNumber==='KB002')||[];
@@ -106827,13 +106827,13 @@ function review(){const errors=[];let ledger=null,materials=null,purchases=null,
  if(existing.length)errors.push('KB002 journal entry already exists in staging; automatic reposting blocked.');
  if(audit?.length)errors.push('Stage 7 audit already exists; repeat posting blocked.');
  const totals=expected.flatMap(e=>e.lines).reduce((r,l)=>({debit:r.debit+l.debit,credit:r.credit+l.credit}),{debit:0,credit:0});
- return {ready:errors.length===0,errors,postingTarget:'STAGING ONLY — not reconciled general ledger',batch:'KB002',supplier:'Abdu Yiga',purchaseUGX:63675,cashAlreadyPaidUGX:63600,nonCashDiscountUGX:75,expectedEntries:expected,totals,existingKB002StagingEntries:existing.length};
+ return {ready:errors.length===0,errors,postingTarget:'STAGING ONLY — not reconciled general ledger',batch:'KB002',supplier:'Abdu Yiga',purchaseUGX:63675,cashAlreadyPaidUGX:63600,nonCashDiscountUGX:75,expectedEntries:expected,totals,existingKB002StagingEntries:existing.length,stagingLedgerStatus:ledger===null?'NOT_YET_INITIALIZED — safe initialization only after backup and Director approval':'EXISTING_LEDGER_PRESERVED'};
 }
 function download(obj,name){const url=URL.createObjectURL(new Blob([JSON.stringify(obj,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000)}
 function backup(){const keys=[KEY,AUDIT,'materialRecords','afSupplierPurchases','supplierPayments','afSupplierSettlementAdjustmentsV1','afStage5HistoricalCorrectionsV1','afStage4DirectorVerificationV1','afJournalEntries'];const raw={};keys.forEach(k=>raw[k]=localStorage.getItem(k));return {type:'AF_STAGE7_PRE_POSTING_BACKUP',createdAt:new Date().toISOString(),keys:raw}}
 function post(){const check=review();if(!check.ready)throw Error(check.errors.join('\n'));
- const user=director();const before=localStorage.getItem(KEY),beforeAudit=localStorage.getItem(AUDIT);const ledger=JSON.parse(before);
- const now=new Date().toISOString();const next=ledger.entries.slice();
+ const user=director();const before=localStorage.getItem(KEY),beforeAudit=localStorage.getItem(AUDIT);const ledger=before===null?{version:1,entries:[]}:JSON.parse(before);
+ const now=new Date().toISOString();if(ledger.version!==1||!Array.isArray(ledger.entries))throw Error('Incompatible staging ledger. No changes made.'); const next=ledger.entries.slice();
  expected.forEach((e,i)=>{if(next.some(x=>x.sourceKey===e.sourceType+':'+e.sourceId))throw Error('Duplicate journal source');next.push({id:'AFJ-S7-KB002-'+(i+1),sourceKey:e.sourceType+':'+e.sourceId,date:e.date,memo:e.memo,lines:e.lines.map(l=>({...l})),createdAt:now,actor:user.employeeId||'Director',reverses:null})});
  const record={id:'AF-S7-KB002-001',postedAt:now,postedByRole:'Director',postedByEmployeeId:user.employeeId||'',journalIds:next.slice(-3).map(e=>e.id),stagingOnly:true,operationalCashCreated:false,stockCreated:false,operationalPaymentCreated:false,sourceStage6:'AF-S6-KB002-001',accountingReconciliationStatus:'PENDING_FULL_SOURCE_RECONCILIATION'};
  try{localStorage.setItem(KEY,JSON.stringify({...ledger,entries:next}));localStorage.setItem(AUDIT,JSON.stringify([record]));}catch(e){try{if(before===null)localStorage.removeItem(KEY);else localStorage.setItem(KEY,before);if(beforeAudit===null)localStorage.removeItem(AUDIT);else localStorage.setItem(AUDIT,beforeAudit)}catch(_){}throw e}
