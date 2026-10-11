@@ -106388,3 +106388,46 @@ function show(){const u=(()=>{try{return JSON.parse(localStorage.getItem('curren
 function attach(){if(document.getElementById('afReconcileButton'))return;const b=document.createElement('button');b.id='afReconcileButton';b.type='button';b.textContent='Accounting Reconciliation Preview';b.style.cssText='position:fixed;bottom:102px;right:12px;z-index:2147482000;background:#633c13;color:white;border:1px solid white;border-radius:8px;padding:10px;font:600 12px Arial;cursor:pointer';b.onclick=show;document.body.appendChild(b)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
 })();
+
+/* A&F PURCHASE MIRROR EXCEPTION REVIEW v1 — READ ONLY.
+   Diagnostics only: does not post journals, reconcile balances or alter records. */
+(function(){
+'use strict';
+if(window.AFPurchaseMirrorReviewV1)return;
+function load(key){try{const x=JSON.parse(localStorage.getItem(key)||'[]');return Array.isArray(x)?x:null}catch(_){return null}}
+function review(){
+ const originals=load('materialRecords'),mirrors=load('afSupplierPurchases');
+ if(!originals||!mirrors)return {status:'INVALID_SOURCE',issues:[{problem:'Purchase source is not a valid array'}]};
+ const sourceIds=new Map();
+ for(const r of originals){if(r&&r.id!==undefined)sourceIds.set(String(r.id),r)}
+ const issues=[];const matched=new Set();
+ for(let i=0;i<mirrors.length;i++){
+  const m=mirrors[i]||{};const link=m.materialRecordId;
+  if(link===undefined||link===null||String(link).trim()===''){
+   issues.push({mirrorRow:i+1,problem:'Missing materialRecordId',mirrorId:m.id??null});continue;
+  }
+  const id=String(link);
+  if(!sourceIds.has(id)){issues.push({mirrorRow:i+1,problem:'No matching material record',materialRecordId:id,mirrorId:m.id??null});continue}
+  if(matched.has(id))issues.push({mirrorRow:i+1,problem:'Multiple supplier purchase rows refer to one material record',materialRecordId:id,mirrorId:m.id??null});
+  matched.add(id);
+ }
+ for(const [id] of sourceIds)if(!matched.has(id))issues.push({problem:'Material record has no linked supplier purchase',materialRecordId:id});
+ return {status:issues.length?'EXCEPTIONS_FOUND':'LINK_IDS_MATCH_ONLY_NOT_FINANCIALLY_RECONCILED',createdAt:new Date().toISOString(),sourceCount:originals.length,mirrorCount:mirrors.length,linkedSourceCount:matched.size,issues,note:'Read-only. Checks links, not monetary amounts or stock ownership. Verify each exception against original purchase documents before making corrections. Browser-local data only.'};
+}
+function open(){
+ const u=(()=>{try{return JSON.parse(localStorage.getItem('currentUser')||'null')}catch(_){return null}})();
+ if(!u||u.role!=='Director'){alert('Director access required.');return}
+ const report=review();document.getElementById('afPurchaseMirrorReview')?.remove();
+ const modal=document.createElement('div');modal.id='afPurchaseMirrorReview';modal.style.cssText='position:fixed;inset:0;z-index:2147483004;overflow:auto;background:#000a;padding:16px;font:14px Arial';
+ const card=document.createElement('section');card.style.cssText='max-width:750px;margin:30px auto;padding:22px;background:white;border-radius:12px;color:#20372d';
+ const title=document.createElement('h2');title.textContent='Purchase Link Exceptions — Read Only';card.appendChild(title);
+ const p=document.createElement('p');p.textContent='Status: '+report.status+'. Source records: '+(report.sourceCount??'—')+'; supplier purchase rows: '+(report.mirrorCount??'—')+'. No data will be changed.';card.appendChild(p);
+ const pre=document.createElement('pre');pre.style.cssText='white-space:pre-wrap;word-break:break-word;max-height:50vh;overflow:auto;background:#f5f7f5;padding:12px';pre.textContent=JSON.stringify(report.issues,null,2);card.appendChild(pre);
+ const note=document.createElement('p');note.textContent=report.note||'';card.appendChild(note);
+ const download=document.createElement('button');download.textContent='Download exception report';download.onclick=()=>{const blob=new Blob([JSON.stringify(report,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='AF_Purchase_Link_Exceptions_READ_ONLY.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};card.appendChild(download);
+ const close=document.createElement('button');close.textContent='Close';close.style.marginLeft='12px';close.onclick=()=>modal.remove();card.appendChild(close);modal.appendChild(card);document.body.appendChild(modal);
+}
+window.AFPurchaseMirrorReviewV1=Object.freeze({review,open});
+function attach(){if(document.getElementById('afPurchaseReviewButton'))return;const b=document.createElement('button');b.id='afPurchaseReviewButton';b.type='button';b.textContent='Purchase Link Exceptions';b.style.cssText='position:fixed;bottom:146px;right:12px;z-index:2147482000;background:#564078;color:white;border:1px solid white;border-radius:8px;padding:10px;font:600 12px Arial;cursor:pointer';b.onclick=open;document.body.appendChild(b)}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
+})();
