@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict');
+const {inspect}=require('../modernization/diagnostics');
+const storage=(obj)=>({length:Object.keys(obj).length,key:i=>Object.keys(obj)[i],getItem:k=>Object.prototype.hasOwnProperty.call(obj,k)?obj[k]:null});
+const good=storage({afAccountingV1Staging:JSON.stringify({version:1,entries:[{sourceId:'A',lines:[{debit:75,credit:0},{debit:0,credit:75}]}]})});
+assert.equal(inspect(good).staging.balanced,true);
+assert.equal(inspect(good).staging.entryCount,1);
+const dup=storage({afAccountingV1Staging:JSON.stringify({entries:[{sourceId:'A',lines:[]},{sourceId:'A',lines:[]}]})});
+assert.deepEqual(inspect(dup).staging.duplicateSourceIds,['A']);
+const bad=storage({afAccountingV1Staging:'broken'});
+assert.equal(inspect(bad).records.afAccountingV1Staging.parseError,true);
+assert.equal(inspect(storage({})).staging.status,'not_found');
+console.log('4 diagnostic tests passed');
