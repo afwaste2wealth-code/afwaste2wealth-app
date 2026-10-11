@@ -18282,11 +18282,22 @@ function afRefreshSupplierPaymentSummary(record) {
     .reduce((sum, payment) => sum + Math.max(Number(payment.amount) || 0, 0), 0);
   record.materialCost = due;
   record.supplierAmountPaid = paid;
-  record.supplierBalance = Math.max(due - paid, 0);
+  // Approved non-cash settlement discounts reduce the payable, not cash paid.
+  const settlementDiscount = (String(record.id) === "1791244969174" && String(record.batchNumber) === "KB002")
+    ? (function(){
+        try {
+          const entries = JSON.parse(localStorage.getItem("afSupplierSettlementAdjustmentsV1") || "[]");
+          return Array.isArray(entries) ? entries.filter(x => x && x.id === "AF-S6-KB002-001" &&
+            x.type === "SUPPLIER_SETTLEMENT_DISCOUNT" && x.approvedByRole === "Director")
+            .reduce((sum,x) => sum + Number(x.amountUGX || 0), 0) : 0;
+        } catch (_) { return 0; }
+      })() : 0;
+  record.supplierSettlementDiscount = settlementDiscount;
+  record.supplierBalance = Math.max(due - paid - settlementDiscount, 0);
   record.supplierPaymentStatus =
     due <= 0 ? "No Supplier Amount" :
-    paid <= 0 ? "Unpaid" :
-    paid + 0.001 >= due ? "Paid in Full" : "Partly Paid";
+    record.supplierBalance <= 0.001 ? "Paid in Full" :
+    paid <= 0 ? "Unpaid" : "Partly Paid";
   return record;
 }
 
@@ -106679,5 +106690,101 @@ function open(){if(!director()){alert('Director access required.');return}
 }
 window.AFStage5KB002=Object.freeze({validate,open});
 function attach(){if(document.getElementById('afStage5Button'))return;const b=document.createElement('button');b.id='afStage5Button';b.type='button';b.textContent='Stage 5 • KB002 Restore';b.style.cssText='position:fixed;bottom:322px;right:12px;z-index:2147482000;background:#0b5d3b;color:white;border:1px solid white;border-radius:8px;padding:10px;font:600 12px Arial;cursor:pointer';b.onclick=open;document.body.appendChild(b)}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
+})();
+
+
+
+/* A&F STAGE 6 — KB002 DIRECTOR-APPROVED SUPPLIER SETTLEMENT DISCOUNT
+   Accounting: purchase remains UGX 63,675; historical cash remains UGX 63,600;
+   UGX 75 is a separate non-cash settlement discount. No new cash, stock or GL post.
+   LocalStorage is not a tamper-proof audit log or authenticated server ledger. */
+(function(){
+'use strict';
+if(window.AFStage6KB002)return;
+const ID='AF-S6-KB002-001', KEY='afSupplierSettlementAdjustmentsV1', MID='1791244969174', PID='PUR-1791244969174';
+function read(k){try{return JSON.parse(localStorage.getItem(k)||'null')}catch(_){return null}}
+function array(k){const v=read(k);return Array.isArray(v)?v:null}
+function director(){const u=read('currentUser');return u&&u.role==='Director'?u:null}
+function same(a,b){return String(a??'')===String(b??'')}
+function review(){
+ const errors=[],m=array('materialRecords'),p=array('afSupplierPurchases'),pay=array('supplierPayments'),
+   stage5=array('afStage5HistoricalCorrectionsV1'),adj=array(KEY);
+ if(!director())errors.push('Director login required.');
+ if(!m||!p||!pay||!stage5)errors.push('One or more required record arrays are invalid or missing.');
+ if(localStorage.getItem(KEY)!==null&&!adj)errors.push('Settlement adjustment ledger is invalid.');
+ if(errors.length)return {ready:false,errors};
+ const records=m.filter(x=>same(x?.id,MID)||same(x?.batchNumber,'KB002'));
+ const purchases=p.filter(x=>same(x?.id,PID)||same(x?.materialRecordId,MID));
+ const payments=pay.filter(x=>same(x?.materialRecordId,MID)||same(x?.batchNumber,'KB002'));
+ const paid=payments.reduce((n,x)=>n+Number(x.amount||0),0);
+ const prior=(adj||[]).filter(x=>x?.id===ID||same(x?.materialRecordId,MID));
+ const r=records[0],purchase=purchases[0];
+ if(records.length!==1||!r||!same(r.id,MID)||r.batchNumber!=='KB002'||r.materialSource!=='company'||
+    r.materialType!=='HDPE'||Number(r.netWeight)!==212.25||Number(r.materialCost)!==63675||
+    r.historicalCorrectionReference!=='AF-S5-KB002-001')errors.push('Restored KB002 source record differs from the approved Stage 5 record.');
+ if(purchases.length!==1||!purchase||purchase.id!==PID||purchase.batchNumber!=='KB002'||
+    Number(purchase.totalCost)!==63675||purchase.supplierName!=='Abdu Yiga')errors.push('Original supplier purchase is missing or changed.');
+ if(stage5.filter(x=>x?.id==='AF-S5-KB002-001').length!==1)errors.push('Stage 5 audit confirmation missing or duplicated.');
+ if(payments.length!==1||paid!==63600||payments[0]?.method!=='Cash')errors.push('Expected one existing cash payment of exactly UGX 63,600.');
+ if(prior.length)errors.push('Stage 6 adjustment already exists; repeat posting is blocked.');
+ const custody=m.find(x=>same(x?.id,'1791202061631'));
+ if(!custody||custody.materialSource!=='client')errors.push('Client custody ownership check failed.');
+ return {ready:errors.length===0,errors,batchNumber:'KB002',supplier:'Abdu Yiga',purchaseUGX:63675,
+  recordedCashUGX:paid,proposedSettlementDiscountUGX:75,proposedOutstandingUGX:63675-paid-75,
+  existingAdjustments:prior.length,notice:'Director-confirmed UGX 63,600 accepted as full settlement. No cash or journal entry will be created.'};
+}
+function download(value,name){const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json'}));
+ const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000)}
+function backup(){const keys=['materialRecords','afSupplierPurchases','supplierPayments','afStage5HistoricalCorrectionsV1',KEY];
+ const raw={};keys.forEach(k=>raw[k]=localStorage.getItem(k));return {type:'AF_STAGE6_PRE_ADJUSTMENT_BACKUP',createdAt:new Date().toISOString(),keys:raw}}
+function apply(){const check=review();if(!check.ready)throw Error(check.errors.join('\n'));
+ const user=director(),date=new Date().toISOString();const rows=array(KEY)||[],materials=array('materialRecords');
+ const entry={id:ID,type:'SUPPLIER_SETTLEMENT_DISCOUNT',materialRecordId:MID,purchaseId:PID,batchNumber:'KB002',
+  supplierId:'SUP-1791234304632-33di0',supplierName:'Abdu Yiga',amountUGX:75,
+  originalPurchaseUGX:63675,actualCashPaidUGX:63600,outstandingAfterUGX:0,
+  approvedByRole:'Director',approvedByEmployeeId:user.employeeId||'',approvedAt:date,
+  approvalBasis:'Director confirms supplier accepted UGX 63,600 cash in full settlement of UGX 63,675 purchase.',
+  cashEntryCreated:false,paymentEntryCreated:false,stockEntryCreated:false,journalEntryCreated:false,
+  generalLedgerStatus:'PENDING_CONTROLLED_GL_INTEGRATION'};
+ const oldA=localStorage.getItem(KEY),oldM=localStorage.getItem('materialRecords');
+ try{
+   localStorage.setItem(KEY,JSON.stringify([...rows,entry]));
+   const row=materials.find(x=>same(x?.id,MID));
+   if(typeof afRefreshSupplierPaymentSummary!=='function')throw Error('Supplier summary function is missing.');
+   afRefreshSupplierPaymentSummary(row);
+   if(row.supplierBalance!==0||row.supplierSettlementDiscount!==75||row.supplierAmountPaid!==63600)throw Error('Post-adjustment balance did not reconcile.');
+   row.supplierSettlementAdjustmentReference=ID;
+   localStorage.setItem('materialRecords',JSON.stringify(materials));
+ }catch(e){try{if(oldA===null)localStorage.removeItem(KEY);else localStorage.setItem(KEY,oldA);
+   if(oldM===null)localStorage.removeItem('materialRecords');else localStorage.setItem('materialRecords',oldM)}catch(_){}
+   throw e;}
+ return entry;
+}
+function open(){if(!director()){alert('Director access required.');return}
+ document.getElementById('afStage6Modal')?.remove();const modal=document.createElement('div');modal.id='afStage6Modal';
+ modal.style.cssText='position:fixed;inset:0;z-index:2147483030;background:#000b;overflow:auto;padding:16px;font:14px Arial';
+ const card=document.createElement('section');card.style.cssText='max-width:780px;margin:25px auto;background:white;color:#173027;border-radius:12px;padding:22px';
+ const h=document.createElement('h2');h.textContent='Stage 6 — KB002 Supplier Settlement';card.appendChild(h);
+ const description=document.createElement('p');description.textContent='Original purchase UGX 63,675; existing cash payment UGX 63,600; supplier accepted full settlement. Record a separate UGX 75 non-cash discount, not a new payment.';card.appendChild(description);
+ const pre=document.createElement('pre');pre.style.cssText='white-space:pre-wrap;word-break:break-word;max-height:45vh;overflow:auto;background:#f4f7f5;padding:12px';card.appendChild(pre);
+ const refresh=()=>{const v=review();pre.textContent=JSON.stringify(v,null,2);return v};refresh();let backed=false;
+ function button(label,fn){const b=document.createElement('button');b.type='button';b.textContent=label;b.style.cssText='padding:10px;margin:5px;border:0;border-radius:7px;background:#0b5d3b;color:white;cursor:pointer';b.onclick=fn;card.appendChild(b)}
+ button('Download backup (required)',()=>{download(backup(),'AF_Stage6_Pre_Adjustment_Backup.json');backed=true;alert('Keep this backup safely before approving.');});
+ button('Approve UGX 75 settlement discount',()=>{
+  if(!backed){alert('Download the backup first.');return}
+  const result=refresh();if(!result.ready){alert('Pre-check failed. No changes made.');return}
+  if(!confirm('Director approval: Abdu Yiga accepted UGX 63,600 cash as FULL settlement of UGX 63,675 for KB002. Record UGX 75 NON-CASH supplier discount, no additional payment or journal posting?'))return;
+  try{const receipt=apply();download(receipt,'AF_Stage6_KB002_Settlement_Receipt.json');refresh();
+   alert('Settlement adjustment saved. Supplier balance is UGX 0. No new cash payment or general-ledger journal was created.');}
+  catch(e){alert('Adjustment blocked: '+e.message);refresh()}
+ });
+ button('Download Stage 6 review',()=>download(review(),'AF_Stage6_KB002_Review.json'));
+ button('Close',()=>modal.remove());modal.appendChild(card);document.body.appendChild(modal);
+}
+window.AFStage6KB002=Object.freeze({review,open});
+function attach(){if(document.getElementById('afStage6Button'))return;const b=document.createElement('button');b.id='afStage6Button';b.type='button';b.textContent='Stage 6 • KB002 Settlement';
+ b.style.cssText='position:fixed;bottom:366px;right:12px;z-index:2147482000;background:#0b5d3b;color:white;border:1px solid white;border-radius:8px;padding:10px;font:600 12px Arial;cursor:pointer';
+ b.onclick=open;document.body.appendChild(b)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
 })();
