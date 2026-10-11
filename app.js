@@ -88468,7 +88468,7 @@ function openAFAccountsReports() {
 
         <div style="font-weight:bold;color:#0b5d3b;margin:20px 0 9px;">Ledgers</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;">
-            ${card("generalLedger", "📚", "General Ledger", "Central debit/credit ledger", "ENGINE NEXT")}
+            ${card("generalLedger", "📚", "General Ledger", "Staging debit/credit ledger", "STAGING")}
             ${card("debtors", "👥", "Customer / Debtors Ledger", "Sales, payments and customer balances")}
             ${card("creditors", "🤝", "Supplier / Creditors Ledger", "Purchases and supplier position")}
             ${card("payroll", "👤", "Payroll Ledger", "Employee earnings, payments and balances")}
@@ -88478,10 +88478,10 @@ function openAFAccountsReports() {
 
         <div style="font-weight:bold;color:#0b5d3b;margin:20px 0 9px;">Financial Statements</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;">
-            ${card("trialBalance", "⚖️", "Trial Balance", "Debit and credit account balances", "ENGINE NEXT")}
+            ${card("trialBalance", "⚖️", "Trial Balance", "Staging account balances", "STAGING")}
             ${card("profitLoss", "📈", "Profit & Loss", "Sales, COGS, expenses and net result")}
-            ${card("balanceSheet", "🏢", "Balance Sheet", "Assets, liabilities and equity", "ENGINE NEXT")}
-            ${card("cashFlow", "💰", "Cash Flow Statement", "Operating, investing and financing cash flows", "ENGINE NEXT")}
+            ${card("balanceSheet", "🏢", "Balance Sheet", "Staging assets and liabilities", "STAGING")}
+            ${card("cashFlow", "💰", "Cash Flow Statement", "Unreconciled staging cash movements", "STAGING")}
         </div>
 
         <div style="font-weight:bold;color:#0b5d3b;margin:20px 0 9px;">Factory Records & Export</div>
@@ -106220,33 +106220,52 @@ window.AFAccountingStaging=Object.freeze({chartOfAccounts:()=>copy(accounts),val
    The staging journal is separate from historical operational transactions. */
 window.afOpenStagingAccountingReport = function(kind) {
   const engine=window.AFAccountingStaging;
-  if(!engine) return alert('Accounting staging module unavailable.');
+  if(!engine)return alert('Accounting staging module unavailable.');
   const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const fmt=x=>'UGX '+Number(x||0).toLocaleString('en-UG');
   let report,accounts,entries;
-  try {report=engine.report();accounts=engine.chartOfAccounts();entries=JSON.parse(engine.export()).entries;}
+  try{report=engine.report();accounts=engine.chartOfAccounts();entries=JSON.parse(engine.export()).entries;}
   catch(e){return alert('Could not read staging journal: '+e.message)}
   const titles={generalLedger:'General Ledger',trialBalance:'Trial Balance',balanceSheet:'Balance Sheet',cashFlow:'Cash Flow Statement'};
   if(!titles[kind])return;
+  const row=cells=>'<tr>'+cells.map(c=>'<td style="border-bottom:1px solid #ddd;padding:8px">'+esc(c)+'</td>').join('')+'</tr>';
+  const table=(headers,rows)=>'<div style="overflow:auto"><table style="width:100%;border-collapse:collapse"><thead><tr>'+headers.map(x=>'<th style="text-align:left;border-bottom:2px solid #bbb;padding:8px">'+esc(x)+'</th>').join('')+'</tr></thead><tbody>'+rows.join('')+'</tbody></table></div>';
   let content='';
-  const row=(cells)=>'<tr>'+cells.map(c=>'<td style="border-bottom:1px solid #ddd;padding:8px">'+esc(c)+'</td>').join('')+'</tr>';
+  const sums=new Map(accounts.map(a=>[a.code,{...a,debit:0,credit:0}]));
+  for(const e of entries)for(const l of e.lines||[]){const a=sums.get(String(l.account));if(a){a.debit+=Number(l.debit||0);a.credit+=Number(l.credit||0)}}
+  const values=[...sums.values()].map(a=>({...a,net:a.debit-a.credit}));
+  const tbDebit=values.reduce((n,a)=>n+Math.max(0,a.net),0);
+  const tbCredit=values.reduce((n,a)=>n+Math.max(0,-a.net),0);
+  const balanced=tbDebit===tbCredit;
   if(kind==='generalLedger'){
-    content='<p>Journal entries in staging ledger: '+entries.length+'</p><div style="overflow:auto"><table style="width:100%;border-collapse:collapse"><thead><tr><th>Date</th><th>Journal</th><th>Account</th><th>Debit</th><th>Credit</th><th>Source</th></tr></thead><tbody>'+
-      entries.flatMap(e=>e.lines.map(l=>row([e.date,e.id,l.account+' '+(accounts.find(a=>a.code===l.account)?.name||''),fmt(l.debit),fmt(l.credit),e.sourceKey]))).join('')+'</tbody></table></div>';
-  } else if(kind==='trialBalance'){
-    content='<p>Posting totals (not net account balances): '+fmt(report.totalDebits)+' debit / '+fmt(report.totalCredits)+' credit</p><table style="width:100%;border-collapse:collapse"><thead><tr><th>Account</th><th>Debit balance</th><th>Credit balance</th></tr></thead><tbody>'+
-      report.accounts.map(a=>row([a.code+' '+a.name,fmt(Math.max(0,a.balance)),fmt(Math.max(0,-a.balance))])).join('')+'</tbody></table>';
-  } else if(kind==='balanceSheet'){
-    content='<p>A certified Balance Sheet cannot yet be generated: opening balances, inventory valuation, payroll and other source modules have not been reconciled and posted into this ledger.</p>';
-  } else {
-    content='<p>A certified Cash Flow Statement cannot yet be generated: opening cash balances, complete receipts/payments and cash-flow classifications have not been reconciled into this ledger.</p>';
+    const running=new Map();const lines=[];
+    for(const e of entries.slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))||String(a.id).localeCompare(String(b.id)))){
+      for(const l of e.lines||[]){const key=String(l.account);const next=(running.get(key)||0)+Number(l.debit||0)-Number(l.credit||0);running.set(key,next);lines.push(row([e.date,e.id,key+' '+(sums.get(key)?.name||''),fmt(l.debit),fmt(l.credit),fmt(next),e.sourceKey||'']))}
+    }
+    content='<p>Staging entries: '+entries.length+'; debit/credit totals: '+fmt(report.totalDebits)+' / '+fmt(report.totalCredits)+'.</p>'+table(['Date','Entry','Account','Debit','Credit','Running net','Source'],lines);
+  }else if(kind==='trialBalance'){
+    content='<p>Net debit balances: '+fmt(tbDebit)+'; net credit balances: '+fmt(tbCredit)+'; '+(balanced?'Balanced':'NOT BALANCED')+'.</p>'+table(['Account','Debit balance','Credit balance'],values.filter(a=>a.net).map(a=>row([a.code+' '+a.name,fmt(Math.max(0,a.net)),fmt(Math.max(0,-a.net))])));
+  }else if(kind==='balanceSheet'){
+    const asset=values.filter(a=>a.type==='Asset'||a.type==='Contra Asset');
+    const liabilities=values.filter(a=>a.type==='Liability');const equity=values.filter(a=>a.type==='Equity');
+    const netAssets=asset.reduce((n,a)=>n+a.net,0);
+    const netLiabilities=liabilities.reduce((n,a)=>n-a.net,0);
+    const netEquity=equity.reduce((n,a)=>n-a.net,0);
+    const netIncome=values.filter(a=>a.type==='Revenue').reduce((n,a)=>n-a.net,0)-values.filter(a=>a.type==='Expense').reduce((n,a)=>n+a.net,0);
+    content='<p><strong>Staging-only position, not a company Balance Sheet.</strong> Opening balances, unposted source transactions and valuation are missing.</p>'+
+      table(['Staging classification','Net UGX'],[row(['Assets after accumulated depreciation',fmt(netAssets)]),row(['Liabilities',fmt(netLiabilities)]),row(['Equity',fmt(netEquity)]),row(['Staging income less expenses',fmt(netIncome)]),row(['Unexplained difference',fmt(netAssets-netLiabilities-netEquity-netIncome)])]);
+  }else{
+    const cashCodes=new Set(['1000','1010','1020']);
+    const cashLines=entries.flatMap(e=>(e.lines||[]).filter(l=>cashCodes.has(String(l.account))).map(l=>({e,l,change:Number(l.debit||0)-Number(l.credit||0)})));
+    const inflow=cashLines.reduce((n,x)=>n+Math.max(0,x.change),0),outflow=cashLines.reduce((n,x)=>n+Math.max(0,-x.change),0);
+    content='<p><strong>Staging cash movements only.</strong> This is not a Cash Flow Statement: the historical cashbook, opening cash, bank transfers and operating/investing/financing classifications have not been reconciled. Internal transfers may be counted twice.</p>'+
+      table(['Measure','Amount'],[row(['Staging cash inflows',fmt(inflow)]),row(['Staging cash outflows',fmt(outflow)]),row(['Net cash movement in staging',fmt(inflow-outflow)])])+
+      table(['Date','Journal','Cash account','Movement','Source'],cashLines.map(x=>row([x.e.date,x.e.id,x.l.account,fmt(x.change),x.e.sourceKey||''])));
   }
   const old=document.getElementById('afStagingAccountingDiagnostic');if(old)old.remove();
-  const modal=document.createElement('div');modal.id='afStagingAccountingDiagnostic';
-  modal.style.cssText='position:fixed;inset:0;background:#0009;z-index:2147483000;overflow:auto;padding:20px';
-  modal.innerHTML='<section style="background:white;color:#183329;max-width:1100px;margin:25px auto;border-radius:12px;padding:22px;font-family:Arial,sans-serif"><button id="afCloseStagingReport" style="float:right">✕ Close</button><h2>'+esc(titles[kind])+'</h2><p style="padding:12px;border:1px solid #c58b24;background:#fff6dd"><strong>STAGING ONLY — NOT RECONCILED.</strong> Historical transactions from the factory modules are NOT included. Do not use this screen for business decisions or statutory reporting.</p>'+content+'</section>';
-  document.body.appendChild(modal);
-  modal.querySelector('#afCloseStagingReport').onclick=()=>modal.remove();
+  const modal=document.createElement('div');modal.id='afStagingAccountingDiagnostic';modal.style.cssText='position:fixed;inset:0;background:#0009;z-index:2147483000;overflow:auto;padding:20px';
+  modal.innerHTML='<section style="background:white;color:#183329;max-width:1100px;margin:25px auto;border-radius:12px;padding:22px;font-family:Arial,sans-serif"><button id="afCloseStagingReport" style="float:right">✕ Close</button><h2>'+esc(titles[kind])+'</h2><p style="padding:12px;border:1px solid #c58b24;background:#fff6dd"><strong>STAGING ONLY — NOT RECONCILED.</strong> This view excludes unposted historical transactions. Do not use it for statutory reporting, lending or business decisions.</p>'+content+'</section>';
+  document.body.appendChild(modal);modal.querySelector('#afCloseStagingReport').onclick=()=>modal.remove();
 };
 
 
@@ -106919,29 +106938,4 @@ window.AFStage7KB002=Object.freeze({review,open});function attach(){if(document.
   window.addEventListener("storage",mount);
   document.addEventListener("click",function(){if(!director())mount();},true);
   setInterval(mount,5000);
-})();
-
-
-/* KB002 reconciliation control: READ ONLY, does not post or synchronize. */
-(function(){'use strict';
-if(window.AFKB002IntegrityCheck)return;
-function get(k){try{return JSON.parse(localStorage.getItem(k)||'null')}catch(_){return null}}
-function rows(k){const a=get(k);return Array.isArray(a)?a:null}
-function check(){const purchases=rows('afSupplierPurchases'),payments=rows('supplierPayments'),discounts=rows('afSupplierSettlementAdjustmentsV1'),main=rows('afJournalEntries'),stage=get('afAccountingV1Staging');
-const p=(purchases||[]).filter(x=>x.id==='PUR-1791244969174'||String(x.materialRecordId)==='1791244969174');
-const pay=(payments||[]).filter(x=>x.batchNumber==='KB002'||String(x.materialRecordId)==='1791244969174');
-const d=(discounts||[]).filter(x=>x.id==='AF-S6-KB002-001');
-const s=(Array.isArray(stage?.entries)?stage.entries:[]).filter(x=>/KB002/i.test(String(x.memo||''))||/^AFJ-S7-KB002-/.test(String(x.id||'')));
-const j=(main||[]).filter(x=>/KB002|1791244969174|AF-S6-KB002-001/i.test(JSON.stringify(x)));
-const issues=[];if(!purchases||!payments||!discounts||!main)issues.push('Missing or invalid browser register');
-if(p.length!==1||Number(p[0]?.materialCost)!==63675)issues.push('KB002 purchase not verified');
-if(pay.length!==1||Number(pay[0]?.amount)!==63600)issues.push('KB002 cash payment not verified');
-if(d.length!==1||Number(d[0]?.amountUGX)!==75)issues.push('KB002 discount not verified');
-if(s.length!==3)issues.push('Expected three staging entries');
-const lines=s.map(e=>{const a=Array.isArray(e.lines)?e.lines:[];const debit=a.reduce((v,l)=>v+Number(l.debit||0),0),credit=a.reduce((v,l)=>v+Number(l.credit||0),0);return {id:e.id,debit,credit,balanced:a.length>=2&&debit===credit&&debit>0}});
-if(lines.some(x=>!x.balanced))issues.push('Unbalanced staging entry');
-issues.push(j.length?'Potential KB002 main journal entries: manual review required':'KB002 not identified in main journal; full GL unreconciled');
-return {status:'READ_ONLY_NOT_RECONCILED',checkedAt:new Date().toISOString(),purchaseUGX:p.length===1?Number(p[0].materialCost):null,cashUGX:pay.reduce((v,x)=>v+Number(x.amount||0),0),discountUGX:d.reduce((v,x)=>v+Number(x.amountUGX||0),0),stagingEntries:s.length,stagingLines:lines,potentialMainJournalMatches:j.length,issues,notice:'Browser-only check; no data modified; cloud reconciliation and server security not verified.'};}
-function download(){const result=check(),u=URL.createObjectURL(new Blob([JSON.stringify(result,null,2)],{type:'application/json'})),a=document.createElement('a');a.href=u;a.download='AF_KB002_Integrity_READ_ONLY.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);return result;}
-window.AFKB002IntegrityCheck=Object.freeze({check,download});
 })();
