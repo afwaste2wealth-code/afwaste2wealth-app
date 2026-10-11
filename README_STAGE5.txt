@@ -1,0 +1,1 @@
+Stage 5: Replace existing app.js with included app.js after backing up. Director login > Stage 5 KB002 Restore > Download backup > Approve and restore. No cash, supplier payment, or journal is posted. Keep original purchase unchanged. Test on backup first.

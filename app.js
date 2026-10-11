@@ -106552,3 +106552,132 @@ window.AFStage4Reconciliation=Object.freeze({data,open});
 function attach(){if(document.getElementById('afStage4Button'))return;const b=document.createElement('button');b.id='afStage4Button';b.type='button';b.textContent='Stage 4 • KB002 Verification';b.style.cssText='position:fixed;bottom:278px;right:12px;z-index:2147482000;background:#0b5d3b;color:white;border:1px solid white;border-radius:8px;padding:10px;font:600 12px Arial;cursor:pointer';b.onclick=open;document.body.appendChild(b)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
 })();
+
+
+/* A&F STAGE 5 — DIRECTOR-CONTROLLED KB002 SOURCE RESTORATION
+   Restores a missing historical material source row, never creates a payment,
+   supplier purchase, general-ledger entry or independent stock movement.
+   Requires Stage 4 memo, exact purchase facts, a browser backup and explicit approval.
+   Browser localStorage is not a secure multi-user audit system. */
+(function(){
+'use strict';
+if(window.AFStage5KB002)return;
+const PID='PUR-1791244969174', MID='1791244969174', MEMO='afStage4ReconciliationMemosV1';
+const AUDIT='afStage5HistoricalCorrectionsV1';
+function load(k){try{return JSON.parse(localStorage.getItem(k)||'null')}catch(_){return null}}
+function arr(k){const a=load(k);return Array.isArray(a)?a:null}
+function director(){const u=load('currentUser');return u&&u.role==='Director'?u:null}
+function matches(a,b){return String(a??'').trim()===String(b??'').trim()}
+function validate(){
+ const materials=arr('materialRecords'),purchases=arr('afSupplierPurchases'),memos=arr(MEMO),audits=arr(AUDIT);
+ const errors=[];
+ if(!materials||!purchases||!memos)errors.push('One or more source arrays are missing or invalid.');
+ if(load(AUDIT)!==null&&!audits)errors.push('Correction audit storage is invalid.');
+ if(errors.length)return {ready:false,errors};
+ const p=purchases.filter(x=>matches(x?.id,PID)&&matches(x?.materialRecordId,MID));
+ if(p.length!==1)errors.push('Expected exactly one matching original supplier purchase.');
+ const otherLinks=purchases.filter(x=>matches(x?.materialRecordId,MID));
+ if(otherLinks.length!==1)errors.push('Duplicate or changed supplier purchase link detected.');
+ const existing=materials.filter(x=>matches(x?.id,MID)||matches(x?.batchNumber,'KB002'));
+ if(existing.length)errors.push('Material ID or batch KB002 already exists. No restoration permitted.');
+ const purchase=p[0];
+ if(purchase){
+  if(!matches(purchase.batchNumber,'KB002')||!matches(purchase.supplierName,'Abdu Yiga')||
+    !matches(purchase.materialType,'HDPE')||Number(purchase.grossKg)!==283||
+    Number(purchase.acceptedKg)!==212.25||Number(purchase.totalCost)!==63675)
+    errors.push('Original purchase facts differ from the Director-verified batch.');
+  if(purchase.materialCost!=null&&Number(purchase.materialCost)!==63675)
+    errors.push('Purchase material cost differs from UGX 63,675.');
+  if(Number(purchase.transportCost||0)!==0||Number(purchase.miscellaneousExpenses||0)!==0)
+    errors.push('Extra purchase costs require separate review.');
+ }
+ const memo=memos.find(x=>matches(x?.purchaseId,PID)&&matches(x?.materialRecordId,MID)&&
+   x.physicalStockConfirmed===true&&x.washed===false&&x.clientStockExcluded===true&&
+   Number(x.paidCashUGX)===63675&&x.verifiedByRole==='Director');
+ if(!memo)errors.push('Valid Stage 4 Director verification memo not found in this browser.');
+ if((audits||[]).some(x=>matches(x?.purchaseId,PID)))errors.push('This correction has already been recorded.');
+ const custody=materials.find(x=>matches(x?.id,'1791202061631'));
+ if(!custody||String(custody.materialSource||'').toLowerCase()!=='client')
+   errors.push('Mr. Gideon client custody source is missing or reclassified.');
+ // Never fabricate a payment: check whether the payment ledger already contains a linked payment.
+ const payments=arr('supplierPayments');
+ if(load('supplierPayments')!==null&&!payments)errors.push('Supplier payment ledger cannot be read.');
+ const linked=(payments||[]).filter(x=>matches(x?.materialRecordId,MID)||matches(x?.batchNumber,'KB002'));
+ const paid=linked.reduce((n,x)=>n+Math.max(0,Number(x.amount)||0),0);
+ if(paid>63675.001)errors.push('Existing linked supplier payments exceed purchase cost.');
+ const user=director();if(!user)errors.push('Director login required.');
+ return {ready:errors.length===0,errors,purchase:purchase||null,memo:memo||null,
+  existingMaterialCount:existing.length,existingSupplierPayments:linked.length,
+  linkedPaymentAmountUGX:paid,unverifiedCashLedgerDifferenceUGX:63675-paid,
+  notice:'The historical cash payment is verified by the Director but may not be present in supplierPayments. Stage 5 will NOT create any cash or supplier payment record. Financial reconciliation remains outstanding.'};
+}
+function backup(){
+ const keys=['materialRecords','afSupplierPurchases','supplierPayments',MEMO,AUDIT];
+ const values={};for(const k of keys)values[k]=localStorage.getItem(k);
+ return {type:'AF_STAGE5_PRE_CORRECTION_BACKUP',createdAt:new Date().toISOString(),keys:values};
+}
+function download(data,name){const u=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+ const a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),3000)}
+function apply(){
+ const check=validate();if(!check.ready)throw Error(check.errors.join('\n'));
+ const p=check.purchase,u=director(),date=new Date().toISOString();
+ const materials=arr('materialRecords'),audit=arr(AUDIT)||[];
+ const dirt=70.75;
+ const record={
+  id:Number(MID),batchNumber:'KB002',washingCycleNumber:typeof washingCycleFromBatch==='function'?washingCycleFromBatch('KB002'):null,
+  batchStatus:'AVAILABLE FOR WASHING',date:String(p.date||''),materialSource:'company',materialType:'HDPE',
+  supplierId:p.supplierId||'',supplierName:'Abdu Yiga',clientName:'',clientPhone:'',clientOrigin:'',clientAddress:'',clientService:'',
+  grossWeight:283,washingGrossWeight:0,pelletWeight:0,actualPelletWeight:0,
+  dirtPercent:25,dirtWeightKg:dirt,netWeight:212.25,openingBatchKg:212.25,batchBalanceKg:212.25,
+  pricePerKg:300,transportType:p.transportType||'none',transportCost:0,transportPayee:'',transportAmountPaid:0,
+  transportBalance:0,transportPaymentMethod:'',transportPaymentReference:'',miscellaneousExpenses:0,miscellaneousReason:'',
+  materialCost:63675,totalCost:63675,
+  supplierAmountPaid:check.linkedPaymentAmountUGX,
+  supplierBalance:Math.max(0,63675-check.linkedPaymentAmountUGX),
+  supplierPaymentStatus:check.linkedPaymentAmountUGX>=63675?'Paid in Full':check.linkedPaymentAmountUGX>0?'Partly Paid':'Payment verification pending ledger reconciliation',
+  recordedByEmployeeId:'',recordedByName:'',recordedByRole:'',recordedAt:null,
+  historicalCorrection:true,historicalCorrectionReference:'AF-S5-KB002-001',
+  historicalCorrectionAt:date,historicalCorrectionByEmployeeId:u.employeeId||'',
+  originalPurchaseId:PID,
+  accountingPostingStatus:'NOT_POSTED_HISTORICAL_RECONCILIATION_PENDING'
+ };
+ const event={id:'AF-S5-KB002-001',purchaseId:PID,materialRecordId:MID,batchNumber:'KB002',
+  restoredKg:212.25,restoredPurchaseCostUGX:63675,approvedByEmployeeId:u.employeeId||'',approvedByRole:u.role,
+  approvedAt:date,stage4MemoId:check.memo.id,originalSupplierPurchasePreserved:true,
+  paymentEntryCreated:false,cashEntryCreated:false,journalEntryCreated:false,
+  supplierPaymentsFound:check.existingSupplierPayments,linkedSupplierPaymentsUGX:check.linkedPaymentAmountUGX,
+  note:'Historical source-row restoration only; no independent stock receipt. Cash ledger must be reconciled separately.'};
+ // Snapshot both keys and restore them if either write fails.
+ const oldM=localStorage.getItem('materialRecords'),oldA=localStorage.getItem(AUDIT);
+ try{localStorage.setItem('materialRecords',JSON.stringify([...materials,record]));
+     localStorage.setItem(AUDIT,JSON.stringify([...audit,event]));}
+ catch(e){try{oldM===null?localStorage.removeItem('materialRecords'):localStorage.setItem('materialRecords',oldM);
+ oldA===null?localStorage.removeItem(AUDIT):localStorage.setItem(AUDIT,oldA)}catch(_){}
+ throw Error('Could not save both correction records. Reload and verify before retrying: '+e.message)}
+ return event;
+}
+function open(){if(!director()){alert('Director access required.');return}
+ document.getElementById('afStage5Modal')?.remove();const m=document.createElement('div');m.id='afStage5Modal';
+ m.style.cssText='position:fixed;inset:0;z-index:2147483020;background:#000b;overflow:auto;padding:15px;font:14px Arial';
+ const c=document.createElement('section');c.style.cssText='max-width:820px;margin:25px auto;background:white;color:#173027;padding:22px;border-radius:12px';
+ const h=document.createElement('h2');h.textContent='Stage 5 — KB002 Controlled Source Restoration';c.appendChild(h);
+ const p=document.createElement('p');p.textContent='Restores the missing historical material source for 212.25 kg of unwashed, company-owned HDPE. It does not create another supplier purchase, payment, cash entry or general-ledger posting.';c.appendChild(p);
+ const pre=document.createElement('pre');pre.style.cssText='white-space:pre-wrap;word-break:break-word;max-height:45vh;overflow:auto;background:#f4f7f5;padding:12px';c.appendChild(pre);
+ let backedUp=false;const refresh=()=>{const d=validate();pre.textContent=JSON.stringify(d,null,2);return d};refresh();
+ function button(label,fn){const b=document.createElement('button');b.type='button';b.textContent=label;b.style.cssText='padding:10px;margin:5px;background:#0b5d3b;color:white;border:0;border-radius:7px;cursor:pointer';b.onclick=fn;c.appendChild(b)}
+ button('Download backup (required)',()=>{download(backup(),'AF_Stage5_Pre_Correction_Backup.json');backedUp=true;alert('Keep the downloaded backup safely before approving.')});
+ button('Approve & restore missing material record',()=>{
+  if(!backedUp){alert('Download the backup first.');return}
+  const d=refresh();if(!d.ready){alert('Pre-check failed. No change made.');return}
+  if(!confirm('Director approval: restore only the missing KB002 material source row (212.25 kg; UGX 63,675). No new cash payment or journal entry. Continue?'))return;
+  try{const event=apply();refresh();download(event,'AF_Stage5_KB002_Correction_Receipt.json');
+   alert('KB002 source record restored. No payment or journal posted. Downloaded correction receipt. Reconcile cash ledger separately.');}
+  catch(e){alert('Restoration stopped: '+e.message);refresh()}
+ });
+ button('Download Stage 5 review',()=>download(validate(),'AF_Stage5_KB002_Review.json'));
+ button('Close',()=>m.remove());c.appendChild(pre);m.appendChild(c);document.body.appendChild(m)
+}
+window.AFStage5KB002=Object.freeze({validate,open});
+function attach(){if(document.getElementById('afStage5Button'))return;const b=document.createElement('button');b.id='afStage5Button';b.type='button';b.textContent='Stage 5 • KB002 Restore';b.style.cssText='position:fixed;bottom:322px;right:12px;z-index:2147482000;background:#0b5d3b;color:white;border:1px solid white;border-radius:8px;padding:10px;font:600 12px Arial;cursor:pointer';b.onclick=open;document.body.appendChild(b)}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
+})();
