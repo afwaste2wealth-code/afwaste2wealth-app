@@ -106496,3 +106496,59 @@ window.AFStage3OwnershipReview=Object.freeze({review,open});
 function attach(){if(document.getElementById('afStage3OwnershipButton'))return;const b=document.createElement('button');b.id='afStage3OwnershipButton';b.type='button';b.textContent='Ownership & Purchase Review';b.style.cssText='position:fixed;bottom:234px;right:12px;z-index:2147482000;background:#164e63;color:white;border:1px solid white;border-radius:8px;padding:10px;font:600 12px Arial;cursor:pointer';b.onclick=open;document.body.appendChild(b)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
 })();
+
+
+/* STAGE 4: DIRECTOR-APPROVED RECONCILIATION MEMORANDUM.
+   No historical source rows, stock quantities, payments, or journals are mutated.
+   A missing material record cannot safely be reconstructed from purchase totals alone. */
+(function(){
+'use strict';
+if(window.AFStage4Reconciliation)return;
+const KEY='afStage4ReconciliationMemosV1', PID='PUR-1791244969174', MID='1791244969174';
+function read(k){try{return JSON.parse(localStorage.getItem(k)||'null')}catch(_){return null}}
+function director(){return read('currentUser')?.role==='Director'}
+function data(){
+ const purchases=read('afSupplierPurchases'), materials=read('materialRecords'), memos=read(KEY)||[];
+ if(!Array.isArray(purchases)||!Array.isArray(materials)||!Array.isArray(memos))return {status:'INVALID_STORAGE',error:'Expected array data; no changes made'};
+ const p=purchases.find(x=>String(x?.id)===PID && String(x?.materialRecordId)===MID);
+ const material=materials.find(x=>String(x?.id)===MID);
+ const custody=materials.find(x=>String(x?.id)==='1791202061631');
+ const matches=purchases.filter(x=>String(x?.materialRecordId)===MID);
+ const approved=memos.find(x=>x?.purchaseId===PID);
+ return {status:approved?'DIRECTOR_MEMO_SAVED':'AWAITING_DIRECTOR_MEMO',createdAt:new Date().toISOString(),
+ purchaseFound:!!p,purchaseCountForMaterialId:matches.length,materialRecordExists:!!material,
+ purchase:p?{id:p.id,materialRecordId:p.materialRecordId,batchNumber:p.batchNumber,supplierName:p.supplierName,grossKg:p.grossKg,acceptedKg:p.acceptedKg,totalCost:p.totalCost}:null,
+ clientCustodySeparate:!!custody&&String(custody.materialSource||'').toLowerCase()==='client',
+ memo:approved||null,stockEntryCreated:false,cashEntryCreated:false,journalEntryCreated:false,
+ nextAction:'Review existing inventory and cash records; create an approved historical source correction only after verifying no existing movement. Memo alone does not fix the stock ledger.'};
+}
+function download(v){const url=URL.createObjectURL(new Blob([JSON.stringify(v,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='AF_Stage4_Reconciliation_Control.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500)}
+function open(){
+ if(!director()){alert('Director access required');return}
+ document.getElementById('afStage4Modal')?.remove();
+ const m=document.createElement('div');m.id='afStage4Modal';m.style.cssText='position:fixed;inset:0;z-index:2147483015;background:#000b;overflow:auto;padding:16px;font:14px Arial';
+ const c=document.createElement('section');c.style.cssText='max-width:790px;margin:25px auto;padding:22px;background:white;border-radius:12px;color:#18362c';
+ const h=document.createElement('h2');h.textContent='Stage 4 — KB002 Reconciliation Control';c.appendChild(h);
+ const note=document.createElement('p');note.textContent='Abdu Yiga: 283 kg gross, 212.25 kg accepted, UGX 63,675 paid in cash. Director confirmed physical stock remains unwashed. Mr. Gideon is client custody, not company inventory.';c.appendChild(note);
+ const pre=document.createElement('pre');pre.style.cssText='white-space:pre-wrap;word-break:break-word;background:#f4f7f5;padding:12px;max-height:48vh;overflow:auto';c.appendChild(pre);
+ const refresh=()=>{pre.textContent=JSON.stringify(data(),null,2)};refresh();
+ const warn=document.createElement('p');warn.style.color='#9a4d00';warn.textContent='Approval saves a reconciliation memorandum only. It does not add stock, spend cash again, change purchase records, or post a journal.';c.appendChild(warn);
+ function btn(t,fn){const b=document.createElement('button');b.type='button';b.textContent=t;b.style.cssText='padding:10px;margin:5px;border:0;border-radius:7px;background:#0b5d3b;color:white;cursor:pointer';b.onclick=fn;c.appendChild(b)}
+ btn('Save Director verification memo',()=>{
+   if(!director())return;
+   const d=data();
+   if(!d.purchaseFound||d.purchaseCountForMaterialId!==1||d.materialRecordExists){alert('Source data has changed. Review the records before approval.');return}
+   if(!confirm('Confirm only these facts: KB002 received, paid UGX 63,675 cash, still physically at factory, not washed. This creates NO stock or accounting entry.'))return;
+   const old=read(KEY)||[];if(!Array.isArray(old))return;
+   if(old.some(x=>x?.purchaseId===PID)){alert('A verification memo already exists.');return}
+   const user=read('currentUser');
+   const memo={id:'AF-S4-KB002-001',purchaseId:PID,materialRecordId:MID,batchNumber:'KB002',supplier:'Abdu Yiga',grossKg:283,acceptedKg:212.25,paidCashUGX:63675,physicalStockConfirmed:true,washed:false,clientStockExcluded:true,verifiedByEmployeeId:user?.employeeId||null,verifiedByRole:'Director',verifiedAt:new Date().toISOString(),type:'VERIFICATION_ONLY_NOT_ACCOUNTING_POSTING'};
+   try{localStorage.setItem(KEY,JSON.stringify([...old,memo]));refresh();alert('Verification memorandum saved. No stock or accounting entries were changed.')}catch(e){alert('Could not save memorandum: '+e.message)}
+ });
+ btn('Download Stage 4 report',()=>download(data()));
+ btn('Close',()=>m.remove());m.appendChild(c);document.body.appendChild(m);
+}
+window.AFStage4Reconciliation=Object.freeze({data,open});
+function attach(){if(document.getElementById('afStage4Button'))return;const b=document.createElement('button');b.id='afStage4Button';b.type='button';b.textContent='Stage 4 • KB002 Verification';b.style.cssText='position:fixed;bottom:278px;right:12px;z-index:2147482000;background:#0b5d3b;color:white;border:1px solid white;border-radius:8px;padding:10px;font:600 12px Arial;cursor:pointer';b.onclick=open;document.body.appendChild(b)}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
+})();
