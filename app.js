@@ -106431,3 +106431,42 @@ window.AFPurchaseMirrorReviewV1=Object.freeze({review,open});
 function attach(){if(document.getElementById('afPurchaseReviewButton'))return;const b=document.createElement('button');b.id='afPurchaseReviewButton';b.type='button';b.textContent='Purchase Link Exceptions';b.style.cssText='position:fixed;bottom:146px;right:12px;z-index:2147482000;background:#564078;color:white;border:1px solid white;border-radius:8px;padding:10px;font:600 12px Arial;cursor:pointer';b.onclick=open;document.body.appendChild(b)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
 })();
+
+/* A&F PURCHASE EXCEPTION DETAIL COMPARISON v2 — READ ONLY.
+   No writes to browser storage, accounting journals or inventory. */
+(function(){
+'use strict';
+if(window.AFPurchaseExceptionDetailsV2)return;
+const SOURCE_ID='1791202061631', MIRROR_LINK='1791244969174';
+function read(key){try{const a=JSON.parse(localStorage.getItem(key)||'[]');return Array.isArray(a)?a:[]}catch(e){return []}}
+function director(){try{return JSON.parse(localStorage.getItem('currentUser')||'null')?.role==='Director'}catch(e){return false}}
+function details(){
+ const materials=read('materialRecords'), purchases=read('afSupplierPurchases');
+ const orphanMaterial=materials.find(r=>String(r?.id)===SOURCE_ID)||null;
+ const orphanMirror=purchases.find(r=>String(r?.materialRecordId)===MIRROR_LINK)||null;
+ const relatedMaterial=materials.filter(r=>String(r?.id)===MIRROR_LINK);
+ const relatedPurchases=purchases.filter(r=>String(r?.materialRecordId)===SOURCE_ID);
+ return {status:'READ_ONLY_UNVERIFIED',createdAt:new Date().toISOString(),orphanMaterial,orphanMirror,relatedMaterial,relatedPurchases,sourceCount:materials.length,mirrorCount:purchases.length,note:'Browser-local values only. No records changed. Similar dates, weights or amounts do not prove identity. Verify original purchase evidence before any correction.'};
+}
+function cell(text){const td=document.createElement('td');td.textContent=text;td.style.cssText='padding:8px;border-bottom:1px solid #ddd;vertical-align:top;word-break:break-word';return td}
+function display(v){return v===undefined?'(missing)':v===null?'null':typeof v==='object'?JSON.stringify(v):String(v)}
+function open(){
+ if(!director()){alert('Director access required.');return}
+ const data=details();document.getElementById('afPurchaseDetailModalV2')?.remove();
+ const overlay=document.createElement('div');overlay.id='afPurchaseDetailModalV2';overlay.style.cssText='position:fixed;inset:0;z-index:2147483010;overflow:auto;background:rgba(0,0,0,.7);padding:14px;font:14px Arial';
+ const panel=document.createElement('section');panel.style.cssText='max-width:1150px;margin:22px auto;background:white;color:#23372c;padding:22px;border-radius:12px';
+ const heading=document.createElement('h2');heading.textContent='Purchase Exception Details — Read Only';panel.appendChild(heading);
+ const p=document.createElement('p');p.textContent='Comparing the two unmatched records. These may or may not describe the same purchase. All values below are from this browser. No data will be changed.';panel.appendChild(p);
+ const wrap=document.createElement('div');wrap.style.cssText='max-height:65vh;overflow:auto';
+ const table=document.createElement('table');table.style.cssText='border-collapse:collapse;width:100%;table-layout:fixed';
+ const thead=document.createElement('thead'),hr=document.createElement('tr');['Field','Unlinked material record: '+SOURCE_ID,'Unmatched supplier purchase: '+MIRROR_LINK].forEach(s=>{const th=document.createElement('th');th.textContent=s;th.style.cssText='position:sticky;top:0;background:#0b5d3b;color:white;text-align:left;padding:9px';hr.appendChild(th)});thead.appendChild(hr);table.appendChild(thead);
+ const body=document.createElement('tbody');const fields=new Set([...Object.keys(data.orphanMaterial||{}),...Object.keys(data.orphanMirror||{})]);
+ for(const key of [...fields].sort()){const tr=document.createElement('tr');tr.appendChild(cell(key));tr.appendChild(cell(display(data.orphanMaterial?.[key])));tr.appendChild(cell(display(data.orphanMirror?.[key])));body.appendChild(tr)}table.appendChild(body);wrap.appendChild(table);panel.appendChild(wrap);
+ const warning=document.createElement('p');warning.textContent='Review supplier, date, gross/accepted weight, price, total cost, payment and source documents. Different IDs alone do not justify merging. This tool cannot prove a match.';panel.appendChild(warning);
+ const download=document.createElement('button');download.textContent='Download detailed comparison JSON';download.style.cssText='padding:10px;background:#0b5d3b;color:white;border:0;border-radius:7px;margin-right:12px';download.onclick=()=>{const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='AF_Purchase_Exception_Details_READ_ONLY.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)};panel.appendChild(download);
+ const close=document.createElement('button');close.textContent='Close';close.style.padding='10px';close.onclick=()=>overlay.remove();panel.appendChild(close);overlay.appendChild(panel);document.body.appendChild(overlay);
+}
+window.AFPurchaseExceptionDetailsV2=Object.freeze({details,open});
+function attach(){if(document.getElementById('afPurchaseDetailsButtonV2'))return;const btn=document.createElement('button');btn.id='afPurchaseDetailsButtonV2';btn.textContent='Compare Purchase Exceptions';btn.type='button';btn.style.cssText='position:fixed;bottom:190px;right:12px;z-index:2147482000;background:#126653;color:white;border:1px solid white;border-radius:8px;padding:10px;font:600 12px Arial;cursor:pointer';btn.onclick=open;document.body.appendChild(btn)}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
+})();
