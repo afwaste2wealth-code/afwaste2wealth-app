@@ -76688,7 +76688,11 @@ column.appendChild(
      */
     if (
       performance.parentElement !== column ||
-      letters.nextElementSibling !== performance
+      !(
+        letters.nextElementSibling === performance ||
+        (letters.nextElementSibling?.id === "afUgandaEnvironmentalNewsCard" &&
+         letters.nextElementSibling.nextElementSibling === performance)
+      )
     ) {
       letters.insertAdjacentElement(
         "afterend",
@@ -76746,7 +76750,9 @@ afFixSupplierPerformancePosition,
         column &&
         letters.parentElement === column &&
         performance.parentElement === column &&
-        letters.nextElementSibling === performance;
+        (letters.nextElementSibling === performance ||
+         (letters.nextElementSibling?.id === "afUgandaEnvironmentalNewsCard" &&
+          letters.nextElementSibling.nextElementSibling === performance));
 
       if (!alreadyCorrect) {
         afFixSupplierPerformancePosition();
@@ -90564,6 +90570,13 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
         30,
         clean.length * 7
       );
+
+    const signature = JSON.stringify({
+      items: clean.map(item => [item.title, item.link, item.source, item.pubDate]),
+      fallback
+    });
+    if (body.dataset.afNewsSignature === signature && body.firstElementChild) return;
+    body.dataset.afNewsSignature = signature;
 
     body.innerHTML = `
       <div class="afEnvViewport">
