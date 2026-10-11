@@ -106788,3 +106788,61 @@ function attach(){if(document.getElementById('afStage6Button'))return;const b=do
  b.onclick=open;document.body.appendChild(b)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
 })();
+
+
+/* A&F STAGE 7 — CONTROLLED KB002 STAGING JOURNAL
+   Posts one balanced historical transaction as three linked entries ONLY to
+   afAccountingV1Staging. Does not post to afJournalEntries, source payments,
+   material stock or bank/cash operational records. Staging is not reconciled
+   financial reporting. LocalStorage cannot provide tamper-proof authorization. */
+(function(){
+'use strict';
+if(window.AFStage7KB002)return;
+const KEY='afAccountingV1Staging', AUDIT='afStage7KB002PostingAuditV1';
+const SOURCES=['AF-S7-KB002-PURCHASE','AF-S7-KB002-CASH','AF-S7-KB002-DISCOUNT'];
+const expected=[
+ {sourceType:'stage7-kb002',sourceId:SOURCES[0],date:'2026-03-23',memo:'KB002 historical company-owned HDPE purchase, accepted 212.25 kg',lines:[{account:'1200',debit:63675,credit:0},{account:'2000',debit:0,credit:63675}]},
+ {sourceType:'stage7-kb002',sourceId:SOURCES[1],date:'2026-03-23',memo:'KB002 existing historical cash paid to Abdu Yiga (no new cash disbursement)',lines:[{account:'2000',debit:63600,credit:0},{account:'1000',debit:0,credit:63600}]},
+ {sourceType:'stage7-kb002',sourceId:SOURCES[2],date:'2026-10-11',memo:'KB002 approved non-cash settlement discount, Stage 6 AF-S6-KB002-001',lines:[{account:'2000',debit:75,credit:0},{account:'4100',debit:0,credit:75}]}
+];
+function get(k){const raw=localStorage.getItem(k);if(raw===null)return null;return JSON.parse(raw)}
+function arr(k){const v=get(k);return Array.isArray(v)?v:null}
+function same(a,b){return String(a??'')===String(b??'')}
+function director(){const u=get('currentUser');return u?.role==='Director'?u:null}
+function review(){const errors=[];let ledger=null,materials=null,purchases=null,payments=null,adjustments=null,audit=null;
+ try{ledger=get(KEY);materials=arr('materialRecords');purchases=arr('afSupplierPurchases');payments=arr('supplierPayments');adjustments=arr('afSupplierSettlementAdjustmentsV1');audit=get(AUDIT)}catch(e){errors.push('Malformed data: '+e.message)}
+ if(!director())errors.push('Director login required.');
+ if(!ledger||ledger.version!==1||!Array.isArray(ledger.entries))errors.push('Staging ledger unavailable or incompatible.');
+ if(!materials||!purchases||!payments||!adjustments)errors.push('Required historical records unavailable.');
+ if(audit!==null&&(!Array.isArray(audit)))errors.push('Stage 7 audit register is invalid.');
+ const m=materials?.filter(x=>same(x.id,1791244969174)||x.batchNumber==='KB002')||[];
+ const p=purchases?.filter(x=>x.id==='PUR-1791244969174'||same(x.materialRecordId,1791244969174))||[];
+ const pay=payments?.filter(x=>same(x.materialRecordId,1791244969174)||x.batchNumber==='KB002')||[];
+ const a=adjustments?.filter(x=>x.id==='AF-S6-KB002-001'||same(x.materialRecordId,1791244969174))||[];
+ if(m.length!==1||m[0]?.materialSource!=='company'||m[0]?.historicalCorrectionReference!=='AF-S5-KB002-001'||Number(m[0]?.netWeight)!==212.25||Number(m[0]?.materialCost)!==63675||Number(m[0]?.supplierBalance)!==0)errors.push('Stage 5 material restoration or settled balance is not verified.');
+ if(p.length!==1||Number(p[0]?.materialCost)!==63675||p[0]?.supplierName!=='Abdu Yiga')errors.push('Original purchase is missing or changed.');
+ if(pay.length!==1||Number(pay[0]?.amount)!==63600||pay[0]?.method!=='Cash')errors.push('Historical cash payment is missing or changed.');
+ if(a.length!==1||Number(a[0]?.amountUGX)!==75||a[0]?.approvedByRole!=='Director'||a[0]?.generalLedgerStatus!=='PENDING_CONTROLLED_GL_INTEGRATION')errors.push('Stage 6 settlement approval is missing or changed.');
+ const existing=ledger?.entries?.filter(e=>e.sourceType==='stage7-kb002'||SOURCES.some(s=>e.sourceId===s)||/KB002/i.test(String(e.memo||'')))||[];
+ if(existing.length)errors.push('KB002 journal entry already exists in staging; automatic reposting blocked.');
+ if(audit?.length)errors.push('Stage 7 audit already exists; repeat posting blocked.');
+ const totals=expected.flatMap(e=>e.lines).reduce((r,l)=>({debit:r.debit+l.debit,credit:r.credit+l.credit}),{debit:0,credit:0});
+ return {ready:errors.length===0,errors,postingTarget:'STAGING ONLY — not reconciled general ledger',batch:'KB002',supplier:'Abdu Yiga',purchaseUGX:63675,cashAlreadyPaidUGX:63600,nonCashDiscountUGX:75,expectedEntries:expected,totals,existingKB002StagingEntries:existing.length};
+}
+function download(obj,name){const url=URL.createObjectURL(new Blob([JSON.stringify(obj,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000)}
+function backup(){const keys=[KEY,AUDIT,'materialRecords','afSupplierPurchases','supplierPayments','afSupplierSettlementAdjustmentsV1','afStage5HistoricalCorrectionsV1','afStage4DirectorVerificationV1','afJournalEntries'];const raw={};keys.forEach(k=>raw[k]=localStorage.getItem(k));return {type:'AF_STAGE7_PRE_POSTING_BACKUP',createdAt:new Date().toISOString(),keys:raw}}
+function post(){const check=review();if(!check.ready)throw Error(check.errors.join('\n'));
+ const user=director();const before=localStorage.getItem(KEY),beforeAudit=localStorage.getItem(AUDIT);const ledger=JSON.parse(before);
+ const now=new Date().toISOString();const next=ledger.entries.slice();
+ expected.forEach((e,i)=>{if(next.some(x=>x.sourceKey===e.sourceType+':'+e.sourceId))throw Error('Duplicate journal source');next.push({id:'AFJ-S7-KB002-'+(i+1),sourceKey:e.sourceType+':'+e.sourceId,date:e.date,memo:e.memo,lines:e.lines.map(l=>({...l})),createdAt:now,actor:user.employeeId||'Director',reverses:null})});
+ const record={id:'AF-S7-KB002-001',postedAt:now,postedByRole:'Director',postedByEmployeeId:user.employeeId||'',journalIds:next.slice(-3).map(e=>e.id),stagingOnly:true,operationalCashCreated:false,stockCreated:false,operationalPaymentCreated:false,sourceStage6:'AF-S6-KB002-001',accountingReconciliationStatus:'PENDING_FULL_SOURCE_RECONCILIATION'};
+ try{localStorage.setItem(KEY,JSON.stringify({...ledger,entries:next}));localStorage.setItem(AUDIT,JSON.stringify([record]));}catch(e){try{if(before===null)localStorage.removeItem(KEY);else localStorage.setItem(KEY,before);if(beforeAudit===null)localStorage.removeItem(AUDIT);else localStorage.setItem(AUDIT,beforeAudit)}catch(_){}throw e}
+ return record;
+}
+function open(){if(!director()){alert('Director access required');return}document.getElementById('afStage7Modal')?.remove();const m=document.createElement('div');m.id='afStage7Modal';m.style.cssText='position:fixed;inset:0;z-index:2147483040;background:#000b;overflow:auto;padding:16px;font:14px Arial';const c=document.createElement('section');c.style.cssText='max-width:850px;margin:25px auto;background:white;border-radius:12px;padding:22px;color:#173027';const h=document.createElement('h2');h.textContent='Stage 7 — KB002 Controlled Staging Journal';c.appendChild(h);const note=document.createElement('p');note.textContent='Creates three linked, balanced staging entries for historical purchase, already-paid cash and approved settlement discount. Does NOT pay cash again or change factory stock. Full general ledger remains unreconciled.';c.appendChild(note);const pre=document.createElement('pre');pre.style.cssText='white-space:pre-wrap;word-break:break-word;max-height:52vh;overflow:auto;background:#f4f7f5;padding:12px';c.appendChild(pre);const refresh=()=>{const v=review();pre.textContent=JSON.stringify(v,null,2);return v};refresh();let backed=false;
+ function button(t,fn){const b=document.createElement('button');b.textContent=t;b.type='button';b.style.cssText='padding:10px;margin:5px;border:0;border-radius:7px;background:#0b5d3b;color:white;cursor:pointer';b.onclick=fn;c.appendChild(b)}
+ button('Download backup (required)',()=>{download(backup(),'AF_Stage7_Pre_Posting_Backup.json');backed=true;alert('Keep this backup before posting.');});
+ button('Post three KB002 staging entries',()=>{if(!backed)return alert('Download backup first.');if(!refresh().ready)return alert('Validation blocked posting.');if(!confirm('Post 3 historical KB002 entries to STAGING ONLY? No new factory cash or stock movements.'))return;try{const result=post();download(result,'AF_Stage7_KB002_Posting_Receipt.json');refresh();alert('Three balanced staging entries saved. Full company GL remains unreconciled.')}catch(e){alert('Posting blocked: '+e.message);refresh()}});
+ button('Download review',()=>download(review(),'AF_Stage7_KB002_Review.json'));button('Close',()=>m.remove());m.appendChild(c);document.body.appendChild(m)}
+window.AFStage7KB002=Object.freeze({review,open});function attach(){if(document.getElementById('afStage7Button'))return;const b=document.createElement('button');b.id='afStage7Button';b.textContent='Stage 7 • KB002 Journal';b.type='button';b.style.cssText='position:fixed;bottom:410px;right:12px;z-index:2147482000;background:#0b5d3b;color:white;border:1px solid white;border-radius:8px;padding:10px;font:600 12px Arial;cursor:pointer';b.onclick=open;document.body.appendChild(b)}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
+})();
