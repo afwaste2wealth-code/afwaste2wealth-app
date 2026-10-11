@@ -106920,3 +106920,28 @@ window.AFStage7KB002=Object.freeze({review,open});function attach(){if(document.
   document.addEventListener("click",function(){if(!director())mount();},true);
   setInterval(mount,5000);
 })();
+
+
+/* KB002 reconciliation control: READ ONLY, does not post or synchronize. */
+(function(){'use strict';
+if(window.AFKB002IntegrityCheck)return;
+function get(k){try{return JSON.parse(localStorage.getItem(k)||'null')}catch(_){return null}}
+function rows(k){const a=get(k);return Array.isArray(a)?a:null}
+function check(){const purchases=rows('afSupplierPurchases'),payments=rows('supplierPayments'),discounts=rows('afSupplierSettlementAdjustmentsV1'),main=rows('afJournalEntries'),stage=get('afAccountingV1Staging');
+const p=(purchases||[]).filter(x=>x.id==='PUR-1791244969174'||String(x.materialRecordId)==='1791244969174');
+const pay=(payments||[]).filter(x=>x.batchNumber==='KB002'||String(x.materialRecordId)==='1791244969174');
+const d=(discounts||[]).filter(x=>x.id==='AF-S6-KB002-001');
+const s=(Array.isArray(stage?.entries)?stage.entries:[]).filter(x=>/KB002/i.test(String(x.memo||''))||/^AFJ-S7-KB002-/.test(String(x.id||'')));
+const j=(main||[]).filter(x=>/KB002|1791244969174|AF-S6-KB002-001/i.test(JSON.stringify(x)));
+const issues=[];if(!purchases||!payments||!discounts||!main)issues.push('Missing or invalid browser register');
+if(p.length!==1||Number(p[0]?.materialCost)!==63675)issues.push('KB002 purchase not verified');
+if(pay.length!==1||Number(pay[0]?.amount)!==63600)issues.push('KB002 cash payment not verified');
+if(d.length!==1||Number(d[0]?.amountUGX)!==75)issues.push('KB002 discount not verified');
+if(s.length!==3)issues.push('Expected three staging entries');
+const lines=s.map(e=>{const a=Array.isArray(e.lines)?e.lines:[];const debit=a.reduce((v,l)=>v+Number(l.debit||0),0),credit=a.reduce((v,l)=>v+Number(l.credit||0),0);return {id:e.id,debit,credit,balanced:a.length>=2&&debit===credit&&debit>0}});
+if(lines.some(x=>!x.balanced))issues.push('Unbalanced staging entry');
+issues.push(j.length?'Potential KB002 main journal entries: manual review required':'KB002 not identified in main journal; full GL unreconciled');
+return {status:'READ_ONLY_NOT_RECONCILED',checkedAt:new Date().toISOString(),purchaseUGX:p.length===1?Number(p[0].materialCost):null,cashUGX:pay.reduce((v,x)=>v+Number(x.amount||0),0),discountUGX:d.reduce((v,x)=>v+Number(x.amountUGX||0),0),stagingEntries:s.length,stagingLines:lines,potentialMainJournalMatches:j.length,issues,notice:'Browser-only check; no data modified; cloud reconciliation and server security not verified.'};}
+function download(){const result=check(),u=URL.createObjectURL(new Blob([JSON.stringify(result,null,2)],{type:'application/json'})),a=document.createElement('a');a.href=u;a.download='AF_KB002_Integrity_READ_ONLY.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);return result;}
+window.AFKB002IntegrityCheck=Object.freeze({check,download});
+})();
