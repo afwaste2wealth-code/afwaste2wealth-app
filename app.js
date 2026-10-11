@@ -87777,6 +87777,48 @@ function afARPaymentBook(methodGroup) {
 
     const entries = [];
 
+    /* Funding entries are projected from their source ledger on every report
+       opening. No new source record or journal posting is created here. */
+    afARReadArray("afOtherFundsV1").forEach(funding => {
+        if (!funding || funding.reversedAt) return;
+        const method = String(funding.method || "").trim().toLowerCase();
+        const normalized = method === "bank" ? "bank transfer" : method;
+        if (!wanted.includes(normalized)) return;
+        const amount = Number(funding.amount);
+        if (!Number.isSafeInteger(amount) || amount <= 0) return;
+        const label = funding.type === "directorLoan" ? "Director loan received" :
+            funding.type === "capital" ? "Owner capital contribution" :
+            funding.type === "otherIncome" ? "Other company income" : null;
+        if (!label) return;
+        entries.push({
+            date: afARDateValue(funding.date || funding.createdAt),
+            reference: funding.id || "",
+            particulars: label + " - " + (funding.source || ""),
+            method: funding.method || "",
+            received: amount,
+            paid: 0
+        });
+        if (funding.type === "directorLoan" && Array.isArray(funding.payments)) {
+            funding.payments.forEach(payment => {
+                const repaymentAmount = Number(payment.amount);
+                if (!Number.isSafeInteger(repaymentAmount) || repaymentAmount <= 0) return;
+                /* Older repayment records have no payment-method field.
+                   Do not guess their cash/bank classification. */
+                const repaymentMethod = String(payment.method || "").trim().toLowerCase();
+                const repaymentNormalized = repaymentMethod === "bank" ? "bank transfer" : repaymentMethod;
+                if (!wanted.includes(repaymentNormalized)) return;
+                entries.push({
+                    date: afARDateValue(payment.date || payment.at),
+                    reference: payment.id || "",
+                    particulars: "Director loan repayment - " + (funding.source || ""),
+                    method: payment.method,
+                    received: 0,
+                    paid: repaymentAmount
+                });
+            });
+        }
+    });
+
     customerPayments.forEach(record => {
         const method = afARPaymentMethod(record).toLowerCase();
         if (!wanted.includes(method)) return;
@@ -87895,8 +87937,8 @@ function afAROpenCashBook() {
     afAROpenTableReport({
         id: "afCashBookModal",
         title: "Cash Book",
-        subtitle: "Recorded Cash and Mobile Money receipts/payments",
-        note: "This book is based on customer payments and expenses already recorded in the application. Add opening cash balances and any other cash movements through the future double-entry accounting engine before treating the balance as a final accounting cash balance.",
+        subtitle: "Recorded Cash and Mobile Money receipts/payments, including funding receipts",
+        note: "Includes active funding receipts from the Other Funds ledger without duplicating source records. Opening balances and full general-ledger reconciliation remain outstanding; do not treat the running balance as a final accounting cash balance. Historical loan repayments without a payment method are excluded pending classification.",
         columns: [
             { label: "Date", value: r => afARFormatDate(r.date) },
             { label: "Reference", key: "reference" },

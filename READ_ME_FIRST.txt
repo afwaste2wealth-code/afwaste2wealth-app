@@ -1,3 +1,2 @@
-A&F Wekavera accounting candidate (audit-safe reversal change only).
-NOT FOR GITHUB COMMIT. Full accounting integration and browser regression tests remain incomplete.
-The included app.js is a candidate, not the verified stable version.
+TEST CANDIDATE - DO NOT COMMIT UNTIL TESTED.
+Adds Other Funds receipts to cash/bank book reports by reading the existing funding ledger. No data migration or general journal posting. Director loan cash receipt UGX 50,000 should appear once. Does not yet reconcile main journal or opening balances. Historical loan repayments without payment method are excluded. Keep existing working app.js and factory backup.
