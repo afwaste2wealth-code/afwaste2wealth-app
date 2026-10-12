@@ -1,8 +1,22 @@
-A&F Director Audit Upgrade
+A&F WEKAVERA LTD — COMBINED SIDEBAR + PETTY LOANS TEST PACKAGE
+12 October 2026
 
-1. BACK UP live browser data and current app.js first.
-2. Upload ONLY app.js from this package to the existing GitHub repository, replacing app.js. Keep index.html and other files unchanged.
-3. Reload application, sign in as Director, click the bottom-right 'System Audit & Reconciliation' button.
-4. Upload the downloaded AF_Modernization_Diagnostics_READ_ONLY.json here for review.
+This replaces the earlier sidebar-only ZIP; use this combined package instead.
+Contents: app.js (complete JavaScript source).
 
-This audit is READ ONLY. It does not reconcile company-wide accounts or migrate data. Director role restriction is client-side only and not secure against local browser tampering. Do not rely on this as final access control.
+Included:
+- Earlier sidebar cleanup, advanced accounting/audit tools preserved.
+- Petty Loans filter buttons: All, Active, Overdue, Rejected, Closed, Pending, Voided.
+- Individual lender selector, showing principal, repayments and outstanding amounts.
+- Director-only Edit for PENDING or REJECTED loans, with mandatory reason and before/after audit.
+- Director-only Void for PENDING or REJECTED loans, with reason and retained record.
+- Approved loans and their repayments are NOT editable or voidable in this release because reversing posted accounting entries requires controlled counter-entries.
+- Secretary retains view and existing permitted entry capabilities.
+- Alerts limited to approved outstanding loans.
+
+Verification:
+- Complete JavaScript passed node --check.
+- ZIP CRC integrity checked.
+- NOT live browser tested. NOT a certified final production accounting release.
+
+IMPORTANT: Before replacing your current GitHub app.js, preserve a copy of the committed working version. This package includes no company data or browser backup. Check Petty Loans in Director and Secretary roles before adopting.
