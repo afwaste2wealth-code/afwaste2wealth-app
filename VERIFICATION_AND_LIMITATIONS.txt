@@ -1,0 +1,10 @@
+A&F Wekavera Ltd — V1 stabilization verification (2026-10-13)
+
+BASELINE: AF_Wekavera_Petty_Loans_Organized_UI_TEST.zip (last confirmed committed package).
+CHANGES: petty-loan repayments now require whole-UGX amounts and an explicit Cash/Bank/Mobile Money method. New petty-loan submissions reject fractional amounts. Existing stored records are untouched.
+
+CHECKS: full source parses with node --check; source replacement assertions passed; ZIP CRC checked.
+NOT VERIFIED: actual live browser workflows, production cloud sync, historical balances, stock/payroll reconciliation, secure role authorization.
+ACCOUNTING LIMITATION: unified accounting display is marked partial by source code; petty loans and general ledger are not fully integrated.
+
+RELEASE STATUS: STABILIZATION CANDIDATE ONLY. Not certified as a final financial system. Keep a copy of the current deployed app and backup local business data before testing. Do not assume code deployment migrates localStorage.
