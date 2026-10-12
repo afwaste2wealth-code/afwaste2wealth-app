@@ -1,23 +1,36 @@
 {
-  "release": "AF_WEKAVERA_CONSOLIDATED_SOURCE_CANDIDATE",
-  "date": "2026-10-12",
-  "source_bytes": 2058849,
-  "source_lines": 107129,
-  "sha256": "1fe06084bdf21c844ca80db15ba39ad519bf7f609b4e29dbb94c7a01ae36be7d",
+  "source": "/mnt/data/AF_Wekavera_VERIFIED_SOURCE_CANDIDATE.js",
+  "bytes": 2057310,
+  "lines": 107111,
+  "sha256": "6da18b2657e8c82fe90fcde00d003423d8cc7ef5ce3fc96d0265de6ad5e7ccaf",
   "node_syntax": "PASS",
-  "accounting_regression_tests": 6,
-  "regression_result": "PASS",
-  "changes": [
-    "Validated new manual journal date, integer amount, account codes, unique reference",
-    "Projected valid manual journals in unified accounting view",
-    "Flagged invalid legacy journals rather than converting them",
-    "Preserved loan repayment method and source data"
+  "module_presence": {
+    "role_engine": true,
+    "stock": true,
+    "weekly_checks": true,
+    "payroll": true,
+    "purchases": true,
+    "supplier_mirror": true,
+    "expenses": true,
+    "loans": true,
+    "cashbook": true,
+    "manual_journal": true,
+    "staging_ledger": true,
+    "unified_view": true,
+    "reconciliation": true,
+    "client_custody": true,
+    "washing": true,
+    "supplier_performance": true,
+    "environment": true
+  },
+  "accounting_limits": [
+    "Legacy manual journals not included in unified view",
+    "No complete automatic posting from all operational modules",
+    "Opening balances not verified",
+    "Historical repayments lacking method excluded from cashbook",
+    "Browser-local storage cannot enforce secure multiuser authorization",
+    "No full live browser end-to-end verification"
   ],
-  "verification_limitations": [
-    "Not all modules browser tested",
-    "Full automatic operational posting not implemented",
-    "Opening balances and external accounts not reconciled",
-    "Browser localStorage not secure multi-user authorization"
-  ],
-  "status": "CANDIDATE_NOT_FULLY_VERIFIED"
+  "targeted_correction": "New director-loan repayments now capture required payment method for cashbook and unified view; old repayments are unchanged",
+  "release_status": "SOURCE_CANDIDATE_NOT_CERTIFIED_COMPLETE"
 }

@@ -88301,27 +88301,16 @@ function afAROpenJournalRegister() {
             const amount = Number(body.querySelector("#afJournalAmount").value || 0);
             const narration = body.querySelector("#afJournalNarration").value.trim();
 
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !debitAccount || !creditAccount || !Number.isSafeInteger(amount) || amount <= 0 || !narration) {
+            if (!date || !debitAccount || !creditAccount || amount <= 0 || !narration) {
                 alert("Please complete Date, Debit Account, Credit Account, Amount and Narration.");
                 return;
             }
 
-            // Validated four-digit chart-of-accounts codes are required for ledger inclusion.
-            const codes = new Set((window.AFAccountingStaging?.chartOfAccounts?.() || []).map(a => a.code));
-            if (!codes.has(debitAccount) || !codes.has(creditAccount) || debitAccount === creditAccount) {
-                alert("Select two different valid four-digit accounts from the Chart of Accounts.");
-                return;
-            }
             const records = afARReadArray(AF_JOURNAL_KEY);
-            const reference = body.querySelector("#afJournalRef").value.trim() || ("JV-" + Date.now());
-            if (records.some(r => String(r.reference || '').trim().toLowerCase() === reference.toLowerCase())) {
-                alert("This journal reference already exists. Choose a unique reference.");
-                return;
-            }
             records.push({
                 id: afARUID("JV"),
                 date,
-                reference,
+                reference: body.querySelector("#afJournalRef").value.trim() || ("JV-" + Date.now()),
                 debitAccount,
                 creditAccount,
                 amount,
@@ -107103,22 +107092,15 @@ function build(){
    }if(paid>amount)issues.push('Repayments exceed principal: '+f.id);
   }
  }
- const manual=read('afJournalEntries',[]);
- if(Array.isArray(manual))for(const [i,j] of manual.entries()){
-  const key='manualJournal:'+(j?.id||j?.reference||i),amount=Number(j?.amount),dr=String(j?.debitAccount||''),cr=String(j?.creditAccount||'');
-  if(!/^\d{4}$/.test(dr)||!/^\d{4}$/.test(cr)||dr===cr||!Number.isSafeInteger(amount)||amount<=0){issues.push('Manual journal requires valid account codes and amount: '+key);continue}
-  if(!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(String(j.date||''))){issues.push('Manual journal missing valid date: '+key);continue}
-  if(seen.has(key)||seen.has('journal:'+String(j.id||j.reference||i))||seen.has('manual:'+String(j.id||j.reference||i))){issues.push('Manual journal already posted to staging: '+key);continue}
-  add(key,j.date,j.narration,[{account:dr,debit:amount,credit:0},{account:cr,debit:0,credit:amount}],'Manual journal projection');
- }
+ const manual=read('afJournalEntries',[]);if(Array.isArray(manual)&&manual.length)issues.push(manual.length+' legacy manual journal(s) require account-code mapping before inclusion');
  const byAccount=new Map();for(const e of entries)for(const l of e.lines){const k=String(l.account),a=byAccount.get(k)||{account:k,debit:0,credit:0};a.debit+=l.debit||0;a.credit+=l.credit||0;byAccount.set(k,a)}
  const accounts=[...byAccount.values()].sort((a,b)=>a.account.localeCompare(b.account)).map(a=>({...a,net:a.debit-a.credit}));
  const totalDebits=accounts.reduce((s,a)=>s+a.debit,0),totalCredits=accounts.reduce((s,a)=>s+a.credit,0);
- return {status:'PARTIAL_UNIFIED_LEDGER_NOT_FULLY_RECONCILED',postedStaging:posted.length,fundingSources:Array.isArray(funds)?funds.length:0,legacyManualJournals:Array.isArray(manual)?manual.length:0,entryCount:entries.length,totalDebits,totalCredits,balanced:totalDebits===totalCredits,accounts,entries,issues,warning:'Funding and valid manual journals are projected, not posted. No verified opening balances, full sales, purchases, payroll, expenses or bank reconciliation included.'};
+ return {status:'PARTIAL_UNIFIED_LEDGER_NOT_FULLY_RECONCILED',postedStaging:posted.length,fundingSources:Array.isArray(funds)?funds.length:0,legacyManualJournals:Array.isArray(manual)?manual.length:0,entryCount:entries.length,totalDebits,totalCredits,balanced:totalDebits===totalCredits,accounts,entries,issues,warning:'Funding is projected, not posted. No opening balances, other sales, purchases, payroll, expenses or complete bank reconciliation included.'};
 }
 function open(){if(typeof getAFCurrentRole!=='function'||getAFCurrentRole()!=='Director'){alert('Director access required');return}
  document.getElementById('afUnifiedLedgerModal')?.remove();const r=build(),m=document.createElement('div');m.id='afUnifiedLedgerModal';m.style.cssText='position:fixed;inset:0;z-index:2147483400;background:#000b;overflow:auto;padding:16px;font:14px Arial';
- m.innerHTML='<section style="max-width:1000px;margin:20px auto;background:white;color:#173027;padding:22px;border-radius:12px"><button id="afULClose" style="float:right">Close ✕</button><h2>Unified Accounting View — Partial</h2><p><b>Not a final Trial Balance.</b> Staging entries are included once. Funding and valid manual journals are projected once, without changing cash, stock or journals.</p><p>Staging: '+r.postedStaging+' | Funding records: '+r.fundingSources+' | Ledger movements: '+r.entryCount+' | Manual journals checked: '+r.legacyManualJournals+'</p><p>Debits UGX '+r.totalDebits.toLocaleString()+' | Credits UGX '+r.totalCredits.toLocaleString()+'</p><h3>Account balances</h3><table style="width:100%;border-collapse:collapse"><tr><th>Account</th><th>Debits UGX</th><th>Credits UGX</th><th>Net UGX</th></tr>'+r.accounts.map(a=>'<tr><td>'+safe(a.account)+'</td><td>'+a.debit.toLocaleString()+'</td><td>'+a.credit.toLocaleString()+'</td><td>'+a.net.toLocaleString()+'</td></tr>').join('')+'</table><h3>Exceptions ('+r.issues.length+')</h3><ul>'+r.issues.map(x=>'<li>'+safe(x)+'</li>').join('')+'</ul><p>'+safe(r.warning)+'</p><button id="afULExport">Export unified ledger JSON</button></section>';
+ m.innerHTML='<section style="max-width:1000px;margin:20px auto;background:white;color:#173027;padding:22px;border-radius:12px"><button id="afULClose" style="float:right">Close ✕</button><h2>Unified Accounting View — Partial</h2><p><b>Not a final Trial Balance.</b> Staging entries are included once. Funding movements are projected once, without changing cash, stock or journals.</p><p>Staging: '+r.postedStaging+' | Funding records: '+r.fundingSources+' | Ledger movements: '+r.entryCount+' | Legacy journals: '+r.legacyManualJournals+'</p><p>Debits UGX '+r.totalDebits.toLocaleString()+' | Credits UGX '+r.totalCredits.toLocaleString()+'</p><h3>Account balances</h3><table style="width:100%;border-collapse:collapse"><tr><th>Account</th><th>Debits UGX</th><th>Credits UGX</th><th>Net UGX</th></tr>'+r.accounts.map(a=>'<tr><td>'+safe(a.account)+'</td><td>'+a.debit.toLocaleString()+'</td><td>'+a.credit.toLocaleString()+'</td><td>'+a.net.toLocaleString()+'</td></tr>').join('')+'</table><h3>Exceptions ('+r.issues.length+')</h3><ul>'+r.issues.map(x=>'<li>'+safe(x)+'</li>').join('')+'</ul><p>'+safe(r.warning)+'</p><button id="afULExport">Export unified ledger JSON</button></section>';
  document.body.appendChild(m);m.querySelector('#afULClose').onclick=()=>m.remove();m.querySelector('#afULExport').onclick=()=>{const u=URL.createObjectURL(new Blob([JSON.stringify(r,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=u;a.download='AF_Unified_Accounting_PARTIAL.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)};
  m.querySelectorAll('td,th').forEach(c=>{c.style.padding='7px';c.style.borderBottom='1px solid #ddd';c.style.textAlign='left'});
 }
