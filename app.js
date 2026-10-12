@@ -18282,22 +18282,11 @@ function afRefreshSupplierPaymentSummary(record) {
     .reduce((sum, payment) => sum + Math.max(Number(payment.amount) || 0, 0), 0);
   record.materialCost = due;
   record.supplierAmountPaid = paid;
-  // Approved non-cash settlement discounts reduce the payable, not cash paid.
-  const settlementDiscount = (String(record.id) === "1791244969174" && String(record.batchNumber) === "KB002")
-    ? (function(){
-        try {
-          const entries = JSON.parse(localStorage.getItem("afSupplierSettlementAdjustmentsV1") || "[]");
-          return Array.isArray(entries) ? entries.filter(x => x && x.id === "AF-S6-KB002-001" &&
-            x.type === "SUPPLIER_SETTLEMENT_DISCOUNT" && x.approvedByRole === "Director")
-            .reduce((sum,x) => sum + Number(x.amountUGX || 0), 0) : 0;
-        } catch (_) { return 0; }
-      })() : 0;
-  record.supplierSettlementDiscount = settlementDiscount;
-  record.supplierBalance = Math.max(due - paid - settlementDiscount, 0);
+  record.supplierBalance = Math.max(due - paid, 0);
   record.supplierPaymentStatus =
     due <= 0 ? "No Supplier Amount" :
-    record.supplierBalance <= 0.001 ? "Paid in Full" :
-    paid <= 0 ? "Unpaid" : "Partly Paid";
+    paid <= 0 ? "Unpaid" :
+    paid + 0.001 >= due ? "Paid in Full" : "Partly Paid";
   return record;
 }
 
@@ -76688,11 +76677,7 @@ column.appendChild(
      */
     if (
       performance.parentElement !== column ||
-      !(
-        letters.nextElementSibling === performance ||
-        (letters.nextElementSibling?.id === "afUgandaEnvironmentalNewsCard" &&
-         letters.nextElementSibling.nextElementSibling === performance)
-      )
+      letters.nextElementSibling !== performance
     ) {
       letters.insertAdjacentElement(
         "afterend",
@@ -76750,9 +76735,7 @@ afFixSupplierPerformancePosition,
         column &&
         letters.parentElement === column &&
         performance.parentElement === column &&
-        (letters.nextElementSibling === performance ||
-         (letters.nextElementSibling?.id === "afUgandaEnvironmentalNewsCard" &&
-          letters.nextElementSibling.nextElementSibling === performance));
+        letters.nextElementSibling === performance;
 
       if (!alreadyCorrect) {
         afFixSupplierPerformancePosition();
@@ -87777,48 +87760,6 @@ function afARPaymentBook(methodGroup) {
 
     const entries = [];
 
-    /* Funding entries are projected from their source ledger on every report
-       opening. No new source record or journal posting is created here. */
-    afARReadArray("afOtherFundsV1").forEach(funding => {
-        if (!funding || funding.reversedAt) return;
-        const method = String(funding.method || "").trim().toLowerCase();
-        const normalized = method === "bank" ? "bank transfer" : method;
-        if (!wanted.includes(normalized)) return;
-        const amount = Number(funding.amount);
-        if (!Number.isSafeInteger(amount) || amount <= 0) return;
-        const label = funding.type === "directorLoan" ? "Director loan received" :
-            funding.type === "capital" ? "Owner capital contribution" :
-            funding.type === "otherIncome" ? "Other company income" : null;
-        if (!label) return;
-        entries.push({
-            date: afARDateValue(funding.date || funding.createdAt),
-            reference: funding.id || "",
-            particulars: label + " - " + (funding.source || ""),
-            method: funding.method || "",
-            received: amount,
-            paid: 0
-        });
-        if (funding.type === "directorLoan" && Array.isArray(funding.payments)) {
-            funding.payments.forEach(payment => {
-                const repaymentAmount = Number(payment.amount);
-                if (!Number.isSafeInteger(repaymentAmount) || repaymentAmount <= 0) return;
-                /* Older repayment records have no payment-method field.
-                   Do not guess their cash/bank classification. */
-                const repaymentMethod = String(payment.method || "").trim().toLowerCase();
-                const repaymentNormalized = repaymentMethod === "bank" ? "bank transfer" : repaymentMethod;
-                if (!wanted.includes(repaymentNormalized)) return;
-                entries.push({
-                    date: afARDateValue(payment.date || payment.at),
-                    reference: payment.id || "",
-                    particulars: "Director loan repayment - " + (funding.source || ""),
-                    method: payment.method,
-                    received: 0,
-                    paid: repaymentAmount
-                });
-            });
-        }
-    });
-
     customerPayments.forEach(record => {
         const method = afARPaymentMethod(record).toLowerCase();
         if (!wanted.includes(method)) return;
@@ -87937,8 +87878,8 @@ function afAROpenCashBook() {
     afAROpenTableReport({
         id: "afCashBookModal",
         title: "Cash Book",
-        subtitle: "Recorded Cash and Mobile Money receipts/payments, including funding receipts",
-        note: "Includes active funding receipts from the Other Funds ledger without duplicating source records. Opening balances and full general-ledger reconciliation remain outstanding; do not treat the running balance as a final accounting cash balance. Historical loan repayments without a payment method are excluded pending classification.",
+        subtitle: "Recorded Cash and Mobile Money receipts/payments",
+        note: "This book is based on customer payments and expenses already recorded in the application. Add opening cash balances and any other cash movements through the future double-entry accounting engine before treating the balance as a final accounting cash balance.",
         columns: [
             { label: "Date", value: r => afARFormatDate(r.date) },
             { label: "Reference", key: "reference" },
@@ -88301,27 +88242,16 @@ function afAROpenJournalRegister() {
             const amount = Number(body.querySelector("#afJournalAmount").value || 0);
             const narration = body.querySelector("#afJournalNarration").value.trim();
 
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !debitAccount || !creditAccount || !Number.isSafeInteger(amount) || amount <= 0 || !narration) {
+            if (!date || !debitAccount || !creditAccount || amount <= 0 || !narration) {
                 alert("Please complete Date, Debit Account, Credit Account, Amount and Narration.");
                 return;
             }
 
-            // Validated four-digit chart-of-accounts codes are required for ledger inclusion.
-            const codes = new Set((window.AFAccountingStaging?.chartOfAccounts?.() || []).map(a => a.code));
-            if (!codes.has(debitAccount) || !codes.has(creditAccount) || debitAccount === creditAccount) {
-                alert("Select two different valid four-digit accounts from the Chart of Accounts.");
-                return;
-            }
             const records = afARReadArray(AF_JOURNAL_KEY);
-            const reference = body.querySelector("#afJournalRef").value.trim() || ("JV-" + Date.now());
-            if (records.some(r => String(r.reference || '').trim().toLowerCase() === reference.toLowerCase())) {
-                alert("This journal reference already exists. Choose a unique reference.");
-                return;
-            }
             records.push({
                 id: afARUID("JV"),
                 date,
-                reference,
+                reference: body.querySelector("#afJournalRef").value.trim() || ("JV-" + Date.now()),
                 debitAccount,
                 creditAccount,
                 amount,
@@ -88527,7 +88457,7 @@ function openAFAccountsReports() {
 
         <div style="font-weight:bold;color:#0b5d3b;margin:20px 0 9px;">Ledgers</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;">
-            ${card("generalLedger", "📚", "General Ledger", "Staging debit/credit ledger", "STAGING")}
+            ${card("generalLedger", "📚", "General Ledger", "Central debit/credit ledger", "ENGINE NEXT")}
             ${card("debtors", "👥", "Customer / Debtors Ledger", "Sales, payments and customer balances")}
             ${card("creditors", "🤝", "Supplier / Creditors Ledger", "Purchases and supplier position")}
             ${card("payroll", "👤", "Payroll Ledger", "Employee earnings, payments and balances")}
@@ -88537,10 +88467,10 @@ function openAFAccountsReports() {
 
         <div style="font-weight:bold;color:#0b5d3b;margin:20px 0 9px;">Financial Statements</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;">
-            ${card("trialBalance", "⚖️", "Trial Balance", "Staging account balances", "STAGING")}
+            ${card("trialBalance", "⚖️", "Trial Balance", "Debit and credit account balances", "ENGINE NEXT")}
             ${card("profitLoss", "📈", "Profit & Loss", "Sales, COGS, expenses and net result")}
-            ${card("balanceSheet", "🏢", "Balance Sheet", "Staging assets and liabilities", "STAGING")}
-            ${card("cashFlow", "💰", "Cash Flow Statement", "Unreconciled staging cash movements", "STAGING")}
+            ${card("balanceSheet", "🏢", "Balance Sheet", "Assets, liabilities and equity", "ENGINE NEXT")}
+            ${card("cashFlow", "💰", "Cash Flow Statement", "Operating, investing and financing cash flows", "ENGINE NEXT")}
         </div>
 
         <div style="font-weight:bold;color:#0b5d3b;margin:20px 0 9px;">Factory Records & Export</div>
@@ -90623,13 +90553,6 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
         30,
         clean.length * 7
       );
-
-    const signature = JSON.stringify({
-      items: clean.map(item => [item.title, item.link, item.source, item.pubDate]),
-      fallback
-    });
-    if (body.dataset.afNewsSignature === signature && body.firstElementChild) return;
-    body.dataset.afNewsSignature = signature;
 
     body.innerHTML = `
       <div class="afEnvViewport">
@@ -106198,23 +106121,17 @@ const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth
 const num=v=>Math.max(0,Number(v)||0);
 const payments=l=>num((l.payments||[]).reduce((a,p)=>a+num(p.amount),0));
 const due=l=>num(l.principal)+num(l.interest)-payments(l);
-const visible=l=>!l.voidedAt;
-let activeFilter='all', lenderFilter='';
 const audit=(action,id,reason='')=>{const a=read(AUDIT);a.push({action,id,reason,actor:actor(),at:new Date().toISOString()});write(AUDIT,a)};
 const entry=(id,type,amount)=>{const a=read(LEDGER);a.push({id:Date.now()+'-'+Math.random().toString(36).slice(2),loanId:id,type,amount,at:new Date().toISOString(),by:actor()});write(LEDGER,a)};
 const daysLeft=date=>{const a=new Date(today()+'T00:00:00');const b=new Date(date+'T00:00:00');return Math.round((b-a)/86400000)};
-const status=l=>{if(l.voidedAt)return 'Voided';if(l.state==='pending')return 'Awaiting approval';if(l.state==='rejected')return 'Rejected';if(due(l)<=0)return 'Paid';const d=daysLeft(l.dueDate);return d<0?'Overdue':d===0?'Due today':d<=2?'Due soon':'Active'};
+const status=l=>{if(l.state==='pending')return 'Awaiting approval';if(l.state==='rejected')return 'Rejected';if(due(l)<=0)return 'Paid';const d=daysLeft(l.dueDate);return d<0?'Overdue':d===0?'Due today':d<=2?'Due soon':'Active'};
 const modal=()=>{let x=document.getElementById('afPettyLoanModal');if(x)return x;x=document.createElement('div');x.id='afPettyLoanModal';x.style.cssText='position:fixed;inset:0;background:#0009;z-index:2147483000;display:none;overflow:auto;padding:20px';x.innerHTML='<div style="background:white;color:#183329;max-width:980px;margin:25px auto;border-radius:12px;padding:22px;box-shadow:0 10px 50px #0005"><div style="display:flex;justify-content:space-between;gap:15px;align-items:center"><h2 style="margin:0">💳 Petty Loans & Repayments</h2><button id="afPLClose" type="button">✕ Close</button></div><div id="afPLBody"></div></div>';document.body.appendChild(x);x.querySelector('#afPLClose').onclick=()=>x.style.display='none';return x};
 const btn=(name,action)=>`<button type="button" data-pl="${action}" style="padding:7px 10px;margin:3px;border:1px solid #c5d6cd;border-radius:6px;background:#edf6f0;cursor:pointer">${name}</button>`;
-function render(){const m=modal(),body=m.querySelector('#afPLBody'),r=role();if(!['Director','Secretary'].includes(r)){alert('Director or Secretary access required');return}m.style.display='block';const loans=read(KEY).slice().reverse();const approved=loans.filter(x=>visible(x)&&x.state==='approved');const out=approved.reduce((a,x)=>a+due(x),0);const overdue=approved.filter(x=>due(x)>0&&daysLeft(x.dueDate)<0).length;const borrowed=approved.reduce((a,x)=>a+num(x.principal),0);const totalRepayable=approved.reduce((a,x)=>a+num(x.principal)+num(x.interest),0);const totalPayments=approved.reduce((a,x)=>a+payments(x),0);const percentagePaid=totalRepayable>0?Math.min(100,Math.max(0,totalPayments/totalRepayable*100)):0;
+function render(){const m=modal(),body=m.querySelector('#afPLBody'),r=role();if(!['Director','Secretary'].includes(r)){alert('Director or Secretary access required');return}m.style.display='block';const loans=read(KEY).slice().reverse();const approved=loans.filter(x=>x.state==='approved');const out=approved.reduce((a,x)=>a+due(x),0);const overdue=approved.filter(x=>due(x)>0&&daysLeft(x.dueDate)<0).length;const borrowed=approved.reduce((a,x)=>a+num(x.principal),0);const totalRepayable=approved.reduce((a,x)=>a+num(x.principal)+num(x.interest),0);const totalPayments=approved.reduce((a,x)=>a+payments(x),0);const percentagePaid=totalRepayable>0?Math.min(100,Math.max(0,totalPayments/totalRepayable*100)):0;
 body.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:9px;margin:14px 0">${[
-['Outstanding',money(out)],['Overdue Loans',String(overdue)],['Pending Approval',String(loans.filter(x=>visible(x)&&x.state==='pending').length)],['Total Payments',money(totalPayments)],['Total Borrowed',money(borrowed)],['Total Repayable',money(totalRepayable)]
+['Outstanding',money(out)],['Overdue Loans',String(overdue)],['Pending Approval',String(loans.filter(x=>x.state==='pending').length)],['Total Payments',money(totalPayments)],['Total Borrowed',money(borrowed)],['Total Repayable',money(totalRepayable)]
 ].map(([label,value])=>`<div style="padding:12px;border:1px solid #d7e3dc;border-radius:8px;background:#f5faf7"><div style="font-size:12px;color:#4e685b">${label}</div><strong style="display:block;font-size:17px;margin-top:5px">${value}</strong></div>`).join('')}</div>
 <div style="padding:12px;border:1px solid #d7e3dc;border-radius:8px;margin:10px 0"><div style="display:flex;justify-content:space-between;align-items:center"><b>Percentage Paid</b><b>${percentagePaid.toFixed(1)}%</b></div><div style="background:#e5eae7;border-radius:99px;height:12px;overflow:hidden;margin-top:8px"><div style="height:100%;width:${percentagePaid}%;background:#22875b;border-radius:99px"></div></div><small style="color:#586c60">Actual repayments ÷ approved total repayable (principal + interest). Pending/rejected loans excluded.</small></div>
-<section style="border:1px solid #d7e3dc;padding:12px;border-radius:8px;margin:12px 0"><h3 style="margin:0 0 8px">Individual lender accounts & loan records</h3>
-<div style="display:flex;gap:7px;flex-wrap:wrap">${[['all','All'],['approved','Active'],['overdue','Overdue'],['rejected','Rejected'],['paid','Closed'],['pending','Pending'],['voided','Voided']].map(([k,t])=>btn(t+' ('+loans.filter(l=>k==='all'?visible(l):k==='voided'?!!l.voidedAt:visible(l)&&(k==='approved'?l.state==='approved'&&due(l)>0&&daysLeft(l.dueDate)>=0:k==='overdue'?l.state==='approved'&&due(l)>0&&daysLeft(l.dueDate)<0:k==='paid'?l.state==='approved'&&due(l)===0:l.state===k)).length+')','filter:'+k)).join('')}</div>
-<label style="display:block;margin-top:10px">Individual lender account <select id="afPLLender" style="padding:8px;max-width:100%;margin-left:8px"><option value="">All lenders</option>${[...new Set(loans.map(l=>String(l.lender||'').trim()).filter(Boolean))].sort().map(n=>'<option value="'+esc(n)+'"'+(n===lenderFilter?' selected':'')+'>'+esc(n)+'</option>').join('')}</select></label>
-<div id="afPLAccountStatement" style="margin-top:10px"></div></section>
 <form id="afPLForm" style="border:1px solid #d7e3dc;padding:12px;border-radius:8px;margin:12px 0"><h3>Record a factory loan</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px">
 <label>Lender<input name="lender" required maxlength="150" style="display:block;width:100%;padding:8px"></label>
 <label>Principal (UGX)<input name="principal" required type="number" min="1" step="1" style="display:block;width:100%;padding:8px"></label>
@@ -106224,41 +106141,17 @@ body.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,m
 <label>Repayment due<input name="dueDate" type="date" required value="${today()}" style="display:block;width:100%;padding:8px"></label></div>
 <label>Purpose / notes<input name="purpose" maxlength="250" style="display:block;width:100%;padding:8px"></label>
 <p id="afPLPreview"></p><button type="submit" style="padding:9px 16px">Save loan for Director approval</button></form>
-<div style="overflow:auto"><table style="border-collapse:collapse;width:100%;font-size:13px"><thead><tr><th>Lender</th><th>Principal</th><th>Interest</th><th>Total</th><th>Paid</th><th>Paid %</th><th>Outstanding</th><th>Due</th><th>Status</th><th>Actions</th></tr></thead><tbody>${loans.filter(l=>(!lenderFilter||l.lender===lenderFilter)&&(activeFilter==='all'?visible(l):activeFilter==='voided'?!!l.voidedAt:visible(l)&&(activeFilter==='approved'?l.state==='approved'&&due(l)>0&&daysLeft(l.dueDate)>=0:activeFilter==='overdue'?l.state==='approved'&&due(l)>0&&daysLeft(l.dueDate)<0:activeFilter==='paid'?l.state==='approved'&&due(l)===0:l.state===activeFilter))).map(l=>`<tr><td>${esc(l.lender)}<small style="display:block">${esc(l.purpose)}</small></td><td>${money(l.principal)}</td><td>${money(l.interest)}</td><td>${money(num(l.principal)+num(l.interest))}</td><td>${money(payments(l))}</td><td><div style="min-width:75px">${(num(l.principal)+num(l.interest))>0?Math.min(100,Math.max(0,payments(l)/(num(l.principal)+num(l.interest))*100)).toFixed(1):'0.0'}%<div style="height:5px;background:#e5eae7;border-radius:8px;overflow:hidden"><div style="height:100%;background:#22875b;width:${(num(l.principal)+num(l.interest))>0?Math.min(100,Math.max(0,payments(l)/(num(l.principal)+num(l.interest))*100)):0}%"></div></div></div></td><td>${money(due(l))}</td><td>${esc(l.dueDate)}</td><td>${status(l)}</td><td>${r==='Director'&&l.state==='pending'?btn('Approve','approve:'+l.id)+btn('Reject','reject:'+l.id):''}${l.state==='approved'&&due(l)>0?btn('Record repayment','pay:'+l.id):''}${btn('History','history:'+l.id)}${r==='Director'&&!l.voidedAt&&['pending','rejected'].includes(l.state)?btn('Edit','edit:'+l.id)+btn('Void','void:'+l.id):''}</td></tr>`).join('')||'<tr><td colspan="10">No loans recorded yet.</td></tr>'}</tbody></table></div>
+<div style="overflow:auto"><table style="border-collapse:collapse;width:100%;font-size:13px"><thead><tr><th>Lender</th><th>Principal</th><th>Interest</th><th>Total</th><th>Paid</th><th>Paid %</th><th>Outstanding</th><th>Due</th><th>Status</th><th>Actions</th></tr></thead><tbody>${loans.map(l=>`<tr><td>${esc(l.lender)}<small style="display:block">${esc(l.purpose)}</small></td><td>${money(l.principal)}</td><td>${money(l.interest)}</td><td>${money(num(l.principal)+num(l.interest))}</td><td>${money(payments(l))}</td><td><div style="min-width:75px">${(num(l.principal)+num(l.interest))>0?Math.min(100,Math.max(0,payments(l)/(num(l.principal)+num(l.interest))*100)).toFixed(1):'0.0'}%<div style="height:5px;background:#e5eae7;border-radius:8px;overflow:hidden"><div style="height:100%;background:#22875b;width:${(num(l.principal)+num(l.interest))>0?Math.min(100,Math.max(0,payments(l)/(num(l.principal)+num(l.interest))*100)):0}%"></div></div></div></td><td>${money(due(l))}</td><td>${esc(l.dueDate)}</td><td>${status(l)}</td><td>${r==='Director'&&l.state==='pending'?btn('Approve','approve:'+l.id)+btn('Reject','reject:'+l.id):''}${l.state==='approved'&&due(l)>0?btn('Record repayment','pay:'+l.id):''}${btn('History','history:'+l.id)}</td></tr>`).join('')||'<tr><td colspan="10">No loans recorded yet.</td></tr>'}</tbody></table></div>
 <p style="font-size:12px;color:#555">Company loans are liabilities, not sales. This module keeps its own loan cash ledger; do not also post the same borrowing or repayment as an ordinary expense or sale.</p>`;
 body.querySelectorAll('td,th').forEach(c=>{c.style.padding='8px';c.style.borderBottom='1px solid #ddd';c.style.textAlign='left'});
-const lenderSelect=body.querySelector('#afPLLender');
-lenderSelect.onchange=()=>{lenderFilter=lenderSelect.value;render()};
-const accountBox=body.querySelector('#afPLAccountStatement');
-if(lenderFilter){const items=loans.filter(l=>l.lender===lenderFilter&&!l.voidedAt),accepted=items.filter(l=>l.state==='approved');accountBox.innerHTML='<b>'+esc(lenderFilter)+'</b> — '+items.length+' loan record(s), '+accepted.filter(l=>due(l)>0).length+' outstanding; total principal '+money(accepted.reduce((n,l)=>n+num(l.principal),0))+', repaid '+money(accepted.reduce((n,l)=>n+payments(l),0))+', outstanding '+money(accepted.reduce((n,l)=>n+due(l),0))+'. <small>Individual account is a view of existing loan records; no duplicate postings.</small>'}
 const f=body.querySelector('#afPLForm');const preview=()=>{const p=num(f.elements.principal.value),v=num(f.elements.interestValue.value),t=f.elements.interestType.value;const i=t==='fixed'?v:t==='percent'?Math.round(p*v/100):0;body.querySelector('#afPLPreview').textContent='Interest: '+money(i)+' | Total repayment: '+money(p+i)};f.addEventListener('input',preview);preview();
 f.onsubmit=e=>{e.preventDefault();const p=num(f.elements.principal.value),v=num(f.elements.interestValue.value),t=f.elements.interestType.value,i=t==='fixed'?v:t==='percent'?Math.round(p*v/100):0;if(!p||!f.elements.lender.value.trim()||!f.elements.dueDate.value){alert('Enter lender, amount and repayment date');return}if(f.elements.dueDate.value<f.elements.receivedDate.value){alert('Due date cannot precede loan date');return}const l={id:'PL-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),lender:f.elements.lender.value.trim(),principal:p,interest:i,interestType:t,interestValue:v,receivedDate:f.elements.receivedDate.value,dueDate:f.elements.dueDate.value,purpose:f.elements.purpose.value,state:'pending',payments:[],createdBy:actor(),createdAt:new Date().toISOString()};const a=read(KEY);a.push(l);write(KEY,a);audit('Loan submitted',l.id);render();refresh()};
-body.querySelectorAll('[data-pl]').forEach(b=>b.onclick=()=>{const [action,id]=b.dataset.pl.split(':');
-if(action==='filter'){activeFilter=id;render();return}
-const a=read(KEY),l=a.find(x=>x.id===id);if(!l)return;
-if(action==='edit'){if(role()!=='Director'||l.voidedAt||!['pending','rejected'].includes(l.state))return;
-const name=prompt('Correct lender name:',l.lender);if(name===null)return;
-const principal=prompt('Correct principal (UGX):',String(l.principal));if(principal===null)return;
-const interest=prompt('Correct interest (UGX):',String(l.interest));if(interest===null)return;
-const dueDate=prompt('Correct due date (YYYY-MM-DD):',l.dueDate);if(dueDate===null)return;
-const reason=prompt('Reason for correction (required):');if(!reason?.trim())return;
-const p=Number(principal),i=Number(interest);
-if(!name.trim()||!Number.isSafeInteger(p)||p<=0||!Number.isSafeInteger(i)||i<0||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(dueDate)||!Number.isFinite(new Date(dueDate+'T00:00:00').getTime())||dueDate<l.receivedDate){alert('Invalid lender, amounts or due date');return}
-if(!confirm('Save correction to this unapproved/rejected loan?'))return;
-const before={lender:l.lender,principal:l.principal,interest:l.interest,dueDate:l.dueDate};
-Object.assign(l,{lender:name.trim(),principal:p,interest:i,dueDate,correctedAt:new Date().toISOString(),correctedBy:actor()});
-const history=read(AUDIT);history.push({action:'Loan corrected',id:l.id,reason:reason.trim(),before,after:{lender:l.lender,principal:p,interest:i,dueDate},actor:actor(),at:new Date().toISOString()});
-write(AUDIT,history);write(KEY,a);render();refresh();return}
-if(action==='void'){if(role()!=='Director'||l.voidedAt||!['pending','rejected'].includes(l.state))return;
-const reason=prompt('Reason for voiding this unapproved/rejected record (required):');if(!reason?.trim())return;
-if(!confirm('Void this loan record? The original will remain in audit history.'))return;
-l.voidedAt=new Date().toISOString();l.voidedBy=actor();l.voidReason=reason.trim();audit('Loan voided',l.id,reason.trim());write(KEY,a);render();refresh();return}
-if(action==='approve'||action==='reject'){if(role()!=='Director'||l.state!=='pending')return;const reason=action==='reject'?prompt('Reason for rejecting loan:'):'';if(action==='reject'&&!reason?.trim())return;if(!confirm(action==='approve'?'Confirm company loan was actually received? This will post the borrowing to the loan cash ledger.':'Reject this loan?'))return;l.state=action==='approve'?'approved':'rejected';l.reviewedBy=actor();l.reviewedAt=new Date().toISOString();if(action==='approve')entry(l.id,'BORROWING_CASH_IN',l.principal);audit(action,l.id,reason||'');write(KEY,a);render();refresh()}
+body.querySelectorAll('[data-pl]').forEach(b=>b.onclick=()=>{const [action,id]=b.dataset.pl.split(':');const a=read(KEY),l=a.find(x=>x.id===id);if(!l)return;if(action==='approve'||action==='reject'){if(role()!=='Director'||l.state!=='pending')return;const reason=action==='reject'?prompt('Reason for rejecting loan:'):'';if(action==='reject'&&!reason?.trim())return;if(!confirm(action==='approve'?'Confirm company loan was actually received? This will post the borrowing to the loan cash ledger.':'Reject this loan?'))return;l.state=action==='approve'?'approved':'rejected';l.reviewedBy=actor();l.reviewedAt=new Date().toISOString();if(action==='approve')entry(l.id,'BORROWING_CASH_IN',l.principal);audit(action,l.id,reason||'');write(KEY,a);render();refresh()}
 if(action==='pay'){if(role()!=='Director'){alert('Director approval is required to confirm repayment');return}const val=prompt('Enter amount actually repaid (UGX). Outstanding: '+money(due(l)));if(val===null)return;const amt=Number(val);if(!Number.isFinite(amt)||amt<=0||amt>due(l)){alert('Enter a valid amount no greater than the outstanding balance');return}if(!confirm('Confirm payment of '+money(amt)+' has actually been made?'))return;l.payments.push({amount:amt,date:today(),by:actor(),at:new Date().toISOString()});entry(l.id,'REPAYMENT_CASH_OUT',amt);audit('Repayment',l.id,money(amt));write(KEY,a);render();refresh()}
 if(action==='history'){alert('Loan: '+l.id+'\nLender: '+l.lender+'\nCreated: '+l.createdBy+'\n'+(l.payments||[]).map(p=>p.date+' - '+money(p.amount)+' by '+p.by).join('\n')+'\nOutstanding: '+money(due(l)))}})
 }
-function nav(){const r=role(),base=document.getElementById('navExpenses');if(!base||!base.parentNode)return;let b=document.getElementById('navPettyLoans');if(!b){b=base.cloneNode(true);b.id='navPettyLoans';b.removeAttribute('onclick');b.onclick=e=>{e.preventDefault();render()};base.insertAdjacentElement('afterend',b)}b.style.display=['Director','Secretary'].includes(r)?'':'none';const alerts=read(KEY).filter(l=>visible(l)&&l.state==='approved'&&due(l)>0&&daysLeft(l.dueDate)<=0);b.textContent='💳 Petty Loans & Repayments'+(alerts.length?' 🔴 '+alerts.length:'')}
-function refresh(){nav();const r=role();let box=document.getElementById('afPettyLoanDashboardAlerts');if(!['Director','Secretary'].includes(r)){if(box)box.remove();return}const main=document.querySelector('#mainApplication .main')||document.querySelector('main');if(!main)return;if(!box){box=document.createElement('section');box.id='afPettyLoanDashboardAlerts';box.style.cssText='margin:12px 0;padding:12px;border-radius:9px;border:2px solid #d5a13c;background:#fff9e8;color:#48320b';main.prepend(box)}const loans=read(KEY).filter(l=>visible(l)&&l.state==='approved'&&due(l)>0&&daysLeft(l.dueDate)<=2);if(!loans.length){box.style.display='none';return}box.style.display='block';box.innerHTML='<style>@keyframes afPLPulse{50%{box-shadow:0 0 0 5px #ed9a5155}}</style><div style="animation:afPLPulse 1.6s infinite"><b>🔔 PETTY LOAN REPAYMENT REMINDERS ('+loans.length+')</b></div>'+loans.map(l=>'<div style="margin-top:6px">'+esc(l.lender)+' — '+money(due(l))+' — '+esc(l.dueDate)+' ('+status(l)+')</div>').join('')+'<button type="button" id="afPLDashboardOpen" style="margin-top:8px">Open Petty Loans</button>';box.querySelector('#afPLDashboardOpen').onclick=render}
+function nav(){const r=role(),base=document.getElementById('navExpenses');if(!base||!base.parentNode)return;let b=document.getElementById('navPettyLoans');if(!b){b=base.cloneNode(true);b.id='navPettyLoans';b.removeAttribute('onclick');b.onclick=e=>{e.preventDefault();render()};base.insertAdjacentElement('afterend',b)}b.style.display=['Director','Secretary'].includes(r)?'':'none';const alerts=read(KEY).filter(l=>l.state!=='rejected'&&due(l)>0&&daysLeft(l.dueDate)<=0);b.textContent='💳 Petty Loans & Repayments'+(alerts.length?' 🔴 '+alerts.length:'')}
+function refresh(){nav();const r=role();let box=document.getElementById('afPettyLoanDashboardAlerts');if(!['Director','Secretary'].includes(r)){if(box)box.remove();return}const main=document.querySelector('#mainApplication .main')||document.querySelector('main');if(!main)return;if(!box){box=document.createElement('section');box.id='afPettyLoanDashboardAlerts';box.style.cssText='margin:12px 0;padding:12px;border-radius:9px;border:2px solid #d5a13c;background:#fff9e8;color:#48320b';main.prepend(box)}const loans=read(KEY).filter(l=>l.state!=='rejected'&&due(l)>0&&daysLeft(l.dueDate)<=2);if(!loans.length){box.style.display='none';return}box.style.display='block';box.innerHTML='<style>@keyframes afPLPulse{50%{box-shadow:0 0 0 5px #ed9a5155}}</style><div style="animation:afPLPulse 1.6s infinite"><b>🔔 PETTY LOAN REPAYMENT REMINDERS ('+loans.length+')</b></div>'+loans.map(l=>'<div style="margin-top:6px">'+esc(l.lender)+' — '+money(due(l))+' — '+esc(l.dueDate)+' ('+status(l)+')</div>').join('')+'<button type="button" id="afPLDashboardOpen" style="margin-top:8px">Open Petty Loans</button>';box.querySelector('#afPLDashboardOpen').onclick=render}
 window.openAFPettyLoans=render;
 if(typeof applyAFRoleDashboard==='function'){const previous=applyAFRoleDashboard;applyAFRoleDashboard=function(){const result=previous.apply(this,arguments);setTimeout(refresh,160);return result}}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',refresh);else refresh();
@@ -106280,12 +106173,12 @@ const date=()=>{let d=new Date();return [d.getFullYear(),String(d.getMonth()+1).
 const audit=(action,id,reason)=>{let a=read(A);a.push({action,id,reason:reason||'',by:actor(),at:new Date().toISOString()});save(A,a)};
 const records=()=>read(K);
 function modal(){let m=document.getElementById('afOtherFundsModal');if(m)return m;m=document.createElement('div');m.id='afOtherFundsModal';m.style.cssText='display:none;position:fixed;inset:0;z-index:2147483001;overflow:auto;padding:22px;background:#0009';m.innerHTML='<div style="background:#fff;color:#16352b;max-width:1000px;margin:20px auto;padding:22px;border-radius:12px"><div style="display:flex;justify-content:space-between;gap:10px"><h2>Other Funds & Capital Injections</h2><button type="button" id="afOFclose">✕ Close</button></div><div id="afOFbody"></div></div>';document.body.appendChild(m);m.querySelector('#afOFclose').onclick=()=>m.style.display='none';return m}
-function totals(a){a=a.filter(x=>!x.reversedAt);const capital=a.filter(x=>x.type==='capital').reduce((n,x)=>n+x.amount,0);const loans=a.filter(x=>x.type==='directorLoan');const borrowed=loans.reduce((n,x)=>n+x.amount,0);const paid=loans.reduce((n,x)=>n+(x.payments||[]).reduce((q,p)=>q+p.amount,0),0);const income=a.filter(x=>x.type==='otherIncome').reduce((n,x)=>n+x.amount,0);return {capital,borrowed,paid,outstanding:Math.max(0,borrowed-paid),income}}
+function totals(a){const capital=a.filter(x=>x.type==='capital').reduce((n,x)=>n+x.amount,0);const loans=a.filter(x=>x.type==='directorLoan');const borrowed=loans.reduce((n,x)=>n+x.amount,0);const paid=loans.reduce((n,x)=>n+(x.payments||[]).reduce((q,p)=>q+p.amount,0),0);const income=a.filter(x=>x.type==='otherIncome').reduce((n,x)=>n+x.amount,0);return {capital,borrowed,paid,outstanding:Math.max(0,borrowed-paid),income}}
 function render(){let r=role();if(!['Director','Secretary'].includes(r)){alert('Access restricted');return}let m=modal(),b=m.querySelector('#afOFbody'),a=records(),t=totals(a);m.style.display='block';let labels=[['Capital Injected',t.capital],['Director Loans Received',t.borrowed],['Director Loans Repaid',t.paid],['Director Loans Outstanding',t.outstanding],['Other Company Income',t.income]];
-b.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:8px;margin:12px 0">'+labels.map(([k,v])=>'<div style="border:1px solid #ddd;border-radius:8px;padding:12px;background:#f3f8f5"><small>'+k+'</small><strong style="display:block;margin-top:5px">'+money(v)+'</strong></div>').join('')+'</div>'+(r==='Director'?'<form id="afOFform" style="border:1px solid #ccdcd2;padding:12px;border-radius:8px"><h3>Record funds received</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px"><label>Type<select name="type" required style="display:block;width:100%;padding:7px"><option value="capital">Owner capital contribution</option><option value="directorLoan">Director loan to company</option><option value="otherIncome">Other company income</option></select></label><label>Amount (UGX)<input name="amount" type="number" min="1" step="1" required style="display:block;width:100%;padding:7px"></label><label>Source / payer<input name="source" maxlength="160" required style="display:block;width:100%;padding:7px"></label><label>Date received<input name="date" type="date" required value="'+date()+'" style="display:block;width:100%;padding:7px"></label><label>Payment method<select name="method" style="display:block;width:100%;padding:7px"><option>Cash</option><option>Bank</option><option>Mobile Money</option></select></label><label>Reference / notes<input name="note" maxlength="250" style="display:block;width:100%;padding:7px"></label></div><p><button type="submit">Record funds</button></p></form>':'<p><strong>Read-only access:</strong> The Secretary can view records but cannot change them.</p>')+'<h3>Funding history</h3><div style="overflow:auto"><table style="border-collapse:collapse;width:100%;font-size:13px"><thead><tr><th>Date</th><th>Type</th><th>Source</th><th>Received</th><th>Repaid</th><th>Balance</th><th>Action</th></tr></thead><tbody>'+a.slice().reverse().map(x=>{let rep=(x.payments||[]).reduce((n,p)=>n+p.amount,0);return '<tr><td>'+safe(x.date)+'</td><td>'+({capital:'Capital',directorLoan:'Director loan',otherIncome:'Other income'}[x.type]||safe(x.type))+'</td><td>'+safe(x.source)+'</td><td>'+money(x.amount)+'</td><td>'+money(rep)+'</td><td>'+(x.type==='directorLoan'?money(x.amount-rep):'—')+'</td><td>'+(r==='Director'&&!x.reversedAt&&x.type==='directorLoan'&&x.amount>rep?'<button type="button" data-of="repay:'+safe(x.id)+'">Record repayment</button>':'')+(r==='Director'&&!x.reversedAt?'<button type="button" data-of="reverse:'+safe(x.id)+'">Reverse</button>':'')+(x.reversedAt?'<strong>REVERSED</strong>':'')+'</td></tr>'}).join('')+'</tbody></table></div><p style="font-size:12px;color:#666">This module maintains a dedicated funding ledger. Funding receipts and classified repayments appear in the Cash Book report; the General Ledger is not automatically posted. Do not enter the same transaction twice. Capital contributions are not automatically changes to registered share capital.</p>';
+b.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:8px;margin:12px 0">'+labels.map(([k,v])=>'<div style="border:1px solid #ddd;border-radius:8px;padding:12px;background:#f3f8f5"><small>'+k+'</small><strong style="display:block;margin-top:5px">'+money(v)+'</strong></div>').join('')+'</div>'+(r==='Director'?'<form id="afOFform" style="border:1px solid #ccdcd2;padding:12px;border-radius:8px"><h3>Record funds received</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px"><label>Type<select name="type" required style="display:block;width:100%;padding:7px"><option value="capital">Owner capital contribution</option><option value="directorLoan">Director loan to company</option><option value="otherIncome">Other company income</option></select></label><label>Amount (UGX)<input name="amount" type="number" min="1" step="1" required style="display:block;width:100%;padding:7px"></label><label>Source / payer<input name="source" maxlength="160" required style="display:block;width:100%;padding:7px"></label><label>Date received<input name="date" type="date" required value="'+date()+'" style="display:block;width:100%;padding:7px"></label><label>Payment method<select name="method" style="display:block;width:100%;padding:7px"><option>Cash</option><option>Bank</option><option>Mobile Money</option></select></label><label>Reference / notes<input name="note" maxlength="250" style="display:block;width:100%;padding:7px"></label></div><p><button type="submit">Record funds</button></p></form>':'<p><strong>Read-only access:</strong> The Secretary can view records but cannot change them.</p>')+'<h3>Funding history</h3><div style="overflow:auto"><table style="border-collapse:collapse;width:100%;font-size:13px"><thead><tr><th>Date</th><th>Type</th><th>Source</th><th>Received</th><th>Repaid</th><th>Balance</th><th>Action</th></tr></thead><tbody>'+a.slice().reverse().map(x=>{let rep=(x.payments||[]).reduce((n,p)=>n+p.amount,0);return '<tr><td>'+safe(x.date)+'</td><td>'+({capital:'Capital',directorLoan:'Director loan',otherIncome:'Other income'}[x.type]||safe(x.type))+'</td><td>'+safe(x.source)+'</td><td>'+money(x.amount)+'</td><td>'+money(rep)+'</td><td>'+(x.type==='directorLoan'?money(x.amount-rep):'—')+'</td><td>'+(r==='Director'&&x.type==='directorLoan'&&x.amount>rep?'<button type="button" data-of="repay:'+safe(x.id)+'">Record repayment</button>':'')+(r==='Director'?'<button type="button" data-of="reverse:'+safe(x.id)+'">Reverse</button>':'')+'</td></tr>'}).join('')+'</tbody></table></div><p style="font-size:12px;color:#666">This module maintains a dedicated funding ledger. It does not yet post to the existing general cashbook or Expenses. Do not enter the same transaction twice. Capital contributions are not automatically changes to registered share capital.</p>';
 b.querySelectorAll('th,td').forEach(c=>{c.style.padding='8px';c.style.borderBottom='1px solid #ddd';c.style.textAlign='left'});
 let f=b.querySelector('#afOFform');if(f)f.onsubmit=e=>{e.preventDefault();if(role()!=='Director')return;let amount=Number(f.elements.amount.value),source=f.elements.source.value.trim();if(!Number.isSafeInteger(amount)||amount<=0||!source)return alert('Enter a valid positive whole-UGX amount and source');let x={id:'OF'+Date.now()+'_'+Math.random().toString(36).slice(2,8),type:f.elements.type.value,amount,source,date:f.elements.date.value,method:f.elements.method.value,note:f.elements.note.value.trim(),payments:[],by:actor(),createdAt:new Date().toISOString()};let a=records();a.push(x);save(K,a);audit('record',x.id,'');render()};
-b.querySelectorAll('[data-of]').forEach(btn=>btn.onclick=()=>{if(role()!=='Director')return;let [action,id]=btn.dataset.of.split(':'),a=records(),x=a.find(z=>z.id===id);if(!x||x.reversedAt)return;if(action==='repay'){let already=(x.payments||[]).reduce((n,p)=>n+p.amount,0),remaining=x.amount-already;let v=prompt('Director loan repayment in UGX. Remaining: '+money(remaining));if(v===null)return;let n=Number(v);if(!Number.isSafeInteger(n)||n<=0||n>remaining)return alert('Enter an amount between 1 and '+remaining);let reason=prompt('Payment reference / notes (required)');if(!reason||!reason.trim())return;let methodInput=prompt('Repayment method: Cash, Bank or Mobile Money (required)');if(methodInput===null)return;let methods={'cash':'Cash','bank':'Bank','bank transfer':'Bank','mobile money':'Mobile Money'};let method=methods[String(methodInput).trim().toLowerCase()];if(!method)return alert('Choose Cash, Bank or Mobile Money');if(!confirm('Confirm actual payment of '+money(n)+' by '+method+'? This is recorded in the funding ledger only.'))return;x.payments.push({id:'RP'+Date.now(),amount:n,date:date(),method,note:reason.trim(),by:actor(),at:new Date().toISOString()});save(K,a);audit('repayment',x.id,reason);render()}if(action==='reverse'){let paid=(x.payments||[]).reduce((n,p)=>n+p.amount,0);if(paid>0)return alert('Cannot reverse a loan with repayments. Reconcile repayments first.');let reason=prompt('Mandatory reason for reversing this funding entry');if(!reason||!reason.trim())return;if(!confirm('Reverse this entry?'))return;x.reversedAt=new Date().toISOString();x.reversedBy=actor();x.reversalReason=reason.trim();save(K,a);audit('reverse',id,reason);render()}})
+b.querySelectorAll('[data-of]').forEach(btn=>btn.onclick=()=>{if(role()!=='Director')return;let [action,id]=btn.dataset.of.split(':'),a=records(),x=a.find(z=>z.id===id);if(!x)return;if(action==='repay'){let already=(x.payments||[]).reduce((n,p)=>n+p.amount,0),remaining=x.amount-already;let v=prompt('Director loan repayment in UGX. Remaining: '+money(remaining));if(v===null)return;let n=Number(v);if(!Number.isSafeInteger(n)||n<=0||n>remaining)return alert('Enter an amount between 1 and '+remaining);let reason=prompt('Payment reference / notes (required)');if(!reason||!reason.trim())return; if(!confirm('Confirm actual payment of '+money(n)+'? This is recorded in the funding ledger only.'))return;x.payments.push({id:'RP'+Date.now(),amount:n,date:date(),note:reason.trim(),by:actor(),at:new Date().toISOString()});save(K,a);audit('repayment',x.id,reason);render()}if(action==='reverse'){let paid=(x.payments||[]).reduce((n,p)=>n+p.amount,0);if(paid>0)return alert('Cannot reverse a loan with repayments. Reconcile repayments first.');let reason=prompt('Mandatory reason for reversing this funding entry');if(!reason||!reason.trim())return;if(!confirm('Reverse this entry?'))return;save(K,a.filter(z=>z.id!==id));audit('reverse',id,reason);render()}})
 }
 function nav(){let base=document.getElementById('navPettyLoans');if(!base)return;let b=document.getElementById('navOtherFunds');if(!b){b=base.cloneNode(true);b.id='navOtherFunds';b.removeAttribute('onclick');b.onclick=e=>{e.preventDefault();render()};base.insertAdjacentElement('afterend',b)}b.textContent='💰 Other Funds & Capital Injections';b.style.display=['Director','Secretary'].includes(role())?'':'none'}
 window.openAFOtherFunds=render;
@@ -106316,52 +106209,33 @@ window.AFAccountingStaging=Object.freeze({chartOfAccounts:()=>copy(accounts),val
    The staging journal is separate from historical operational transactions. */
 window.afOpenStagingAccountingReport = function(kind) {
   const engine=window.AFAccountingStaging;
-  if(!engine)return alert('Accounting staging module unavailable.');
+  if(!engine) return alert('Accounting staging module unavailable.');
   const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const fmt=x=>'UGX '+Number(x||0).toLocaleString('en-UG');
   let report,accounts,entries;
-  try{report=engine.report();accounts=engine.chartOfAccounts();entries=JSON.parse(engine.export()).entries;}
+  try {report=engine.report();accounts=engine.chartOfAccounts();entries=JSON.parse(engine.export()).entries;}
   catch(e){return alert('Could not read staging journal: '+e.message)}
   const titles={generalLedger:'General Ledger',trialBalance:'Trial Balance',balanceSheet:'Balance Sheet',cashFlow:'Cash Flow Statement'};
   if(!titles[kind])return;
-  const row=cells=>'<tr>'+cells.map(c=>'<td style="border-bottom:1px solid #ddd;padding:8px">'+esc(c)+'</td>').join('')+'</tr>';
-  const table=(headers,rows)=>'<div style="overflow:auto"><table style="width:100%;border-collapse:collapse"><thead><tr>'+headers.map(x=>'<th style="text-align:left;border-bottom:2px solid #bbb;padding:8px">'+esc(x)+'</th>').join('')+'</tr></thead><tbody>'+rows.join('')+'</tbody></table></div>';
   let content='';
-  const sums=new Map(accounts.map(a=>[a.code,{...a,debit:0,credit:0}]));
-  for(const e of entries)for(const l of e.lines||[]){const a=sums.get(String(l.account));if(a){a.debit+=Number(l.debit||0);a.credit+=Number(l.credit||0)}}
-  const values=[...sums.values()].map(a=>({...a,net:a.debit-a.credit}));
-  const tbDebit=values.reduce((n,a)=>n+Math.max(0,a.net),0);
-  const tbCredit=values.reduce((n,a)=>n+Math.max(0,-a.net),0);
-  const balanced=tbDebit===tbCredit;
+  const row=(cells)=>'<tr>'+cells.map(c=>'<td style="border-bottom:1px solid #ddd;padding:8px">'+esc(c)+'</td>').join('')+'</tr>';
   if(kind==='generalLedger'){
-    const running=new Map();const lines=[];
-    for(const e of entries.slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))||String(a.id).localeCompare(String(b.id)))){
-      for(const l of e.lines||[]){const key=String(l.account);const next=(running.get(key)||0)+Number(l.debit||0)-Number(l.credit||0);running.set(key,next);lines.push(row([e.date,e.id,key+' '+(sums.get(key)?.name||''),fmt(l.debit),fmt(l.credit),fmt(next),e.sourceKey||'']))}
-    }
-    content='<p>Staging entries: '+entries.length+'; debit/credit totals: '+fmt(report.totalDebits)+' / '+fmt(report.totalCredits)+'.</p>'+table(['Date','Entry','Account','Debit','Credit','Running net','Source'],lines);
-  }else if(kind==='trialBalance'){
-    content='<p>Net debit balances: '+fmt(tbDebit)+'; net credit balances: '+fmt(tbCredit)+'; '+(balanced?'Balanced':'NOT BALANCED')+'.</p>'+table(['Account','Debit balance','Credit balance'],values.filter(a=>a.net).map(a=>row([a.code+' '+a.name,fmt(Math.max(0,a.net)),fmt(Math.max(0,-a.net))])));
-  }else if(kind==='balanceSheet'){
-    const asset=values.filter(a=>a.type==='Asset'||a.type==='Contra Asset');
-    const liabilities=values.filter(a=>a.type==='Liability');const equity=values.filter(a=>a.type==='Equity');
-    const netAssets=asset.reduce((n,a)=>n+a.net,0);
-    const netLiabilities=liabilities.reduce((n,a)=>n-a.net,0);
-    const netEquity=equity.reduce((n,a)=>n-a.net,0);
-    const netIncome=values.filter(a=>a.type==='Revenue').reduce((n,a)=>n-a.net,0)-values.filter(a=>a.type==='Expense').reduce((n,a)=>n+a.net,0);
-    content='<p><strong>Staging-only position, not a company Balance Sheet.</strong> Opening balances, unposted source transactions and valuation are missing.</p>'+
-      table(['Staging classification','Net UGX'],[row(['Assets after accumulated depreciation',fmt(netAssets)]),row(['Liabilities',fmt(netLiabilities)]),row(['Equity',fmt(netEquity)]),row(['Staging income less expenses',fmt(netIncome)]),row(['Unexplained difference',fmt(netAssets-netLiabilities-netEquity-netIncome)])]);
-  }else{
-    const cashCodes=new Set(['1000','1010','1020']);
-    const cashLines=entries.flatMap(e=>(e.lines||[]).filter(l=>cashCodes.has(String(l.account))).map(l=>({e,l,change:Number(l.debit||0)-Number(l.credit||0)})));
-    const inflow=cashLines.reduce((n,x)=>n+Math.max(0,x.change),0),outflow=cashLines.reduce((n,x)=>n+Math.max(0,-x.change),0);
-    content='<p><strong>Staging cash movements only.</strong> This is not a Cash Flow Statement: the historical cashbook, opening cash, bank transfers and operating/investing/financing classifications have not been reconciled. Internal transfers may be counted twice.</p>'+
-      table(['Measure','Amount'],[row(['Staging cash inflows',fmt(inflow)]),row(['Staging cash outflows',fmt(outflow)]),row(['Net cash movement in staging',fmt(inflow-outflow)])])+
-      table(['Date','Journal','Cash account','Movement','Source'],cashLines.map(x=>row([x.e.date,x.e.id,x.l.account,fmt(x.change),x.e.sourceKey||''])));
+    content='<p>Journal entries in staging ledger: '+entries.length+'</p><div style="overflow:auto"><table style="width:100%;border-collapse:collapse"><thead><tr><th>Date</th><th>Journal</th><th>Account</th><th>Debit</th><th>Credit</th><th>Source</th></tr></thead><tbody>'+
+      entries.flatMap(e=>e.lines.map(l=>row([e.date,e.id,l.account+' '+(accounts.find(a=>a.code===l.account)?.name||''),fmt(l.debit),fmt(l.credit),e.sourceKey]))).join('')+'</tbody></table></div>';
+  } else if(kind==='trialBalance'){
+    content='<p>Posting totals (not net account balances): '+fmt(report.totalDebits)+' debit / '+fmt(report.totalCredits)+' credit</p><table style="width:100%;border-collapse:collapse"><thead><tr><th>Account</th><th>Debit balance</th><th>Credit balance</th></tr></thead><tbody>'+
+      report.accounts.map(a=>row([a.code+' '+a.name,fmt(Math.max(0,a.balance)),fmt(Math.max(0,-a.balance))])).join('')+'</tbody></table>';
+  } else if(kind==='balanceSheet'){
+    content='<p>A certified Balance Sheet cannot yet be generated: opening balances, inventory valuation, payroll and other source modules have not been reconciled and posted into this ledger.</p>';
+  } else {
+    content='<p>A certified Cash Flow Statement cannot yet be generated: opening cash balances, complete receipts/payments and cash-flow classifications have not been reconciled into this ledger.</p>';
   }
   const old=document.getElementById('afStagingAccountingDiagnostic');if(old)old.remove();
-  const modal=document.createElement('div');modal.id='afStagingAccountingDiagnostic';modal.style.cssText='position:fixed;inset:0;background:#0009;z-index:2147483000;overflow:auto;padding:20px';
-  modal.innerHTML='<section style="background:white;color:#183329;max-width:1100px;margin:25px auto;border-radius:12px;padding:22px;font-family:Arial,sans-serif"><button id="afCloseStagingReport" style="float:right">✕ Close</button><h2>'+esc(titles[kind])+'</h2><p style="padding:12px;border:1px solid #c58b24;background:#fff6dd"><strong>STAGING ONLY — NOT RECONCILED.</strong> This view excludes unposted historical transactions. Do not use it for statutory reporting, lending or business decisions.</p>'+content+'</section>';
-  document.body.appendChild(modal);modal.querySelector('#afCloseStagingReport').onclick=()=>modal.remove();
+  const modal=document.createElement('div');modal.id='afStagingAccountingDiagnostic';
+  modal.style.cssText='position:fixed;inset:0;background:#0009;z-index:2147483000;overflow:auto;padding:20px';
+  modal.innerHTML='<section style="background:white;color:#183329;max-width:1100px;margin:25px auto;border-radius:12px;padding:22px;font-family:Arial,sans-serif"><button id="afCloseStagingReport" style="float:right">✕ Close</button><h2>'+esc(titles[kind])+'</h2><p style="padding:12px;border:1px solid #c58b24;background:#fff6dd"><strong>STAGING ONLY — NOT RECONCILED.</strong> Historical transactions from the factory modules are NOT included. Do not use this screen for business decisions or statutory reporting.</p>'+content+'</section>';
+  document.body.appendChild(modal);
+  modal.querySelector('#afCloseStagingReport').onclick=()=>modal.remove();
 };
 
 
@@ -106515,678 +106389,67 @@ function attach(){if(document.getElementById('afReconcileButton'))return;const b
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
 })();
 
-/* A&F PURCHASE MIRROR EXCEPTION REVIEW v1 — READ ONLY.
-   Diagnostics only: does not post journals, reconcile balances or alter records. */
+
+/* ================================================================
+ A&F CONSOLIDATED NAVIGATION — NON-DESTRUCTIVE UI CLEANUP
+ Keeps the original data and ledgers unchanged.
+ ================================================================ */
 (function(){
-'use strict';
-if(window.AFPurchaseMirrorReviewV1)return;
-function load(key){try{const x=JSON.parse(localStorage.getItem(key)||'[]');return Array.isArray(x)?x:null}catch(_){return null}}
-function review(){
- const originals=load('materialRecords'),mirrors=load('afSupplierPurchases');
- if(!originals||!mirrors)return {status:'INVALID_SOURCE',issues:[{problem:'Purchase source is not a valid array'}]};
- const sourceIds=new Map();
- for(const r of originals){if(r&&r.id!==undefined)sourceIds.set(String(r.id),r)}
- const issues=[];const matched=new Set();
- for(let i=0;i<mirrors.length;i++){
-  const m=mirrors[i]||{};const link=m.materialRecordId;
-  if(link===undefined||link===null||String(link).trim()===''){
-   issues.push({mirrorRow:i+1,problem:'Missing materialRecordId',mirrorId:m.id??null});continue;
-  }
-  const id=String(link);
-  if(!sourceIds.has(id)){issues.push({mirrorRow:i+1,problem:'No matching material record',materialRecordId:id,mirrorId:m.id??null});continue}
-  if(matched.has(id))issues.push({mirrorRow:i+1,problem:'Multiple supplier purchase rows refer to one material record',materialRecordId:id,mirrorId:m.id??null});
-  matched.add(id);
+ 'use strict';
+ const STYLE_ID='afConsolidatedNavigationRules';
+ function ensureStyle(){
+   if(document.getElementById(STYLE_ID))return;
+   const s=document.createElement('style');s.id=STYLE_ID;
+   s.textContent=`
+     #navReports, #navPettyLoans, #navOtherFunds { display:none !important; }
+     #navLoansFunds[hidden], #navAccountsReports[hidden] { display:none !important; }
+   `;
+   document.head.appendChild(s);
  }
- for(const [id] of sourceIds)if(!matched.has(id))issues.push({problem:'Material record has no linked supplier purchase',materialRecordId:id});
- return {status:issues.length?'EXCEPTIONS_FOUND':'LINK_IDS_MATCH_ONLY_NOT_FINANCIALLY_RECONCILED',createdAt:new Date().toISOString(),sourceCount:originals.length,mirrorCount:mirrors.length,linkedSourceCount:matched.size,issues,note:'Read-only. Checks links, not monetary amounts or stock ownership. Verify each exception against original purchase documents before making corrections. Browser-local data only.'};
-}
-function open(){
- const u=(()=>{try{return JSON.parse(localStorage.getItem('currentUser')||'null')}catch(_){return null}})();
- if(!u||u.role!=='Director'){alert('Director access required.');return}
- const report=review();document.getElementById('afPurchaseMirrorReview')?.remove();
- const modal=document.createElement('div');modal.id='afPurchaseMirrorReview';modal.style.cssText='position:fixed;inset:0;z-index:2147483004;overflow:auto;background:#000a;padding:16px;font:14px Arial';
- const card=document.createElement('section');card.style.cssText='max-width:750px;margin:30px auto;padding:22px;background:white;border-radius:12px;color:#20372d';
- const title=document.createElement('h2');title.textContent='Purchase Link Exceptions — Read Only';card.appendChild(title);
- const p=document.createElement('p');p.textContent='Status: '+report.status+'. Source records: '+(report.sourceCount??'—')+'; supplier purchase rows: '+(report.mirrorCount??'—')+'. No data will be changed.';card.appendChild(p);
- const pre=document.createElement('pre');pre.style.cssText='white-space:pre-wrap;word-break:break-word;max-height:50vh;overflow:auto;background:#f5f7f5;padding:12px';pre.textContent=JSON.stringify(report.issues,null,2);card.appendChild(pre);
- const note=document.createElement('p');note.textContent=report.note||'';card.appendChild(note);
- const download=document.createElement('button');download.textContent='Download exception report';download.onclick=()=>{const blob=new Blob([JSON.stringify(report,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='AF_Purchase_Link_Exceptions_READ_ONLY.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};card.appendChild(download);
- const close=document.createElement('button');close.textContent='Close';close.style.marginLeft='12px';close.onclick=()=>modal.remove();card.appendChild(close);modal.appendChild(card);document.body.appendChild(modal);
-}
-window.AFPurchaseMirrorReviewV1=Object.freeze({review,open});
-function attach(){if(document.getElementById('afPurchaseReviewButton'))return;const b=document.createElement('button');b.id='afPurchaseReviewButton';b.type='button';b.textContent='Purchase Link Exceptions';b.style.cssText='position:fixed;bottom:146px;right:12px;z-index:2147482000;background:#564078;color:white;border:1px solid white;border-radius:8px;padding:10px;font:600 12px Arial;cursor:pointer';b.onclick=open;document.body.appendChild(b)}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
-})();
-
-/* A&F PURCHASE EXCEPTION DETAIL COMPARISON v2 — READ ONLY.
-   No writes to browser storage, accounting journals or inventory. */
-(function(){
-'use strict';
-if(window.AFPurchaseExceptionDetailsV2)return;
-const SOURCE_ID='1791202061631', MIRROR_LINK='1791244969174';
-function read(key){try{const a=JSON.parse(localStorage.getItem(key)||'[]');return Array.isArray(a)?a:[]}catch(e){return []}}
-function director(){try{return JSON.parse(localStorage.getItem('currentUser')||'null')?.role==='Director'}catch(e){return false}}
-function details(){
- const materials=read('materialRecords'), purchases=read('afSupplierPurchases');
- const orphanMaterial=materials.find(r=>String(r?.id)===SOURCE_ID)||null;
- const orphanMirror=purchases.find(r=>String(r?.materialRecordId)===MIRROR_LINK)||null;
- const relatedMaterial=materials.filter(r=>String(r?.id)===MIRROR_LINK);
- const relatedPurchases=purchases.filter(r=>String(r?.materialRecordId)===SOURCE_ID);
- return {status:'READ_ONLY_UNVERIFIED',createdAt:new Date().toISOString(),orphanMaterial,orphanMirror,relatedMaterial,relatedPurchases,sourceCount:materials.length,mirrorCount:purchases.length,note:'Browser-local values only. No records changed. Similar dates, weights or amounts do not prove identity. Verify original purchase evidence before any correction.'};
-}
-function cell(text){const td=document.createElement('td');td.textContent=text;td.style.cssText='padding:8px;border-bottom:1px solid #ddd;vertical-align:top;word-break:break-word';return td}
-function display(v){return v===undefined?'(missing)':v===null?'null':typeof v==='object'?JSON.stringify(v):String(v)}
-function open(){
- if(!director()){alert('Director access required.');return}
- const data=details();document.getElementById('afPurchaseDetailModalV2')?.remove();
- const overlay=document.createElement('div');overlay.id='afPurchaseDetailModalV2';overlay.style.cssText='position:fixed;inset:0;z-index:2147483010;overflow:auto;background:rgba(0,0,0,.7);padding:14px;font:14px Arial';
- const panel=document.createElement('section');panel.style.cssText='max-width:1150px;margin:22px auto;background:white;color:#23372c;padding:22px;border-radius:12px';
- const heading=document.createElement('h2');heading.textContent='Purchase Exception Details — Read Only';panel.appendChild(heading);
- const p=document.createElement('p');p.textContent='Comparing the two unmatched records. These may or may not describe the same purchase. All values below are from this browser. No data will be changed.';panel.appendChild(p);
- const wrap=document.createElement('div');wrap.style.cssText='max-height:65vh;overflow:auto';
- const table=document.createElement('table');table.style.cssText='border-collapse:collapse;width:100%;table-layout:fixed';
- const thead=document.createElement('thead'),hr=document.createElement('tr');['Field','Unlinked material record: '+SOURCE_ID,'Unmatched supplier purchase: '+MIRROR_LINK].forEach(s=>{const th=document.createElement('th');th.textContent=s;th.style.cssText='position:sticky;top:0;background:#0b5d3b;color:white;text-align:left;padding:9px';hr.appendChild(th)});thead.appendChild(hr);table.appendChild(thead);
- const body=document.createElement('tbody');const fields=new Set([...Object.keys(data.orphanMaterial||{}),...Object.keys(data.orphanMirror||{})]);
- for(const key of [...fields].sort()){const tr=document.createElement('tr');tr.appendChild(cell(key));tr.appendChild(cell(display(data.orphanMaterial?.[key])));tr.appendChild(cell(display(data.orphanMirror?.[key])));body.appendChild(tr)}table.appendChild(body);wrap.appendChild(table);panel.appendChild(wrap);
- const warning=document.createElement('p');warning.textContent='Review supplier, date, gross/accepted weight, price, total cost, payment and source documents. Different IDs alone do not justify merging. This tool cannot prove a match.';panel.appendChild(warning);
- const download=document.createElement('button');download.textContent='Download detailed comparison JSON';download.style.cssText='padding:10px;background:#0b5d3b;color:white;border:0;border-radius:7px;margin-right:12px';download.onclick=()=>{const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='AF_Purchase_Exception_Details_READ_ONLY.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)};panel.appendChild(download);
- const close=document.createElement('button');close.textContent='Close';close.style.padding='10px';close.onclick=()=>overlay.remove();panel.appendChild(close);overlay.appendChild(panel);document.body.appendChild(overlay);
-}
-window.AFPurchaseExceptionDetailsV2=Object.freeze({details,open});
-function attach(){if(document.getElementById('afPurchaseDetailsButtonV2'))return;const btn=document.createElement('button');btn.id='afPurchaseDetailsButtonV2';btn.textContent='Compare Purchase Exceptions';btn.type='button';btn.style.cssText='position:fixed;bottom:190px;right:12px;z-index:2147482000;background:#126653;color:white;border:1px solid white;border-radius:8px;padding:10px;font:600 12px Arial;cursor:pointer';btn.onclick=open;document.body.appendChild(btn)}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
-})();
-
-/* A&F STAGE 3 — OWNERSHIP-AWARE PURCHASE RECONCILIATION (READ ONLY)
-   No stock, payment, journal, or historical records are modified. */
-(function(){
-'use strict';
-if(window.AFStage3OwnershipReview)return;
-function read(k){try{const a=JSON.parse(localStorage.getItem(k)||'[]');return Array.isArray(a)?a:null}catch(_){return null}}
-function isDirector(){try{return JSON.parse(localStorage.getItem('currentUser')||'null')?.role==='Director'}catch(_){return false}}
-function classify(r){const s=String(r?.materialSource||'').trim().toLowerCase();return s==='client'?'CLIENT_CUSTODY':s==='company'||s==='factory'?'FACTORY_OWNED':'UNCLASSIFIED'}
-function review(){
- const materials=read('materialRecords'),purchases=read('afSupplierPurchases');
- if(!materials||!purchases)return {status:'INVALID_DATA',error:'Material or supplier records cannot be read as arrays. No changes made.'};
- const byId=new Map(materials.filter(r=>r&&r.id!=null).map(r=>[String(r.id),r]));
- const links=new Set(purchases.filter(p=>p&&p.materialRecordId!=null).map(p=>String(p.materialRecordId)));
- const clientCustody=materials.filter(r=>classify(r)==='CLIENT_CUSTODY');
- const unclassified=materials.filter(r=>classify(r)==='UNCLASSIFIED');
- const unmatchedSupplierPurchases=purchases.filter(p=>!byId.has(String(p?.materialRecordId??''))).map(p=>({purchaseId:p?.id??null,materialRecordId:p?.materialRecordId??null,batchNumber:p?.batchNumber??null,supplierName:p?.supplierName??null,grossKg:p?.grossKg??null,acceptedKg:p?.acceptedKg??null,totalCost:p?.totalCost??null,review:'Confirm existing stock and cash evidence before any correction'}));
- const unmatchedFactoryMaterials=materials.filter(r=>classify(r)==='FACTORY_OWNED'&&!links.has(String(r.id))).map(r=>({id:r.id,batchNumber:r.batchNumber??null,review:'Check source purchase evidence'}));
- const unmatchedClientCustody=clientCustody.filter(r=>!links.has(String(r.id))).map(r=>({id:r.id,batchNumber:r.batchNumber??null,clientName:r.clientName??null,review:'Expected to have no supplier purchase link; custody stock only'}));
- return {status:'READ_ONLY_NOT_POSTED',createdAt:new Date().toISOString(),materialRecords:materials.length,supplierPurchases:purchases.length,clientCustodyRecords:clientCustody.length,unclassifiedMaterialRecords:unclassified.length,unmatchedSupplierPurchases,unmatchedFactoryMaterials,unmatchedClientCustody,knownCase:{supplierPurchaseMaterialRecordId:'1791244969174',supplier:'Abdu Yiga',cashPaidUGX:63675,paymentConfirmedByDirector:true,materialReceivedConfirmedByDirector:true,clientMaterialRecordId:'1791202061631',client:'Mr. Gideon',clientMaterialIsNotFactoryInventory:true,accountingEntryPosted:false},warnings:['A missing supplier-to-material link is not proof that physical stock is absent.','Do not add cash payments or inventory entries without checking existing books.','Unclassified ownership needs review; do not assume company ownership.','This report only reads this browser and does not reconcile cloud records or bank/cash balances.']};
-}
-function open(){if(!isDirector()){alert('Director access required');return}const r=review();document.getElementById('afStage3Modal')?.remove();const m=document.createElement('div');m.id='afStage3Modal';m.style.cssText='position:fixed;inset:0;z-index:2147483012;overflow:auto;background:#000a;padding:15px;font:14px Arial';const c=document.createElement('section');c.style.cssText='max-width:900px;margin:30px auto;background:white;border-radius:12px;padding:22px;color:#173027';const h=document.createElement('h2');h.textContent='Ownership-Aware Purchase Review — Read Only';c.appendChild(h);const p=document.createElement('p');p.textContent='Factory purchases and client custody materials are reviewed separately. No inventory, cash or journal entries are changed.';c.appendChild(p);const pre=document.createElement('pre');pre.style.cssText='white-space:pre-wrap;word-break:break-word;background:#f4f7f5;padding:12px;max-height:60vh;overflow:auto';pre.textContent=JSON.stringify(r,null,2);c.appendChild(pre);const b=document.createElement('button');b.textContent='Download ownership review JSON';b.style.cssText='padding:11px;background:#0b5d3b;color:white;border:0;border-radius:7px;margin-right:12px';b.onclick=()=>{const u=URL.createObjectURL(new Blob([JSON.stringify(r,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=u;a.download='AF_Stage3_Ownership_Review_READ_ONLY.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1000)};c.appendChild(b);const x=document.createElement('button');x.textContent='Close';x.onclick=()=>m.remove();c.appendChild(x);m.appendChild(c);document.body.appendChild(m)}
-window.AFStage3OwnershipReview=Object.freeze({review,open});
-function attach(){if(document.getElementById('afStage3OwnershipButton'))return;const b=document.createElement('button');b.id='afStage3OwnershipButton';b.type='button';b.textContent='Ownership & Purchase Review';b.style.cssText='position:fixed;bottom:234px;right:12px;z-index:2147482000;background:#164e63;color:white;border:1px solid white;border-radius:8px;padding:10px;font:600 12px Arial;cursor:pointer';b.onclick=open;document.body.appendChild(b)}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
-})();
-
-
-/* STAGE 4: DIRECTOR-APPROVED RECONCILIATION MEMORANDUM.
-   No historical source rows, stock quantities, payments, or journals are mutated.
-   A missing material record cannot safely be reconstructed from purchase totals alone. */
-(function(){
-'use strict';
-if(window.AFStage4Reconciliation)return;
-const KEY='afStage4ReconciliationMemosV1', PID='PUR-1791244969174', MID='1791244969174';
-function read(k){try{return JSON.parse(localStorage.getItem(k)||'null')}catch(_){return null}}
-function director(){return read('currentUser')?.role==='Director'}
-function data(){
- const purchases=read('afSupplierPurchases'), materials=read('materialRecords'), memos=read(KEY)||[];
- if(!Array.isArray(purchases)||!Array.isArray(materials)||!Array.isArray(memos))return {status:'INVALID_STORAGE',error:'Expected array data; no changes made'};
- const p=purchases.find(x=>String(x?.id)===PID && String(x?.materialRecordId)===MID);
- const material=materials.find(x=>String(x?.id)===MID);
- const custody=materials.find(x=>String(x?.id)==='1791202061631');
- const matches=purchases.filter(x=>String(x?.materialRecordId)===MID);
- const approved=memos.find(x=>x?.purchaseId===PID);
- return {status:approved?'DIRECTOR_MEMO_SAVED':'AWAITING_DIRECTOR_MEMO',createdAt:new Date().toISOString(),
- purchaseFound:!!p,purchaseCountForMaterialId:matches.length,materialRecordExists:!!material,
- purchase:p?{id:p.id,materialRecordId:p.materialRecordId,batchNumber:p.batchNumber,supplierName:p.supplierName,grossKg:p.grossKg,acceptedKg:p.acceptedKg,totalCost:p.totalCost}:null,
- clientCustodySeparate:!!custody&&String(custody.materialSource||'').toLowerCase()==='client',
- memo:approved||null,stockEntryCreated:false,cashEntryCreated:false,journalEntryCreated:false,
- nextAction:'Review existing inventory and cash records; create an approved historical source correction only after verifying no existing movement. Memo alone does not fix the stock ledger.'};
-}
-function download(v){const url=URL.createObjectURL(new Blob([JSON.stringify(v,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='AF_Stage4_Reconciliation_Control.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500)}
-function open(){
- if(!director()){alert('Director access required');return}
- document.getElementById('afStage4Modal')?.remove();
- const m=document.createElement('div');m.id='afStage4Modal';m.style.cssText='position:fixed;inset:0;z-index:2147483015;background:#000b;overflow:auto;padding:16px;font:14px Arial';
- const c=document.createElement('section');c.style.cssText='max-width:790px;margin:25px auto;padding:22px;background:white;border-radius:12px;color:#18362c';
- const h=document.createElement('h2');h.textContent='Stage 4 — KB002 Reconciliation Control';c.appendChild(h);
- const note=document.createElement('p');note.textContent='Abdu Yiga: 283 kg gross, 212.25 kg accepted, UGX 63,675 paid in cash. Director confirmed physical stock remains unwashed. Mr. Gideon is client custody, not company inventory.';c.appendChild(note);
- const pre=document.createElement('pre');pre.style.cssText='white-space:pre-wrap;word-break:break-word;background:#f4f7f5;padding:12px;max-height:48vh;overflow:auto';c.appendChild(pre);
- const refresh=()=>{pre.textContent=JSON.stringify(data(),null,2)};refresh();
- const warn=document.createElement('p');warn.style.color='#9a4d00';warn.textContent='Approval saves a reconciliation memorandum only. It does not add stock, spend cash again, change purchase records, or post a journal.';c.appendChild(warn);
- function btn(t,fn){const b=document.createElement('button');b.type='button';b.textContent=t;b.style.cssText='padding:10px;margin:5px;border:0;border-radius:7px;background:#0b5d3b;color:white;cursor:pointer';b.onclick=fn;c.appendChild(b)}
- btn('Save Director verification memo',()=>{
-   if(!director())return;
-   const d=data();
-   if(!d.purchaseFound||d.purchaseCountForMaterialId!==1||d.materialRecordExists){alert('Source data has changed. Review the records before approval.');return}
-   if(!confirm('Confirm only these facts: KB002 received, paid UGX 63,675 cash, still physically at factory, not washed. This creates NO stock or accounting entry.'))return;
-   const old=read(KEY)||[];if(!Array.isArray(old))return;
-   if(old.some(x=>x?.purchaseId===PID)){alert('A verification memo already exists.');return}
-   const user=read('currentUser');
-   const memo={id:'AF-S4-KB002-001',purchaseId:PID,materialRecordId:MID,batchNumber:'KB002',supplier:'Abdu Yiga',grossKg:283,acceptedKg:212.25,paidCashUGX:63675,physicalStockConfirmed:true,washed:false,clientStockExcluded:true,verifiedByEmployeeId:user?.employeeId||null,verifiedByRole:'Director',verifiedAt:new Date().toISOString(),type:'VERIFICATION_ONLY_NOT_ACCOUNTING_POSTING'};
-   try{localStorage.setItem(KEY,JSON.stringify([...old,memo]));refresh();alert('Verification memorandum saved. No stock or accounting entries were changed.')}catch(e){alert('Could not save memorandum: '+e.message)}
- });
- btn('Download Stage 4 report',()=>download(data()));
- btn('Close',()=>m.remove());m.appendChild(c);document.body.appendChild(m);
-}
-window.AFStage4Reconciliation=Object.freeze({data,open});
-function attach(){if(document.getElementById('afStage4Button'))return;const b=document.createElement('button');b.id='afStage4Button';b.type='button';b.textContent='Stage 4 • KB002 Verification';b.style.cssText='position:fixed;bottom:278px;right:12px;z-index:2147482000;background:#0b5d3b;color:white;border:1px solid white;border-radius:8px;padding:10px;font:600 12px Arial;cursor:pointer';b.onclick=open;document.body.appendChild(b)}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
-})();
-
-
-/* A&F STAGE 5 — DIRECTOR-CONTROLLED KB002 SOURCE RESTORATION
-   Restores a missing historical material source row, never creates a payment,
-   supplier purchase, general-ledger entry or independent stock movement.
-   Requires Stage 4 memo, exact purchase facts, a browser backup and explicit approval.
-   Browser localStorage is not a secure multi-user audit system. */
-(function(){
-'use strict';
-if(window.AFStage5KB002)return;
-const PID='PUR-1791244969174', MID='1791244969174', MEMO='afStage4ReconciliationMemosV1';
-const AUDIT='afStage5HistoricalCorrectionsV1';
-function load(k){try{return JSON.parse(localStorage.getItem(k)||'null')}catch(_){return null}}
-function arr(k){const a=load(k);return Array.isArray(a)?a:null}
-function director(){const u=load('currentUser');return u&&u.role==='Director'?u:null}
-function matches(a,b){return String(a??'').trim()===String(b??'').trim()}
-function validate(){
- const materials=arr('materialRecords'),purchases=arr('afSupplierPurchases'),memos=arr(MEMO),audits=arr(AUDIT);
- const errors=[];
- if(!materials||!purchases||!memos)errors.push('One or more source arrays are missing or invalid.');
- if(load(AUDIT)!==null&&!audits)errors.push('Correction audit storage is invalid.');
- if(errors.length)return {ready:false,errors};
- const p=purchases.filter(x=>matches(x?.id,PID)&&matches(x?.materialRecordId,MID));
- if(p.length!==1)errors.push('Expected exactly one matching original supplier purchase.');
- const otherLinks=purchases.filter(x=>matches(x?.materialRecordId,MID));
- if(otherLinks.length!==1)errors.push('Duplicate or changed supplier purchase link detected.');
- const existing=materials.filter(x=>matches(x?.id,MID)||matches(x?.batchNumber,'KB002'));
- if(existing.length)errors.push('Material ID or batch KB002 already exists. No restoration permitted.');
- const purchase=p[0];
- if(purchase){
-  if(!matches(purchase.batchNumber,'KB002')||!matches(purchase.supplierName,'Abdu Yiga')||
-    !matches(purchase.materialType,'HDPE')||Number(purchase.grossKg)!==283||
-    Number(purchase.acceptedKg)!==212.25||Number(purchase.totalCost)!==63675)
-    errors.push('Original purchase facts differ from the Director-verified batch.');
-  if(purchase.materialCost!=null&&Number(purchase.materialCost)!==63675)
-    errors.push('Purchase material cost differs from UGX 63,675.');
-  if(Number(purchase.transportCost||0)!==0||Number(purchase.miscellaneousExpenses||0)!==0)
-    errors.push('Extra purchase costs require separate review.');
+ function role(){try{return typeof getAFCurrentRole==='function'?getAFCurrentRole():null}catch(_){return null}}
+ function makeButton(base,id,title){
+   if(!base||!base.parentNode)return null;
+   let b=document.getElementById(id);
+   if(!b){b=base.cloneNode(false);b.id=id;b.removeAttribute('onclick');b.removeAttribute('style');base.insertAdjacentElement('afterend',b)}
+   b.textContent=title;
+   return b;
  }
- const memo=memos.find(x=>matches(x?.purchaseId,PID)&&matches(x?.materialRecordId,MID)&&
-   x.physicalStockConfirmed===true&&x.washed===false&&x.clientStockExcluded===true&&
-   Number(x.paidCashUGX)===63675&&x.verifiedByRole==='Director');
- if(!memo)errors.push('Valid Stage 4 Director verification memo not found in this browser.');
- if((audits||[]).some(x=>matches(x?.purchaseId,PID)))errors.push('This correction has already been recorded.');
- const custody=materials.find(x=>matches(x?.id,'1791202061631'));
- if(!custody||String(custody.materialSource||'').toLowerCase()!=='client')
-   errors.push('Mr. Gideon client custody source is missing or reclassified.');
- // Never fabricate a payment: check whether the payment ledger already contains a linked payment.
- const payments=arr('supplierPayments');
- if(load('supplierPayments')!==null&&!payments)errors.push('Supplier payment ledger cannot be read.');
- const linked=(payments||[]).filter(x=>matches(x?.materialRecordId,MID)||matches(x?.batchNumber,'KB002'));
- const paid=linked.reduce((n,x)=>n+Math.max(0,Number(x.amount)||0),0);
- if(paid>63675.001)errors.push('Existing linked supplier payments exceed purchase cost.');
- const user=director();if(!user)errors.push('Director login required.');
- return {ready:errors.length===0,errors,purchase:purchase||null,memo:memo||null,
-  existingMaterialCount:existing.length,existingSupplierPayments:linked.length,
-  linkedPaymentAmountUGX:paid,unverifiedCashLedgerDifferenceUGX:63675-paid,
-  notice:'The historical cash payment is verified by the Director but may not be present in supplierPayments. Stage 5 will NOT create any cash or supplier payment record. Financial reconciliation remains outstanding.'};
-}
-function backup(){
- const keys=['materialRecords','afSupplierPurchases','supplierPayments',MEMO,AUDIT];
- const values={};for(const k of keys)values[k]=localStorage.getItem(k);
- return {type:'AF_STAGE5_PRE_CORRECTION_BACKUP',createdAt:new Date().toISOString(),keys:values};
-}
-function download(data,name){const u=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
- const a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),3000)}
-function apply(){
- const check=validate();if(!check.ready)throw Error(check.errors.join('\n'));
- const p=check.purchase,u=director(),date=new Date().toISOString();
- const materials=arr('materialRecords'),audit=arr(AUDIT)||[];
- const dirt=70.75;
- const record={
-  id:Number(MID),batchNumber:'KB002',washingCycleNumber:typeof washingCycleFromBatch==='function'?washingCycleFromBatch('KB002'):null,
-  batchStatus:'AVAILABLE FOR WASHING',date:String(p.date||''),materialSource:'company',materialType:'HDPE',
-  supplierId:p.supplierId||'',supplierName:'Abdu Yiga',clientName:'',clientPhone:'',clientOrigin:'',clientAddress:'',clientService:'',
-  grossWeight:283,washingGrossWeight:0,pelletWeight:0,actualPelletWeight:0,
-  dirtPercent:25,dirtWeightKg:dirt,netWeight:212.25,openingBatchKg:212.25,batchBalanceKg:212.25,
-  pricePerKg:300,transportType:p.transportType||'none',transportCost:0,transportPayee:'',transportAmountPaid:0,
-  transportBalance:0,transportPaymentMethod:'',transportPaymentReference:'',miscellaneousExpenses:0,miscellaneousReason:'',
-  materialCost:63675,totalCost:63675,
-  supplierAmountPaid:check.linkedPaymentAmountUGX,
-  supplierBalance:Math.max(0,63675-check.linkedPaymentAmountUGX),
-  supplierPaymentStatus:check.linkedPaymentAmountUGX>=63675?'Paid in Full':check.linkedPaymentAmountUGX>0?'Partly Paid':'Payment verification pending ledger reconciliation',
-  recordedByEmployeeId:'',recordedByName:'',recordedByRole:'',recordedAt:null,
-  historicalCorrection:true,historicalCorrectionReference:'AF-S5-KB002-001',
-  historicalCorrectionAt:date,historicalCorrectionByEmployeeId:u.employeeId||'',
-  originalPurchaseId:PID,
-  accountingPostingStatus:'NOT_POSTED_HISTORICAL_RECONCILIATION_PENDING'
- };
- const event={id:'AF-S5-KB002-001',purchaseId:PID,materialRecordId:MID,batchNumber:'KB002',
-  restoredKg:212.25,restoredPurchaseCostUGX:63675,approvedByEmployeeId:u.employeeId||'',approvedByRole:u.role,
-  approvedAt:date,stage4MemoId:check.memo.id,originalSupplierPurchasePreserved:true,
-  paymentEntryCreated:false,cashEntryCreated:false,journalEntryCreated:false,
-  supplierPaymentsFound:check.existingSupplierPayments,linkedSupplierPaymentsUGX:check.linkedPaymentAmountUGX,
-  note:'Historical source-row restoration only; no independent stock receipt. Cash ledger must be reconciled separately.'};
- // Snapshot both keys and restore them if either write fails.
- const oldM=localStorage.getItem('materialRecords'),oldA=localStorage.getItem(AUDIT);
- try{localStorage.setItem('materialRecords',JSON.stringify([...materials,record]));
-     localStorage.setItem(AUDIT,JSON.stringify([...audit,event]));}
- catch(e){try{oldM===null?localStorage.removeItem('materialRecords'):localStorage.setItem('materialRecords',oldM);
- oldA===null?localStorage.removeItem(AUDIT):localStorage.setItem(AUDIT,oldA)}catch(_){}
- throw Error('Could not save both correction records. Reload and verify before retrying: '+e.message)}
- return event;
-}
-function open(){if(!director()){alert('Director access required.');return}
- document.getElementById('afStage5Modal')?.remove();const m=document.createElement('div');m.id='afStage5Modal';
- m.style.cssText='position:fixed;inset:0;z-index:2147483020;background:#000b;overflow:auto;padding:15px;font:14px Arial';
- const c=document.createElement('section');c.style.cssText='max-width:820px;margin:25px auto;background:white;color:#173027;padding:22px;border-radius:12px';
- const h=document.createElement('h2');h.textContent='Stage 5 — KB002 Controlled Source Restoration';c.appendChild(h);
- const p=document.createElement('p');p.textContent='Restores the missing historical material source for 212.25 kg of unwashed, company-owned HDPE. It does not create another supplier purchase, payment, cash entry or general-ledger posting.';c.appendChild(p);
- const pre=document.createElement('pre');pre.style.cssText='white-space:pre-wrap;word-break:break-word;max-height:45vh;overflow:auto;background:#f4f7f5;padding:12px';c.appendChild(pre);
- let backedUp=false;const refresh=()=>{const d=validate();pre.textContent=JSON.stringify(d,null,2);return d};refresh();
- function button(label,fn){const b=document.createElement('button');b.type='button';b.textContent=label;b.style.cssText='padding:10px;margin:5px;background:#0b5d3b;color:white;border:0;border-radius:7px;cursor:pointer';b.onclick=fn;c.appendChild(b)}
- button('Download backup (required)',()=>{download(backup(),'AF_Stage5_Pre_Correction_Backup.json');backedUp=true;alert('Keep the downloaded backup safely before approving.')});
- button('Approve & restore missing material record',()=>{
-  if(!backedUp){alert('Download the backup first.');return}
-  const d=refresh();if(!d.ready){alert('Pre-check failed. No change made.');return}
-  if(!confirm('Director approval: restore only the missing KB002 material source row (212.25 kg; UGX 63,675). No new cash payment or journal entry. Continue?'))return;
-  try{const event=apply();refresh();download(event,'AF_Stage5_KB002_Correction_Receipt.json');
-   alert('KB002 source record restored. No payment or journal posted. Downloaded correction receipt. Reconcile cash ledger separately.');}
-  catch(e){alert('Restoration stopped: '+e.message);refresh()}
- });
- button('Download Stage 5 review',()=>download(validate(),'AF_Stage5_KB002_Review.json'));
- button('Close',()=>m.remove());c.appendChild(pre);m.appendChild(c);document.body.appendChild(m)
-}
-window.AFStage5KB002=Object.freeze({validate,open});
-function attach(){if(document.getElementById('afStage5Button'))return;const b=document.createElement('button');b.id='afStage5Button';b.type='button';b.textContent='Stage 5 • KB002 Restore';b.style.cssText='position:fixed;bottom:322px;right:12px;z-index:2147482000;background:#0b5d3b;color:white;border:1px solid white;border-radius:8px;padding:10px;font:600 12px Arial;cursor:pointer';b.onclick=open;document.body.appendChild(b)}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
-})();
-
-
-
-/* A&F STAGE 6 — KB002 DIRECTOR-APPROVED SUPPLIER SETTLEMENT DISCOUNT
-   Accounting: purchase remains UGX 63,675; historical cash remains UGX 63,600;
-   UGX 75 is a separate non-cash settlement discount. No new cash, stock or GL post.
-   LocalStorage is not a tamper-proof audit log or authenticated server ledger. */
-(function(){
-'use strict';
-if(window.AFStage6KB002)return;
-const ID='AF-S6-KB002-001', KEY='afSupplierSettlementAdjustmentsV1', MID='1791244969174', PID='PUR-1791244969174';
-function read(k){try{return JSON.parse(localStorage.getItem(k)||'null')}catch(_){return null}}
-function array(k){const v=read(k);return Array.isArray(v)?v:null}
-function director(){const u=read('currentUser');return u&&u.role==='Director'?u:null}
-function same(a,b){return String(a??'')===String(b??'')}
-function review(){
- const errors=[],m=array('materialRecords'),p=array('afSupplierPurchases'),pay=array('supplierPayments'),
-   stage5=array('afStage5HistoricalCorrectionsV1'),adj=array(KEY);
- if(!director())errors.push('Director login required.');
- if(!m||!p||!pay||!stage5)errors.push('One or more required record arrays are invalid or missing.');
- if(localStorage.getItem(KEY)!==null&&!adj)errors.push('Settlement adjustment ledger is invalid.');
- if(errors.length)return {ready:false,errors};
- const records=m.filter(x=>same(x?.id,MID)||same(x?.batchNumber,'KB002'));
- const purchases=p.filter(x=>same(x?.id,PID)||same(x?.materialRecordId,MID));
- const payments=pay.filter(x=>same(x?.materialRecordId,MID)||same(x?.batchNumber,'KB002'));
- const paid=payments.reduce((n,x)=>n+Number(x.amount||0),0);
- const prior=(adj||[]).filter(x=>x?.id===ID||same(x?.materialRecordId,MID));
- const r=records[0],purchase=purchases[0];
- if(records.length!==1||!r||!same(r.id,MID)||r.batchNumber!=='KB002'||r.materialSource!=='company'||
-    r.materialType!=='HDPE'||Number(r.netWeight)!==212.25||Number(r.materialCost)!==63675||
-    r.historicalCorrectionReference!=='AF-S5-KB002-001')errors.push('Restored KB002 source record differs from the approved Stage 5 record.');
- if(purchases.length!==1||!purchase||purchase.id!==PID||purchase.batchNumber!=='KB002'||
-    Number(purchase.totalCost)!==63675||purchase.supplierName!=='Abdu Yiga')errors.push('Original supplier purchase is missing or changed.');
- if(stage5.filter(x=>x?.id==='AF-S5-KB002-001').length!==1)errors.push('Stage 5 audit confirmation missing or duplicated.');
- if(payments.length!==1||paid!==63600||payments[0]?.method!=='Cash')errors.push('Expected one existing cash payment of exactly UGX 63,600.');
- if(prior.length)errors.push('Stage 6 adjustment already exists; repeat posting is blocked.');
- const custody=m.find(x=>same(x?.id,'1791202061631'));
- if(!custody||custody.materialSource!=='client')errors.push('Client custody ownership check failed.');
- return {ready:errors.length===0,errors,batchNumber:'KB002',supplier:'Abdu Yiga',purchaseUGX:63675,
-  recordedCashUGX:paid,proposedSettlementDiscountUGX:75,proposedOutstandingUGX:63675-paid-75,
-  existingAdjustments:prior.length,notice:'Director-confirmed UGX 63,600 accepted as full settlement. No cash or journal entry will be created.'};
-}
-function download(value,name){const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json'}));
- const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000)}
-function backup(){const keys=['materialRecords','afSupplierPurchases','supplierPayments','afStage5HistoricalCorrectionsV1',KEY];
- const raw={};keys.forEach(k=>raw[k]=localStorage.getItem(k));return {type:'AF_STAGE6_PRE_ADJUSTMENT_BACKUP',createdAt:new Date().toISOString(),keys:raw}}
-function apply(){const check=review();if(!check.ready)throw Error(check.errors.join('\n'));
- const user=director(),date=new Date().toISOString();const rows=array(KEY)||[],materials=array('materialRecords');
- const entry={id:ID,type:'SUPPLIER_SETTLEMENT_DISCOUNT',materialRecordId:MID,purchaseId:PID,batchNumber:'KB002',
-  supplierId:'SUP-1791234304632-33di0',supplierName:'Abdu Yiga',amountUGX:75,
-  originalPurchaseUGX:63675,actualCashPaidUGX:63600,outstandingAfterUGX:0,
-  approvedByRole:'Director',approvedByEmployeeId:user.employeeId||'',approvedAt:date,
-  approvalBasis:'Director confirms supplier accepted UGX 63,600 cash in full settlement of UGX 63,675 purchase.',
-  cashEntryCreated:false,paymentEntryCreated:false,stockEntryCreated:false,journalEntryCreated:false,
-  generalLedgerStatus:'PENDING_CONTROLLED_GL_INTEGRATION'};
- const oldA=localStorage.getItem(KEY),oldM=localStorage.getItem('materialRecords');
- try{
-   localStorage.setItem(KEY,JSON.stringify([...rows,entry]));
-   const row=materials.find(x=>same(x?.id,MID));
-   if(typeof afRefreshSupplierPaymentSummary!=='function')throw Error('Supplier summary function is missing.');
-   afRefreshSupplierPaymentSummary(row);
-   if(row.supplierBalance!==0||row.supplierSettlementDiscount!==75||row.supplierAmountPaid!==63600)throw Error('Post-adjustment balance did not reconcile.');
-   row.supplierSettlementAdjustmentReference=ID;
-   localStorage.setItem('materialRecords',JSON.stringify(materials));
- }catch(e){try{if(oldA===null)localStorage.removeItem(KEY);else localStorage.setItem(KEY,oldA);
-   if(oldM===null)localStorage.removeItem('materialRecords');else localStorage.setItem('materialRecords',oldM)}catch(_){}
-   throw e;}
- return entry;
-}
-function open(){if(!director()){alert('Director access required.');return}
- document.getElementById('afStage6Modal')?.remove();const modal=document.createElement('div');modal.id='afStage6Modal';
- modal.style.cssText='position:fixed;inset:0;z-index:2147483030;background:#000b;overflow:auto;padding:16px;font:14px Arial';
- const card=document.createElement('section');card.style.cssText='max-width:780px;margin:25px auto;background:white;color:#173027;border-radius:12px;padding:22px';
- const h=document.createElement('h2');h.textContent='Stage 6 — KB002 Supplier Settlement';card.appendChild(h);
- const description=document.createElement('p');description.textContent='Original purchase UGX 63,675; existing cash payment UGX 63,600; supplier accepted full settlement. Record a separate UGX 75 non-cash discount, not a new payment.';card.appendChild(description);
- const pre=document.createElement('pre');pre.style.cssText='white-space:pre-wrap;word-break:break-word;max-height:45vh;overflow:auto;background:#f4f7f5;padding:12px';card.appendChild(pre);
- const refresh=()=>{const v=review();pre.textContent=JSON.stringify(v,null,2);return v};refresh();let backed=false;
- function button(label,fn){const b=document.createElement('button');b.type='button';b.textContent=label;b.style.cssText='padding:10px;margin:5px;border:0;border-radius:7px;background:#0b5d3b;color:white;cursor:pointer';b.onclick=fn;card.appendChild(b)}
- button('Download backup (required)',()=>{download(backup(),'AF_Stage6_Pre_Adjustment_Backup.json');backed=true;alert('Keep this backup safely before approving.');});
- button('Approve UGX 75 settlement discount',()=>{
-  if(!backed){alert('Download the backup first.');return}
-  const result=refresh();if(!result.ready){alert('Pre-check failed. No changes made.');return}
-  if(!confirm('Director approval: Abdu Yiga accepted UGX 63,600 cash as FULL settlement of UGX 63,675 for KB002. Record UGX 75 NON-CASH supplier discount, no additional payment or journal posting?'))return;
-  try{const receipt=apply();download(receipt,'AF_Stage6_KB002_Settlement_Receipt.json');refresh();
-   alert('Settlement adjustment saved. Supplier balance is UGX 0. No new cash payment or general-ledger journal was created.');}
-  catch(e){alert('Adjustment blocked: '+e.message);refresh()}
- });
- button('Download Stage 6 review',()=>download(review(),'AF_Stage6_KB002_Review.json'));
- button('Close',()=>modal.remove());modal.appendChild(card);document.body.appendChild(modal);
-}
-window.AFStage6KB002=Object.freeze({review,open});
-function attach(){if(document.getElementById('afStage6Button'))return;const b=document.createElement('button');b.id='afStage6Button';b.type='button';b.textContent='Stage 6 • KB002 Settlement';
- b.style.cssText='position:fixed;bottom:366px;right:12px;z-index:2147482000;background:#0b5d3b;color:white;border:1px solid white;border-radius:8px;padding:10px;font:600 12px Arial;cursor:pointer';
- b.onclick=open;document.body.appendChild(b)}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
-})();
-
-
-/* A&F STAGE 7 — CONTROLLED KB002 STAGING JOURNAL
-   Posts one balanced historical transaction as three linked entries ONLY to
-   afAccountingV1Staging. Does not post to afJournalEntries, source payments,
-   material stock or bank/cash operational records. Staging is not reconciled
-   financial reporting. LocalStorage cannot provide tamper-proof authorization. */
-(function(){
-'use strict';
-if(window.AFStage7KB002)return;
-const KEY='afAccountingV1Staging', AUDIT='afStage7KB002PostingAuditV1';
-const SOURCES=['AF-S7-KB002-PURCHASE','AF-S7-KB002-CASH','AF-S7-KB002-DISCOUNT'];
-const expected=[
- {sourceType:'stage7-kb002',sourceId:SOURCES[0],date:'2026-03-23',memo:'KB002 historical company-owned HDPE purchase, accepted 212.25 kg',lines:[{account:'1200',debit:63675,credit:0},{account:'2000',debit:0,credit:63675}]},
- {sourceType:'stage7-kb002',sourceId:SOURCES[1],date:'2026-03-23',memo:'KB002 existing historical cash paid to Abdu Yiga (no new cash disbursement)',lines:[{account:'2000',debit:63600,credit:0},{account:'1000',debit:0,credit:63600}]},
- {sourceType:'stage7-kb002',sourceId:SOURCES[2],date:'2026-10-11',memo:'KB002 approved non-cash settlement discount, Stage 6 AF-S6-KB002-001',lines:[{account:'2000',debit:75,credit:0},{account:'4100',debit:0,credit:75}]}
-];
-function get(k){const raw=localStorage.getItem(k);if(raw===null)return null;return JSON.parse(raw)}
-function arr(k){const v=get(k);return Array.isArray(v)?v:null}
-function same(a,b){return String(a??'')===String(b??'')}
-function director(){const u=get('currentUser');return u?.role==='Director'?u:null}
-function review(){const errors=[];let ledger=null,materials=null,purchases=null,payments=null,adjustments=null,audit=null;
- try{ledger=get(KEY);materials=arr('materialRecords');purchases=arr('afSupplierPurchases');payments=arr('supplierPayments');adjustments=arr('afSupplierSettlementAdjustmentsV1');audit=get(AUDIT)}catch(e){errors.push('Malformed data: '+e.message)}
- if(!director())errors.push('Director login required.');
- if(ledger!==null&&(ledger.version!==1||!Array.isArray(ledger.entries)))errors.push('Existing staging ledger has an incompatible format; posting blocked to protect data.');
- if(!materials||!purchases||!payments||!adjustments)errors.push('Required historical records unavailable.');
- if(audit!==null&&(!Array.isArray(audit)))errors.push('Stage 7 audit register is invalid.');
- const m=materials?.filter(x=>same(x.id,1791244969174)||x.batchNumber==='KB002')||[];
- const p=purchases?.filter(x=>x.id==='PUR-1791244969174'||same(x.materialRecordId,1791244969174))||[];
- const pay=payments?.filter(x=>same(x.materialRecordId,1791244969174)||x.batchNumber==='KB002')||[];
- const a=adjustments?.filter(x=>x.id==='AF-S6-KB002-001'||same(x.materialRecordId,1791244969174))||[];
- if(m.length!==1||m[0]?.materialSource!=='company'||m[0]?.historicalCorrectionReference!=='AF-S5-KB002-001'||Number(m[0]?.netWeight)!==212.25||Number(m[0]?.materialCost)!==63675||Number(m[0]?.supplierBalance)!==0)errors.push('Stage 5 material restoration or settled balance is not verified.');
- if(p.length!==1||Number(p[0]?.materialCost)!==63675||p[0]?.supplierName!=='Abdu Yiga')errors.push('Original purchase is missing or changed.');
- if(pay.length!==1||Number(pay[0]?.amount)!==63600||pay[0]?.method!=='Cash')errors.push('Historical cash payment is missing or changed.');
- if(a.length!==1||Number(a[0]?.amountUGX)!==75||a[0]?.approvedByRole!=='Director'||a[0]?.generalLedgerStatus!=='PENDING_CONTROLLED_GL_INTEGRATION')errors.push('Stage 6 settlement approval is missing or changed.');
- const existing=ledger?.entries?.filter(e=>e.sourceType==='stage7-kb002'||SOURCES.some(s=>e.sourceId===s)||/KB002/i.test(String(e.memo||'')))||[];
- if(existing.length)errors.push('KB002 journal entry already exists in staging; automatic reposting blocked.');
- if(audit?.length)errors.push('Stage 7 audit already exists; repeat posting blocked.');
- const totals=expected.flatMap(e=>e.lines).reduce((r,l)=>({debit:r.debit+l.debit,credit:r.credit+l.credit}),{debit:0,credit:0});
- return {ready:errors.length===0,errors,postingTarget:'STAGING ONLY — not reconciled general ledger',batch:'KB002',supplier:'Abdu Yiga',purchaseUGX:63675,cashAlreadyPaidUGX:63600,nonCashDiscountUGX:75,expectedEntries:expected,totals,existingKB002StagingEntries:existing.length,stagingLedgerStatus:ledger===null?'NOT_YET_INITIALIZED — safe initialization only after backup and Director approval':'EXISTING_LEDGER_PRESERVED'};
-}
-function download(obj,name){const url=URL.createObjectURL(new Blob([JSON.stringify(obj,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000)}
-function backup(){const keys=[KEY,AUDIT,'materialRecords','afSupplierPurchases','supplierPayments','afSupplierSettlementAdjustmentsV1','afStage5HistoricalCorrectionsV1','afStage4DirectorVerificationV1','afJournalEntries'];const raw={};keys.forEach(k=>raw[k]=localStorage.getItem(k));return {type:'AF_STAGE7_PRE_POSTING_BACKUP',createdAt:new Date().toISOString(),keys:raw}}
-function post(){const check=review();if(!check.ready)throw Error(check.errors.join('\n'));
- const user=director();const before=localStorage.getItem(KEY),beforeAudit=localStorage.getItem(AUDIT);const ledger=before===null?{version:1,entries:[]}:JSON.parse(before);
- const now=new Date().toISOString();if(ledger.version!==1||!Array.isArray(ledger.entries))throw Error('Incompatible staging ledger. No changes made.'); const next=ledger.entries.slice();
- expected.forEach((e,i)=>{if(next.some(x=>x.sourceKey===e.sourceType+':'+e.sourceId))throw Error('Duplicate journal source');next.push({id:'AFJ-S7-KB002-'+(i+1),sourceKey:e.sourceType+':'+e.sourceId,date:e.date,memo:e.memo,lines:e.lines.map(l=>({...l})),createdAt:now,actor:user.employeeId||'Director',reverses:null})});
- const record={id:'AF-S7-KB002-001',postedAt:now,postedByRole:'Director',postedByEmployeeId:user.employeeId||'',journalIds:next.slice(-3).map(e=>e.id),stagingOnly:true,operationalCashCreated:false,stockCreated:false,operationalPaymentCreated:false,sourceStage6:'AF-S6-KB002-001',accountingReconciliationStatus:'PENDING_FULL_SOURCE_RECONCILIATION'};
- try{localStorage.setItem(KEY,JSON.stringify({...ledger,entries:next}));localStorage.setItem(AUDIT,JSON.stringify([record]));}catch(e){try{if(before===null)localStorage.removeItem(KEY);else localStorage.setItem(KEY,before);if(beforeAudit===null)localStorage.removeItem(AUDIT);else localStorage.setItem(AUDIT,beforeAudit)}catch(_){}throw e}
- return record;
-}
-function open(){if(!director()){alert('Director access required');return}document.getElementById('afStage7Modal')?.remove();const m=document.createElement('div');m.id='afStage7Modal';m.style.cssText='position:fixed;inset:0;z-index:2147483040;background:#000b;overflow:auto;padding:16px;font:14px Arial';const c=document.createElement('section');c.style.cssText='max-width:850px;margin:25px auto;background:white;border-radius:12px;padding:22px;color:#173027';const h=document.createElement('h2');h.textContent='Stage 7 — KB002 Controlled Staging Journal';c.appendChild(h);const note=document.createElement('p');note.textContent='Creates three linked, balanced staging entries for historical purchase, already-paid cash and approved settlement discount. Does NOT pay cash again or change factory stock. Full general ledger remains unreconciled.';c.appendChild(note);const pre=document.createElement('pre');pre.style.cssText='white-space:pre-wrap;word-break:break-word;max-height:52vh;overflow:auto;background:#f4f7f5;padding:12px';c.appendChild(pre);const refresh=()=>{const v=review();pre.textContent=JSON.stringify(v,null,2);return v};refresh();let backed=false;
- function button(t,fn){const b=document.createElement('button');b.textContent=t;b.type='button';b.style.cssText='padding:10px;margin:5px;border:0;border-radius:7px;background:#0b5d3b;color:white;cursor:pointer';b.onclick=fn;c.appendChild(b)}
- button('Download backup (required)',()=>{download(backup(),'AF_Stage7_Pre_Posting_Backup.json');backed=true;alert('Keep this backup before posting.');});
- button('Post three KB002 staging entries',()=>{if(!backed)return alert('Download backup first.');if(!refresh().ready)return alert('Validation blocked posting.');if(!confirm('Post 3 historical KB002 entries to STAGING ONLY? No new factory cash or stock movements.'))return;try{const result=post();download(result,'AF_Stage7_KB002_Posting_Receipt.json');refresh();alert('Three balanced staging entries saved. Full company GL remains unreconciled.')}catch(e){alert('Posting blocked: '+e.message);refresh()}});
- button('Download review',()=>download(review(),'AF_Stage7_KB002_Review.json'));button('Close',()=>m.remove());m.appendChild(c);document.body.appendChild(m)}
-window.AFStage7KB002=Object.freeze({review,open});function attach(){if(document.getElementById('afStage7Button'))return;const b=document.createElement('button');b.id='afStage7Button';b.textContent='Stage 7 • KB002 Journal';b.type='button';b.style.cssText='position:fixed;bottom:410px;right:12px;z-index:2147482000;background:#0b5d3b;color:white;border:1px solid white;border-radius:8px;padding:10px;font:600 12px Arial;cursor:pointer';b.onclick=open;document.body.appendChild(b)}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
-})();
-
-
-/* A&F Wekavera — read-only modernization diagnostics. No ledger or stock writes. */
-(function (root) {
-  'use strict';
-  function inspect(storage) {
-    const result = {version:1, mode:'READ_ONLY', checkedAt:new Date().toISOString(), keys:[], warnings:[], staging:{status:'not_found', entryCount:0, balanced:null}, records:{}};
-    for(let i=0;i<storage.length;i++) result.keys.push(storage.key(i));
-    result.keys.sort();
-    const known = ['afAccountingV1Staging','materialRecords','afSupplierPurchases','expenses','expenseRecords','afSupplierSettlementAdjustmentsV1','afStage5HistoricalCorrectionsV1'];
-    for (const key of known) {
-      const raw=storage.getItem(key);
-      if(raw===null) { result.records[key]={present:false}; continue; }
-      try { const parsed=JSON.parse(raw); result.records[key]={present:true,kind:Array.isArray(parsed)?'array':typeof parsed,count:Array.isArray(parsed)?parsed.length:null};
-        if(key==='afAccountingV1Staging') {
-          const entries=Array.isArray(parsed.entries)?parsed.entries:null;
-          if(!entries) {result.staging.status='incompatible'; result.warnings.push('Staging ledger has no entries array');}
-          else { let debit=0,credit=0,invalid=0; const ids=new Set(), duplicates=[];
-            for(const e of entries){const id=e.sourceId || e.id; if(id){if(ids.has(id))duplicates.push(id); ids.add(id);} for(const l of (Array.isArray(e.lines)?e.lines:[])){const d=Number(l.debit),c=Number(l.credit);if(!Number.isFinite(d)||!Number.isFinite(c)||d<0||c<0)invalid++;else {debit+=d;credit+=c;}}}
-            result.staging={status:'present',entryCount:entries.length,debit,credit,balanced:invalid===0&&Math.abs(debit-credit)<0.005,invalidLines:invalid,duplicateSourceIds:duplicates};
-            if(duplicates.length)result.warnings.push('Duplicate staging source IDs detected');
-            if(!result.staging.balanced)result.warnings.push('Staging ledger not balanced or contains invalid lines');
-          }
-        }
-      } catch(e) {result.records[key]={present:true,parseError:true};result.warnings.push('Cannot parse '+key);}
-    }
-    result.warnings.push('Browser storage is not a secure shared company database; this diagnostic is not an accounting reconciliation.');
-    return result;
-  }
-  function downloadReport(storage) {
-    const report=inspect(storage);const blob=new Blob([JSON.stringify(report,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='AF_Modernization_Diagnostics_READ_ONLY.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return report;
-  }
-  root.AFModernizationDiagnostics={inspect,downloadReport};
-  if(typeof module!=='undefined'&&module.exports)module.exports={inspect};
-})(typeof window!=='undefined'?window:globalThis);
-
-
-
-/* A&F Modernization: Director-only read-only system audit launcher.
-   UI role gate only; browser storage is not a secure authorization boundary. */
-(function(){
-  "use strict";
-  function director(){
-    try { var u=JSON.parse(localStorage.getItem("currentUser")||"null"); return !!u && u.role==="Director"; }
-    catch(e){return false;}
-  }
-  function mount(){
-    var b=document.getElementById("af-modernization-audit-button");
-    if(!director()){if(b)b.remove();return;}
-    if(b)return;
-    b=document.createElement("button");
-    b.id="af-modernization-audit-button";
-    b.type="button";
-    b.textContent="System Audit & Reconciliation";
-    b.title="Director-only read-only diagnostic; does not reconcile or change records";
-    b.style.cssText="position:fixed;right:14px;bottom:18px;z-index:2147483000;background:#075b3b;color:white;border:2px solid #fff;border-radius:9px;padding:12px 14px;font:600 13px Arial;box-shadow:0 2px 12px #0005;max-width:245px;cursor:pointer";
-    b.addEventListener("click",function(){
-      if(!director()){alert("Director login required.");mount();return;}
-      if(!window.AFModernizationDiagnostics){alert("Audit module unavailable.");return;}
-      try {
-        var report=window.AFModernizationDiagnostics.downloadReport(localStorage);
-        alert("Read-only audit exported. Staging entries: "+report.staging.entryCount+
-          ". Warnings: "+report.warnings.length+
-          ". This is a diagnostic, not a reconciled financial statement.");
-      }catch(e){alert("Audit failed: "+e.message);}
-    });
-    document.body.appendChild(b);
-  }
-  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",mount);
-  else mount();
-  window.addEventListener("storage",mount);
-  document.addEventListener("click",function(){if(!director())mount();},true);
-  setInterval(mount,5000);
-})();
-
-
-/* A&F CONSOLIDATED RECONCILIATION PREVIEW v1 — READ ONLY.
-   No writes, no migration, no duplicate cashbook/journal postings. */
-(function(){'use strict';
-const readArray=key=>{try{const v=JSON.parse(localStorage.getItem(key)||'[]');return Array.isArray(v)?v:[]}catch{return []}};
-const money=n=>'UGX '+Number(n||0).toLocaleString('en-UG');
-const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const accountFor=m=>{m=String(m||'').trim().toLowerCase();return m==='cash'?'1000':m==='bank'||m==='bank transfer'?'1010':m==='mobile money'?'1020':null};
-const accountName={'1000':'Cash','1010':'Bank','1020':'Mobile Money','2200':'Director Loan Payable','3000':'Owner Capital Contributions (pending equity classification)','4100':'Other Income (pending classification)'};
-function build(){
- const issues=[],entries=[],seen=new Set();
- const funds=readArray('afOtherFundsV1');
- const legacy=readArray('afJournalEntries');
- let staging=[];try{const x=JSON.parse(localStorage.getItem('afAccountingV1Staging')||'{"entries":[]}');staging=Array.isArray(x.entries)?x.entries:[];}catch{issues.push('Staging journal is unreadable');}
- const stagedKeys=new Set(staging.map(e=>String(e.sourceKey||'')));
- function add(key,date,debit,credit,amount,memo){
-  if(seen.has(key)){issues.push('Duplicate funding source reference: '+key);return;}
-  seen.add(key);
-  if(stagedKeys.has(key))issues.push('Already exists in staging: '+key+' — do not post again');
-  if(!debit||!credit||!Number.isSafeInteger(amount)||amount<=0){issues.push('Invalid/unclassified funding movement: '+key);return;}
-  entries.push({sourceKey:key,date,memo,lines:[{account:debit,debit:amount,credit:0},{account:credit,debit:0,credit:amount}]});
- }
- for(const f of funds){
-  if(!f||!f.id){issues.push('Funding record missing stable ID');continue;}
-  const key='otherFunds:'+f.id;
-  if(f.reversedAt){if((f.payments||[]).length)issues.push('Reversed funding with repayment history: '+f.id);continue;}
-  const a=accountFor(f.method),amount=Number(f.amount);
-  const credit=f.type==='directorLoan'?'2200':f.type==='capital'?'3000':f.type==='otherIncome'?'4100':null;
-  add(key,String(f.date||'').slice(0,10),a,credit,amount,String(f.source||''));
-  if(f.type==='directorLoan'){
-   let total=0;
-   for(const p of (f.payments||[])){
-    const v=Number(p.amount);total+=v;
-    const method=accountFor(p.method);
-    if(!method){issues.push('Repayment payment method missing/unrecognized: '+(p.id||f.id));continue;}
-    add('otherFundsRepayment:'+(p.id||f.id),String(p.date||'').slice(0,10),'2200',method,v,'Director loan repayment');
+ function openHub(){
+   if(!['Director','Secretary'].includes(role()))return alert('Access restricted to Director and Secretary.');
+   let m=document.getElementById('afCombinedLoansHub');
+   if(!m){
+     m=document.createElement('div');m.id='afCombinedLoansHub';
+     m.style.cssText='position:fixed;inset:0;z-index:2147482998;background:rgba(0,0,0,.6);padding:18px;overflow:auto';
+     m.innerHTML=`<div style="max-width:700px;margin:7vh auto;background:white;color:#17382b;border-radius:14px;padding:24px;font:15px Arial,sans-serif;box-shadow:0 12px 35px #0004">
+       <div style="display:flex;justify-content:space-between;gap:12px;align-items:center"><h2 style="margin:0">💳 Loans & Other Funds</h2><button type="button" id="afCombinedClose">✕ Close</button></div>
+       <p>Choose a record book. Petty loans, Director's loans, capital contributions and other income retain their separate accounting classifications and histories.</p>
+       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+         <button type="button" id="afCombinedPetty" style="padding:20px;text-align:left;border:1px solid #b5d5c1;border-radius:10px;background:#eef8f1;cursor:pointer"><b>💳 Petty Loans & Repayments</b><p style="margin-bottom:0">Borrowing, approvals, due dates and repayments</p></button>
+         <button type="button" id="afCombinedOther" style="padding:20px;text-align:left;border:1px solid #b5d5c1;border-radius:10px;background:#eef8f1;cursor:pointer"><b>💰 Director's Loans & Other Funds</b><p style="margin-bottom:0">Director's loans, capital injections and other income</p></button>
+       </div><p style="font-size:12px;color:#666">Navigation consolidation only. This does not post transactions to the General Ledger or reconcile existing balances.</p>
+     </div>`;
+     document.body.appendChild(m);
+     m.querySelector('#afCombinedClose').onclick=()=>m.remove();
+     m.addEventListener('click',e=>{if(e.target===m)m.remove()});
+     m.querySelector('#afCombinedPetty').onclick=()=>{m.remove();if(typeof window.openAFPettyLoans==='function')window.openAFPettyLoans();else alert('Petty Loans module unavailable')};
+     m.querySelector('#afCombinedOther').onclick=()=>{m.remove();if(typeof window.openAFOtherFunds==='function')window.openAFOtherFunds();else alert('Other Funds module unavailable')};
    }
-   if(total>amount)issues.push('Repayments exceed principal: '+f.id);
-  }
  }
- const debits=entries.reduce((n,e)=>n+e.lines.reduce((s,l)=>s+l.debit,0),0);
- const credits=entries.reduce((n,e)=>n+e.lines.reduce((s,l)=>s+l.credit,0),0);
- return {status:'READ_ONLY_PREVIEW_NOT_POSTED',fundingRecords:funds.length,legacyJournalRecords:legacy.length,stagingJournalRecords:staging.length,entries,issues,totalDebits:debits,totalCredits:credits,balanced:debits===credits};
-}
-function open(){
- const role=typeof getAFCurrentRole==='function'?getAFCurrentRole():'';
- if(role!=='Director')return alert('Director access required.');
- const r=build();document.getElementById('afReconciliationPreviewModal')?.remove();
- const m=document.createElement('div');m.id='afReconciliationPreviewModal';m.style.cssText='position:fixed;inset:0;z-index:2147483400;background:#000a;overflow:auto;padding:20px;font:14px Arial';
- const rows=r.entries.map(e=>'<tr><td>'+safe(e.date)+'</td><td>'+safe(e.sourceKey)+'</td><td>'+safe(accountName[e.lines[0].account]||e.lines[0].account)+'</td><td>'+safe(accountName[e.lines[1].account]||e.lines[1].account)+'</td><td>'+money(e.lines[0].debit)+'</td></tr>').join('');
- m.innerHTML='<section style="max-width:1050px;margin:20px auto;padding:24px;background:#fff;color:#173027;border-radius:12px"><button id="afRecClose" style="float:right">✕ Close</button><h2>Accounting Reconciliation — Read-Only Preview</h2><p><strong>No transactions are posted or changed by this report.</strong> This is not a certified General Ledger or trial balance.</p><p>Funding source records: '+r.fundingRecords+' | Manual journals: '+r.legacyJournalRecords+' | Staging journals: '+r.stagingJournalRecords+'</p><p>Proposed balanced movements: '+r.entries.length+' | Debits '+money(r.totalDebits)+' | Credits '+money(r.totalCredits)+'</p><h3>Exceptions requiring reconciliation ('+r.issues.length+')</h3><div style="max-height:180px;overflow:auto">'+(r.issues.length?'<ul>'+r.issues.map(x=>'<li>'+safe(x)+'</li>').join('')+'</ul>':'<p>No exceptions identified in funding records; other company transactions remain unreconciled.</p>')+'</div><h3>Funding journal preview</h3><div style="overflow:auto;max-height:50vh"><table style="width:100%;border-collapse:collapse"><thead><tr><th>Date</th><th>Source ID</th><th>Debit</th><th>Credit</th><th>UGX</th></tr></thead><tbody>'+rows+'</tbody></table></div><p><button id="afRecExport">Download reconciliation JSON</button></p></section>';
- document.body.appendChild(m);m.querySelector('#afRecClose').onclick=()=>m.remove();m.querySelector('#afRecExport').onclick=()=>{const blob=new Blob([JSON.stringify(r,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='AF_Reconciliation_Preview_READ_ONLY.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
- m.querySelectorAll('th,td').forEach(c=>{c.style.padding='8px';c.style.borderBottom='1px solid #ddd';c.style.textAlign='left'});
-}
-window.AFConsolidatedReconciliation=Object.freeze({build,open});
-function attach(){if(document.getElementById('afReconciliationPreviewButton'))return;const base=document.getElementById('navOtherFunds');if(!base)return;const b=document.createElement('button');b.id='afReconciliationPreviewButton';b.textContent='📘 Accounting Reconciliation Preview';b.style.cssText='display:block;margin:6px 0;padding:9px;border:1px solid #aac8b6;border-radius:7px;background:#eaf5ee;cursor:pointer';b.onclick=open;base.insertAdjacentElement('afterend',b);b.style.display=(typeof getAFCurrentRole==='function'&&getAFCurrentRole()==='Director')?'':'none';}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
-})();
-
-
-/* A&F UNIFIED ACCOUNTING VIEW v1 — non-destructive live ledger.
-   Reads the posted staging ledger and unposted funding sources once each.
-   It does NOT mutate source records or certify opening balances. */
-(function(){'use strict';
-const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const read=(k,fallback)=>{try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(fallback))}catch{return fallback}};
-const mapMethod=x=>({'cash':'1000','bank':'1010','bank transfer':'1010','cheque':'1010','mobile money':'1020'})[String(x||'').trim().toLowerCase()]||null;
-function build(){
- const issues=[],entries=[],seen=new Set();const staging=read('afAccountingV1Staging',{entries:[]});
- const posted=Array.isArray(staging.entries)?staging.entries:[];
- const add=(key,date,memo,lines,source)=>{
-  if(seen.has(key)){issues.push('Duplicate ledger reference: '+key);return}seen.add(key);
-  const debit=lines.reduce((s,l)=>s+(Number(l.debit)||0),0),credit=lines.reduce((s,l)=>s+(Number(l.credit)||0),0);
-  if(!lines.length||debit!==credit||debit<=0||lines.some(l=>!/^\d{4}$/.test(String(l.account))||!Number.isSafeInteger(l.debit||0)||!Number.isSafeInteger(l.credit||0)||l.debit<0||l.credit<0)){
-   issues.push('Invalid journal entry excluded: '+key);return}
-  entries.push({sourceKey:key,date,memo,source,lines});
- };
- for(const p of posted){if(!p||!p.sourceKey||!Array.isArray(p.lines)){issues.push('Invalid staging record');continue}add(String(p.sourceKey),p.date,p.memo,p.lines,'Staging posted')}
- const funds=read('afOtherFundsV1',[]);
- for(const f of Array.isArray(funds)?funds:[]){
-  if(!f||!f.id){issues.push('Funding record missing ID');continue}
-  const key='otherFunds:'+f.id;
-  if(f.reversedAt){if((f.payments||[]).length)issues.push('Reversed funding has repayments: '+f.id);continue}
-  const debit=mapMethod(f.method),credit=({'directorLoan':'2200','capital':'3000','otherIncome':'4100'})[f.type],amount=Number(f.amount);
-  if(!debit||!credit||!Number.isSafeInteger(amount)||amount<=0){issues.push('Funding needs classification: '+key);continue}
-  if(seen.has(key)){issues.push('Funding already posted to staging, excluded from projection: '+key)}
-  else add(key,f.date,f.source,[{account:debit,debit:amount,credit:0},{account:credit,debit:0,credit:amount}],'Funding projection');
-  if(f.type==='directorLoan'){
-   let paid=0;for(const [i,p] of (f.payments||[]).entries()){
-    const amt=Number(p.amount);paid+=Number.isFinite(amt)?amt:0;
-    const method=mapMethod(p.method),repkey='otherFundsRepayment:'+(p.id||f.id+':'+i);
-    if(!method||!Number.isSafeInteger(amt)||amt<=0){issues.push('Repayment needs method/amount: '+repkey);continue}
-    if(seen.has(repkey))issues.push('Repayment already posted to staging, excluded: '+repkey);
-    else add(repkey,p.date,'Director loan repayment',[{account:'2200',debit:amt,credit:0},{account:method,debit:0,credit:amt}],'Funding repayment projection');
-   }if(paid>amount)issues.push('Repayments exceed principal: '+f.id);
-  }
+ function refresh(){
+   ensureStyle();
+   const r=role(),allowed=['Director','Secretary'].includes(r);
+   const expenses=document.getElementById('navExpenses');
+   const loans=makeButton(expenses,'navLoansFunds','💳 Loans & Other Funds');
+   if(loans){loans.hidden=!allowed;loans.style.display=allowed?'':'none';loans.onclick=e=>{e.preventDefault();openHub()}}
+   const oldReports=document.getElementById('navReports');
+   const accounts=document.getElementById('navAccountsReports');
+   if(accounts){accounts.hidden=!allowed;accounts.style.display=allowed?'':'none';accounts.onclick=e=>{e.preventDefault();if(typeof window.openAFAccountsReports==='function')window.openAFAccountsReports();else if(typeof openAFAccountsReports==='function')openAFAccountsReports();else alert('Accounts & Reports module unavailable')}}
+   // Older navigation buttons are visually retired, not deleted, to avoid breaking older handlers.
+   for(const id of ['navReports','navPettyLoans','navOtherFunds']){
+     const el=document.getElementById(id);if(el){el.setAttribute('aria-hidden','true');el.tabIndex=-1}
+   }
  }
- const manual=read('afJournalEntries',[]);
- if(Array.isArray(manual))for(const [i,j] of manual.entries()){
-  const key='manualJournal:'+(j?.id||j?.reference||i),amount=Number(j?.amount),dr=String(j?.debitAccount||''),cr=String(j?.creditAccount||'');
-  if(!/^\d{4}$/.test(dr)||!/^\d{4}$/.test(cr)||dr===cr||!Number.isSafeInteger(amount)||amount<=0){issues.push('Manual journal requires valid account codes and amount: '+key);continue}
-  if(!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(String(j.date||''))){issues.push('Manual journal missing valid date: '+key);continue}
-  if(seen.has(key)||seen.has('journal:'+String(j.id||j.reference||i))||seen.has('manual:'+String(j.id||j.reference||i))){issues.push('Manual journal already posted to staging: '+key);continue}
-  add(key,j.date,j.narration,[{account:dr,debit:amount,credit:0},{account:cr,debit:0,credit:amount}],'Manual journal projection');
- }
- const byAccount=new Map();for(const e of entries)for(const l of e.lines){const k=String(l.account),a=byAccount.get(k)||{account:k,debit:0,credit:0};a.debit+=l.debit||0;a.credit+=l.credit||0;byAccount.set(k,a)}
- const accounts=[...byAccount.values()].sort((a,b)=>a.account.localeCompare(b.account)).map(a=>({...a,net:a.debit-a.credit}));
- const totalDebits=accounts.reduce((s,a)=>s+a.debit,0),totalCredits=accounts.reduce((s,a)=>s+a.credit,0);
- return {status:'PARTIAL_UNIFIED_LEDGER_NOT_FULLY_RECONCILED',postedStaging:posted.length,fundingSources:Array.isArray(funds)?funds.length:0,legacyManualJournals:Array.isArray(manual)?manual.length:0,entryCount:entries.length,totalDebits,totalCredits,balanced:totalDebits===totalCredits,accounts,entries,issues,warning:'Funding and valid manual journals are projected, not posted. No verified opening balances, full sales, purchases, payroll, expenses or bank reconciliation included.'};
-}
-function open(){if(typeof getAFCurrentRole!=='function'||getAFCurrentRole()!=='Director'){alert('Director access required');return}
- document.getElementById('afUnifiedLedgerModal')?.remove();const r=build(),m=document.createElement('div');m.id='afUnifiedLedgerModal';m.style.cssText='position:fixed;inset:0;z-index:2147483400;background:#000b;overflow:auto;padding:16px;font:14px Arial';
- m.innerHTML='<section style="max-width:1000px;margin:20px auto;background:white;color:#173027;padding:22px;border-radius:12px"><button id="afULClose" style="float:right">Close ✕</button><h2>Unified Accounting View — Partial</h2><p><b>Not a final Trial Balance.</b> Staging entries are included once. Funding and valid manual journals are projected once, without changing cash, stock or journals.</p><p>Staging: '+r.postedStaging+' | Funding records: '+r.fundingSources+' | Ledger movements: '+r.entryCount+' | Manual journals checked: '+r.legacyManualJournals+'</p><p>Debits UGX '+r.totalDebits.toLocaleString()+' | Credits UGX '+r.totalCredits.toLocaleString()+'</p><h3>Account balances</h3><table style="width:100%;border-collapse:collapse"><tr><th>Account</th><th>Debits UGX</th><th>Credits UGX</th><th>Net UGX</th></tr>'+r.accounts.map(a=>'<tr><td>'+safe(a.account)+'</td><td>'+a.debit.toLocaleString()+'</td><td>'+a.credit.toLocaleString()+'</td><td>'+a.net.toLocaleString()+'</td></tr>').join('')+'</table><h3>Exceptions ('+r.issues.length+')</h3><ul>'+r.issues.map(x=>'<li>'+safe(x)+'</li>').join('')+'</ul><p>'+safe(r.warning)+'</p><button id="afULExport">Export unified ledger JSON</button></section>';
- document.body.appendChild(m);m.querySelector('#afULClose').onclick=()=>m.remove();m.querySelector('#afULExport').onclick=()=>{const u=URL.createObjectURL(new Blob([JSON.stringify(r,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=u;a.download='AF_Unified_Accounting_PARTIAL.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)};
- m.querySelectorAll('td,th').forEach(c=>{c.style.padding='7px';c.style.borderBottom='1px solid #ddd';c.style.textAlign='left'});
-}
-window.AFUnifiedAccounting=Object.freeze({build,open});
-function attach(){if(document.getElementById('afUnifiedLedgerButton'))return;const base=document.getElementById('afReconciliationPreviewButton')||document.getElementById('navOtherFunds');if(!base)return;const b=document.createElement('button');b.id='afUnifiedLedgerButton';b.textContent='📒 Unified Accounting View';b.style.cssText='display:block;margin:6px 0;padding:9px;border:1px solid #aac8b6;border-radius:7px;background:#eaf5ee;cursor:pointer';b.onclick=open;base.insertAdjacentElement('afterend',b);b.style.display=(typeof getAFCurrentRole==='function'&&getAFCurrentRole()==='Director')?'':'none'}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
-})();
-
-
-/* A&F ACCOUNTING TOOLS NAVIGATION — consolidated, UI-only.
-   One Accounts & Reports main entry; technical tools stay nested.
-   Observer is disconnected during DOM moves to avoid mutation feedback. */
-(function(){
-'use strict';
-const ids=['afAuditSourceButton','afSchemaAuditButton','afReconcileButton','afPurchaseReviewButton','afPurchaseDetailsButtonV2','afStage3OwnershipButton','afStage4Button','afStage5Button','afStage6Button','afStage7Button','afReconciliationPreviewButton','afUnifiedLedgerButton'];
-const names={afAuditSourceButton:'Source audit',afSchemaAuditButton:'Transaction schema audit',afReconcileButton:'Reconciliation preview',afPurchaseReviewButton:'Purchase link exceptions',afPurchaseDetailsButtonV2:'Compare purchase exceptions',afStage3OwnershipButton:'Ownership & purchase review',afStage4Button:'KB002 verification',afStage5Button:'KB002 restore',afStage6Button:'KB002 settlement',afStage7Button:'KB002 journal',afReconciliationPreviewButton:'Accounting reconciliation report',afUnifiedLedgerButton:'Unified accounting view'};
-function isDirector(){try{if(typeof getAFCurrentRole==='function')return getAFCurrentRole()==='Director';const u=JSON.parse(localStorage.getItem('currentUser')||'null');return !!u&&u.role==='Director'}catch(_){return false}}
-let observer=null, queued=false;
-function refresh(){
- if(observer)observer.disconnect();
- try{
-  let hub=document.getElementById('afAccountingToolsHub');
-  if(!hub){
-   hub=document.createElement('details');hub.id='afAccountingToolsHub';hub.style.cssText='margin:6px 8px;padding:8px;border:1px solid #b6cbbf;border-radius:9px;background:#f4f8f5;color:#173b2a;font:13px Arial';
-   const summary=document.createElement('summary');summary.textContent='Advanced accounting & audits';summary.style.cssText='font-weight:700;cursor:pointer;padding:6px';hub.appendChild(summary);
-   const desc=document.createElement('p');desc.textContent='Director-only technical tools; read-only reports are not final accounts.';desc.style.cssText='font-size:12px;margin:8px 4px';hub.appendChild(desc);
-   const items=document.createElement('div');items.id='afAccountingToolsItems';items.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:6px';hub.appendChild(items);
-   const nav=document.getElementById('navAccountsReports')||document.getElementById('navAccounts');
-   if(nav&&nav.parentNode)nav.insertAdjacentElement('afterend',hub);else {const other=document.getElementById('navOtherFunds');if(other)other.insertAdjacentElement('afterend',hub);else document.body.appendChild(hub)}
-  }
-  const wanted=isDirector()?'':'none';if(hub.style.display!==wanted)hub.style.display=wanted;
-  const items=document.getElementById('afAccountingToolsItems');
-  for(const id of ids){const b=document.getElementById(id);if(!b||b.parentNode===items)continue;
-   b.style.position='static';b.style.bottom='auto';b.style.right='auto';b.style.zIndex='auto';b.style.width='100%';b.style.margin='0';b.style.display='block';b.style.fontSize='12px';b.textContent=names[id]||b.textContent;items.appendChild(b);
-  }
- }finally{if(observer&&document.body)observer.observe(document.body,{childList:true,subtree:true})}
-}
-function schedule(){if(queued)return;queued=true;queueMicrotask(()=>{queued=false;refresh()})}
-function init(){observer=new MutationObserver(mutations=>{if(mutations.some(m=>Array.from(m.addedNodes).some(n=>n.nodeType===1&&(ids.includes(n.id)||ids.some(id=>n.querySelector?.('#'+id))))))schedule()});refresh();document.addEventListener('click',e=>{if(e.target?.id==='navAccountsReports'||e.target?.id==='navAccounts')schedule()},true)}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',refresh);else refresh();
+ setInterval(refresh,1200);
+ window.afRefreshConsolidatedNavigation=refresh;
 })();
