@@ -106994,3 +106994,62 @@ window.AFStage7KB002=Object.freeze({review,open});function attach(){if(document.
   document.addEventListener("click",function(){if(!director())mount();},true);
   setInterval(mount,5000);
 })();
+
+
+/* A&F CONSOLIDATED RECONCILIATION PREVIEW v1 — READ ONLY.
+   No writes, no migration, no duplicate cashbook/journal postings. */
+(function(){'use strict';
+const readArray=key=>{try{const v=JSON.parse(localStorage.getItem(key)||'[]');return Array.isArray(v)?v:[]}catch{return []}};
+const money=n=>'UGX '+Number(n||0).toLocaleString('en-UG');
+const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const accountFor=m=>{m=String(m||'').trim().toLowerCase();return m==='cash'?'1000':m==='bank'||m==='bank transfer'?'1010':m==='mobile money'?'1020':null};
+const accountName={'1000':'Cash','1010':'Bank','1020':'Mobile Money','2200':'Director Loan Payable','3000':'Owner Capital Contributions (pending equity classification)','4100':'Other Income (pending classification)'};
+function build(){
+ const issues=[],entries=[],seen=new Set();
+ const funds=readArray('afOtherFundsV1');
+ const legacy=readArray('afJournalEntries');
+ let staging=[];try{const x=JSON.parse(localStorage.getItem('afAccountingV1Staging')||'{"entries":[]}');staging=Array.isArray(x.entries)?x.entries:[];}catch{issues.push('Staging journal is unreadable');}
+ const stagedKeys=new Set(staging.map(e=>String(e.sourceKey||'')));
+ function add(key,date,debit,credit,amount,memo){
+  if(seen.has(key)){issues.push('Duplicate funding source reference: '+key);return;}
+  seen.add(key);
+  if(stagedKeys.has(key))issues.push('Already exists in staging: '+key+' — do not post again');
+  if(!debit||!credit||!Number.isSafeInteger(amount)||amount<=0){issues.push('Invalid/unclassified funding movement: '+key);return;}
+  entries.push({sourceKey:key,date,memo,lines:[{account:debit,debit:amount,credit:0},{account:credit,debit:0,credit:amount}]});
+ }
+ for(const f of funds){
+  if(!f||!f.id){issues.push('Funding record missing stable ID');continue;}
+  const key='otherFunds:'+f.id;
+  if(f.reversedAt){if((f.payments||[]).length)issues.push('Reversed funding with repayment history: '+f.id);continue;}
+  const a=accountFor(f.method),amount=Number(f.amount);
+  const credit=f.type==='directorLoan'?'2200':f.type==='capital'?'3000':f.type==='otherIncome'?'4100':null;
+  add(key,String(f.date||'').slice(0,10),a,credit,amount,String(f.source||''));
+  if(f.type==='directorLoan'){
+   let total=0;
+   for(const p of (f.payments||[])){
+    const v=Number(p.amount);total+=v;
+    const method=accountFor(p.method);
+    if(!method){issues.push('Repayment payment method missing/unrecognized: '+(p.id||f.id));continue;}
+    add('otherFundsRepayment:'+(p.id||f.id),String(p.date||'').slice(0,10),'2200',method,v,'Director loan repayment');
+   }
+   if(total>amount)issues.push('Repayments exceed principal: '+f.id);
+  }
+ }
+ const debits=entries.reduce((n,e)=>n+e.lines.reduce((s,l)=>s+l.debit,0),0);
+ const credits=entries.reduce((n,e)=>n+e.lines.reduce((s,l)=>s+l.credit,0),0);
+ return {status:'READ_ONLY_PREVIEW_NOT_POSTED',fundingRecords:funds.length,legacyJournalRecords:legacy.length,stagingJournalRecords:staging.length,entries,issues,totalDebits:debits,totalCredits:credits,balanced:debits===credits};
+}
+function open(){
+ const role=typeof getAFCurrentRole==='function'?getAFCurrentRole():'';
+ if(role!=='Director')return alert('Director access required.');
+ const r=build();document.getElementById('afReconciliationPreviewModal')?.remove();
+ const m=document.createElement('div');m.id='afReconciliationPreviewModal';m.style.cssText='position:fixed;inset:0;z-index:2147483400;background:#000a;overflow:auto;padding:20px;font:14px Arial';
+ const rows=r.entries.map(e=>'<tr><td>'+safe(e.date)+'</td><td>'+safe(e.sourceKey)+'</td><td>'+safe(accountName[e.lines[0].account]||e.lines[0].account)+'</td><td>'+safe(accountName[e.lines[1].account]||e.lines[1].account)+'</td><td>'+money(e.lines[0].debit)+'</td></tr>').join('');
+ m.innerHTML='<section style="max-width:1050px;margin:20px auto;padding:24px;background:#fff;color:#173027;border-radius:12px"><button id="afRecClose" style="float:right">✕ Close</button><h2>Accounting Reconciliation — Read-Only Preview</h2><p><strong>No transactions are posted or changed by this report.</strong> This is not a certified General Ledger or trial balance.</p><p>Funding source records: '+r.fundingRecords+' | Manual journals: '+r.legacyJournalRecords+' | Staging journals: '+r.stagingJournalRecords+'</p><p>Proposed balanced movements: '+r.entries.length+' | Debits '+money(r.totalDebits)+' | Credits '+money(r.totalCredits)+'</p><h3>Exceptions requiring reconciliation ('+r.issues.length+')</h3><div style="max-height:180px;overflow:auto">'+(r.issues.length?'<ul>'+r.issues.map(x=>'<li>'+safe(x)+'</li>').join('')+'</ul>':'<p>No exceptions identified in funding records; other company transactions remain unreconciled.</p>')+'</div><h3>Funding journal preview</h3><div style="overflow:auto;max-height:50vh"><table style="width:100%;border-collapse:collapse"><thead><tr><th>Date</th><th>Source ID</th><th>Debit</th><th>Credit</th><th>UGX</th></tr></thead><tbody>'+rows+'</tbody></table></div><p><button id="afRecExport">Download reconciliation JSON</button></p></section>';
+ document.body.appendChild(m);m.querySelector('#afRecClose').onclick=()=>m.remove();m.querySelector('#afRecExport').onclick=()=>{const blob=new Blob([JSON.stringify(r,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='AF_Reconciliation_Preview_READ_ONLY.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
+ m.querySelectorAll('th,td').forEach(c=>{c.style.padding='8px';c.style.borderBottom='1px solid #ddd';c.style.textAlign='left'});
+}
+window.AFConsolidatedReconciliation=Object.freeze({build,open});
+function attach(){if(document.getElementById('afReconciliationPreviewButton'))return;const base=document.getElementById('navOtherFunds');if(!base)return;const b=document.createElement('button');b.id='afReconciliationPreviewButton';b.textContent='📘 Accounting Reconciliation Preview';b.style.cssText='display:block;margin:6px 0;padding:9px;border:1px solid #aac8b6;border-radius:7px;background:#eaf5ee;cursor:pointer';b.onclick=open;base.insertAdjacentElement('afterend',b);b.style.display=(typeof getAFCurrentRole==='function'&&getAFCurrentRole()==='Director')?'':'none';}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
+})();
