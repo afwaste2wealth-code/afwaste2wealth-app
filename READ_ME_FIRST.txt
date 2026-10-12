@@ -1,11 +1,1 @@
-A&F Wekavera Ltd — CONSOLIDATED RECONCILIATION PREVIEW (TEST FIRST)
-
-This candidate is based on the previous Cash Book integration app.js.
-Adds a Director-only read-only Accounting Reconciliation Preview next to Other Funds navigation.
-No automatic ledger postings, no data migrations, no financial records changed.
-It flags duplicate source IDs, missing payment methods, existing staging keys, and excessive repayments.
-It does NOT reconcile all purchases, sales, stock, payroll, or opening balances.
-Do not call this a finished accounting system.
-
-Test first on a separate branch or safe copy, with backup; verify no dashboard blinking and existing UGX 50,000 Cash Book entry.
-Never upload factory data backups to a public repository.
+VERIFIED SOURCE CANDIDATE, NOT CERTIFIED COMPLETE. Syntax and module-presence checks passed. Live end-to-end accounting reconciliation and browser workflows NOT verified. Does not modify historical records or include any private data. Do not replace production until smoke-tested and backed up.

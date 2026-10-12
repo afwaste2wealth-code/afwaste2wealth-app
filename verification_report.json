@@ -1,0 +1,36 @@
+{
+  "source": "/mnt/data/AF_Wekavera_VERIFIED_SOURCE_CANDIDATE.js",
+  "bytes": 2057310,
+  "lines": 107111,
+  "sha256": "6da18b2657e8c82fe90fcde00d003423d8cc7ef5ce3fc96d0265de6ad5e7ccaf",
+  "node_syntax": "PASS",
+  "module_presence": {
+    "role_engine": true,
+    "stock": true,
+    "weekly_checks": true,
+    "payroll": true,
+    "purchases": true,
+    "supplier_mirror": true,
+    "expenses": true,
+    "loans": true,
+    "cashbook": true,
+    "manual_journal": true,
+    "staging_ledger": true,
+    "unified_view": true,
+    "reconciliation": true,
+    "client_custody": true,
+    "washing": true,
+    "supplier_performance": true,
+    "environment": true
+  },
+  "accounting_limits": [
+    "Legacy manual journals not included in unified view",
+    "No complete automatic posting from all operational modules",
+    "Opening balances not verified",
+    "Historical repayments lacking method excluded from cashbook",
+    "Browser-local storage cannot enforce secure multiuser authorization",
+    "No full live browser end-to-end verification"
+  ],
+  "targeted_correction": "New director-loan repayments now capture required payment method for cashbook and unified view; old repayments are unchanged",
+  "release_status": "SOURCE_CANDIDATE_NOT_CERTIFIED_COMPLETE"
+}
