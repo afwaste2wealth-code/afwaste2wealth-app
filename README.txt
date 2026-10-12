@@ -1,6 +1,6 @@
-A&F Rejected Loans Navigation Fix
-Based on Sidebar + Petty Loans Combined package.
-Adds a direct Rejected Loan Applications sidebar entry for Director and Secretary.
-Uses the existing rejected filter and does not modify financial data or storage.
-Preserves existing loan approval, correction, repayment, and audit functions.
-JavaScript syntax verified. Live browser workflow not verified.
+A&F Petty Loans interface cleanup. Replaces prior Rejected Loan quick-access patch.
+Removed duplicate sidebar shortcut; Rejected remains available as a filter in Petty Loans.
+Simplified headings and separated Individual Accounts section.
+No data migration or localStorage writes added.
+Syntax verified with node --check. Browser testing not completed.
+Keep a backup of the current working version before committing.
