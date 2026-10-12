@@ -88479,9 +88479,20 @@ function openAFAccountsReports() {
             ${card("stockMovement", "🔄", "Stock Movement", "Open the live Stock & Inventory screen")}
             ${card("reportsHub", "📊", "Other Reports / Export", "Operational reports and existing exports")}
         </div>
+        ${role === "Director" ? `
+        <div style="font-weight:bold;color:#0b5d3b;margin:20px 0 9px;">Accounting Administration</div>
+        <div style="font-weight:600;color:#566b60;margin:0 0 9px;">Audit &amp; Reconciliation — read-only checks; no journal postings</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;">
+            ${card("auditReconciliation", "🔍", "Reconciliation Preview", "Review duplicate IDs and transaction coverage", "READ ONLY")}
+            ${card("auditSchema", "🧩", "Transaction Schema Audit", "Review record structures and missing fields", "READ ONLY")}
+            ${card("auditSources", "🗂️", "Accounting Source Audit", "Inventory original browser data sources", "READ ONLY")}
+        </div>` : ""}
     `;
 
     const actions = {
+        auditReconciliation: () => window.AFReconciliationPreview?.open?.() || window.AFReconciliationPreview?.show?.(),
+        auditSchema: () => window.AFTransactionSchemaAudit?.open?.(),
+        auditSources: () => window.AFReadOnlySourceAudit?.open?.(),
         cash: afAROpenCashBook,
         bank: afAROpenBankBook,
         sales: afAROpenSalesRegister,
@@ -106274,7 +106285,7 @@ function openAudit(){
  root.querySelector('#afAuditExport').onclick=()=>{const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='AF_Source_Inventory_READ_ONLY.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000)};
 }
 window.AFReadOnlySourceAudit=Object.freeze({inspect,open:openAudit});
-function attach(){if(document.getElementById('afAuditSourceButton'))return;const b=document.createElement('button');b.id='afAuditSourceButton';b.type='button';b.textContent='Accounting Source Audit (Read Only)';b.style.cssText='position:fixed;bottom:12px;right:12px;z-index:2147482000;background:#075334;color:#fff;border:1px solid white;border-radius:8px;padding:10px;font:600 12px Arial;cursor:pointer';b.onclick=openAudit;document.body.appendChild(b)}
+function attach(){ /* Audit tools are available through Accounts & Reports only. */ }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
 })();
 
@@ -106327,7 +106338,7 @@ function open(){
  root.querySelector('#afSchemaExport').onclick=()=>{const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='AF_Transaction_Schema_READ_ONLY.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000)};
 }
 window.AFTransactionSchemaAudit=Object.freeze({inspect,open});
-function attach(){if(document.getElementById('afSchemaAuditButton'))return;const b=document.createElement('button');b.id='afSchemaAuditButton';b.type='button';b.textContent='Transaction Schema Audit (Read Only)';b.style.cssText='position:fixed;bottom:58px;right:12px;z-index:2147482000;background:#164b6b;color:white;border:1px solid white;border-radius:8px;padding:10px;font:600 12px Arial;cursor:pointer';b.onclick=open;document.body.appendChild(b)}
+function attach(){ /* Audit tools are available through Accounts & Reports only. */ }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
 })();
 
@@ -106385,7 +106396,8 @@ function show(){const u=(()=>{try{return JSON.parse(localStorage.getItem('curren
  modal.innerHTML='<section style="background:white;color:#20372d;border-radius:12px;max-width:1050px;margin:20px auto;padding:20px"><button id="afRecClose" style="float:right">✕ Close</button><h2>Accounting Reconciliation Preview — Read Only</h2><p><b>NOT RECONCILED. NO ACCOUNTING POSTINGS.</b> This compares current browser records only.</p><p>Purchase mirror IDs matched: '+c.purchaseMirrorMatches+'/'+c.purchaseMirrorTotal+'; Expense mirror IDs matched: '+c.expenseMirrorMatches+'/'+c.expenseMirrorTotal+'; Orphan loan events: '+c.orphanLoanEvents+'; Unbalanced/unrecognized journal structures: '+c.unbalancedJournal+'</p><div style="overflow:auto"><table style="width:100%;border-collapse:collapse"><thead><tr><th>Group</th><th>Records</th><th>Missing IDs</th><th>Duplicate IDs</th><th>Cancelled</th><th>Unclassified</th></tr></thead><tbody>'+report.rows.map(r=>'<tr style="border-bottom:1px solid #ddd"><td>'+safe(r.group)+'</td><td>'+safe(r.count)+'</td><td>'+safe(r.missingIds)+'</td><td>'+safe(r.duplicateIds)+'</td><td>'+safe(r.cancelled)+'</td><td>'+safe(r.unclassified)+'</td></tr>').join('')+'</tbody></table></div><p>Matching IDs do not establish equal amounts or settlement. Confirm bank/cash balances and opening balances before activation. Data remains unchanged.</p><button id="afRecDownload" style="background:#0b5d3b;color:white;padding:12px;border:0;border-radius:7px">Download reconciliation preview JSON</button></section>';
  document.body.appendChild(modal);modal.querySelector('#afRecClose').onclick=()=>modal.remove();modal.querySelector('#afRecDownload').onclick=()=>{const blob=new Blob([JSON.stringify(report,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='AF_Reconciliation_Preview_READ_ONLY.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)};
 }
-function attach(){if(document.getElementById('afReconcileButton'))return;const b=document.createElement('button');b.id='afReconcileButton';b.type='button';b.textContent='Accounting Reconciliation Preview';b.style.cssText='position:fixed;bottom:102px;right:12px;z-index:2147482000;background:#633c13;color:white;border:1px solid white;border-radius:8px;padding:10px;font:600 12px Arial;cursor:pointer';b.onclick=show;document.body.appendChild(b)}
+window.AFReconciliationPreview=Object.freeze({inspect,open:show});
+function attach(){ /* Audit tools are available through Accounts & Reports only. */ }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
 })();
 
