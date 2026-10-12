@@ -1,29 +1,7 @@
-A&F WEKAVERA LTD — CONSOLIDATED SOURCE / ACCOUNTING CORRECTIONS
-12 October 2026
+A&F Wekavera — Director dashboard cleanup candidate (2026-10-12)
 
-CONTENTS
-app.js: Full consolidated application JavaScript source.
-verification_report.json: Machine-readable scope, results and unresolved issues.
-RELEASE_NOTES.txt: This file.
+CHANGED: Added a collapsible Accounts & Reports — advanced tools panel, collecting the existing source audit, transaction schema audit, reconciliation preview, purchase exceptions, KB002 stages 4–7, and unified accounting view. Existing click handlers are preserved. This is UI-only; it does not write financial or stock data.
 
-CHANGES
-1. Manual Journal Register: require a valid ISO-style date, positive whole-UGX amount, two distinct valid 4-digit chart-of-accounts codes, and unique journal reference for newly saved entries.
-2. Unified Accounting View: read and project valid legacy manual journals as balanced double-entry movements, alongside staging and funding movements, without writing historical records.
-3. Invalid legacy journals are excluded and flagged rather than silently converted.
-4. Preserve existing Director Loan repayment-method fix and existing Cash Book/funding records.
+VERIFIED: node --check app.js; 6 bundled accounting regression tests; ZIP CRC integrity.
 
-VERIFICATION
-- Full app.js passes node --check.
-- Six Node VM accounting regression checks pass.
-- ZIP integrity check passes.
-- Existing application data is not included in this ZIP.
-
-LIMITATIONS — DO NOT CLAIM CERTIFIED FINAL ACCOUNTS
-- No complete end-to-end browser validation of all factory modules.
-- Not all operational transactions automatically post to the General Ledger.
-- Opening balances, historical settlements and external bank statements not reconciled.
-- Client-side permissions/localStorage are not a secure multi-user backend.
-- Read-only unified ledger remains a partial report, not certified financial statements.
-
-DEPLOYMENT
-Retain the current committed version and a private backup before changing app.js. Test in a separate GitHub branch first. Do not upload company backups or employee data to public GitHub.
+NOT VERIFIED: full live browser workflow, complete historical reconciliation, backend security. This is not a certified production accounting release. Back up current GitHub version before testing; test on a non-production branch.
