@@ -106425,6 +106425,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
        <p>Choose a record book. Petty loans, Director's loans, capital contributions and other income retain their separate accounting classifications and histories.</p>
        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
          <button type="button" id="afCombinedPetty" style="padding:20px;text-align:left;border:1px solid #b5d5c1;border-radius:10px;background:#eef8f1;cursor:pointer"><b>💳 Petty Loans & Repayments</b><p style="margin-bottom:0">Borrowing, approvals, due dates and repayments</p></button>
+         <button type="button" id="afCombinedLenders" style="padding:20px;text-align:left;border:1px solid #b5d5c1;border-radius:10px;background:#eef8f1;cursor:pointer"><b>📒 Individual Lender Accounts</b><p style="margin-bottom:0">Select a lender, view all loans and repayments, print a statement</p></button>
          <button type="button" id="afCombinedOther" style="padding:20px;text-align:left;border:1px solid #b5d5c1;border-radius:10px;background:#eef8f1;cursor:pointer"><b>💰 Director's Loans & Other Funds</b><p style="margin-bottom:0">Director's loans, capital injections and other income</p></button>
        </div><p style="font-size:12px;color:#666">Navigation consolidation only. This does not post transactions to the General Ledger or reconcile existing balances.</p>
      </div>`;
@@ -106432,6 +106433,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
      m.querySelector('#afCombinedClose').onclick=()=>m.remove();
      m.addEventListener('click',e=>{if(e.target===m)m.remove()});
      m.querySelector('#afCombinedPetty').onclick=()=>{m.remove();if(typeof window.openAFPettyLoans==='function')window.openAFPettyLoans();else alert('Petty Loans module unavailable')};
+     m.querySelector('#afCombinedLenders').onclick=()=>{m.remove();window.openAFIndividualLenderAccounts()};
      m.querySelector('#afCombinedOther').onclick=()=>{m.remove();if(typeof window.openAFOtherFunds==='function')window.openAFOtherFunds();else alert('Other Funds module unavailable')};
    }
  }
@@ -106452,4 +106454,50 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',refresh);else refresh();
  setInterval(refresh,1200);
  window.afRefreshConsolidatedNavigation=refresh;
+})();
+
+/* A&F Individual Lender Accounts — read-only statements; no accounting postings. */
+(function(){
+ 'use strict';
+ const KEY='afPettyLoansV1';
+ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const money=v=>'UGX '+Number(v||0).toLocaleString('en-UG',{maximumFractionDigits:0});
+ const amount=v=>Math.max(0,Number(v)||0);
+ const date=v=>esc(v||'—');
+ const getLoans=()=>{try{const a=JSON.parse(localStorage.getItem(KEY)||'[]');return Array.isArray(a)?a:[]}catch(e){return []}};
+ function open(){
+   const role=typeof getAFCurrentRole==='function'?getAFCurrentRole():null;
+   if(!['Director','Secretary'].includes(role)){alert('Access restricted to Director and Secretary.');return}
+   document.getElementById('afIndividualLenderModal')?.remove();
+   const loans=getLoans().filter(x=>x&&x.state!=='rejected');
+   const names=[...new Set(loans.map(x=>String(x.lender||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+   const modal=document.createElement('div');modal.id='afIndividualLenderModal';
+   modal.style.cssText='position:fixed;inset:0;z-index:2147483001;background:#000a;padding:16px;overflow:auto;font:14px Arial,sans-serif';
+   modal.innerHTML=`<div style="max-width:1050px;margin:3vh auto;background:white;color:#183329;border-radius:12px;padding:22px"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center"><h2>Individual Lender Accounts</h2><button id="afLenderClose" type="button">✕ Close</button></div><p>Select a lender to see every loan and repayment. This is a read-only statement; it does not change loan records.</p><label>Lender <select id="afLenderSelect" style="padding:9px;max-width:100%;min-width:220px"><option value="">Select lender</option>${names.map((n,i)=>`<option value="${i}">${esc(n)}</option>`).join('')}</select></label><button id="afLenderPrint" type="button" style="margin-left:10px;padding:9px" disabled>Print statement</button><div id="afLenderStatement" style="margin-top:18px"></div></div>`;
+   document.body.appendChild(modal);
+   modal.querySelector('#afLenderClose').onclick=()=>modal.remove();
+   modal.onclick=e=>{if(e.target===modal)modal.remove()};
+   const sel=modal.querySelector('#afLenderSelect'),out=modal.querySelector('#afLenderStatement'),print=modal.querySelector('#afLenderPrint');
+   function render(){
+     const index=sel.value===''?-1:Number(sel.value);const name=names[index];
+     print.disabled=!name;
+     if(!name){out.innerHTML='<p>Choose a lender above.</p>';return}
+     const records=loans.filter(x=>String(x.lender||'').trim()===name).sort((a,b)=>String(a.receivedDate||'').localeCompare(String(b.receivedDate||'')));
+     const total=k=>records.reduce((sum,x)=>sum+amount(x[k]),0);
+     const principal=total('principal'),interest=total('interest');
+     const paid=records.reduce((sum,x)=>sum+(Array.isArray(x.payments)?x.payments:[]).reduce((n,p)=>n+amount(p.amount),0),0);
+     const outstanding=Math.max(0,principal+interest-paid);
+     const rows=records.map(x=>{
+       const repayments=Array.isArray(x.payments)?x.payments:[];
+       const repaid=repayments.reduce((n,p)=>n+amount(p.amount),0);
+       return `<tr><td>${esc(x.id||'—')}</td><td>${date(x.receivedDate)}</td><td>${date(x.dueDate)}</td><td>${esc(x.state||'—')}</td><td>${money(x.principal)}</td><td>${money(x.interest)}</td><td>${money(repaid)}</td><td>${money(Math.max(0,amount(x.principal)+amount(x.interest)-repaid))}</td></tr><tr><td colspan="8" style="background:#f5faf7"><b>Repayments:</b> ${repayments.length?repayments.map(p=>`${date(p.date||p.at)} — ${money(p.amount)}`).join('; '):'None recorded'}</td></tr>`
+     }).join('');
+     out.innerHTML=`<div id="afLenderPrintable"><h3>A&F Wekavera Ltd — Individual Lender Statement</h3><p><b>Lender:</b> ${esc(name)}<br><b>Statement date:</b> ${new Date().toLocaleDateString('en-UG')}</p><p><b>Total borrowed:</b> ${money(principal)} &nbsp; <b>Interest:</b> ${money(interest)} &nbsp; <b>Total repaid:</b> ${money(paid)} &nbsp; <b>Outstanding:</b> ${money(outstanding)}</p><div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;font-size:12px"><thead><tr>${['Loan reference','Received','Due date','Status','Principal','Interest','Paid','Outstanding'].map(x=>`<th>${x}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div><p style="font-size:12px;color:#555">Statement is based on saved Petty Loans records. Pending loans are shown separately by status; this is not a General Ledger reconciliation. Lenders with spelling variations may appear as separate accounts.</p></div>`;
+     out.querySelectorAll('td,th').forEach(c=>{c.style.border='1px solid #d7e3dc';c.style.padding='7px';c.style.textAlign='left'});
+   }
+   sel.onchange=render;
+   print.onclick=()=>{const content=out.querySelector('#afLenderPrintable');if(!content)return;const w=window.open('','_blank');if(!w){alert('Allow pop-ups to print this statement.');return}w.document.write('<!doctype html><html><head><title>Lender Statement</title><style>body{font:12px Arial;margin:24px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #aaa;padding:6px;text-align:left}@media print{button{display:none}}</style></head><body>'+content.innerHTML+'</body></html>');w.document.close();w.focus();w.print()};
+   render();
+ }
+ window.openAFIndividualLenderAccounts=open;
 })();
