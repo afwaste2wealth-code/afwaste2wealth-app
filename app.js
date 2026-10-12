@@ -106211,7 +106211,7 @@ body.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,m
 ['Outstanding',money(out)],['Overdue Loans',String(overdue)],['Pending Approval',String(loans.filter(x=>visible(x)&&x.state==='pending').length)],['Total Payments',money(totalPayments)],['Total Borrowed',money(borrowed)],['Total Repayable',money(totalRepayable)]
 ].map(([label,value])=>`<div style="padding:12px;border:1px solid #d7e3dc;border-radius:8px;background:#f5faf7"><div style="font-size:12px;color:#4e685b">${label}</div><strong style="display:block;font-size:17px;margin-top:5px">${value}</strong></div>`).join('')}</div>
 <div style="padding:12px;border:1px solid #d7e3dc;border-radius:8px;margin:10px 0"><div style="display:flex;justify-content:space-between;align-items:center"><b>Percentage Paid</b><b>${percentagePaid.toFixed(1)}%</b></div><div style="background:#e5eae7;border-radius:99px;height:12px;overflow:hidden;margin-top:8px"><div style="height:100%;width:${percentagePaid}%;background:#22875b;border-radius:99px"></div></div><small style="color:#586c60">Actual repayments ÷ approved total repayable (principal + interest). Pending/rejected loans excluded.</small></div>
-<section style="border:1px solid #d7e3dc;padding:12px;border-radius:8px;margin:12px 0"><h3 style="margin:0 0 8px">Individual lender accounts & loan records</h3>
+<section style="border:1px solid #d7e3dc;padding:12px;border-radius:8px;margin:12px 0"><h3 style="margin:0 0 8px">Loan records — Active, Overdue, Rejected and Closed</h3><p style="font-size:12px;color:#53685d">Select Rejected to see applications declined before disbursement. Approved loans cannot be deleted.</p><h3 style="margin:10px 0 8px">Individual lender accounts & loan records</h3>
 <div style="display:flex;gap:7px;flex-wrap:wrap">${[['all','All'],['approved','Active'],['overdue','Overdue'],['rejected','Rejected'],['paid','Closed'],['pending','Pending'],['voided','Voided']].map(([k,t])=>btn(t+' ('+loans.filter(l=>k==='all'?visible(l):k==='voided'?!!l.voidedAt:visible(l)&&(k==='approved'?l.state==='approved'&&due(l)>0&&daysLeft(l.dueDate)>=0:k==='overdue'?l.state==='approved'&&due(l)>0&&daysLeft(l.dueDate)<0:k==='paid'?l.state==='approved'&&due(l)===0:l.state===k)).length+')','filter:'+k)).join('')}</div>
 <label style="display:block;margin-top:10px">Individual lender account <select id="afPLLender" style="padding:8px;max-width:100%;margin-left:8px"><option value="">All lenders</option>${[...new Set(loans.map(l=>String(l.lender||'').trim()).filter(Boolean))].sort().map(n=>'<option value="'+esc(n)+'"'+(n===lenderFilter?' selected':'')+'>'+esc(n)+'</option>').join('')}</select></label>
 <div id="afPLAccountStatement" style="margin-top:10px"></div></section>
@@ -106260,6 +106260,7 @@ if(action==='history'){alert('Loan: '+l.id+'\nLender: '+l.lender+'\nCreated: '+l
 function nav(){const r=role(),base=document.getElementById('navExpenses');if(!base||!base.parentNode)return;let b=document.getElementById('navPettyLoans');if(!b){b=base.cloneNode(true);b.id='navPettyLoans';b.removeAttribute('onclick');b.onclick=e=>{e.preventDefault();render()};base.insertAdjacentElement('afterend',b)}b.style.display=['Director','Secretary'].includes(r)?'':'none';const alerts=read(KEY).filter(l=>visible(l)&&l.state==='approved'&&due(l)>0&&daysLeft(l.dueDate)<=0);b.textContent='💳 Petty Loans & Repayments'+(alerts.length?' 🔴 '+alerts.length:'')}
 function refresh(){nav();const r=role();let box=document.getElementById('afPettyLoanDashboardAlerts');if(!['Director','Secretary'].includes(r)){if(box)box.remove();return}const main=document.querySelector('#mainApplication .main')||document.querySelector('main');if(!main)return;if(!box){box=document.createElement('section');box.id='afPettyLoanDashboardAlerts';box.style.cssText='margin:12px 0;padding:12px;border-radius:9px;border:2px solid #d5a13c;background:#fff9e8;color:#48320b';main.prepend(box)}const loans=read(KEY).filter(l=>visible(l)&&l.state==='approved'&&due(l)>0&&daysLeft(l.dueDate)<=2);if(!loans.length){box.style.display='none';return}box.style.display='block';box.innerHTML='<style>@keyframes afPLPulse{50%{box-shadow:0 0 0 5px #ed9a5155}}</style><div style="animation:afPLPulse 1.6s infinite"><b>🔔 PETTY LOAN REPAYMENT REMINDERS ('+loans.length+')</b></div>'+loans.map(l=>'<div style="margin-top:6px">'+esc(l.lender)+' — '+money(due(l))+' — '+esc(l.dueDate)+' ('+status(l)+')</div>').join('')+'<button type="button" id="afPLDashboardOpen" style="margin-top:8px">Open Petty Loans</button>';box.querySelector('#afPLDashboardOpen').onclick=render}
 window.openAFPettyLoans=render;
+window.openAFPettyLoansFiltered=function(filter){const allowed=["all","approved","overdue","rejected","paid","pending","voided"];activeFilter=allowed.includes(filter)?filter:"all";lenderFilter="";render()};
 if(typeof applyAFRoleDashboard==='function'){const previous=applyAFRoleDashboard;applyAFRoleDashboard=function(){const result=previous.apply(this,arguments);setTimeout(refresh,160);return result}}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',refresh);else refresh();
 setInterval(refresh,60000);
@@ -107189,4 +107190,23 @@ function refresh(){
 function schedule(){if(queued)return;queued=true;queueMicrotask(()=>{queued=false;refresh()})}
 function init(){observer=new MutationObserver(mutations=>{if(mutations.some(m=>Array.from(m.addedNodes).some(n=>n.nodeType===1&&(ids.includes(n.id)||ids.some(id=>n.querySelector?.('#'+id))))))schedule()});refresh();document.addEventListener('click',e=>{if(e.target?.id==='navAccountsReports'||e.target?.id==='navAccounts')schedule()},true)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();
+
+
+/* A&F PETTY LOANS QUICK ACCESS — navigation only; never edits records. */
+(function(){
+ 'use strict';
+ function attach(){
+  const base=document.getElementById('navPettyLoans');
+  if(!base||!base.parentNode)return;
+  if(document.getElementById('navRejectedPettyLoans'))return;
+  const b=document.createElement('button');
+  b.type='button';b.id='navRejectedPettyLoans';b.textContent='↳ Rejected Loan Applications';
+  b.style.cssText='display:block;width:calc(100% - 20px);margin:3px 10px 7px;padding:9px 12px;border:1px solid #a9c2b3;border-radius:8px;background:#e9f2ec;color:#173d2c;text-align:left;cursor:pointer;font-size:13px';
+  b.onclick=function(e){e.preventDefault();if(typeof window.openAFPettyLoansFiltered==='function')window.openAFPettyLoansFiltered('rejected')};
+  base.insertAdjacentElement('afterend',b);
+ }
+ function refresh(){const b=document.getElementById('navRejectedPettyLoans');if(!b)attach();const r=typeof getAFCurrentRole==='function'?getAFCurrentRole():'';const el=document.getElementById('navRejectedPettyLoans');if(el)el.style.display=['Director','Secretary'].includes(r)?'block':'none'}
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',refresh,{once:true});else refresh();
+ setInterval(refresh,10000);
 })();
