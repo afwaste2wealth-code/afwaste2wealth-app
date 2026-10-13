@@ -107332,3 +107332,38 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 document.addEventListener('click',()=>setTimeout(attachGLDashboardButton,0));
 
 })();
+
+
+/* =========================================================
+ A&F WEKAVERA V1 RELEASE CONTROL — NON-DESTRUCTIVE
+ A single release readiness gate. Never modifies transaction data.
+ ========================================================= */
+(function(){'use strict';
+ function currentRole(){try{return typeof getAFCurrentRole==='function'?getAFCurrentRole():JSON.parse(localStorage.getItem('currentUser')||'null')?.role}catch(_){return null}}
+ function assess(){
+  const gl=window.AFIntegratedGL;
+  if(!gl||typeof gl.build!=='function')return {ready:false,issues:['Integrated General Ledger module is unavailable.']};
+  const report=gl.build(),issues=Array.isArray(report.issues)?report.issues.slice():['General Ledger exceptions unavailable'];
+  if(!report.balanced)issues.unshift('Projected journal entries do not balance.');
+  if(report.supplierControl&&Math.abs(Number(report.supplierControl.difference)||0)>0.005)issues.unshift('Supplier control and projected ledger disagree by UGX '+report.supplierControl.difference+'.');
+  issues.unshift('Opening balances, inventory consumption, sales, expenses and payroll are not fully certified.');
+  return {ready:false,status:'V1_OPERATIONAL_ACCOUNTING_NOT_CERTIFIED',checkedAt:new Date().toISOString(),journalCount:report.entryCount,projectedDebit:report.debit,projectedCredit:report.credit,supplierControl:report.supplierControl||null,issues,automaticHistoricalPostingEnabled:false};
+ }
+ function open(){if(currentRole()!=='Director'){alert('Director access required');return}
+  document.getElementById('afV1ReleaseControlModal')?.remove();
+  const r=assess(),modal=document.createElement('div');modal.id='afV1ReleaseControlModal';modal.style.cssText='position:fixed;inset:0;background:#000b;z-index:2147483450;overflow:auto;padding:16px;font:14px Arial';
+  const panel=document.createElement('section');panel.style.cssText='max-width:900px;margin:20px auto;background:white;color:#173027;padding:22px;border-radius:12px';
+  const title=document.createElement('h2');title.textContent='A&F Wekavera — V1 Release Control';panel.appendChild(title);
+  const summary=document.createElement('p');summary.textContent='Factory operations retained. Historical automatic GL posting is disabled until reconciliation and verification are complete.';panel.appendChild(summary);
+  const status=document.createElement('p');status.textContent='Accounting certification: NOT READY | Projected journal entries: '+r.journalCount+' | Debits: UGX '+r.projectedDebit.toLocaleString()+' | Credits: UGX '+r.projectedCredit.toLocaleString();panel.appendChild(status);
+  if(r.supplierControl){const s=document.createElement('p');s.textContent='Supplier control payable: UGX '+r.supplierControl.outstanding.toLocaleString()+' | Projected GL payable: UGX '+r.supplierControl.projectedPayable.toLocaleString()+' | Difference: UGX '+r.supplierControl.difference.toLocaleString();panel.appendChild(s)}
+  const h=document.createElement('h3');h.textContent='Outstanding accounting checks ('+r.issues.length+')';panel.appendChild(h);
+  const ul=document.createElement('ul');ul.style.cssText='max-height:310px;overflow:auto';r.issues.forEach(msg=>{const li=document.createElement('li');li.textContent=msg;ul.appendChild(li)});panel.appendChild(ul);
+  const exportBtn=document.createElement('button');exportBtn.textContent='Export one consolidated readiness report';exportBtn.onclick=()=>{const blob=new Blob([JSON.stringify({release:assess(),generalLedger:window.AFIntegratedGL.build()},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='AF_V1_RELEASE_READINESS.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};panel.appendChild(exportBtn);
+  const close=document.createElement('button');close.textContent='Close';close.style.marginLeft='12px';close.onclick=()=>modal.remove();panel.appendChild(close);modal.appendChild(panel);document.body.appendChild(modal);
+ }
+ window.AFV1ReleaseControl=Object.freeze({assess,open});
+ function attach(){const host=document.querySelector('#mainApplication .main')||document.getElementById('mainApplication');if(!host)return;let b=document.getElementById('afV1ReleaseControlButton');if(!b){b=document.createElement('button');b.id='afV1ReleaseControlButton';b.type='button';b.textContent='V1 Release & Accounting Status';b.style.cssText='margin:8px;padding:10px 14px;border:1px solid #9cbca9;border-radius:8px;background:#f3f7f4;color:#173027;font-weight:bold;cursor:pointer';b.onclick=open;host.prepend(b)}b.style.display=currentRole()==='Director'?'block':'none'}
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
+ document.addEventListener('click',()=>setTimeout(attach,0));
+})();

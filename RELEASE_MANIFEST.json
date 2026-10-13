@@ -1,0 +1,23 @@
+{
+  "package": "A&F Wekavera V1 consolidated controlled release",
+  "source": "Latest committed supplier-control ZIP supplied earlier",
+  "syntaxCheck": "PASS",
+  "sourceSHA256": "6061dfe75079db8b517666a3b6f9427321649eaa8fc28b071dfa191f4a7dbd89",
+  "accountingCertified": false,
+  "autoHistoricalPosting": false,
+  "supplierControl": {
+    "purchaseCount": 14,
+    "paymentCount": 16,
+    "discountCount": 1,
+    "purchaseCost": 8187832.5,
+    "payments": 7980200,
+    "approvedDiscounts": 75,
+    "unapprovedDiscounts": 0,
+    "unverifiedPurchases": [],
+    "outstanding": 207557.5,
+    "projectedPayable": 169495,
+    "difference": 38062.5
+  },
+  "projectedEntries": 44,
+  "knownExceptions": 26
+}
