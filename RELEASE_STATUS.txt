@@ -1,22 +1,2 @@
-A&F Wekavera consolidated accounting review — NOT PRODUCTION-CERTIFIED
-
-SOURCE: user uploaded app (50).js
-
-COMPLETED IN THIS FILE:
-- Four accounting report buttons open functional STAGING-only views.
-- General Ledger shows chronological journal lines and per-account running net balances.
-- Trial Balance shows net debit and credit balances and balancing check.
-- Balance Sheet shows staging-only asset/liability/equity/net-income arithmetic and difference.
-- Cash Flow view shows staging-only cash account movements with explicit transfer and classification limitations.
-- No automatic historical posting, cloud migration, or KB002 replay.
-- Original application functions and records left intact.
-- node --check PASSED.
-
-NOT COMPLETED / DO NOT CLAIM FULL SYSTEM IS DONE:
-- Opening balances and all operational source records not posted and reconciled to one authoritative general ledger.
-- Cloud sync of staging journals not confirmed.
-- Cash flow classification and bank reconciliation incomplete.
-- Client-side login and role checks are not server-side authorization.
-- No end-to-end live browser test has been run.
-
-DEPLOY ONLY AFTER BACKUP. Replace app.js once, commit, and test all four STAGING reports; do not treat these as certified financial statements.
+TARGETED CORRECTION ONLY — NOT FINAL PRODUCTION CERTIFICATION.
+Fix: preserve repayment method in petty-loan ledger and reject repayment of unapproved/voided loans. Existing records unchanged. Syntax check passed. Historical financial reconciliation and live browser tests remain outstanding. Preserve current live version and back up records before deployment.
