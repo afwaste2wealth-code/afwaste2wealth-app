@@ -1,0 +1,950 @@
+{
+  "release": {
+    "ready": false,
+    "status": "V1_OPERATIONAL_ACCOUNTING_NOT_CERTIFIED",
+    "checkedAt": "2026-10-13T09:09:40.386Z",
+    "journalCount": 45,
+    "projectedDebit": 17340507.5,
+    "projectedCredit": 17340507.5,
+    "supplierControl": {
+      "purchaseCount": 14,
+      "paymentCount": 16,
+      "discountCount": 1,
+      "purchaseCost": 8187832.5,
+      "payments": 7980200,
+      "approvedDiscounts": 75,
+      "unapprovedDiscounts": 0,
+      "unverifiedPurchases": [],
+      "outstanding": 207557.5,
+      "projectedPayable": 207557.5,
+      "difference": 0
+    },
+    "issues": [
+      "Opening balances, inventory consumption, sales, expenses and payroll are not fully certified.",
+      "Transport/miscellaneous allocation and payment need review: KB004 (UGX 116,000)",
+      "Transport/miscellaneous allocation and payment need review: KB005 (UGX 200,000)",
+      "Transport/miscellaneous allocation and payment need review: KB006 (UGX 200,000)",
+      "Transport/miscellaneous allocation and payment need review: KB007 (UGX 5,000)",
+      "Transport/miscellaneous allocation and payment need review: KB008 (UGX 200,000)",
+      "Transport/miscellaneous allocation and payment need review: KB009 (UGX 131,000)",
+      "Transport/miscellaneous allocation and payment need review: KB010 (UGX 151,000)",
+      "Transport/miscellaneous allocation and payment need review: KB011 (UGX 30,000)",
+      "Transport/miscellaneous allocation and payment need review: KB013 (UGX 50,000)",
+      "Transport/miscellaneous allocation and payment need review: KB014 (UGX 188,500)",
+      "Contractual loan interest not accrued automatically: PL-1791634318100-hbf5i UGX 4,940",
+      "Contractual loan interest not accrued automatically: PL-1791634490619-mcnh7 UGX 5,000",
+      "Contractual loan interest not accrued automatically: PL-1791634653335-d749v UGX 4,700",
+      "Contractual loan interest not accrued automatically: PL-1791648130001-oncpf UGX 3,000",
+      "Contractual loan interest not accrued automatically: PL-1791812266576-sygsh UGX 4,000",
+      "Contractual loan interest not accrued automatically: PL-1791812339743-907qg UGX 1,200",
+      "Contractual loan interest not accrued automatically: PL-1791812475970-um12v UGX 6,000",
+      "Contractual loan interest not accrued automatically: PL-1791812629896-ypz2f UGX 4,000",
+      "Payroll expense/payment mismatch requires confirmation before GL: EXP-20261007-001",
+      "Payroll payable not posted until earned wages are verified: Tayebwa Edison August 2026 UGX 9,600",
+      "Payroll payable not posted until earned wages are verified: Tayebwa Edison September 2026 UGX 63,300",
+      "Payroll payable not posted until earned wages are verified: Turyamureba Enock Edwin September 2026 UGX 86,600",
+      "Client service invoice/payment requires revenue recognition review: CPJ-2026-0001",
+      "Historical small supplier settlement differences require individual approved, audited discounts; do not clear them automatically."
+    ],
+    "automaticHistoricalPostingEnabled": false
+  },
+  "generalLedger": {
+    "status": "INTEGRATED_READ_ONLY_NOT_CERTIFIED",
+    "createdAt": "2026-10-13T09:09:40.387Z",
+    "entryCount": 45,
+    "debit": 17340507.5,
+    "credit": 17340507.5,
+    "balanced": true,
+    "coverage": {
+      "Existing staging": 3,
+      "Material purchase": 13,
+      "Supplier payment": 15,
+      "Petty loan borrowing": 13,
+      "Other funds": 1
+    },
+    "accounts": [
+      {
+        "account": "1000",
+        "debit": 1172400,
+        "credit": 7980200
+      },
+      {
+        "account": "1200",
+        "debit": 8187832.5,
+        "credit": 0
+      },
+      {
+        "account": "2000",
+        "debit": 7980275,
+        "credit": 8187832.5
+      },
+      {
+        "account": "2200",
+        "debit": 0,
+        "credit": 50000
+      },
+      {
+        "account": "2210",
+        "debit": 0,
+        "credit": 1122400
+      },
+      {
+        "account": "4100",
+        "debit": 0,
+        "credit": 75
+      }
+    ],
+    "supplierControl": {
+      "purchaseCount": 14,
+      "paymentCount": 16,
+      "discountCount": 1,
+      "purchaseCost": 8187832.5,
+      "payments": 7980200,
+      "approvedDiscounts": 75,
+      "unapprovedDiscounts": 0,
+      "unverifiedPurchases": [],
+      "outstanding": 207557.5,
+      "projectedPayable": 207557.5,
+      "difference": 0
+    },
+    "issues": [
+      "Transport/miscellaneous allocation and payment need review: KB004 (UGX 116,000)",
+      "Transport/miscellaneous allocation and payment need review: KB005 (UGX 200,000)",
+      "Transport/miscellaneous allocation and payment need review: KB006 (UGX 200,000)",
+      "Transport/miscellaneous allocation and payment need review: KB007 (UGX 5,000)",
+      "Transport/miscellaneous allocation and payment need review: KB008 (UGX 200,000)",
+      "Transport/miscellaneous allocation and payment need review: KB009 (UGX 131,000)",
+      "Transport/miscellaneous allocation and payment need review: KB010 (UGX 151,000)",
+      "Transport/miscellaneous allocation and payment need review: KB011 (UGX 30,000)",
+      "Transport/miscellaneous allocation and payment need review: KB013 (UGX 50,000)",
+      "Transport/miscellaneous allocation and payment need review: KB014 (UGX 188,500)",
+      "Contractual loan interest not accrued automatically: PL-1791634318100-hbf5i UGX 4,940",
+      "Contractual loan interest not accrued automatically: PL-1791634490619-mcnh7 UGX 5,000",
+      "Contractual loan interest not accrued automatically: PL-1791634653335-d749v UGX 4,700",
+      "Contractual loan interest not accrued automatically: PL-1791648130001-oncpf UGX 3,000",
+      "Contractual loan interest not accrued automatically: PL-1791812266576-sygsh UGX 4,000",
+      "Contractual loan interest not accrued automatically: PL-1791812339743-907qg UGX 1,200",
+      "Contractual loan interest not accrued automatically: PL-1791812475970-um12v UGX 6,000",
+      "Contractual loan interest not accrued automatically: PL-1791812629896-ypz2f UGX 4,000",
+      "Payroll expense/payment mismatch requires confirmation before GL: EXP-20261007-001",
+      "Payroll payable not posted until earned wages are verified: Tayebwa Edison August 2026 UGX 9,600",
+      "Payroll payable not posted until earned wages are verified: Tayebwa Edison September 2026 UGX 63,300",
+      "Payroll payable not posted until earned wages are verified: Turyamureba Enock Edwin September 2026 UGX 86,600",
+      "Client service invoice/payment requires revenue recognition review: CPJ-2026-0001",
+      "Historical small supplier settlement differences require individual approved, audited discounts; do not clear them automatically."
+    ],
+    "entries": [
+      {
+        "sourceKey": "stage7-kb002:AF-S7-KB002-PURCHASE",
+        "date": "2026-03-23",
+        "memo": "KB002 historical company-owned HDPE purchase, accepted 212.25 kg",
+        "origin": "Existing staging",
+        "lines": [
+          {
+            "account": "1200",
+            "debit": 63675,
+            "credit": 0
+          },
+          {
+            "account": "2000",
+            "debit": 0,
+            "credit": 63675
+          }
+        ]
+      },
+      {
+        "sourceKey": "stage7-kb002:AF-S7-KB002-CASH",
+        "date": "2026-03-23",
+        "memo": "KB002 existing historical cash paid to Abdu Yiga (no new cash disbursement)",
+        "origin": "Existing staging",
+        "lines": [
+          {
+            "account": "2000",
+            "debit": 63600,
+            "credit": 0
+          },
+          {
+            "account": "1000",
+            "debit": 0,
+            "credit": 63600
+          }
+        ]
+      },
+      {
+        "sourceKey": "stage7-kb002:AF-S7-KB002-DISCOUNT",
+        "date": "2026-10-11",
+        "memo": "KB002 approved non-cash settlement discount, Stage 6 AF-S6-KB002-001",
+        "origin": "Existing staging",
+        "lines": [
+          {
+            "account": "2000",
+            "debit": 75,
+            "credit": 0
+          },
+          {
+            "account": "4100",
+            "debit": 0,
+            "credit": 75
+          }
+        ]
+      },
+      {
+        "sourceKey": "purchase-material:PUR-1791245078677",
+        "date": "2026-03-23",
+        "memo": "Material KB003",
+        "origin": "Material purchase",
+        "lines": [
+          {
+            "account": "1200",
+            "debit": 63675,
+            "credit": 0
+          },
+          {
+            "account": "2000",
+            "debit": 0,
+            "credit": 63675
+          }
+        ]
+      },
+      {
+        "sourceKey": "purchase-material:PUR-1791246332785",
+        "date": "2026-01-14",
+        "memo": "Material KB004",
+        "origin": "Material purchase",
+        "lines": [
+          {
+            "account": "1200",
+            "debit": 1763100,
+            "credit": 0
+          },
+          {
+            "account": "2000",
+            "debit": 0,
+            "credit": 1763100
+          }
+        ]
+      },
+      {
+        "sourceKey": "purchase-material:PUR-1791249644789",
+        "date": "2026-03-06",
+        "memo": "Material KB005",
+        "origin": "Material purchase",
+        "lines": [
+          {
+            "account": "1200",
+            "debit": 1595700,
+            "credit": 0
+          },
+          {
+            "account": "2000",
+            "debit": 0,
+            "credit": 1595700
+          }
+        ]
+      },
+      {
+        "sourceKey": "purchase-material:PUR-1791272391110",
+        "date": "2026-04-12",
+        "memo": "Material KB006",
+        "origin": "Material purchase",
+        "lines": [
+          {
+            "account": "1200",
+            "debit": 1563300,
+            "credit": 0
+          },
+          {
+            "account": "2000",
+            "debit": 0,
+            "credit": 1563300
+          }
+        ]
+      },
+      {
+        "sourceKey": "purchase-material:PUR-1791288672951",
+        "date": "2026-04-18",
+        "memo": "Material KB007",
+        "origin": "Material purchase",
+        "lines": [
+          {
+            "account": "1200",
+            "debit": 38062.5,
+            "credit": 0
+          },
+          {
+            "account": "2000",
+            "debit": 0,
+            "credit": 38062.5
+          }
+        ]
+      },
+      {
+        "sourceKey": "purchase-material:PUR-1791288940312",
+        "date": "2026-04-13",
+        "memo": "Material KB008",
+        "origin": "Material purchase",
+        "lines": [
+          {
+            "account": "1200",
+            "debit": 1563300,
+            "credit": 0
+          },
+          {
+            "account": "2000",
+            "debit": 0,
+            "credit": 1563300
+          }
+        ]
+      },
+      {
+        "sourceKey": "purchase-material:PUR-1791289889192",
+        "date": "2026-06-04",
+        "memo": "Material KB009",
+        "origin": "Material purchase",
+        "lines": [
+          {
+            "account": "1200",
+            "debit": 237480,
+            "credit": 0
+          },
+          {
+            "account": "2000",
+            "debit": 0,
+            "credit": 237480
+          }
+        ]
+      },
+      {
+        "sourceKey": "purchase-material:PUR-1791290158527",
+        "date": "2026-06-19",
+        "memo": "Material KB010",
+        "origin": "Material purchase",
+        "lines": [
+          {
+            "account": "1200",
+            "debit": 228360,
+            "credit": 0
+          },
+          {
+            "account": "2000",
+            "debit": 0,
+            "credit": 228360
+          }
+        ]
+      },
+      {
+        "sourceKey": "purchase-material:PUR-1791290478716",
+        "date": "2026-06-12",
+        "memo": "Material KB011",
+        "origin": "Material purchase",
+        "lines": [
+          {
+            "account": "1200",
+            "debit": 73920,
+            "credit": 0
+          },
+          {
+            "account": "2000",
+            "debit": 0,
+            "credit": 73920
+          }
+        ]
+      },
+      {
+        "sourceKey": "purchase-material:PUR-1791291508857",
+        "date": "2026-06-30",
+        "memo": "Material KB012",
+        "origin": "Material purchase",
+        "lines": [
+          {
+            "account": "1200",
+            "debit": 1500,
+            "credit": 0
+          },
+          {
+            "account": "2000",
+            "debit": 0,
+            "credit": 1500
+          }
+        ]
+      },
+      {
+        "sourceKey": "purchase-material:PUR-1791291744979",
+        "date": "2026-07-14",
+        "memo": "Material KB013",
+        "origin": "Material purchase",
+        "lines": [
+          {
+            "account": "1200",
+            "debit": 357750,
+            "credit": 0
+          },
+          {
+            "account": "2000",
+            "debit": 0,
+            "credit": 357750
+          }
+        ]
+      },
+      {
+        "sourceKey": "purchase-material:PUR-1791292429670",
+        "date": "2026-07-06",
+        "memo": "Material KB014",
+        "origin": "Material purchase",
+        "lines": [
+          {
+            "account": "1200",
+            "debit": 516960,
+            "credit": 0
+          },
+          {
+            "account": "2000",
+            "debit": 0,
+            "credit": 516960
+          }
+        ]
+      },
+      {
+        "sourceKey": "purchase-material:PUR-1791295680315",
+        "date": "2026-08-22",
+        "memo": "Material KB015",
+        "origin": "Material purchase",
+        "lines": [
+          {
+            "account": "1200",
+            "debit": 121050,
+            "credit": 0
+          },
+          {
+            "account": "2000",
+            "debit": 0,
+            "credit": 121050
+          }
+        ]
+      },
+      {
+        "sourceKey": "supplier-payment:SP-1791245078679-59Y9M",
+        "date": "2026-03-23",
+        "memo": "Supplier payment KB003",
+        "origin": "Supplier payment",
+        "lines": [
+          {
+            "account": "2000",
+            "debit": 63600,
+            "credit": 0
+          },
+          {
+            "account": "1000",
+            "debit": 0,
+            "credit": 63600
+          }
+        ]
+      },
+      {
+        "sourceKey": "supplier-payment:SP-1791246332788-KPDU6",
+        "date": "2026-01-14",
+        "memo": "Supplier payment KB004",
+        "origin": "Supplier payment",
+        "lines": [
+          {
+            "account": "2000",
+            "debit": 700000,
+            "credit": 0
+          },
+          {
+            "account": "1000",
+            "debit": 0,
+            "credit": 700000
+          }
+        ]
+      },
+      {
+        "sourceKey": "supplier-payment:SP-1791249644793-FC1A3",
+        "date": "2026-03-06",
+        "memo": "Supplier payment KB005",
+        "origin": "Supplier payment",
+        "lines": [
+          {
+            "account": "2000",
+            "debit": 1595700,
+            "credit": 0
+          },
+          {
+            "account": "1000",
+            "debit": 0,
+            "credit": 1595700
+          }
+        ]
+      },
+      {
+        "sourceKey": "supplier-payment:SP-1791250049312-TKN64",
+        "date": "2026-03-06",
+        "memo": "Supplier payment KB004",
+        "origin": "Supplier payment",
+        "lines": [
+          {
+            "account": "2000",
+            "debit": 799300,
+            "credit": 0
+          },
+          {
+            "account": "1000",
+            "debit": 0,
+            "credit": 799300
+          }
+        ]
+      },
+      {
+        "sourceKey": "supplier-payment:SP-1791272391113-8X2FP",
+        "date": "2026-04-12",
+        "memo": "Supplier payment KB006",
+        "origin": "Supplier payment",
+        "lines": [
+          {
+            "account": "2000",
+            "debit": 1563300,
+            "credit": 0
+          },
+          {
+            "account": "1000",
+            "debit": 0,
+            "credit": 1563300
+          }
+        ]
+      },
+      {
+        "sourceKey": "supplier-payment:SP-1791288672954-KKM8U",
+        "date": "2026-04-18",
+        "memo": "Supplier payment KB007",
+        "origin": "Supplier payment",
+        "lines": [
+          {
+            "account": "2000",
+            "debit": 38000,
+            "credit": 0
+          },
+          {
+            "account": "1000",
+            "debit": 0,
+            "credit": 38000
+          }
+        ]
+      },
+      {
+        "sourceKey": "supplier-payment:SP-1791288940315-HZRPF",
+        "date": "2026-04-13",
+        "memo": "Supplier payment KB008",
+        "origin": "Supplier payment",
+        "lines": [
+          {
+            "account": "2000",
+            "debit": 1563300,
+            "credit": 0
+          },
+          {
+            "account": "1000",
+            "debit": 0,
+            "credit": 1563300
+          }
+        ]
+      },
+      {
+        "sourceKey": "supplier-payment:SP-1791289007101-N54IX",
+        "date": "2026-04-13",
+        "memo": "Supplier payment KB004",
+        "origin": "Supplier payment",
+        "lines": [
+          {
+            "account": "2000",
+            "debit": 56700,
+            "credit": 0
+          },
+          {
+            "account": "1000",
+            "debit": 0,
+            "credit": 56700
+          }
+        ]
+      },
+      {
+        "sourceKey": "supplier-payment:SP-1791289889195-YV4CE",
+        "date": "2026-06-04",
+        "memo": "Supplier payment KB009",
+        "origin": "Supplier payment",
+        "lines": [
+          {
+            "account": "2000",
+            "debit": 237400,
+            "credit": 0
+          },
+          {
+            "account": "1000",
+            "debit": 0,
+            "credit": 237400
+          }
+        ]
+      },
+      {
+        "sourceKey": "supplier-payment:SP-1791290158530-0LQQ2",
+        "date": "2026-06-19",
+        "memo": "Supplier payment KB010",
+        "origin": "Supplier payment",
+        "lines": [
+          {
+            "account": "2000",
+            "debit": 228300,
+            "credit": 0
+          },
+          {
+            "account": "1000",
+            "debit": 0,
+            "credit": 228300
+          }
+        ]
+      },
+      {
+        "sourceKey": "supplier-payment:SP-1791290478719-9G9SE",
+        "date": "2026-06-12",
+        "memo": "Supplier payment KB011",
+        "origin": "Supplier payment",
+        "lines": [
+          {
+            "account": "2000",
+            "debit": 73900,
+            "credit": 0
+          },
+          {
+            "account": "1000",
+            "debit": 0,
+            "credit": 73900
+          }
+        ]
+      },
+      {
+        "sourceKey": "supplier-payment:SP-1791291508859-BZG8L",
+        "date": "2026-06-30",
+        "memo": "Supplier payment KB012",
+        "origin": "Supplier payment",
+        "lines": [
+          {
+            "account": "2000",
+            "debit": 1500,
+            "credit": 0
+          },
+          {
+            "account": "1000",
+            "debit": 0,
+            "credit": 1500
+          }
+        ]
+      },
+      {
+        "sourceKey": "supplier-payment:SP-1791291744982-EJS1Q",
+        "date": "2026-07-14",
+        "memo": "Supplier payment KB013",
+        "origin": "Supplier payment",
+        "lines": [
+          {
+            "account": "2000",
+            "debit": 357700,
+            "credit": 0
+          },
+          {
+            "account": "1000",
+            "debit": 0,
+            "credit": 357700
+          }
+        ]
+      },
+      {
+        "sourceKey": "supplier-payment:SP-1791292429673-WT1Q9",
+        "date": "2026-07-06",
+        "memo": "Supplier payment KB014",
+        "origin": "Supplier payment",
+        "lines": [
+          {
+            "account": "2000",
+            "debit": 516900,
+            "credit": 0
+          },
+          {
+            "account": "1000",
+            "debit": 0,
+            "credit": 516900
+          }
+        ]
+      },
+      {
+        "sourceKey": "supplier-payment:SP-1791295680319-1OF2U",
+        "date": "2026-08-22",
+        "memo": "Supplier payment KB015",
+        "origin": "Supplier payment",
+        "lines": [
+          {
+            "account": "2000",
+            "debit": 121000,
+            "credit": 0
+          },
+          {
+            "account": "1000",
+            "debit": 0,
+            "credit": 121000
+          }
+        ]
+      },
+      {
+        "sourceKey": "petty-event:1791634341566-fdaxzu892dd",
+        "date": "2026-10-09",
+        "memo": "Loan received wewole",
+        "origin": "Petty loan borrowing",
+        "lines": [
+          {
+            "account": "1000",
+            "debit": 49400,
+            "credit": 0
+          },
+          {
+            "account": "2210",
+            "debit": 0,
+            "credit": 49400
+          }
+        ]
+      },
+      {
+        "sourceKey": "petty-event:1791634659144-d6vrerijxyc",
+        "date": "2026-10-01",
+        "memo": "Loan received Mukisa Kelementia Kelly",
+        "origin": "Petty loan borrowing",
+        "lines": [
+          {
+            "account": "1000",
+            "debit": 47000,
+            "credit": 0
+          },
+          {
+            "account": "2210",
+            "debit": 0,
+            "credit": 47000
+          }
+        ]
+      },
+      {
+        "sourceKey": "petty-event:1791634663214-tp3euikirx",
+        "date": "2026-10-10",
+        "memo": "Loan received Lubega Abdu Karim",
+        "origin": "Petty loan borrowing",
+        "lines": [
+          {
+            "account": "1000",
+            "debit": 100000,
+            "credit": 0
+          },
+          {
+            "account": "2210",
+            "debit": 0,
+            "credit": 100000
+          }
+        ]
+      },
+      {
+        "sourceKey": "petty-event:1791635566624-d91c5qeenfr",
+        "date": "2026-10-01",
+        "memo": "Loan received Maureen Mukyala Mukisa",
+        "origin": "Petty loan borrowing",
+        "lines": [
+          {
+            "account": "1000",
+            "debit": 50000,
+            "credit": 0
+          },
+          {
+            "account": "2210",
+            "debit": 0,
+            "credit": 50000
+          }
+        ]
+      },
+      {
+        "sourceKey": "petty-event:1791648071681-3s6te93ork5",
+        "date": "2026-10-04",
+        "memo": "Loan received Namakula Nalongo. Jajja",
+        "origin": "Petty loan borrowing",
+        "lines": [
+          {
+            "account": "1000",
+            "debit": 20000,
+            "credit": 0
+          },
+          {
+            "account": "2210",
+            "debit": 0,
+            "credit": 20000
+          }
+        ]
+      },
+      {
+        "sourceKey": "petty-event:1791648076869-4x6jmdd32m6",
+        "date": "2026-10-10",
+        "memo": "Loan received Namutebi",
+        "origin": "Petty loan borrowing",
+        "lines": [
+          {
+            "account": "1000",
+            "debit": 50000,
+            "credit": 0
+          },
+          {
+            "account": "2210",
+            "debit": 0,
+            "credit": 50000
+          }
+        ]
+      },
+      {
+        "sourceKey": "petty-event:1791648143586-p25wns95ie",
+        "date": "2026-10-08",
+        "memo": "Loan received Lubega Elia",
+        "origin": "Petty loan borrowing",
+        "lines": [
+          {
+            "account": "1000",
+            "debit": 30000,
+            "credit": 0
+          },
+          {
+            "account": "2210",
+            "debit": 0,
+            "credit": 30000
+          }
+        ]
+      },
+      {
+        "sourceKey": "petty-event:1791812278289-i169edtzyga",
+        "date": "2026-09-08",
+        "memo": "Loan received Butcha",
+        "origin": "Petty loan borrowing",
+        "lines": [
+          {
+            "account": "1000",
+            "debit": 20000,
+            "credit": 0
+          },
+          {
+            "account": "2210",
+            "debit": 0,
+            "credit": 20000
+          }
+        ]
+      },
+      {
+        "sourceKey": "petty-event:1791812543709-ytfqfwfevyd",
+        "date": "2026-09-12",
+        "memo": "Loan received Butcha",
+        "origin": "Petty loan borrowing",
+        "lines": [
+          {
+            "account": "1000",
+            "debit": 6000,
+            "credit": 0
+          },
+          {
+            "account": "2210",
+            "debit": 0,
+            "credit": 6000
+          }
+        ]
+      },
+      {
+        "sourceKey": "petty-event:1791812655788-nm5clz57dk",
+        "date": "2026-09-18",
+        "memo": "Loan received Butcha",
+        "origin": "Petty loan borrowing",
+        "lines": [
+          {
+            "account": "1000",
+            "debit": 20000,
+            "credit": 0
+          },
+          {
+            "account": "2210",
+            "debit": 0,
+            "credit": 20000
+          }
+        ]
+      },
+      {
+        "sourceKey": "petty-event:1791812660334-j12ticb364e",
+        "date": "2026-10-12",
+        "memo": "Loan received Butcha",
+        "origin": "Petty loan borrowing",
+        "lines": [
+          {
+            "account": "1000",
+            "debit": 30000,
+            "credit": 0
+          },
+          {
+            "account": "2210",
+            "debit": 0,
+            "credit": 30000
+          }
+        ]
+      },
+      {
+        "sourceKey": "petty-event:1791812901896-wp2tnlz8okh",
+        "date": "2026-09-28",
+        "memo": "Loan received Ohn",
+        "origin": "Petty loan borrowing",
+        "lines": [
+          {
+            "account": "1000",
+            "debit": 600000,
+            "credit": 0
+          },
+          {
+            "account": "2210",
+            "debit": 0,
+            "credit": 600000
+          }
+        ]
+      },
+      {
+        "sourceKey": "petty-event:1791812991941-95uu7nvfqg7",
+        "date": "2026-09-06",
+        "memo": "Loan received Ohn",
+        "origin": "Petty loan borrowing",
+        "lines": [
+          {
+            "account": "1000",
+            "debit": 100000,
+            "credit": 0
+          },
+          {
+            "account": "2210",
+            "debit": 0,
+            "credit": 100000
+          }
+        ]
+      },
+      {
+        "sourceKey": "other-funds:OF1791649991336_3q9env",
+        "date": "2026-10-10",
+        "memo": "Other funds Rent from Namugerwa Hajjara",
+        "origin": "Other funds",
+        "lines": [
+          {
+            "account": "1000",
+            "debit": 50000,
+            "credit": 0
+          },
+          {
+            "account": "2200",
+            "debit": 0,
+            "credit": 50000
+          }
+        ]
+      }
+    ],
+    "warning": "Read-only projection. Opening balances, inventory consumption, revenue recognition, payroll payments, small supplier discounts and some expenses remain unverified. Do not post this projection automatically."
+  }
+}

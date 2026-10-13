@@ -1,0 +1,35 @@
+A&F WEKAVERA LTD — V1 FINAL DEVELOPMENT HANDOVER
+13 October 2026
+
+RELEASE DECISION: OPERATIONAL RELEASE CANDIDATE; NOT FULLY ACCOUNTING-CERTIFIED.
+
+SOURCE: app.js extracted unchanged from AF_Wekavera_Consolidated_Credit_Control_Candidate.zip, the latest application package reported committed by the Director. This is NOT a newly tested production patch. It is a single, preserved final-copy handover of that candidate.
+
+VERIFIED FROM LATEST READINESS EXPORT:
+- 45 projected balanced journal entries, debits and credits UGX 17,340,507.50 each.
+- 14 supplier purchases UGX 8,187,832.50; payments UGX 7,980,200; approved discount UGX 75.
+- Supplier outstanding and projected payable both UGX 207,557.50; difference UGX 0.
+- Journal is READ-ONLY projection; automatic historical posting is disabled.
+
+DIRECTOR CONFIRMATIONS FOR FUTURE CONTROLLED RECONCILIATION:
+- Opening cash and other opening balances proposed as zero at 2026-01-01; existing company assets deferred, so opening balance sheet cannot be certified.
+- Ten transport/misc costs totaling UGX 1,271,500 paid to drivers using company money; verify whether costs are all inventory freight and whether payment records already exist.
+- Three unpaid wage items totaling UGX 159,500 remain outstanding; check existing payroll mismatch before posting.
+- Personal rent proceeds UGX 50,000 introduced into company and repayable to Director; classify as Director's Loan Payable, not revenue.
+- CPJ-2026-0001 washing service not performed; UGX 50,000 customer receipt is advance liability; do not recognize UGX 2,120,400 as earned revenue yet.
+- Petty loans: 30-day term, simple daily interest at individual contractual monthly rate divided by 30, continuing after day 30 until principal repaid, subject to actual agreement and repayments. Interest accrual implementation NOT verified.
+- Credit sales require Director approval, reason, and repayment date. Current control is browser-side only; server-side authorization absent.
+
+BLOCKERS TO FULL ACCOUNTING CERTIFICATION:
+1. Actual cash, bank, mobile-money balances and payment-method reconciliation not supplied.
+2. Full posted GL and cashbook not reconciled to all transaction sources; current GL projection is incomplete.
+3. Transport payment matching and cost classification outstanding.
+4. Payroll mismatch EXP-20261007-001 and wage liability source validation outstanding.
+5. Per-loan daily interest accrual and repayment verification outstanding.
+6. Inventory, finished stock, cost of goods sold and asset ownership/valuation outstanding.
+7. Customer advance, delivery and receivable flows not end-to-end tested.
+8. No tamper-resistant Director authorization or independent production acceptance testing.
+
+IMPORTANT: DO NOT CLAIM A FULL ACCOUNTING CERTIFICATE, AUTOMATICALLY POST HISTORICAL ENTRIES, OR REPLACE THE LIVE APP WITHOUT A BACKUP AND BROWSER TEST.
+
+This handover is the final development freeze of the current candidate. Additional certification requires missing source evidence, not further policy questions.
