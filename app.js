@@ -17371,6 +17371,9 @@ function recordMaterialIn() {
         <input id="supplierAmountPaidNow" type="number" min="0" step="1" value="0"
           style="width:100%;padding:10px;margin:6px 0 14px">
 
+        <label style="display:block;margin:8px 0"><input type="checkbox" id="supplierRoundAccepted" style="margin-right:7px">Supplier agrees to round the full purchase settlement DOWN to the nearest UGX 100 (Director approval required)</label>
+        <div id="supplierRoundPreview" style="font-size:12px;color:#555;margin:5px 0 12px">Exact material cost remains recorded. Discount applies only when the agreed rounded amount is fully paid now.</div>
+
         <label>Payment Method</label>
         <select id="supplierPaymentMethod" style="width:100%;padding:10px;margin:6px 0 14px">
           <option>Cash</option>
@@ -17919,6 +17922,16 @@ afAddSupplierForm();
 
     const materialCost = netKg * purchasePrice;
     const initialSupplierPayment = Math.max(Number(supplierPaidNow.value) || 0, 0);
+    const roundAccepted = modal.querySelector("#supplierRoundAccepted").checked;
+    const roundedSettlement = Math.floor((materialCost + 0.0000001) / 100) * 100;
+    const proposedDiscount = Math.round((materialCost - roundedSettlement) * 100) / 100;
+    const directorAuthorized = String(currentUser.role || "").toLowerCase() === "director";
+    if (roundAccepted && !directorAuthorized) {
+      alert("Only the Director can approve an agreed supplier settlement discount."); return;
+    }
+    if (roundAccepted && (initialSupplierPayment !== roundedSettlement || initialSupplierPayment <= 0)) {
+      alert("For full rounded settlement, enter the agreed amount paid now: UGX " + roundedSettlement.toLocaleString() + ". Otherwise untick the settlement box and record a partial payment."); return;
+    }
 
     if (initialSupplierPayment > materialCost) {
       alert("Amount paid to supplier cannot exceed the material amount due (" + afMaterialMoney(materialCost) + "). Transport is kept separate.");
@@ -17999,11 +18012,12 @@ afAddSupplierForm();
         companyMiscExpense,
 
       supplierAmountPaid: initialSupplierPayment,
-      supplierBalance: Math.max(materialCost - initialSupplierPayment, 0),
+      supplierBalance: Math.max(materialCost - initialSupplierPayment - (roundAccepted ? proposedDiscount : 0), 0),
+      supplierSettlementDiscount: roundAccepted ? proposedDiscount : 0,
       supplierPaymentStatus:
         initialSupplierPayment <= 0
           ? "Unpaid"
-          : initialSupplierPayment >= materialCost
+          : (initialSupplierPayment + (roundAccepted ? proposedDiscount : 0)) >= materialCost - 0.001
           ? "Paid in Full"
           : "Partly Paid",
 
@@ -18027,6 +18041,25 @@ afAddSupplierForm();
     afMaterialSaveRecords(records);
 
     afEnsureSupplierPurchaseFromMaterial(record);
+
+    if (roundAccepted && proposedDiscount > 0) {
+      const key = "afSupplierSettlementAdjustmentsV1";
+      let adjustments = [];
+      try { adjustments = JSON.parse(localStorage.getItem(key) || "[]"); } catch (_) {}
+      if (!Array.isArray(adjustments)) adjustments = [];
+      adjustments.push({
+        id: "AF-ROUND-" + String(record.id), type: "SUPPLIER_SETTLEMENT_DISCOUNT",
+        materialRecordId: String(record.id), batchNumber: record.batchNumber,
+        supplierId: record.supplierId, supplierName: record.supplierName,
+        originalPurchaseUGX: materialCost, actualCashPaidUGX: initialSupplierPayment,
+        amountUGX: proposedDiscount, outstandingAfterUGX: 0,
+        approvedByRole: "Director", approvedByEmployeeId: currentUser.employeeId || "",
+        approvedAt: new Date().toISOString(),
+        approvalBasis: "Supplier accepted rounded-down full settlement at purchase; Director confirmed.",
+        journalEntryCreated: false, generalLedgerStatus: "PENDING_CONTROLLED_GL_INTEGRATION"
+      });
+      localStorage.setItem(key, JSON.stringify(adjustments));
+    }
 
     if (initialSupplierPayment > 0) {
       afPostSupplierPayment(record, {
@@ -18060,6 +18093,24 @@ afAddSupplierForm();
     }
   }
 
+  const roundingBox = modal.querySelector("#supplierRoundAccepted");
+  const roundingPreview = modal.querySelector("#supplierRoundPreview");
+  const updateRoundingPreview = () => {
+    const exact = Math.max(Number(gross.value || 0) * (1 - Math.max(0, Number(dirt.value || 0)) / 100) * Number(price.value || 0), 0);
+    const rounded = Math.floor((exact + 0.0000001) / 100) * 100;
+    const discount = Math.round((exact - rounded) * 100) / 100;
+    roundingPreview.textContent = "Proposed full settlement: UGX " + rounded.toLocaleString() +
+      "; discount: UGX " + discount.toLocaleString() +
+      ". Enter the agreed amount in Amount Paid Now. Exact purchase cost is retained.";
+  };
+  [gross,dirt,price].forEach(el => el.addEventListener("input", updateRoundingPreview));
+  roundingBox.addEventListener("change", () => {
+    updateRoundingPreview();
+    if (roundingBox.checked && String(currentUser.role || "").toLowerCase() !== "director") {
+      roundingBox.checked = false;
+      alert("Director approval is required for supplier settlement discounts.");
+    }
+  });
   updateForm();
   calculateCompanyMaterial();
 }
@@ -18283,15 +18334,15 @@ function afRefreshSupplierPaymentSummary(record) {
   record.materialCost = due;
   record.supplierAmountPaid = paid;
   // Approved non-cash settlement discounts reduce the payable, not cash paid.
-  const settlementDiscount = (String(record.id) === "1791244969174" && String(record.batchNumber) === "KB002")
-    ? (function(){
-        try {
-          const entries = JSON.parse(localStorage.getItem("afSupplierSettlementAdjustmentsV1") || "[]");
-          return Array.isArray(entries) ? entries.filter(x => x && x.id === "AF-S6-KB002-001" &&
-            x.type === "SUPPLIER_SETTLEMENT_DISCOUNT" && x.approvedByRole === "Director")
-            .reduce((sum,x) => sum + Number(x.amountUGX || 0), 0) : 0;
-        } catch (_) { return 0; }
-      })() : 0;
+  const settlementDiscount = (function(){
+    try {
+      const entries = JSON.parse(localStorage.getItem("afSupplierSettlementAdjustmentsV1") || "[]");
+      return Array.isArray(entries) ? entries.filter(x => x &&
+        String(x.materialRecordId) === String(record.id) &&
+        x.type === "SUPPLIER_SETTLEMENT_DISCOUNT" && x.approvedByRole === "Director")
+        .reduce((sum,x) => sum + Math.max(Number(x.amountUGX || 0), 0), 0) : 0;
+    } catch (_) { return 0; }
+  })();
   record.supplierSettlementDiscount = settlementDiscount;
   record.supplierBalance = Math.max(due - paid - settlementDiscount, 0);
   record.supplierPaymentStatus =
