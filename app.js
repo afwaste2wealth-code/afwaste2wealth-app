@@ -1,3 +1,11 @@
+/* A&F: Administration staff and Secretary are not production team members. */
+function afIsNonTeamEmployee(employee) {
+  if (!employee) return false;
+  const role = String(employee.role || "").trim().toLowerCase().replace(/[^a-z]/g, "");
+  const department = String(employee.department || "").trim().toLowerCase();
+  return role === "secretary" || department === "administration";
+}
+
 /* =========================================================
    A&F STAFF & HR LOGIN SCREEN
    ========================================================= */
@@ -5891,7 +5899,7 @@ overflow:auto;
 <select id="teamLeader"
         style="${settingsInputStyle()}">
 <option value="">Select registered employee</option>
-  ${employees.map(employee => `
+  ${employees.filter(employee => !afIsNonTeamEmployee(employee)).map(employee => `
 <option value="${escapeSettingsText(employee.employeeId)}">
       ${escapeSettingsText(employee.employeeId)} - ${escapeSettingsText(employee.fullName)}
 </option>
@@ -5911,7 +5919,7 @@ overflow:auto;
 background:white;
      ">
 
-  ${employees.map(employee => `
+  ${employees.filter(employee => !afIsNonTeamEmployee(employee)).map(employee => `
 <label style="
 display:flex;
 align-items:center;
@@ -6272,6 +6280,11 @@ leaderEmployeeId,
     ...memberEmployeeIds
   ])
 );
+const prohibited = employees.find(employee => selectedEmployeeIds.includes(employee.employeeId) && afIsNonTeamEmployee(employee));
+if (prohibited) {
+  alert("Administration/Secretary employees cannot be assigned to production teams: " + prohibited.fullName);
+  return;
+}
 
 const conflictingTeam =
 existingTeams.find(team => {
@@ -15735,6 +15748,28 @@ localStorage.setItem(
 JSON.stringify(history)
     );
 
+    if (afIsNonTeamEmployee(updatedEmployee)) {
+      const teamsBefore = getTeams();
+      const linkedTeams = teamsBefore.filter(team =>
+        String(team.leaderEmployeeId || "") === String(updatedEmployee.employeeId) ||
+        (Array.isArray(team.memberEmployeeIds) && team.memberEmployeeIds.some(id => String(id) === String(updatedEmployee.employeeId)))
+      );
+      if (linkedTeams.some(team => String(team.leaderEmployeeId || "") === String(updatedEmployee.employeeId))) {
+        alert("This employee leads a team. Assign a replacement leader in Teams before changing the employee to Administration/Secretary.");
+        return;
+      }
+      if (linkedTeams.length) {
+        if (!confirm("This change will remove the employee from " + linkedTeams.length + " production team(s). Continue?")) return;
+        const cleaned = teamsBefore.map(team => ({
+          ...team,
+          memberEmployeeIds: Array.isArray(team.memberEmployeeIds) ? team.memberEmployeeIds.filter(id => String(id) !== String(updatedEmployee.employeeId)) : [],
+          members: Array.isArray(team.members) ? team.members.filter(name => name !== employee.fullName) : []
+        }));
+        saveTeams(cleaned);
+      }
+      updatedEmployee.teamId = null;
+      updatedEmployee.teamName = "";
+    }
     employees[employeeIndex] =
 updatedEmployee;
 
