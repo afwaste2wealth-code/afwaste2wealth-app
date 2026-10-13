@@ -1,0 +1,22 @@
+{
+  "date": "2026-10-13",
+  "release": "CREDIT_DELIVERY_CONTROL_CANDIDATE",
+  "fullAccountingCertified": false,
+  "syntaxCheck": "PASS",
+  "browserFunctionalTests": "NOT_RUN",
+  "supplierControlPreviousReport": {
+    "outstandingUGX": 207557.5,
+    "differenceUGX": 0
+  },
+  "remaining": [
+    "complete GL posting/reconciliation",
+    "fixed assets",
+    "cash/bank reconciliation",
+    "stock and COGS",
+    "payroll discrepancy",
+    "transport duplication checks",
+    "interest accrual and repayments",
+    "customer payments and delivery workflow end-to-end",
+    "server-side director authorization"
+  ]
+}

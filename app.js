@@ -49111,6 +49111,57 @@ financials.discountAmount,
   0
 );
 
+/* AF controlled credit delivery guard — conservative, no cash posting.
+   Credit is approved only by Director; unlinked/ambiguous receipts are NOT
+   treated as payment. This is browser-side workflow, not secure authorization. */
+const afCreditKey = "afDirectorCreditApprovals";
+const afClean = value => String(value || "").trim().toLowerCase();
+const afPhone = value => String(value || "").replace(/[^0-9]/g, "");
+const afParseList = key => {
+  try { const v = JSON.parse(localStorage.getItem(key) || "[]"); return Array.isArray(v) ? v : []; }
+  catch (_) { return []; }
+};
+const afCustomerMatches = item => {
+  const itemPhone = afPhone(item.customerPhone || item.clientPhone);
+  const deliveryPhone = afPhone(customerPhone);
+  if (itemPhone && deliveryPhone) return itemPhone === deliveryPhone;
+  return !itemPhone && !deliveryPhone && afClean(item.customerName || item.clientName) === afClean(customerName);
+};
+const afHistoricalSales = records.filter(r =>
+  String(r.deliveryType || r.type || "").toLowerCase() === "poles" &&
+  String(r.status || "").toUpperCase() !== "CANCELLED" &&
+  afCustomerMatches(r)
+).reduce((sum, r) => sum + Number(r.finalSaleTotal ?? r.netSaleTotal ?? r.saleAmount ?? 0), 0);
+const afCustomerReceipts = afParseList("afCustomerPayments").filter(r =>
+  Number(r.amount) > 0 && afCustomerMatches(r) &&
+  !["CANCELLED", "REVERSED", "VOID"].includes(String(r.status || "").toUpperCase())
+).reduce((sum, r) => sum + Number(r.amount || 0), 0);
+const afPriorUnpaid = Math.max(0, afHistoricalSales - afCustomerReceipts);
+const afAvailableAdvance = Math.max(0, afCustomerReceipts - afHistoricalSales);
+const afUnpaidDelivery = Math.max(0, finalSaleTotal - afAvailableAdvance);
+let afCreditApproval = null;
+if (afUnpaidDelivery > 0.005) {
+  if (!isDirector) {
+    alert("Unpaid delivery blocked. Only the Director may approve credit.\n\nUnpaid amount: UGX " + afUnpaidDelivery.toFixed(2) + "\nAvailable recorded customer advance: UGX " + afAvailableAdvance.toFixed(2) + "\nPlease record any payment first, or ask the Director to complete this delivery.");
+    return;
+  }
+  if (!confirm("DIRECTOR CREDIT APPROVAL\n\nUnpaid on this delivery: UGX " + afUnpaidDelivery.toFixed(2) + "\nPrior customer balance: UGX " + afPriorUnpaid.toFixed(2) + "\n\nApprove this delivery on credit? Cancel blocks delivery.")) return;
+  const reason = prompt("Director: enter the reason for this credit approval:", "");
+  if (!reason || !reason.trim()) { alert("Credit approval requires a reason."); return; }
+  const dueDate = prompt("Enter credit due date (YYYY-MM-DD):", "");
+  const validDate = /^\d{4}-\d{2}-\d{2}$/.test(dueDate || "") &&
+    !Number.isNaN(Date.parse(dueDate + "T00:00:00")) &&
+    new Date(dueDate + "T00:00:00").toISOString().slice(0,10) === dueDate;
+  if (!validDate || dueDate < date) { alert("Enter a valid credit due date on or after the delivery date."); return; }
+  afCreditApproval = {
+    id: "AF-CR-" + Date.now(), deliveryNumber, customerName, customerPhone,
+    deliveryDate: date, amount: Math.round(afUnpaidDelivery * 100) / 100,
+    priorOutstanding: Math.round(afPriorUnpaid * 100) / 100,
+    reason: reason.trim(), dueDate, status: "APPROVED",
+    approvedBy: currentUser?.fullName || currentUser?.employeeId || "Director",
+    approvedRole: "Director", approvedAt: new Date().toISOString()
+  };
+}
 
 records.push({
 
@@ -49198,6 +49249,11 @@ financials.discountAmount> 0
 
 finalSaleTotal,
 
+creditApprovalId: afCreditApproval ? afCreditApproval.id : "",
+creditApprovedAmount: afCreditApproval ? afCreditApproval.amount : 0,
+creditDueDate: afCreditApproval ? afCreditApproval.dueDate : "",
+creditApprovalReason: afCreditApproval ? afCreditApproval.reason : "",
+
 saleAmount:
 finalSaleTotal,
 
@@ -49247,6 +49303,11 @@ JSON.stringify(
         )
       );
 
+if (afCreditApproval) {
+  const approvals = afParseList(afCreditKey);
+  approvals.push(afCreditApproval);
+  localStorage.setItem(afCreditKey, JSON.stringify(approvals));
+}
 
 modal.remove();
 
