@@ -1,1 +1,1 @@
-Integrated General Ledger REVIEW build. Read-only projections, not automatic posting. Replace app.js only after making a backup. Director: Integrated General Ledger Review. Never upload factory data backup to GitHub.
+Dashboard button placement fix. Read-only GL review. Replace app.js after backing up.
