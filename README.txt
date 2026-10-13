@@ -1,1 +1,1 @@
-A&F Wekavera supplier rounding patch, based on latest loan-ledger release. New purchases only. Director-confirmed supplier acceptance and full rounded payment required. Exact costs retained. No existing records modified. GL integration remains pending. Test before committing.
+Integrated General Ledger REVIEW build. Read-only projections, not automatic posting. Replace app.js only after making a backup. Director: Integrated General Ledger Review. Never upload factory data backup to GitHub.

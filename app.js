@@ -107245,3 +107245,56 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 
 
 
+
+
+/* A&F integrated general-ledger reconciliation v2 — SAFE READ-ONLY.
+   No historical records are changed, no cash is paid, no journals are posted.
+   Projection is not an opening-balance-certified trial balance. */
+(function(){'use strict';
+ const get=(key,fallback=[])=>{try{const v=JSON.parse(localStorage.getItem(key)||'null');return v===null?fallback:v}catch{return fallback}};
+ const n=x=>Number(x||0), money=x=>'UGX '+n(x).toLocaleString('en-UG',{maximumFractionDigits:2});
+ const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+ const method=x=>({'cash':'1000','bank':'1010','bank transfer':'1010','mobile money':'1020'})[String(x||'').toLowerCase().trim()]||null;
+ function build(){
+  const entries=[],issues=[],seen=new Set(),coverage={};
+  function add(key,date,memo,lines,origin){
+   if(seen.has(key)){issues.push('Duplicate source reference '+key);return}seen.add(key);
+   if(!/^\d{4}-\d{2}-\d{2}$/.test(String(date||''))||!Array.isArray(lines)||lines.length<2||lines.some(l=>!/^\d{4}$/.test(String(l.account))||!Number.isSafeInteger(l.debit||0)||!Number.isSafeInteger(l.credit||0)||l.debit<0||l.credit<0)||lines.reduce((s,l)=>s+n(l.debit),0)!==lines.reduce((s,l)=>s+n(l.credit),0)||lines.reduce((s,l)=>s+n(l.debit),0)<=0){issues.push('Invalid/unbalanced projection excluded: '+key);return}
+   entries.push({sourceKey:key,date,memo,origin,lines});coverage[origin]=(coverage[origin]||0)+1;
+  }
+  const pair=(key,date,memo,dr,cr,amt,origin)=>{if(!Number.isSafeInteger(amt)||amt<=0){issues.push('Non-whole or invalid amount needs review: '+key+' ('+amt+')');return}add(key,date,memo,[{account:dr,debit:amt,credit:0},{account:cr,debit:0,credit:amt}],origin)};
+  const staged=get('afAccountingV1Staging',{entries:[]}).entries||[];
+  staged.forEach(e=>{if(e&&e.sourceKey&&e.lines)add(e.sourceKey,e.date,e.memo,e.lines,'Existing staging');else issues.push('Invalid existing staging record')});
+  const stagedKB002=staged.some(e=>String(e.sourceKey||'').includes('stage7-kb002:'));
+  const purchases=get('afSupplierPurchases');const payments=get('supplierPayments');const discounts=get('afSupplierSettlementAdjustmentsV1');
+  purchases.forEach(p=>{
+   if(!p.id)return issues.push('Purchase without ID');
+   if(p.batchNumber==='KB002'&&stagedKB002)return;
+   const raw=n(p.materialCost),extra=n(p.transportCost)+n(p.miscellaneousExpenses);
+   if(Number.isSafeInteger(raw)&&raw>0)pair('purchase-material:'+p.id,p.date,'Material '+p.batchNumber,'1200','2000',raw,'Material purchase');else issues.push('Purchase material cost requires review: '+p.batchNumber);
+   // Transport and miscellaneous costs are not automatically posted: payee, cash settlement and inventory allocation require confirmation.
+   if(extra)issues.push('Transport/miscellaneous allocation and payment need review: '+p.batchNumber+' ('+money(extra)+')');
+  });
+  payments.forEach(p=>{if(p.batchNumber==='KB002'&&stagedKB002)return;const a=n(p.amount),m=method(p.paymentMethod||p.method);if(!m){issues.push('Supplier payment method missing: '+p.id);return}pair('supplier-payment:'+p.id,p.date,'Supplier payment '+p.batchNumber,'2000',m,a,'Supplier payment')});
+  discounts.forEach(d=>{if(d.batchNumber==='KB002'&&stagedKB002)return;const amt=n(d.amountUGX);if(d.approvedByRole!=='Director'||!d.approvedAt){issues.push('Unapproved settlement discount: '+d.id);return}pair('supplier-discount:'+d.id,String(d.approvedAt).slice(0,10),'Approved settlement discount '+d.batchNumber,'2000','4100',amt,'Supplier discount')});
+  const loans=get('afPettyLoansV1'),events=get('afPettyLoanLedgerV1');const loanMap=new Map(loans.map(l=>[String(l.id),l]));
+  events.forEach(e=>{
+   const loan=loanMap.get(String(e.loanId));if(!loan||loan.state!=='approved'){issues.push('Loan event not linked to approved loan: '+e.id);return}
+   const date=String(e.at||'').slice(0,10),amt=n(e.amount),t=String(e.type||'').toUpperCase();
+   if(t.includes('BORROWING')){if(t.includes('CASH_IN'))pair('petty-event:'+e.id,loan.receivedDate||date,'Loan received '+loan.lender,'1000','2210',amt,'Petty loan borrowing');else issues.push('Loan receipt method needs classification: '+e.id)}
+   else if(t.includes('REPAYMENT')){const m=method(e.method||e.paymentMethod)||(t.includes('CASH')?'1000':null);if(!m){issues.push('Loan repayment method unverified: '+e.id);return}pair('petty-event:'+e.id,date,'Loan repayment '+loan.lender,'2210',m,amt,'Petty loan repayment')}
+   else issues.push('Unknown loan event type: '+e.id+' '+t);
+  });
+  loans.filter(l=>l.state==='approved').forEach(l=>{if(!events.some(e=>e.loanId===l.id&&String(e.type).includes('BORROWING')))issues.push('Approved loan missing borrowing event: '+l.id);if(n(l.interest)>0)issues.push('Contractual loan interest not accrued automatically: '+l.id+' '+money(l.interest))});
+  const funds=get('afOtherFundsV1');funds.forEach(f=>{if(f.reversedAt)return;const m=method(f.method),cr=({capital:'3000',directorLoan:'2200',otherIncome:'4100'})[f.type];if(!m||!cr){issues.push('Funding needs classification: '+f.id);return}pair('other-funds:'+f.id,f.date,'Other funds '+f.source,m,cr,n(f.amount),'Other funds');(f.payments||[]).forEach((p,i)=>{const pm=method(p.method);if(!pm){issues.push('Funding repayment method missing '+f.id);return}pair('funds-repayment:'+(p.id||f.id+':'+i),p.date,'Director loan repayment','2200',pm,n(p.amount),'Funding repayment')})});
+  const exp=get('expenseRecords');exp.forEach(e=>{if(String(e.status).toUpperCase()==='CANCELLED')return;if(String(e.status).toUpperCase()!=='COMPLETED'){issues.push('Expense status needs review: '+e.id);return}if(e.source==='PAYROLL'){issues.push('Payroll expense/payment mismatch requires confirmation before GL: '+e.expenseNumber);return}const m=method(e.paymentMethod);if(!m){issues.push('Expense method missing: '+e.id);return}pair('expense:'+e.id,e.date,e.description||e.category,'6100',m,n(e.amount),'Operating expense')});
+  get('payrollRecords').forEach(p=>{if(n(p.netPayable)>0&&p.status==='UNPAID')issues.push('Payroll payable not posted until earned wages are verified: '+p.employeeName+' '+p.monthName+' '+money(p.netPayable))});
+  get('clientMaterialRecords').forEach(c=>{if(n(c.serviceTotalDue)>0)issues.push('Client service invoice/payment requires revenue recognition review: '+c.serviceJobNumber)});
+  const manual=get('afJournalEntries');manual.forEach((j,i)=>{const dr=String(j.debitAccount||''),cr=String(j.creditAccount||'');if(!/^\d{4}$/.test(dr)||!/^\d{4}$/.test(cr)){issues.push('Manual journal account needs classification: '+(j.id||i));return}pair('manual:'+(j.id||i),j.date,j.narration||'Manual journal',dr,cr,n(j.amount),'Manual journal')});
+  const totals={};entries.forEach(e=>e.lines.forEach(l=>{const a=totals[l.account]||(totals[l.account]={account:l.account,debit:0,credit:0});a.debit+=n(l.debit);a.credit+=n(l.credit)}));
+  const accounts=Object.values(totals).sort((a,b)=>a.account.localeCompare(b.account));const debit=accounts.reduce((s,a)=>s+a.debit,0),credit=accounts.reduce((s,a)=>s+a.credit,0);
+  return {status:'INTEGRATED_READ_ONLY_NOT_CERTIFIED',createdAt:new Date().toISOString(),entryCount:entries.length,debit,credit,balanced:debit===credit,coverage,accounts,issues,entries,warning:'Read-only projection. Opening balances, inventory consumption, revenue recognition, payroll payments, small supplier discounts and some expenses remain unverified. Do not post this projection automatically.'};
+ }
+ function open(){if(typeof getAFCurrentRole!=='function'||getAFCurrentRole()!=='Director')return alert('Director access required');document.getElementById('afGLIntegratedModal')?.remove();const r=build(),m=document.createElement('div');m.id='afGLIntegratedModal';m.style.cssText='position:fixed;inset:0;z-index:2147483400;background:#000b;overflow:auto;padding:16px;font:14px Arial';m.innerHTML='<section style="max-width:1050px;margin:20px auto;background:white;color:#173027;padding:22px;border-radius:12px"><button id="afGLClose" style="float:right">Close ✕</button><h2>Integrated General Ledger — Reconciliation Review</h2><p><strong>Read-only, not certified.</strong> Existing staging and supported factory transactions are combined without changing records or paying anyone.</p><p>Movements: '+r.entryCount+' | Debit '+money(r.debit)+' | Credit '+money(r.credit)+' | Balanced: '+r.balanced+'</p><h3>Source coverage</h3><p>'+Object.entries(r.coverage).map(([k,v])=>safe(k)+': '+v).join(' | ')+'</p><h3>Account movements</h3><div style="overflow:auto"><table style="width:100%;border-collapse:collapse"><tr><th>Account</th><th>Debit</th><th>Credit</th><th>Net Dr / (Cr)</th></tr>'+r.accounts.map(a=>'<tr><td>'+safe(a.account)+'</td><td>'+money(a.debit)+'</td><td>'+money(a.credit)+'</td><td>'+money(a.debit-a.credit)+'</td></tr>').join('')+'</table></div><h3>Items requiring attention ('+r.issues.length+')</h3><div style="max-height:230px;overflow:auto"><ul>'+r.issues.map(x=>'<li>'+safe(x)+'</li>').join('')+'</ul></div><p>'+safe(r.warning)+'</p><button id="afGLExport">Export read-only GL reconciliation JSON</button></section>';document.body.appendChild(m);m.querySelector('#afGLClose').onclick=()=>m.remove();m.querySelector('#afGLExport').onclick=()=>{const u=URL.createObjectURL(new Blob([JSON.stringify(r,null,2)],{type:'application/json'})),a=document.createElement('a');a.href=u;a.download='AF_Integrated_GL_READ_ONLY.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)};m.querySelectorAll('td,th').forEach(c=>{c.style.padding='8px';c.style.borderBottom='1px solid #ddd';c.style.textAlign='left'})}
+ window.AFIntegratedGL=Object.freeze({build,open});function attach(){if(document.getElementById('afGLIntegratedButton'))return;const base=document.getElementById('afUnifiedLedgerButton')||document.getElementById('navOtherFunds');if(!base)return;const b=document.createElement('button');b.id='afGLIntegratedButton';b.type='button';b.textContent='📗 Integrated General Ledger Review';b.style.cssText='display:block;margin:6px 0;padding:9px;border:1px solid #aac8b6;border-radius:7px;background:#eaf5ee;cursor:pointer';b.onclick=open;base.insertAdjacentElement('afterend',b);b.style.display=(typeof getAFCurrentRole==='function'&&getAFCurrentRole()==='Director')?'':'none'}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
+})();
