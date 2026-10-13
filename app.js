@@ -8260,6 +8260,15 @@ employeeId
 
 const shift =
 getAttendanceShift(team);
+const nonTeamEmployee = employees.find(item =>
+  String(item.employeeId) === String(employeeId)
+);
+if (afIsNonTeamEmployee(nonTeamEmployee)) {
+  info.innerHTML = `<strong>Department:</strong> Administration<br>` +
+    `<strong>Team:</strong> Not applicable<br>` +
+    `<strong>Working hours:</strong> Actual Time In / Time Out (no production shift)`;
+  return;
+}
 
 info.innerHTML = `
 <strong>Team:</strong>
@@ -8341,20 +8350,15 @@ getEmployeeTeamForAttendance(
 employeeId
       );
 
-const shift =
-getAttendanceShift(team);
+const nonTeamEmployee = afIsNonTeamEmployee(employee);
+const assignedShift = getAttendanceShift(team);
 
-    if (!team) {
-      alert(
-        "This employee is not assigned to a team."
-      );
+    if (!nonTeamEmployee && !team) {
+      alert("This employee is not assigned to a team.");
       return;
     }
-
-    if (!shift) {
-      alert(
-        "The employee's team does not have a valid shift."
-      );
+    if (!nonTeamEmployee && !assignedShift) {
+      alert("The employee's team does not have a valid shift.");
       return;
     }
 
@@ -8410,13 +8414,21 @@ record.date === date
       return;
     }
 
-const calculations =
-calculateAttendanceTimes(
-        shift,
-timeIn,
-timeOut,
-        status
-      );
+// Administration has no production shift. Calculate actual hours
+// without inventing a scheduled shift, lateness or overtime.
+const shift = nonTeamEmployee
+  ? {
+      id: "",
+      name: "Administration — actual hours",
+      startTime: timeIn || "00:00",
+      endTime: timeOut || "00:00",
+      breakMinutes: 0,
+      graceMinutes: 0
+    }
+  : assignedShift;
+const calculations = calculateAttendanceTimes(
+  shift, timeIn, timeOut, status
+);
 
 const record = {
       id: Date.now(),
@@ -8425,16 +8437,11 @@ employeeId:
 employee.employeeId,
 employeeName:
 employee.fullName,
-teamId:
-team.id || "",
-teamName:
-team.name || "",
-shiftId:
-shift.id || "",
-shiftName:
-shift.name ||
-team.shiftName ||
-        "",
+teamId: nonTeamEmployee ? "" : (team.id || ""),
+teamName: nonTeamEmployee ? "" : (team.name || ""),
+shiftId: nonTeamEmployee ? "" : (shift.id || ""),
+shiftName: nonTeamEmployee ? "Administration — actual hours" :
+  (shift.name || team.shiftName || ""),
       status,
 absenceReason,
 timeIn,
