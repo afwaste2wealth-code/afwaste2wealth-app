@@ -1,1 +1,1 @@
-Dashboard button placement fix. Read-only GL review. Replace app.js after backing up.
+A&F Wekavera GL supplier control review. Read-only: adds independent supplier source totals and explicit GL mismatch warning. No posting, historical edits, or data migration. Backup your live data before replacing app.js. JavaScript syntax checked; browser testing outstanding.
