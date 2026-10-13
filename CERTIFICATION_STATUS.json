@@ -1,0 +1,27 @@
+{
+  "release": "V1 accounting certification candidate - read-only",
+  "status": "NOT_CERTIFIED",
+  "correctedIssue": "KB007 fractional UGX material purchase included in projection using 0.01 precision",
+  "supplierControlExpected": {
+    "purchases": 8187832.5,
+    "payments": 7980200,
+    "approvedDiscounts": 75,
+    "sourcePayable": 207557.5,
+    "priorProjectedPayable": 169495,
+    "missingPurchase": 38062.5,
+    "expectedCorrectedProjectedPayable": 207557.5,
+    "expectedDifference": 0
+  },
+  "unresolved": [
+    "Opening balances and bank/cash reconciliation",
+    "Inventory consumption and valuation",
+    "Transport and miscellaneous costs classification and payment",
+    "Payroll expense/payable reconciliation",
+    "Loan interest accrual schedule",
+    "Client service revenue and receivables",
+    "Supplier settlement discounts awaiting authorization",
+    "Confirm source evidence for Director advance"
+  ],
+  "historicalPostingEnabled": false,
+  "note": "Projected balances are calculations only; no actual journal posting, certification, or browser test."
+}
