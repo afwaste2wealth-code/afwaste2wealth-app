@@ -8352,17 +8352,15 @@ employeeId
 const shift =
 getAttendanceShift(team);
 
-    if (!team) {
-      alert(
-        "This employee is not assigned to a team."
-      );
+    // Administrative staff (including the Secretary) do not belong to
+    // production teams. Production staff must still have a team and shift.
+    const isAdministrative = afIsNonTeamEmployee(employee);
+    if (!team && !isAdministrative) {
+      alert("This employee is not assigned to a team.");
       return;
     }
-
-    if (!shift) {
-      alert(
-        "The employee's team does not have a valid shift."
-      );
+    if (team && !shift) {
+      alert("The employee's team does not have a valid shift.");
       return;
     }
 
@@ -8418,9 +8416,17 @@ record.date === date
       return;
     }
 
+// Without a configured administrative shift, calculate actual hours
+// only. Do not invent lateness, shortfall or overtime targets.
+const effectiveShift = shift || (isAdministrative ? {
+  startTime: timeIn || "00:00",
+  endTime: timeOut || "00:00",
+  breakMinutes: 0,
+  graceMinutes: 0
+} : null);
 const calculations =
 calculateAttendanceTimes(
-        shift,
+        effectiveShift,
 timeIn,
 timeOut,
         status
@@ -8434,15 +8440,13 @@ employee.employeeId,
 employeeName:
 employee.fullName,
 teamId:
-team.id || "",
+team ? (team.id || "") : "",
 teamName:
-team.name || "",
+team ? (team.name || "") : "",
 shiftId:
-shift.id || "",
+shift ? (shift.id || "") : "",
 shiftName:
-shift.name ||
-team.shiftName ||
-        "",
+shift ? (shift.name || (team && team.shiftName) || "") : "",
       status,
 absenceReason,
 timeIn,
