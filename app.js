@@ -107472,3 +107472,95 @@ document.addEventListener('click',()=>setTimeout(attachGLDashboardButton,0));
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach);else attach();
  document.addEventListener('click',()=>setTimeout(attach,0));
 })();
+
+
+/* A&F dashboard cleanup — UI-only. Keep accounting audit functions and data intact.
+   The technical controls are relocated into a Director-only sidebar drawer. */
+(function () {
+  'use strict';
+  const technicalIds = [
+    'af-modernization-audit-button', 'afAuditSourceButton', 'afSchemaAuditButton',
+    'afReconcileButton', 'afPurchaseReviewButton', 'afPurchaseDetailsButtonV2',
+    'afStage3OwnershipButton', 'afStage4Button', 'afStage5Button',
+    'afStage6Button', 'afStage7Button', 'afReconciliationPreviewButton',
+    'afUnifiedLedgerButton', 'afGLIntegratedButton', 'afGLDirectorDashboardButton',
+    'afV1ReleaseControlButton', 'afAccountingToolsHub'
+  ];
+  const captions = {
+    'af-modernization-audit-button': 'System audit & diagnostics',
+    'afGLDirectorDashboardButton': 'Integrated general ledger review',
+    'afV1ReleaseControlButton': 'V1 release & accounting status'
+  };
+  function director() {
+    try {
+      const user = JSON.parse(localStorage.getItem('currentUser') || 'null');
+      return !!user && user.role === 'Director';
+    } catch (_) { return false; }
+  }
+  let observer, scheduled = false;
+  function refresh() {
+    if (observer) observer.disconnect();
+    try {
+      const anchor = document.getElementById('navSystemSettings');
+      const existing = document.getElementById('afDirectorAccountingControls');
+      if (!anchor || !anchor.parentElement) {
+        if (existing) existing.style.display = 'none';
+        return;
+      }
+      let drawer = existing;
+      if (!drawer) {
+        drawer = document.createElement('details');
+        drawer.id = 'afDirectorAccountingControls';
+        drawer.style.cssText = 'margin:8px 4px;padding:9px;border:1px solid #b6cbbf;border-radius:9px;background:#f4f8f5;color:#173b2a;font:13px Arial;';
+        const summary = document.createElement('summary');
+        summary.textContent = '🔒 Accounting Controls & System Audit';
+        summary.style.cssText = 'cursor:pointer;font-weight:700;line-height:1.4;';
+        drawer.appendChild(summary);
+        const note = document.createElement('p');
+        note.textContent = 'Director-only technical tools. Read-only previews are not certified accounts.';
+        note.style.cssText = 'font-size:11px;line-height:1.4;';
+        drawer.appendChild(note);
+        const contents = document.createElement('div');
+        contents.id = 'afDirectorAccountingControlsItems';
+        contents.style.cssText = 'display:grid;gap:7px;';
+        drawer.appendChild(contents);
+      }
+      if (drawer.previousElementSibling !== anchor) anchor.insertAdjacentElement('afterend', drawer);
+      drawer.style.display = director() ? 'block' : 'none';
+      const contents = document.getElementById('afDirectorAccountingControlsItems');
+      for (const id of technicalIds) {
+        const button = document.getElementById(id);
+        if (!button || button === drawer || button.parentElement === contents) continue;
+        // The legacy hub is a details element containing more accounting controls.
+        button.style.cssText += ';position:static!important;inset:auto!important;bottom:auto!important;right:auto!important;z-index:auto!important;width:100%!important;max-width:100%!important;margin:0!important;box-sizing:border-box!important;display:block!important;';
+        if (captions[id]) button.textContent = captions[id];
+        contents.appendChild(button);
+      }
+      // Legacy modules can reset display; the entire drawer remains Director-only.
+    } finally {
+      if (observer && document.body) observer.observe(document.body, {childList:true, subtree:true});
+    }
+  }
+  function schedule() {
+    if (scheduled) return;
+    scheduled = true;
+    setTimeout(() => { scheduled = false; refresh(); }, 30);
+  }
+  function init() {
+    observer = new MutationObserver(mutations => {
+      if (mutations.some(m => Array.from(m.addedNodes).some(n =>
+        n.nodeType === 1 && (technicalIds.includes(n.id) ||
+        (n.querySelector && technicalIds.some(id => n.querySelector('[id="' + id + '"]'))))
+      ))) schedule();
+    });
+    refresh();
+    document.addEventListener('click', e => {
+      if (e.target && (e.target.id === 'afLoginButton' || e.target.id === 'navSystemSettings')) schedule();
+    }, true);
+    window.addEventListener('storage', schedule);
+    // Several legacy modules mount their buttons on delayed timers and clicks.
+    setInterval(schedule, 4000);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, {once:true});
+  else init();
+})();
