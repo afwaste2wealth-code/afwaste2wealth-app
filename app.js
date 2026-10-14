@@ -558,7 +558,7 @@ updateLoggedInUserHeader();
 applyAFRoleDashboard();
   }
 
-}, 500);
+}, 0);
 
 
 } catch (error) {
@@ -2301,11 +2301,13 @@ const roleAccess =
 
 
 resetAFRoleDashboard();
-if (
-typeof refreshAFDashboardBirthdays ===
-  "function"
-) {
-refreshAFDashboardBirthdays();
+/* Birthday information is not needed to grant dashboard access.
+   Schedule it after the first visible frame instead of blocking login. */
+if (typeof refreshAFDashboardBirthdays === "function") {
+  setTimeout(() => {
+    try { refreshAFDashboardBirthdays(); }
+    catch (error) { console.warn("A&F birthday refresh:", error); }
+  }, 100);
 }
 
 
@@ -2380,11 +2382,12 @@ notice.textContent =
 roleAccess.accessText;
 
   }
-if (
-typeof renderAFPerformanceWinnerDashboardCard ===
-  "function"
-) {
-renderAFPerformanceWinnerDashboardCard();
+/* Defer winner calculations until after dashboard access is applied. */
+if (typeof renderAFPerformanceWinnerDashboardCard === "function") {
+  setTimeout(() => {
+    try { renderAFPerformanceWinnerDashboardCard(); }
+    catch (error) { console.warn("A&F winner dashboard:", error); }
+  }, 150);
 }
 
 
@@ -2457,7 +2460,12 @@ hideAFFactoryDashboard();
 
 hideAFFactoryDashboard();
 
-renderAFSecretaryDashboard();
+/* Secretary overview can be populated after the initial dashboard paints. */
+setTimeout(() => {
+  if (getAFCurrentRole() !== "Secretary") return;
+  try { renderAFSecretaryDashboard(); }
+  catch (error) { console.error("A&F Secretary dashboard:", error); }
+}, 50);
 
     return;
   }
@@ -8260,15 +8268,6 @@ employeeId
 
 const shift =
 getAttendanceShift(team);
-const nonTeamEmployee = employees.find(item =>
-  String(item.employeeId) === String(employeeId)
-);
-if (afIsNonTeamEmployee(nonTeamEmployee)) {
-  info.innerHTML = `<strong>Department:</strong> Administration<br>` +
-    `<strong>Team:</strong> Not applicable<br>` +
-    `<strong>Working hours:</strong> Actual Time In / Time Out (no production shift)`;
-  return;
-}
 
 info.innerHTML = `
 <strong>Team:</strong>
@@ -8350,15 +8349,20 @@ getEmployeeTeamForAttendance(
 employeeId
       );
 
-const nonTeamEmployee = afIsNonTeamEmployee(employee);
-const assignedShift = getAttendanceShift(team);
+const shift =
+getAttendanceShift(team);
 
-    if (!nonTeamEmployee && !team) {
-      alert("This employee is not assigned to a team.");
+    if (!team) {
+      alert(
+        "This employee is not assigned to a team."
+      );
       return;
     }
-    if (!nonTeamEmployee && !assignedShift) {
-      alert("The employee's team does not have a valid shift.");
+
+    if (!shift) {
+      alert(
+        "The employee's team does not have a valid shift."
+      );
       return;
     }
 
@@ -8414,21 +8418,13 @@ record.date === date
       return;
     }
 
-// Administration has no production shift. Calculate actual hours
-// without inventing a scheduled shift, lateness or overtime.
-const shift = nonTeamEmployee
-  ? {
-      id: "",
-      name: "Administration — actual hours",
-      startTime: timeIn || "00:00",
-      endTime: timeOut || "00:00",
-      breakMinutes: 0,
-      graceMinutes: 0
-    }
-  : assignedShift;
-const calculations = calculateAttendanceTimes(
-  shift, timeIn, timeOut, status
-);
+const calculations =
+calculateAttendanceTimes(
+        shift,
+timeIn,
+timeOut,
+        status
+      );
 
 const record = {
       id: Date.now(),
@@ -8437,11 +8433,16 @@ employeeId:
 employee.employeeId,
 employeeName:
 employee.fullName,
-teamId: nonTeamEmployee ? "" : (team.id || ""),
-teamName: nonTeamEmployee ? "" : (team.name || ""),
-shiftId: nonTeamEmployee ? "" : (shift.id || ""),
-shiftName: nonTeamEmployee ? "Administration — actual hours" :
-  (shift.name || team.shiftName || ""),
+teamId:
+team.id || "",
+teamName:
+team.name || "",
+shiftId:
+shift.id || "",
+shiftName:
+shift.name ||
+team.shiftName ||
+        "",
       status,
 absenceReason,
 timeIn,
@@ -96612,7 +96613,7 @@ function openAFPerformanceWinnersHistory() {
             error
           )
         );
-    }, 350);
+    }, 0);
   }
 
   function getLocalEmployeeForCloudActivation(
