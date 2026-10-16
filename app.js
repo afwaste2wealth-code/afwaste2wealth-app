@@ -11016,11 +11016,25 @@ dailyAllowance *
 absentDays
      );
 
-const earnedAllowance =
-  roundDownTo100(
-dailyAllowance *
-actualDaysWorked
-  );
+/* If attendance is missing, an existing saved payroll is the historical
+   source of earnings. Do not fabricate days or erase that saved liability. */
+const savedPeriodPayroll = getPayrollRecords().find(r =>
+  String(r.employeeId).trim().toUpperCase() === String(employeeId).trim().toUpperCase() &&
+  Number(r.year) === Number(year) && Number(r.month) === Number(month));
+const attendanceEntries = getAttendanceRecords().filter(r =>
+  String(r.employeeId).trim().toUpperCase() === String(employeeId).trim().toUpperCase() &&
+  String(r.date || '').slice(0,7) ===
+    String(year).padStart(4,'0') + '-' + String(Number(month)+1).padStart(2,'0'));
+const historicalAttendanceMissing = attendanceEntries.length === 0 && !!savedPeriodPayroll;
+const payrollWorkedDays = historicalAttendanceMissing
+  ? Number(savedPeriodPayroll.actualDaysWorked || 0) : actualDaysWorked;
+const payrollAbsentDays = historicalAttendanceMissing
+  ? Number(savedPeriodPayroll.absentDays || 0) : absentDays;
+const payrollAbsenceDeduction = historicalAttendanceMissing
+  ? Number(savedPeriodPayroll.absenceDeduction || 0) : absenceDeduction;
+const earnedAllowance = historicalAttendanceMissing
+  ? Number(savedPeriodPayroll.earnedAllowance || 0)
+  : roundDownTo100(dailyAllowance * actualDaysWorked);
 
   /* =========================
      PERFORMANCE AWARDS
@@ -11308,14 +11322,16 @@ isFullSettlement:
 
 monthlyAllowance,
 
+historicalAttendanceMissing,
+
 daysInMonth,
-actualDaysWorked,
+actualDaysWorked: payrollWorkedDays,
 
 dailyAllowance,
 
-absentDays,
+absentDays: payrollAbsentDays,
 
-absenceDeduction,
+absenceDeduction: payrollAbsenceDeduction,
 
 earnedAllowance,
 
@@ -11994,6 +12010,17 @@ cursor:pointer;
 
 document.body.appendChild(modal);
 
+/* Do not display another employee's/month's previous calculation. */
+["#allowanceEmployee", "#allowanceYear", "#allowanceMonth", "#allowanceCalculationMode"].forEach(selector => {
+  const control = modal.querySelector(selector);
+  if (control) {
+    control.addEventListener("change", () => {
+      modal.querySelector("#allowanceResult").innerHTML =
+        '<div style="padding:10px;background:#eef4ff;">Selection changed. Click Calculate Allowance to refresh this period.</div>';
+    });
+  }
+});
+
 modal.querySelector(
     "#calculateAllowance"
   ).onclick = () => {
@@ -12048,6 +12075,7 @@ payroll.isFullSettlement
 modal.querySelector(
       "#allowanceResult"
     ).innerHTML = `
+${payroll.historicalAttendanceMissing ? `<div style="padding:12px;background:#fff3cd;border:1px solid #d9a441;border-radius:7px;margin-bottom:12px;"><b>Historical payroll:</b> No attendance entries found for this selected month. Earned allowance is taken from the existing saved Payroll Ledger record. Verify attendance before confirming a recalculation.</div>` : ''}
 <div style="
 display:grid;
         grid-template-columns:
@@ -12172,8 +12200,19 @@ modal.querySelector("#confirmFullSettlement");
 if (confirmButton) {
 confirmButton.onclick = () => {
 
-const saved =
-saveCalculatedPayroll(payroll);
+const alreadySaved = getPayrollRecords().find(r =>
+  String(r.employeeId) === String(payroll.employeeId) &&
+  Number(r.year) === Number(payroll.year) && Number(r.month) === Number(payroll.month));
+if (alreadySaved && Number(alreadySaved.amountPaid || 0) > 0) {
+  alert("This payroll already has recorded payments. Reconciliation is required before changing the settlement. No records were changed.");
+  return;
+}
+if (payroll.historicalAttendanceMissing && !window.confirm(
+  "Attendance is missing for this month. Use the existing saved payroll earnings and confirm this settlement?")) return;
+let saved;
+try { saved = saveCalculatedPayroll(payroll); }
+catch (error) { console.error("Payroll settlement save failed:", error);
+  alert("Payroll settlement could not be saved. Existing records were not intentionally changed. " + error.message); return; }
 
     alert(
       "Full Settlement saved successfully for " +
