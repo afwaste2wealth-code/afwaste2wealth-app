@@ -11125,11 +11125,7 @@ settlementSnapshot.total || 0
 
 const previousSettlementBalance =
     mode === "FULL_SETTLEMENT"
-      ? getPreviousFullSettlementBalance(
-employeeId,
-          year,
-          month
-        )
+      ? afGetPriorPayrollPosition(employeeId, year, month).total
       : 0;
 
 
@@ -11382,6 +11378,39 @@ createdAt:
 /* =========================================================
    PREVIOUS NORMAL UNPAID PAYROLL BALANCE
    ========================================================= */
+
+/* A&F payroll: outstanding earnings prior to a selected period.
+   A full settlement carries the last settlement balance plus any later
+   ordinary unpaid payroll; earlier periods were already consolidated. */
+function afGetPriorPayrollPosition(employeeId, year, month) {
+  const cutoff = Number(year) * 12 + Number(month);
+  const previous = getPayrollRecords().filter(r =>
+    String(r.employeeId) === String(employeeId) &&
+    Number(r.year) * 12 + Number(r.month) < cutoff
+  ).sort((a,b) => (Number(a.year)*12+Number(a.month)) -
+                    (Number(b.year)*12+Number(b.month)));
+  const lastSettlement = previous.filter(r =>
+    String(r.calculationMode || "NORMAL").toUpperCase() === "FULL_SETTLEMENT"
+  ).pop();
+  const settledPeriod = lastSettlement
+    ? Number(lastSettlement.year)*12 + Number(lastSettlement.month) : -Infinity;
+  const ordinary = previous.filter(r =>
+    Number(r.year)*12 + Number(r.month) > settledPeriod &&
+    String(r.calculationMode || "NORMAL").toUpperCase() !== "FULL_SETTLEMENT"
+  );
+  const items = [];
+  if (lastSettlement && Number(lastSettlement.balance || 0) !== 0) {
+    items.push({label: String(lastSettlement.monthName || "Previous settlement"),
+      balance: Number(lastSettlement.balance || 0)});
+  }
+  ordinary.forEach(r => {
+    if (Number(r.balance || 0) !== 0) items.push({
+      label: String(r.monthName || `${r.year}-${Number(r.month)+1}`),
+      balance: Number(r.balance || 0)
+    });
+  });
+  return {items, total: items.reduce((n,r) => n + r.balance, 0)};
+}
 
 function getPreviousUnpaidPayrollBalance(
 employeeId,
@@ -11986,16 +12015,13 @@ employeeId,
       return;
     }
 
-const previousBalance =
-payroll.isFullSettlement
-  ? Number(
-payroll.previousSettlementBalance || 0
-    )
-  : getPreviousUnpaidPayrollBalance(
-employeeId,
-      year,
-      month
-    );
+const priorPosition = afGetPriorPayrollPosition(employeeId, year, month);
+const previousBalance = priorPosition.total;
+const priorBreakdown = priorPosition.items.map(item =>
+  `<div style="display:flex;justify-content:space-between;gap:10px;margin:3px 0;">
+     <span>${escapeText(item.label)}</span><b>${formatPayrollMoney(item.balance)}</b>
+   </div>`
+).join("") || '<div>No previously recorded unpaid payroll.</div>';
 
 const totalAmountDue =
 payroll.isFullSettlement
@@ -12045,6 +12071,11 @@ payroll.earnedAllowance
 )}</div>
 </div>
 
+<div style="padding:15px;background:#fff8e1;border-radius:8px;">
+<b>Performance Awards / Bonuses</b>
+<div>${formatPayrollMoney(payroll.performanceAwardTotal || 0)}</div>
+</div>
+
 <div style="padding:15px;background:#f5f5f5;border-radius:8px;">
 <b>Approved Deductions</b>
 <div>${formatPayrollMoney(
@@ -12078,6 +12109,7 @@ payroll.netPayable
 <div>${formatPayrollMoney(
 previousBalance
           )}</div>
+<details style="margin-top:8px;font-size:12px;"><summary>View previous unpaid months</summary>${priorBreakdown}</details>
 </div>
 
 <div style="padding:15px;background:#eef4ff;border-radius:8px;">
