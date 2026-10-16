@@ -1,0 +1,18 @@
+const fs = require('fs'), vm = require('vm'), assert = require('assert');
+const app = fs.readFileSync(__dirname+'/app.js','utf8');
+const fn = app.slice(app.indexOf('function afGetPriorPayrollPosition('),app.indexOf('\nfunction getPreviousUnpaidPayrollBalance('));
+let records = [];
+const ctx = {getPayrollRecords:()=>records,payrollMonthName:(y,m)=>new Date(y,m,1).toLocaleString('en-US',{month:'long'})+' '+y};
+vm.createContext(ctx);vm.runInContext(fn,ctx);
+const january = {employeeId:'EMP014',year:2026,month:0,monthName:'January 2026',calculationMode:'NORMAL',netPayable:96700,amountPaid:0,balance:96700};
+const february = {employeeId:'EMP014',year:2026,month:1,monthName:'February 2026',calculationMode:'NORMAL',netPayable:100000,amountPaid:0,balance:100000};
+records=[january,february];
+assert.equal(ctx.afGetPriorPayrollPosition('EMP014',2026,1).total,96700);
+assert.equal(ctx.afGetPriorPayrollPosition('EMP014',2026,2).total,196700);
+records=[{...january,amountPaid:30000,balance:66700},february];
+assert.equal(ctx.afGetPriorPayrollPosition('EMP014',2026,2).total,166700);
+records=[january,{...february,calculationMode:'FULL_SETTLEMENT',netPayable:196700,balance:196700}, {employeeId:'EMP014',year:2026,month:2,balance:20000,calculationMode:'NORMAL'}];
+assert.equal(ctx.afGetPriorPayrollPosition('EMP014',2026,3).total,216700);
+records=[{...january,employeeId:'EMP015'}];
+assert.equal(ctx.afGetPriorPayrollPosition('EMP014',2026,1).total,0);
+console.log('PASS: January -> February 96,700; March 196,700; partial payment; consolidated settlement; employee isolation');

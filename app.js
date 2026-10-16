@@ -11383,33 +11383,50 @@ createdAt:
    A full settlement carries the last settlement balance plus any later
    ordinary unpaid payroll; earlier periods were already consolidated. */
 function afGetPriorPayrollPosition(employeeId, year, month) {
+  /* Read SAVED payroll liabilities, not merely displayed allowance previews.
+     A full settlement consolidates older periods; only payroll after the
+     latest earlier settlement is added to that settlement's remaining balance. */
   const cutoff = Number(year) * 12 + Number(month);
-  const previous = getPayrollRecords().filter(r =>
-    String(r.employeeId) === String(employeeId) &&
-    Number(r.year) * 12 + Number(r.month) < cutoff
-  ).sort((a,b) => (Number(a.year)*12+Number(a.month)) -
-                    (Number(b.year)*12+Number(b.month)));
-  const lastSettlement = previous.filter(r =>
-    String(r.calculationMode || "NORMAL").toUpperCase() === "FULL_SETTLEMENT"
-  ).pop();
-  const settledPeriod = lastSettlement
-    ? Number(lastSettlement.year)*12 + Number(lastSettlement.month) : -Infinity;
-  const ordinary = previous.filter(r =>
-    Number(r.year)*12 + Number(r.month) > settledPeriod &&
-    String(r.calculationMode || "NORMAL").toUpperCase() !== "FULL_SETTLEMENT"
-  );
+  const normaliseId = value => String(value == null ? "" : value).trim().toUpperCase();
+  const periodOf = record => {
+    const y = Number(record.year);
+    let m = Number(record.month);
+    if (!Number.isFinite(y) || !Number.isFinite(m)) return NaN;
+    /* Existing app records use zero-based months. */
+    return y * 12 + m;
+  };
+  const balanceOf = record => {
+    if (record.balance !== undefined && record.balance !== null && record.balance !== "")
+      return Number(record.balance) || 0;
+    return (Number(record.netPayable) || 0) - (Number(record.amountPaid) || 0);
+  };
+  const previous = getPayrollRecords()
+    .filter(r => normaliseId(r.employeeId) === normaliseId(employeeId) &&
+      Number.isFinite(periodOf(r)) && periodOf(r) < cutoff)
+    .sort((a,b) => periodOf(a) - periodOf(b));
+  const isSettlement = r =>
+    String(r.calculationMode || (r.isFullSettlement ? "FULL_SETTLEMENT" : "NORMAL"))
+      .trim().toUpperCase() === "FULL_SETTLEMENT";
+  let lastSettlementIndex = -1;
+  previous.forEach((r, i) => { if (isSettlement(r)) lastSettlementIndex = i; });
   const items = [];
-  if (lastSettlement && Number(lastSettlement.balance || 0) !== 0) {
-    items.push({label: String(lastSettlement.monthName || "Previous settlement"),
-      balance: Number(lastSettlement.balance || 0)});
+  if (lastSettlementIndex >= 0) {
+    const r = previous[lastSettlementIndex];
+    const outstanding = balanceOf(r);
+    if (outstanding !== 0) items.push({
+      label: String(r.monthName || payrollMonthName(r.year, r.month)) + " (settlement carry-forward)",
+      balance: outstanding
+    });
   }
-  ordinary.forEach(r => {
-    if (Number(r.balance || 0) !== 0) items.push({
-      label: String(r.monthName || `${r.year}-${Number(r.month)+1}`),
-      balance: Number(r.balance || 0)
+  previous.slice(lastSettlementIndex + 1).forEach(r => {
+    if (isSettlement(r)) return;
+    const outstanding = balanceOf(r);
+    if (outstanding !== 0) items.push({
+      label: String(r.monthName || payrollMonthName(r.year, r.month)),
+      balance: outstanding
     });
   });
-  return {items, total: items.reduce((n,r) => n + r.balance, 0)};
+  return { items, total: items.reduce((sum, r) => sum + r.balance, 0) };
 }
 
 function getPreviousUnpaidPayrollBalance(
@@ -12021,13 +12038,12 @@ const priorBreakdown = priorPosition.items.map(item =>
   `<div style="display:flex;justify-content:space-between;gap:10px;margin:3px 0;">
      <span>${escapeText(item.label)}</span><b>${formatPayrollMoney(item.balance)}</b>
    </div>`
-).join("") || '<div>No previously recorded unpaid payroll.</div>';
+).join("") || '<div>No outstanding earlier payroll found for this employee in saved records.</div>';
 
 const totalAmountDue =
 payroll.isFullSettlement
-  ? Number(payroll.netPayable || 0)
-  : previousBalance +
-    Number(payroll.netPayable || 0);
+  ? Number(payroll.netPayable || 0) /* full settlement already includes prior */
+  : previousBalance + Number(payroll.netPayable || 0);
 
 modal.querySelector(
       "#allowanceResult"
@@ -12094,7 +12110,7 @@ payroll.advanceRecovery
 </div>
 
 <div style="padding:15px;background:#e8f5e9;border-radius:8px;">
-<b>${payroll.isFullSettlement ? "Full Settlement Balance"
+<b>${payroll.isFullSettlement ? "Full Settlement Balance (Including Earlier Unpaid)"
 : "Net Payable"}</b>
 <div style="font-size:20px;font-weight:bold;">
             ${formatPayrollMoney(
@@ -12104,8 +12120,8 @@ payroll.netPayable
 </div>
 
 <div style="padding:15px;background:#fff3cd;border-radius:8px;">
-<b>${payroll.isFullSettlement ? "Previous Settlement Balance"
-: "Previous Unpaid Balance"}</b>
+<b>${payroll.isFullSettlement ? "Previous Unpaid Payroll (Earlier Months)"
+: "Previous Unpaid Payroll (Earlier Months)"}</b>
 <div>${formatPayrollMoney(
 previousBalance
           )}</div>
