@@ -12063,7 +12063,7 @@ const priorPosition = afGetPriorPayrollPosition(employeeId, year, month);
 const previousBalance = priorPosition.total;
 const priorBreakdown = priorPosition.items.map(item =>
   `<div style="display:flex;justify-content:space-between;gap:10px;margin:3px 0;">
-     <span>${escapeText(item.label)}</span><b>${formatPayrollMoney(item.balance)}</b>
+     <span>${String(item.label ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]))}</span><b>${formatPayrollMoney(item.balance)}</b>
    </div>`
 ).join("") || '<div>No outstanding earlier payroll found for this employee in saved records.</div>';
 
