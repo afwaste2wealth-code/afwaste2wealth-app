@@ -11720,6 +11720,23 @@ incomingMode !== "FULL_SETTLEMENT"
   return existingRecord;
 }
 
+/* A&F payroll integrity: a calculation is not permission to overwrite a
+   previously paid payroll. All changes to paid earnings require reconciliation. */
+if (existingRecord && Number(existingRecord.amountPaid || 0) > 0) {
+  const protectedFields = ["earnedAllowance", "performanceAwardTotal",
+    "approvedDeductions", "advanceRecovery", "netPayable",
+    "previousSettlementBalance", "calculationMode"];
+  const changed = protectedFields.some(key => {
+    if (key === "calculationMode")
+      return String(existingRecord[key] || "NORMAL").toUpperCase() !==
+        String(payroll[key] || "NORMAL").toUpperCase();
+    return Math.abs(Number(existingRecord[key] || 0) - Number(payroll[key] || 0)) > 0.001;
+  });
+  if (changed) throw new Error("Paid payroll is locked. Reconcile payments before changing approved earnings.");
+  // Preserve payment state and original record; recalculation is read-only.
+  return existingRecord;
+}
+
 
   /*
 Synchronise advance transfers before
@@ -85674,6 +85691,7 @@ b.textContent = "Calculate Payroll";
     const payment = Number(prompt("Enter amount paid in UGX:", String(balance)));
     if (!payment || payment <= 0) return;
     if (payment > balance) return alert("Payment cannot exceed the outstanding balance of " + formatPayrollMoney(balance) + ".");
+    if (!Number.isFinite(payment) || payment <= 0) return alert("Enter a valid positive payment.");
 
     const methodInput = prompt("Payment method: Cash, Mobile Money, Bank Transfer, Cheque or Other", "Cash");
     if (methodInput === null) return;
@@ -85687,6 +85705,17 @@ b.textContent = "Calculate Payroll";
     records[i] = r;
     savePayrolls(records);
     createSalaryExpenseFromPayroll(r, payment, methodInput.trim() || "Cash");
+    try {
+      const key = "afPayrollPaymentAudit";
+      const history = JSON.parse(localStorage.getItem(key) || "[]");
+      history.push({id:"PAY-"+Date.now()+"-"+Math.random().toString(36).slice(2,8),
+        payrollId:String(r.id),employeeId:String(r.employeeId),
+        year:Number(r.year),month:Number(r.month),
+        isFullSettlement:fullSettlement,amount:payment,
+        method:methodInput.trim() || "Cash",date:r.paymentDate,
+        recordedBy:JSON.parse(localStorage.getItem("currentUser")||"null")?.employeeId||"UNKNOWN"});
+      localStorage.setItem(key,JSON.stringify(history));
+    } catch (error) { console.warn("Payroll audit could not be written",error); }
 
     alert("Payroll payment recorded successfully.");
     const calc = document.querySelector("#calculatePayroll");
