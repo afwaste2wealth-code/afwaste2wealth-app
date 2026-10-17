@@ -11412,10 +11412,18 @@ function afGetPriorPayrollPosition(employeeId, year, month) {
   const byPeriod = new Map();
   records.forEach(r => byPeriod.set(Number(r.year)*12+Number(r.month), r));
   const items = [];
-  if (!records.length) return {items, total:0};
-  // Only infer gaps from the first recorded period; do not invent payroll
-  // for dates before the employee's earliest saved payroll.
-  const firstPeriod = Math.min(...byPeriod.keys());
+  // Every employee follows the same period-by-period rule, including employees
+  // without a previously saved payroll record. Anchor at the beginning of the
+  // selected calendar year (or later employment start); earlier saved periods
+  // are included if present. Unsaved months remain provisional, never paid.
+  const employee = getEmployees().find(e =>
+    String(e.employeeId ?? "").trim().toUpperCase() === id);
+  let firstPeriod = Number(year) * 12;
+  if (employee && /^\d{4}-\d{2}-\d{2}$/.test(String(employee.dateJoined || ""))) {
+    const [joinedYear, joinedMonth] = employee.dateJoined.split("-").map(Number);
+    firstPeriod = Math.max(firstPeriod, joinedYear * 12 + joinedMonth - 1);
+  }
+  if (byPeriod.size) firstPeriod = Math.min(firstPeriod, ...byPeriod.keys());
   for (let period = firstPeriod; period < cutoff; period++) {
     const y = Math.floor(period / 12);
     const m = period - y * 12;
@@ -11450,7 +11458,7 @@ function afGetPriorPayrollPosition(employeeId, year, month) {
       provisional = true;
     }
     const balance = earned - paid;
-    if (balance !== 0) items.push({
+    if (balance !== 0 || provisional) items.push({
       label: payrollMonthName(y,m) + " " + y + (provisional ? " (UNSAVED ESTIMATE — confirm before settlement)" : ""),
       balance, provisional
     });
