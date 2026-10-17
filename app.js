@@ -11399,50 +11399,64 @@ createdAt:
    A full settlement carries the last settlement balance plus any later
    ordinary unpaid payroll; earlier periods were already consolidated. */
 function afGetPriorPayrollPosition(employeeId, year, month) {
-  /* Read SAVED payroll liabilities, not merely displayed allowance previews.
-     A full settlement consolidates older periods; only payroll after the
-     latest earlier settlement is added to that settlement's remaining balance. */
+  /* Reconstruct the ledger by PAY PERIOD, not by the latest settlement snapshot.
+     A settlement netPayable already contains older wages and must NEVER be
+     summed as a fresh month's earnings. Payments are counted exactly once. */
+  const id = String(employeeId ?? "").trim().toUpperCase();
   const cutoff = Number(year) * 12 + Number(month);
-  const normaliseId = value => String(value == null ? "" : value).trim().toUpperCase();
-  const periodOf = record => {
-    const y = Number(record.year);
-    let m = Number(record.month);
-    if (!Number.isFinite(y) || !Number.isFinite(m)) return NaN;
-    /* Existing app records use zero-based months. */
-    return y * 12 + m;
-  };
-  const balanceOf = record => {
-    if (record.balance !== undefined && record.balance !== null && record.balance !== "")
-      return Number(record.balance) || 0;
-    return (Number(record.netPayable) || 0) - (Number(record.amountPaid) || 0);
-  };
-  const previous = getPayrollRecords()
-    .filter(r => normaliseId(r.employeeId) === normaliseId(employeeId) &&
-      Number.isFinite(periodOf(r)) && periodOf(r) < cutoff)
-    .sort((a,b) => periodOf(a) - periodOf(b));
-  const isSettlement = r =>
-    String(r.calculationMode || (r.isFullSettlement ? "FULL_SETTLEMENT" : "NORMAL"))
-      .trim().toUpperCase() === "FULL_SETTLEMENT";
-  let lastSettlementIndex = -1;
-  previous.forEach((r, i) => { if (isSettlement(r)) lastSettlementIndex = i; });
+  const records = getPayrollRecords()
+    .filter(r => String(r.employeeId ?? "").trim().toUpperCase() === id &&
+      Number.isFinite(Number(r.year)) && Number.isFinite(Number(r.month)) &&
+      Number(r.year) * 12 + Number(r.month) < cutoff)
+    .sort((a,b) => (Number(a.year)*12+Number(a.month)) - (Number(b.year)*12+Number(b.month)));
+  const byPeriod = new Map();
+  records.forEach(r => byPeriod.set(Number(r.year)*12+Number(r.month), r));
   const items = [];
-  if (lastSettlementIndex >= 0) {
-    const r = previous[lastSettlementIndex];
-    const outstanding = balanceOf(r);
-    if (outstanding !== 0) items.push({
-      label: String(r.monthName || payrollMonthName(r.year, r.month)) + " (settlement carry-forward)",
-      balance: outstanding
+  if (!records.length) return {items, total:0};
+  // Only infer gaps from the first recorded period; do not invent payroll
+  // for dates before the employee's earliest saved payroll.
+  const firstPeriod = Math.min(...byPeriod.keys());
+  for (let period = firstPeriod; period < cutoff; period++) {
+    const y = Math.floor(period / 12);
+    const m = period - y * 12;
+    const record = byPeriod.get(period);
+    let earned, paid, provisional = false;
+    if (record) {
+      const isSettlement = String(record.calculationMode ||
+        (record.isFullSettlement ? "FULL_SETTLEMENT" : "NORMAL")).toUpperCase() === "FULL_SETTLEMENT";
+      const hasComponents = record.earnedAllowance !== undefined && record.earnedAllowance !== null;
+      if (hasComponents) {
+        earned = Number(record.earnedAllowance || 0) +
+          Number(record.performanceAwardTotal || 0) -
+          Number(record.approvedDeductions || 0) -
+          Number(record.advanceRecovery || 0);
+      } else if (!isSettlement) {
+        earned = Number(record.netPayable || 0);
+      } else {
+        // Legacy settlement without itemised earnings: do not guess its
+        // component. Require reconciliation rather than duplicate older pay.
+        throw new Error("Legacy full settlement lacks monthly earnings for " + y + "-" + (m+1) + ". Reconcile this record before calculating a new settlement.");
+      }
+      paid = Number(record.amountPaid || 0);
+    } else {
+      // Preview missing periods for visibility; do not save or approve them.
+      const preview = calculateEmployeePayroll(employeeId, y, m, "NORMAL");
+      if (!preview) continue;
+      earned = Number(preview.earnedAllowance || 0) +
+        Number(preview.performanceAwardTotal || 0) -
+        Number(preview.approvedDeductions || 0) -
+        Number(preview.advanceRecovery || 0);
+      paid = 0;
+      provisional = true;
+    }
+    const balance = earned - paid;
+    if (balance !== 0) items.push({
+      label: payrollMonthName(y,m) + " " + y + (provisional ? " (UNSAVED ESTIMATE — confirm before settlement)" : ""),
+      balance, provisional
     });
   }
-  previous.slice(lastSettlementIndex + 1).forEach(r => {
-    if (isSettlement(r)) return;
-    const outstanding = balanceOf(r);
-    if (outstanding !== 0) items.push({
-      label: String(r.monthName || payrollMonthName(r.year, r.month)),
-      balance: outstanding
-    });
-  });
-  return { items, total: items.reduce((sum, r) => sum + r.balance, 0) };
+  return {items, total: items.reduce((sum, item) => sum + item.balance, 0),
+    hasProvisional: items.some(item => item.provisional)};
 }
 
 function getPreviousUnpaidPayrollBalance(
@@ -12067,6 +12081,9 @@ const priorBreakdown = priorPosition.items.map(item =>
    </div>`
 ).join("") || '<div>No outstanding earlier payroll found for this employee in saved records.</div>';
 
+const priorWarning = priorPosition.hasProvisional
+  ? '<div style="padding:10px;background:#fff3cd;border:1px solid #d9a441;margin-bottom:12px;">Earlier UNSAVED months are included as estimates for preview only. Save and verify those months before confirming a full settlement.</div>'
+  : '';
 const totalAmountDue =
 payroll.isFullSettlement
   ? Number(payroll.netPayable || 0) /* full settlement already includes prior */
@@ -12075,6 +12092,7 @@ payroll.isFullSettlement
 modal.querySelector(
       "#allowanceResult"
     ).innerHTML = `
+${priorWarning}
 ${payroll.historicalAttendanceMissing ? `<div style="padding:12px;background:#fff3cd;border:1px solid #d9a441;border-radius:7px;margin-bottom:12px;"><b>Historical payroll:</b> No attendance entries found for this selected month. Earned allowance is taken from the existing saved Payroll Ledger record. Verify attendance before confirming a recalculation.</div>` : ''}
 <div style="
 display:grid;
@@ -12205,6 +12223,10 @@ const alreadySaved = getPayrollRecords().find(r =>
   Number(r.year) === Number(payroll.year) && Number(r.month) === Number(payroll.month));
 if (alreadySaved && Number(alreadySaved.amountPaid || 0) > 0) {
   alert("This payroll already has recorded payments. Reconciliation is required before changing the settlement. No records were changed.");
+  return;
+}
+if (afGetPriorPayrollPosition(payroll.employeeId, payroll.year, payroll.month).hasProvisional) {
+  alert("Some earlier months have calculated but UNSAVED payroll. Save and verify each earlier month in the Payroll Ledger before confirming this full settlement. No records were changed.");
   return;
 }
 if (payroll.historicalAttendanceMissing && !window.confirm(
