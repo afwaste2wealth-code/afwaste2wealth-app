@@ -1943,70 +1943,13 @@ integration.style.display = "";
    ========================================================= */
 
 function renderAFPerformanceWinnerDashboardCard() {
-  const old = document.getElementById('afPerformanceWinnerDashboardCard');
-  if (old) old.remove();
-  const user = typeof getAFCurrentUser === 'function' ? getAFCurrentUser() : null;
-  if (!user) return;
-  const main = document.querySelector('#mainApplication .main');
-  if (!main) return;
-  const read = key => {
-    try { const value = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(value) ? value : []; }
-    catch (_) { return []; }
-  };
-  const esc = value => String(value == null ? '' : value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-  const money = value => 'UGX ' + (Number(value) || 0).toLocaleString('en-UG');
-  const today = new Date();
-  const monthKey = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0');
-  const monthRecords = read('afMonthEndWinners').filter(r => r && (r.periodKey || (r.year + '-' + String(Number(r.month)+1).padStart(2,'0'))) <= monthKey);
-  monthRecords.sort((x,y) => String(y.periodKey || (y.year + '-' + String(Number(y.month)+1).padStart(2,'0'))).localeCompare(String(x.periodKey || (x.year + '-' + String(Number(x.month)+1).padStart(2,'0')))));
-  const monthly = monthRecords[0] || null;
-  // Only confirmed weekly awards are displayed as winners; never invent a winner from incomplete data.
-  const weeklyRecords = read('afWeekEndWinners').concat(read('afWeeklyWinners'));
-  const weekly = weeklyRecords.filter(r => r && (r.confirmed === true || r.locked === true || String(r.status || '').toLowerCase() === 'approved')).sort((x,y) => String(y.periodKey || y.weekEnd || y.date || '').localeCompare(String(x.periodKey || x.weekEnd || x.date || '')))[0] || null;
-  const rewardStatus = r => esc(r && (r.rewardStatus || r.paymentStatus || r.status) || 'See approved reward record');
-  const award = (title,record,type) => {
-    const name = record && (type === 'employee' ? record.bestEmployeeName : record.bestTeamName);
-    const score = record && Number(type === 'employee' ? record.bestEmployeeScore : record.bestTeamScore);
-    const prize = record && (type === 'employee' ? record.bestEmployeePrize : record.bestTeamPrize);
-    const label = record && (record.label || record.periodKey || record.weekEnd || '');
-    return `<div style="border:1px solid #dce7df;border-radius:11px;background:#fff;padding:15px;min-width:0">
-      <div style="font-size:13px;color:#416253;font-weight:700">${esc(title)}</div>
-      <div style="font-size:17px;font-weight:800;color:#123b2a;margin:9px 0">${name ? esc(name) : 'Not yet confirmed'}</div>
-      ${name ? `<div>Score: ${Number.isFinite(score) ? score.toFixed(1)+'%' : 'Not recorded'}</div><div style="margin-top:5px">Reward: <b>${prize != null ? money(prize) : 'Not recorded'}</b></div><div style="font-size:12px;color:#526b5e;margin-top:5px">${rewardStatus(record)}</div>` : '<div style="color:#687d72;font-size:12px">Awaiting an approved performance result.</div>'}
-      ${label ? `<div style="color:#687d72;font-size:12px;margin-top:7px">${esc(label)}</div>` : ''}
-    </div>`;
-  };
-  let birthdays = [];
-  try { if (typeof getEmployeeBirthdayReminders === 'function') birthdays = getEmployeeBirthdayReminders() || []; }
-  catch (e) { console.warn('Birthday dashboard:',e); }
-  birthdays = birthdays.filter(x => Number(x.daysRemaining) >= 0 && Number(x.daysRemaining) <= 7).sort((x,y)=>Number(x.daysRemaining)-Number(y.daysRemaining));
-  const birthdayHtml = birthdays.length ? birthdays.map(x => {
-    const date = String(x.dateOfBirth || '').split('-');
-    const dayMonth = date.length === 3 ? date[2] + '/' + date[1] : 'Date unavailable';
-    const days = Number(x.daysRemaining);
-    return `<div style="padding:8px 0;border-bottom:1px solid #edf1ee"><b>${esc(x.fullName || 'Employee')}</b> — ${esc(dayMonth)} <span style="color:#476a55">(${days === 0 ? 'Today!' : days + ' day(s) remaining'})</span></div>`;
-  }).join('') : '<div style="color:#64776c">No birthdays in the next seven days.</div>';
-  const isEmployeeWinner = monthly && String(monthly.bestEmployeeId || '') === String(user.employeeId || '');
-  const card = document.createElement('section');
-  card.id = 'afPerformanceWinnerDashboardCard';
-  card.className = 'card';
-  card.style.cssText = 'margin:0 0 16px;padding:18px;border:1px solid #d8e8dc;background:#f4faf5;border-radius:12px';
-  card.innerHTML = `<h2 style="margin:0 0 12px;color:#0b5d3b;font-size:20px">🏆 Staff Performance & Recognition</h2>
-    ${isEmployeeWinner ? '<div style="background:#e4f4e6;padding:10px;border-radius:8px;margin-bottom:12px;font-weight:700">🎉 Congratulations on your Best Employee of the Month award!</div>' : ''}
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px">
-      ${award('🥇 Best Employee — Week',weekly,'employee')}
-      ${award('🏆 Best Team — Week',weekly,'team')}
-      ${award('🥇 Best Employee — Month',monthly,'employee')}
-      ${award('🏆 Best Team — Month',monthly,'team')}
-    </div>
-    <div style="margin-top:14px;background:white;border:1px solid #dce7df;border-radius:11px;padding:15px">
-      <h3 style="margin:0 0 9px;color:#0b5d3b;font-size:17px">🎂 Upcoming Birthdays — Next 7 Days</h3>
-      ${birthdayHtml}
-    </div>
-    <div style="font-size:12px;color:#64776c;margin-top:10px">Recognition is read-only here. Rewards are subject to Director approval; payment or issuance must be confirmed in the appropriate records.</div>`;
-  const notice = document.getElementById('roleAccessNotice');
-  if (notice) notice.insertAdjacentElement('afterend',card);
-  else main.prepend(card);
+  // The live ranking renderer (refreshAFBestPerformance) is the single
+  // calculation used by the Director and every employee. The old version
+  // read only afMonthEndWinners and incorrectly showed empty results.
+  document.getElementById("afPerformanceWinnerDashboardCard")?.remove();
+  if (typeof window.refreshAFBestPerformance === "function") {
+    window.refreshAFBestPerformance();
+  }
 }
 
 /* =========================================================
@@ -2240,6 +2183,23 @@ hideAFFactoryDashboard();
   if (role === "Employee") {
 
 hideAFFactoryDashboard();
+setTimeout(() => {
+  const u = getAFCurrentUser();
+  if (!u || u.role !== "Employee") return;
+  const employee = (typeof getEmployees === "function" ? getEmployees() : [])
+    .find(e => String(e.employeeId).toUpperCase() === String(u.employeeId).toUpperCase());
+  const incomplete = !employee || !(employee.dateJoined || employee.department || employee.monthlyAllowance);
+  document.getElementById("afEmployeeCloudDetailsNotice")?.remove();
+  if (!incomplete) return;
+  const main = document.querySelector("#mainApplication .main");
+  if (!main) return;
+  const notice = document.createElement("div");
+  notice.id = "afEmployeeCloudDetailsNotice";
+  notice.setAttribute("role", "status");
+  notice.style.cssText = "padding:12px;margin:12px 0;background:#fff4d6;border:1px solid #e5bd60;border-radius:9px;font-size:13px";
+  notice.textContent = "Employee details have not fully synchronized to this device. Cloud login alone does not confirm that attendance, payroll and personal records are available. Contact the Director to verify secure employee-data synchronization.";
+  main.prepend(notice);
+}, 400);
 
   }
 
@@ -107490,4 +107450,26 @@ document.addEventListener('click',()=>setTimeout(attachGLDashboardButton,0));
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, {once:true});
   else init();
+})();
+
+/* A&F App64: Refresh the shared, read-only recognition display when
+   approved cloud records or Director rewards arrive on this device. */
+(function afRecognitionCloudRefresh() {
+  let timer;
+  const refresh = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      try {
+        if (typeof window.refreshAFBestPerformance === "function")
+          window.refreshAFBestPerformance();
+        if (typeof refreshAFDashboardBirthdays === "function")
+          refreshAFDashboardBirthdays();
+      } catch (error) { console.warn("A&F recognition refresh:", error); }
+    }, 250);
+  };
+  window.addEventListener("af-cloud-master-updated", refresh);
+  window.addEventListener("afRewardsUpdated", refresh);
+  window.addEventListener("storage", event => {
+    if (["attendanceRecords", "employees", "factoryTeams", "afDirectorRewardRegister", "afMonthEndWinners"].includes(event.key)) refresh();
+  });
 })();
