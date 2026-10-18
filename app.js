@@ -97123,45 +97123,76 @@ function openAFPerformanceWinnersHistory() {
            * Secretary account merely by knowing EMP005/EMP006.
            */
           if (signInResult.error) {
+            /*
+             * A new phone has no factory-local employee record.
+             * The Director has already provisioned a one-time code
+             * on the factory laptop.  Let the server verify that code
+             * and bind the account; do not require localStorage on
+             * the employee's new device.
+             *
+             * IMPORTANT: af-cloud-enroll must validate the code,
+             * employee identity, role and one-time use SERVER-SIDE.
+             * Client-supplied identity is never proof of authorisation.
+             */
             const localEmployee =
-              getLocalEmployeeForCloudActivation(
-                employeeId
-              );
-
-            const localCheck =
-              await verifyLocalEmployeeForCloudActivation(
-                localEmployee,
-                password
-              );
-
-            if (!localCheck.valid) {
-              throw new Error(
-                localCheck.reason ||
-                signInResult.error.message
-              );
+              getLocalEmployeeForCloudActivation(employeeId);
+            if (localEmployee) {
+              const localCheck =
+                await verifyLocalEmployeeForCloudActivation(
+                  localEmployee, password
+                );
+              if (!localCheck.valid) {
+                throw new Error(localCheck.reason ||
+                  "Local employee verification failed.");
+              }
             }
 
-            await activateFirstCloudAccount(
-              client,
-              localEmployee,
-              password,
-              message
+            const enrollmentCode = window.prompt(
+              "FIRST-TIME A&F CLOUD ACTIVATION\n\n" +
+              "Employee ID: " + employeeId + "\n\n" +
+              "Enter the one-time activation code provided by the Director. " +
+              "This is NOT your password.\n\n" +
+              "If you already activated this account, cancel and check your password."
             );
-
+            if (!enrollmentCode || !enrollmentCode.trim()) {
+              throw new Error(
+                "Cloud sign-in was unsuccessful. Activation cancelled. " +
+                "If already activated, check your password."
+              );
+            }
             if (message) {
-              message.style.color =
-                "#555";
-
+              message.textContent =
+                "Verifying one-time activation with A&F Cloud...";
+            }
+            const { data: activation, error: activationError } =
+              await client.functions.invoke("af-cloud-enroll", {
+                body: {
+                  action: "enroll",
+                  employeeId,
+                  password,
+                  enrollmentCode: enrollmentCode.trim(),
+                  ...(localEmployee ? {
+                    fullName: localEmployee.fullName ||
+                      localEmployee.employeeName || employeeId
+                  } : {})
+                }
+              });
+            if (activationError || activation?.error ||
+                activation?.success !== true) {
+              throw new Error(
+                activation?.error || activationError?.message ||
+                "Activation was rejected by the server. " +
+                "Check the code or ask the Director for a fresh code."
+              );
+            }
+            if (message) {
               message.textContent =
                 "Activation successful. Signing in to A&F Cloud...";
             }
-
-            signInResult =
-              await client.auth
-                .signInWithPassword({
-                  email: cloudEmail,
-                  password
-                });
+            signInResult = await client.auth.signInWithPassword({
+              email: cloudEmail,
+              password
+            });
           }
 
           if (signInResult.error) {
