@@ -107452,6 +107452,63 @@ document.addEventListener('click',()=>setTimeout(attachGLDashboardButton,0));
   else init();
 })();
 
+/* A&F App64.1: Persistent read-only staff recognition.  Never disappear
+   just because the cloud device has not downloaded ranking data. */
+(function afStaffRecognitionPersistent() {
+  const safe = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const allowed = new Set(['Employee','Team Leader','Secretary','HR','Manager']);
+  function render() {
+    let user;
+    try { user = JSON.parse(localStorage.getItem('currentUser') || 'null'); } catch (_) { return; }
+    const old = document.getElementById('afStaffRecognitionPersistent');
+    if (!user || !allowed.has(user.role)) { old?.remove(); return; }
+    const main = document.querySelector('#mainApplication .main');
+    if (!main) return;
+    const today = new Date();
+    const date = [today.getFullYear(),String(today.getMonth()+1).padStart(2,'0'),String(today.getDate()).padStart(2,'0')].join('-');
+    let week=[], month=[];
+    try {
+      if (typeof window.calculateAFEmployeeRankings === 'function') {
+        week = window.calculateAFEmployeeRankings('week',date)?.results || [];
+        month = window.calculateAFEmployeeRankings('month',date)?.results || [];
+      }
+    } catch (error) { console.warn('Staff ranking data unavailable',error); }
+    const eligible = a => a.filter(x => x && Number.isFinite(Number(x.finalScore)) && Number(x.finalScore)>0).sort((a,b)=>Number(b.finalScore)-Number(a.finalScore));
+    function topTeam(rows) {
+      const teams = new Map();
+      for (const r of rows) {
+        const key=String(r.teamName||'').trim(); if(!key)continue;
+        const t=teams.get(key)||{name:key,sum:0,count:0};
+        t.sum+=Number(r.finalScore)||0;t.count++;teams.set(key,t);
+      }
+      return [...teams.values()].map(t=>({name:t.name,score:t.sum/t.count})).sort((a,b)=>b.score-a.score)[0];
+    }
+    const w=eligible(week),m=eligible(month);
+    const cells=[['Best Employee — Week',w[0]?.employeeName,w[0]?.finalScore],['Best Team — Week',topTeam(w)?.name,topTeam(w)?.score],['Best Employee — Month',m[0]?.employeeName,m[0]?.finalScore],['Best Team — Month',topTeam(m)?.name,topTeam(m)?.score]];
+    const tiles=cells.map(([label,name,score])=>`<div style="border:1px solid #dce8e2;border-radius:10px;background:white;padding:13px"><div style="font-size:12px;color:#57685f">🏆 ${safe(label)}</div><strong style="display:block;margin:8px 0">${name?safe(name):'Awaiting synchronized data'}</strong><div>${name?Number(score).toFixed(1)+'% · Provisional ranking':'No current performance records on this device'}</div></div>`).join('');
+    let birthdays=[];
+    try { if(typeof getEmployeeBirthdayReminders==='function') birthdays=getEmployeeBirthdayReminders()||[]; } catch(e) { console.warn('Birthday records unavailable',e); }
+    const birthdayText=birthdays.length ? birthdays.map(x=>`<div>${safe(x.fullName||x.name||'Employee')} — ${safe(x.daysRemaining??'')} day(s)</div>`).join('') : 'No upcoming birthdays in available records (or data not synchronized).';
+    const el=old||document.createElement('section');el.id='afStaffRecognitionPersistent';el.className='card';
+    el.style.cssText='padding:18px;margin:14px 0;border:1px solid #dce8e2;border-radius:12px;background:#f8fbf9';
+    el.innerHTML=`<h3 style="margin:0 0 12px;color:#0b5d3b">🏆 Staff Performance & Recognition</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:10px">${tiles}</div><div style="margin-top:16px;padding:12px;background:white;border-radius:10px"><strong>🎂 Upcoming Birthdays — Next 7 Days</strong><div style="margin-top:8px">${birthdayText}</div></div><p style="font-size:12px;color:#64746a">Current rankings are provisional. Rewards require Director approval. Missing cloud data cannot be inferred locally.</p>`;
+    if(!old) {
+      const anchor=document.getElementById('roleAccessNotice');
+      if(anchor && anchor.parentElement===main) anchor.insertAdjacentElement('afterend',el);
+      else main.prepend(el);
+    }
+  }
+  const schedule=()=>setTimeout(()=>{try{render()}catch(e){console.warn('Staff recognition render:',e)}},220);
+  if(typeof applyAFRoleDashboard==='function') {
+    const previous=applyAFRoleDashboard;
+    applyAFRoleDashboard=function(...args){const result=previous.apply(this,args);schedule();return result;};
+  }
+  window.addEventListener('af-cloud-master-updated',schedule);
+  window.addEventListener('afRewardsUpdated',schedule);
+  window.addEventListener('storage',schedule);
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',schedule,{once:true});else schedule();
+})();
+
 /* A&F App64: Refresh the shared, read-only recognition display when
    approved cloud records or Director rewards arrive on this device. */
 (function afRecognitionCloudRefresh() {

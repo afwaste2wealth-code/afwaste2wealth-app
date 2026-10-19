@@ -1,9 +1,15 @@
-A&F App64 recognition alignment
+A&F Wekavera App 64.1 — Persistent Employee Recognition
 
-Replace app.js only after backing up the current app and browser data.
+Fixes the regression where Employee recognition and birthday cards disappeared.
+For Employee, Team Leader, Secretary, HR and Manager dashboards, four ranking
+cards and upcoming birthdays remain visible even when cloud data is missing.
+Ranking figures use locally available performance data and are marked provisional.
+No payroll, activation or cloud access permissions were modified.
 
-Fixes: Removes obsolete month-end-only winner display; uses same live rankings as Director on all roles; refreshes recognition on cloud updates; warns when employee phone only has a minimal cloud login profile.
+IMPORTANT: This is a display safeguard, not a server-side cloud sync fix.
+Employees on phones will still require authorized cloud data delivery to see
+actual names, performance, birthdays, payroll and personal records.
 
-LIMITATIONS: Cloud server row-level security and employee-specific payroll/attendance API were not changed or verified. A successful login is not proof that private employee details synchronize. The Director must check cloud access rules and data. The live ranking can still be empty on phones without synchronized performance source records.
-
-Syntax check: node --check passed. No live database test performed.
+Installation: Back up current app.js and data. Replace app.js in GitHub, commit,
+refresh browser (Ctrl+Shift+R), sign in as employee and check dashboard.
+JavaScript syntax checked; not tested with production browser/cloud data.
