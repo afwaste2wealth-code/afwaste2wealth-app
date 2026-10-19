@@ -1943,14 +1943,325 @@ integration.style.display = "";
    ========================================================= */
 
 function renderAFPerformanceWinnerDashboardCard() {
-  // The live ranking renderer (refreshAFBestPerformance) is the single
-  // calculation used by the Director and every employee. The old version
-  // read only afMonthEndWinners and incorrectly showed empty results.
-  document.getElementById("afPerformanceWinnerDashboardCard")?.remove();
-  if (typeof window.refreshAFBestPerformance === "function") {
-    window.refreshAFBestPerformance();
+
+const oldCard =
+document.getElementById(
+    "afPerformanceWinnerDashboardCard"
+  );
+
+  if (oldCard) {
+oldCard.remove();
   }
+
+
+const currentUser =
+typeof getAFCurrentUser === "function"
+    ? getAFCurrentUser()
+    : JSON.parse(
+localStorage.getItem(
+          "currentUser"
+        ) || "null"
+      );
+
+  if (!currentUser) {
+    return;
+  }
+
+
+let winnerRecords = [];
+
+try {
+const savedWinners =
+JSON.parse(
+localStorage.getItem(
+      "afMonthEndWinners"
+    ) || "[]"
+  );
+
+winnerRecords =
+Array.isArray(savedWinners)
+    ? savedWinners
+    : [];
+
+} catch (error) {
+
+console.error(
+    "Unable to read month-end winners:",
+    error
+  );
+
+winnerRecords = [];
 }
+
+  if (!winnerRecords.length) {
+    return;
+  }
+
+
+const sortedWinners =
+  [...winnerRecords].sort(
+    (a, b) => {
+
+const aMonth =
+      Number(a.year || 0) * 12 +
+      Number(a.month || 0);
+
+const bMonth =
+      Number(b.year || 0) * 12 +
+      Number(b.month || 0);
+
+      return bMonth - aMonth;
+    }
+  );
+
+
+const latestWinner =
+sortedWinners[0];
+
+  if (!latestWinner) {
+    return;
+  }
+
+
+const main =
+document.querySelector(
+    "#mainApplication .main"
+  );
+
+  if (!main) {
+    return;
+  }
+
+
+const money =
+  amount =>
+typeof formatPayrollMoney ===
+    "function"
+      ? formatPayrollMoney(amount)
+      : "UGX " +
+        Number(
+          amount || 0
+        ).toLocaleString();
+
+
+const isBestEmployee =
+  String(
+currentUser.employeeId || ""
+  ) ===
+  String(
+latestWinner.bestEmployeeId || ""
+  );
+
+
+const card =
+document.createElement(
+    "section"
+  );
+
+card.id =
+  "afPerformanceWinnerDashboardCard";
+
+card.className = "card";
+
+card.style.cssText = `
+    margin-bottom:16px;
+    padding:18px;
+    border:1px solid #e0c26b;
+    background:#fff8e1;
+    border-radius:12px;
+  `;
+
+
+card.innerHTML = `
+
+<div style="
+      font-size:18px;
+font-weight:bold;
+      color:#0b5d3b;
+      margin-bottom:12px;
+    ">
+🏆 ${
+escapeText(
+latestWinner.label || ""
+        )
+      } Performance Winners
+</div>
+
+
+    ${
+isBestEmployee
+        ? `
+<div style="
+            background:#e8f5e9;
+            padding:12px;
+            border-radius:8px;
+            margin-bottom:12px;
+font-weight:bold;
+            color:#0b5d3b;
+          ">
+🎉 Congratulations!
+            You are the Best Employee
+            of the Month.
+            Your cash prize is
+            ${money(
+latestWinner
+                .bestEmployeePrize
+            )}.
+</div>
+        `
+        : ""
+    }
+
+
+<div style="
+display:grid;
+      grid-template-columns:
+        repeat(
+          auto-fit,
+minmax(220px,1fr)
+        );
+      gap:12px;
+    ">
+
+<div style="
+background:white;
+        padding:13px;
+        border-radius:9px;
+        border:1px solid #ddd;
+      ">
+
+<div style="
+          font-size:12px;
+          color:#666;
+        ">
+🥇 Best Employee
+</div>
+
+<div style="
+          font-size:17px;
+font-weight:bold;
+          margin-top:5px;
+        ">
+          ${
+escapeText(
+latestWinner
+                .bestEmployeeName ||
+              ""
+            )
+          }
+</div>
+
+<div style="margin-top:6px;">
+          Score:
+<b>
+            ${
+              Number(
+latestWinner
+                  .bestEmployeeScore ||
+                0
+              ).toFixed(1)
+            }%
+</b>
+</div>
+
+<div style="
+          margin-top:6px;
+          color:#0b5d3b;
+font-weight:bold;
+        ">
+          Prize:
+          ${
+            money(
+latestWinner
+                .bestEmployeePrize
+            )
+          }
+</div>
+
+</div>
+
+
+<div style="
+background:white;
+        padding:13px;
+        border-radius:9px;
+        border:1px solid #ddd;
+      ">
+
+<div style="
+          font-size:12px;
+          color:#666;
+        ">
+🏆 Best Team
+</div>
+
+<div style="
+          font-size:17px;
+font-weight:bold;
+          margin-top:5px;
+        ">
+          ${
+escapeText(
+latestWinner
+                .bestTeamName ||
+              ""
+            )
+          }
+</div>
+
+<div style="margin-top:6px;">
+          Team Score:
+<b>
+            ${
+              Number(
+latestWinner
+                  .bestTeamScore ||
+                0
+              ).toFixed(1)
+            }%
+</b>
+</div>
+
+<div style="
+          margin-top:6px;
+          color:#0b5d3b;
+font-weight:bold;
+        ">
+          Team Prize:
+          ${
+            money(
+latestWinner
+                .bestTeamPrize
+            )
+          }
+</div>
+
+</div>
+
+</div>
+  `;
+
+
+const notice =
+document.getElementById(
+    "roleAccessNotice"
+  );
+
+  if (notice) {
+
+notice.insertAdjacentElement(
+      "afterend",
+      card
+    );
+
+  } else {
+
+main.prepend(card);
+
+  }
+
+}
+
 
 /* =========================================================
    APPLY ROLE DASHBOARD
@@ -2183,23 +2494,6 @@ hideAFFactoryDashboard();
   if (role === "Employee") {
 
 hideAFFactoryDashboard();
-setTimeout(() => {
-  const u = getAFCurrentUser();
-  if (!u || u.role !== "Employee") return;
-  const employee = (typeof getEmployees === "function" ? getEmployees() : [])
-    .find(e => String(e.employeeId).toUpperCase() === String(u.employeeId).toUpperCase());
-  const incomplete = !employee || !(employee.dateJoined || employee.department || employee.monthlyAllowance);
-  document.getElementById("afEmployeeCloudDetailsNotice")?.remove();
-  if (!incomplete) return;
-  const main = document.querySelector("#mainApplication .main");
-  if (!main) return;
-  const notice = document.createElement("div");
-  notice.id = "afEmployeeCloudDetailsNotice";
-  notice.setAttribute("role", "status");
-  notice.style.cssText = "padding:12px;margin:12px 0;background:#fff4d6;border:1px solid #e5bd60;border-radius:9px;font-size:13px";
-  notice.textContent = "Employee details have not fully synchronized to this device. Cloud login alone does not confirm that attendance, payroll and personal records are available. Contact the Director to verify secure employee-data synchronization.";
-  main.prepend(notice);
-}, 400);
 
   }
 
@@ -107450,83 +107744,4 @@ document.addEventListener('click',()=>setTimeout(attachGLDashboardButton,0));
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, {once:true});
   else init();
-})();
-
-/* A&F App64.1: Persistent read-only staff recognition.  Never disappear
-   just because the cloud device has not downloaded ranking data. */
-(function afStaffRecognitionPersistent() {
-  const safe = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const allowed = new Set(['Employee','Team Leader','Secretary','HR','Manager']);
-  function render() {
-    let user;
-    try { user = JSON.parse(localStorage.getItem('currentUser') || 'null'); } catch (_) { return; }
-    const old = document.getElementById('afStaffRecognitionPersistent');
-    if (!user || !allowed.has(user.role)) { old?.remove(); return; }
-    const main = document.querySelector('#mainApplication .main');
-    if (!main) return;
-    const today = new Date();
-    const date = [today.getFullYear(),String(today.getMonth()+1).padStart(2,'0'),String(today.getDate()).padStart(2,'0')].join('-');
-    let week=[], month=[];
-    try {
-      if (typeof window.calculateAFEmployeeRankings === 'function') {
-        week = window.calculateAFEmployeeRankings('week',date)?.results || [];
-        month = window.calculateAFEmployeeRankings('month',date)?.results || [];
-      }
-    } catch (error) { console.warn('Staff ranking data unavailable',error); }
-    const eligible = a => a.filter(x => x && Number.isFinite(Number(x.finalScore)) && Number(x.finalScore)>0).sort((a,b)=>Number(b.finalScore)-Number(a.finalScore));
-    function topTeam(rows) {
-      const teams = new Map();
-      for (const r of rows) {
-        const key=String(r.teamName||'').trim(); if(!key)continue;
-        const t=teams.get(key)||{name:key,sum:0,count:0};
-        t.sum+=Number(r.finalScore)||0;t.count++;teams.set(key,t);
-      }
-      return [...teams.values()].map(t=>({name:t.name,score:t.sum/t.count})).sort((a,b)=>b.score-a.score)[0];
-    }
-    const w=eligible(week),m=eligible(month);
-    const cells=[['Best Employee — Week',w[0]?.employeeName,w[0]?.finalScore],['Best Team — Week',topTeam(w)?.name,topTeam(w)?.score],['Best Employee — Month',m[0]?.employeeName,m[0]?.finalScore],['Best Team — Month',topTeam(m)?.name,topTeam(m)?.score]];
-    const tiles=cells.map(([label,name,score])=>`<div style="border:1px solid #dce8e2;border-radius:10px;background:white;padding:13px"><div style="font-size:12px;color:#57685f">🏆 ${safe(label)}</div><strong style="display:block;margin:8px 0">${name?safe(name):'Awaiting synchronized data'}</strong><div>${name?Number(score).toFixed(1)+'% · Provisional ranking':'No current performance records on this device'}</div></div>`).join('');
-    let birthdays=[];
-    try { if(typeof getEmployeeBirthdayReminders==='function') birthdays=getEmployeeBirthdayReminders()||[]; } catch(e) { console.warn('Birthday records unavailable',e); }
-    const birthdayText=birthdays.length ? birthdays.map(x=>`<div>${safe(x.fullName||x.name||'Employee')} — ${safe(x.daysRemaining??'')} day(s)</div>`).join('') : 'No upcoming birthdays in available records (or data not synchronized).';
-    const el=old||document.createElement('section');el.id='afStaffRecognitionPersistent';el.className='card';
-    el.style.cssText='padding:18px;margin:14px 0;border:1px solid #dce8e2;border-radius:12px;background:#f8fbf9';
-    el.innerHTML=`<h3 style="margin:0 0 12px;color:#0b5d3b">🏆 Staff Performance & Recognition</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:10px">${tiles}</div><div style="margin-top:16px;padding:12px;background:white;border-radius:10px"><strong>🎂 Upcoming Birthdays — Next 7 Days</strong><div style="margin-top:8px">${birthdayText}</div></div><p style="font-size:12px;color:#64746a">Current rankings are provisional. Rewards require Director approval. Missing cloud data cannot be inferred locally.</p>`;
-    if(!old) {
-      const anchor=document.getElementById('roleAccessNotice');
-      if(anchor && anchor.parentElement===main) anchor.insertAdjacentElement('afterend',el);
-      else main.prepend(el);
-    }
-  }
-  const schedule=()=>setTimeout(()=>{try{render()}catch(e){console.warn('Staff recognition render:',e)}},220);
-  if(typeof applyAFRoleDashboard==='function') {
-    const previous=applyAFRoleDashboard;
-    applyAFRoleDashboard=function(...args){const result=previous.apply(this,args);schedule();return result;};
-  }
-  window.addEventListener('af-cloud-master-updated',schedule);
-  window.addEventListener('afRewardsUpdated',schedule);
-  window.addEventListener('storage',schedule);
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',schedule,{once:true});else schedule();
-})();
-
-/* A&F App64: Refresh the shared, read-only recognition display when
-   approved cloud records or Director rewards arrive on this device. */
-(function afRecognitionCloudRefresh() {
-  let timer;
-  const refresh = () => {
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      try {
-        if (typeof window.refreshAFBestPerformance === "function")
-          window.refreshAFBestPerformance();
-        if (typeof refreshAFDashboardBirthdays === "function")
-          refreshAFDashboardBirthdays();
-      } catch (error) { console.warn("A&F recognition refresh:", error); }
-    }, 250);
-  };
-  window.addEventListener("af-cloud-master-updated", refresh);
-  window.addEventListener("afRewardsUpdated", refresh);
-  window.addEventListener("storage", event => {
-    if (["attendanceRecords", "employees", "factoryTeams", "afDirectorRewardRegister", "afMonthEndWinners"].includes(event.key)) refresh();
-  });
 })();
