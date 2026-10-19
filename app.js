@@ -4635,7 +4635,8 @@ const allowedRoles = [
     "Director",
     "Manager",
     "HR",
-    "Secretary"
+    "Secretary",
+    "Employee"
   ];
 
 
@@ -44695,7 +44696,7 @@ item.teamName ||
 </div>
 
 </div>
-${typeof afWinnerRewardPanel==='function'?afWinnerRewardPanel(isTeam?'Team':'Employee',name,title.includes('Month')?new Date().toISOString().slice(0,7):null):''}
+${getUser()?.role === 'Employee' ? '<small style="color:#64748b">Recognition is read-only. Cash awards require Director approval.</small>' : (typeof afWinnerRewardPanel==='function'?afWinnerRewardPanel(isTeam?'Team':'Employee',name,title.includes('Month')?new Date().toISOString().slice(0,7):null):'')}
 </div>
     `;
   }
@@ -45002,6 +45003,11 @@ main.appendChild(
       );
     }
 
+
+if (currentUser.role === "Employee") {
+  const rankingsButton = box.querySelector("#afViewRankings");
+  if (rankingsButton) rankingsButton.remove();
+}
 
 const button =
 box.querySelector(
