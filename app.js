@@ -4635,8 +4635,7 @@ const allowedRoles = [
     "Director",
     "Manager",
     "HR",
-    "Secretary",
-    "Employee"
+    "Secretary"
   ];
 
 
@@ -44400,7 +44399,8 @@ const ROLES = [
     "Manager",
     "HR",
     "Secretary",
-    "Team Leader"
+    "Team Leader",
+    "Employee"
   ];
 
 
@@ -44696,7 +44696,7 @@ item.teamName ||
 </div>
 
 </div>
-${getUser()?.role === 'Employee' ? '<small style="color:#64748b">Recognition is read-only. Cash awards require Director approval.</small>' : (typeof afWinnerRewardPanel==='function'?afWinnerRewardPanel(isTeam?'Team':'Employee',name,title.includes('Month')?new Date().toISOString().slice(0,7):null):'')}
+${typeof afWinnerRewardPanel==='function'?afWinnerRewardPanel(isTeam?'Team':'Employee',name,title.includes('Month')?new Date().toISOString().slice(0,7):null):''}
 </div>
     `;
   }
@@ -45004,18 +45004,17 @@ main.appendChild(
     }
 
 
-if (currentUser.role === "Employee") {
-  const rankingsButton = box.querySelector("#afViewRankings");
-  if (rankingsButton) rankingsButton.remove();
-}
-
 const button =
 box.querySelector(
         "#afViewRankings"
       );
 
 
-    if (button) {
+    if (button && currentUser.role === "Employee") {
+      button.remove(); // Employee recognition cards are read-only.
+    }
+
+    if (button && currentUser.role !== "Employee") {
 
 button.onclick =
         function() {

@@ -1,0 +1,30 @@
+A&F WEKAVERA APP 66 - TARGETED CODE REVIEW AND RECOGNITION FIX
+
+Confirmed cause of missing performance card:
+- The Performance & Recognition component has a ROLES whitelist containing Director, Manager, HR, Secretary, Team Leader but NOT Employee.
+- Consequently, logging in as Victo (role Employee) removes/hides the component, even with Cloud Sync connected.
+
+Changes made:
+1. Added Employee to the recognition component's role whitelist.
+2. Removed the View Full Rankings navigation button for Employee role, because the full management ranking view needs a separate permissions review.
+3. No changes to petty loans, payroll, storage keys, cloud synchronization, inventory, or accounting.
+
+Additional findings (not changed):
+- A separate historical winner card uses afMonthEndWinners and hides itself if no winner history exists.
+- The existing weekly/monthly recognition cards calculate current rankings via calculateAFEmployeeRankings.
+- Cloud sync schema contains afMonthEndWinners, but sync status alone does not prove that the employee account has the data or permission to fetch it.
+- Approved award inclusion in payslips requires transaction-level testing; this update does not assert it is complete.
+
+SAFE DEPLOYMENT
+1. Back up company data and keep the current working app.js file.
+2. In the ORIGINAL GitHub repository, replace only app.js with the app.js inside this ZIP.
+3. Commit and reload the website. If the old page is cached, use Ctrl+Shift+R.
+4. Log in as Director and confirm petty loans and dashboard values.
+5. Log out, log in as Victo, confirm Performance & Recognition card shows weekly/monthly rankings.
+6. Check employee portal and payroll without editing existing financial records.
+7. If any regression occurs, restore the previous app.js from GitHub history.
+
+TEST STATUS
+- JavaScript syntax check performed.
+- Not tested against live company records or cloud accounts.
+- This is a targeted fix, NOT a certification that every module is error-free.
