@@ -4635,7 +4635,9 @@ const allowedRoles = [
     "Director",
     "Manager",
     "HR",
-    "Secretary"
+    "Secretary",
+    "Team Leader",
+    "Employee"
   ];
 
 
@@ -44649,10 +44651,15 @@ isTeam
         : item.finalScore;
 
 
-const picture =
-isTeam
-        ? item.photo
-        : item.passportPhoto;
+const picture = (() => {
+      const existing = isTeam ? item.photo : item.passportPhoto;
+      if (existing) return existing;
+      const employees = read('employees');
+      const match = employees.find(e => isTeam
+        ? String(e.fullName || '').trim().toLowerCase() === String(item.leader || '').trim().toLowerCase()
+        : String(e.employeeId || '') === String(item.employeeId || '') || String(e.fullName || '').trim().toLowerCase() === String(item.employeeName || '').trim().toLowerCase());
+      return match?.passportPhoto || match?.photo || '';
+    })();
 
 
 const subText =
@@ -44696,7 +44703,7 @@ item.teamName ||
 </div>
 
 </div>
-${typeof afWinnerRewardPanel==='function'?afWinnerRewardPanel(isTeam?'Team':'Employee',name,title.includes('Month')?new Date().toISOString().slice(0,7):null):''}
+${getUser()?.role==='Director' && typeof afWinnerRewardPanel==='function'?afWinnerRewardPanel(isTeam?'Team':'Employee',name,title.includes('Month')?new Date().toISOString().slice(0,7):null):''}
 </div>
     `;
   }
@@ -45010,11 +45017,7 @@ box.querySelector(
       );
 
 
-    if (button && currentUser.role === "Employee") {
-      button.remove(); // Employee recognition cards are read-only.
-    }
-
-    if (button && currentUser.role !== "Employee") {
+    if (button) {
 
 button.onclick =
         function() {
@@ -106542,18 +106545,18 @@ const due=l=>num(l.principal)+num(l.interest)-payments(l);
 const visible=l=>!l.voidedAt;
 let activeFilter='all', lenderFilter='';
 const audit=(action,id,reason='')=>{const a=read(AUDIT);a.push({action,id,reason,actor:actor(),at:new Date().toISOString()});write(AUDIT,a)};
-const entry=(id,type,amount,method='')=>{const a=read(LEDGER);a.push({id:Date.now()+'-'+Math.random().toString(36).slice(2),loanId:id,type,amount,method,at:new Date().toISOString(),by:actor()});write(LEDGER,a)};
+const entry=(id,type,amount,method='',transactionDate='')=>{const a=read(LEDGER);a.push({id:Date.now()+'-'+Math.random().toString(36).slice(2),loanId:id,type,amount,method,transactionDate:transactionDate||today(),at:new Date().toISOString(),by:actor()});write(LEDGER,a)};
 const daysLeft=date=>{const a=new Date(today()+'T00:00:00');const b=new Date(date+'T00:00:00');return Math.round((b-a)/86400000)};
 const status=l=>{if(l.voidedAt)return 'Voided';if(l.state==='pending')return 'Awaiting approval';if(l.state==='rejected')return 'Rejected';if(due(l)<=0)return 'Paid';const d=daysLeft(l.dueDate);return d<0?'Overdue':d===0?'Due today':d<=2?'Due soon':'Active'};
 const modal=()=>{let x=document.getElementById('afPettyLoanModal');if(x)return x;x=document.createElement('div');x.id='afPettyLoanModal';x.style.cssText='position:fixed;inset:0;background:#0009;z-index:2147483000;display:none;overflow:auto;padding:20px';x.innerHTML='<div style="background:white;color:#183329;max-width:980px;margin:25px auto;border-radius:12px;padding:22px;box-shadow:0 10px 50px #0005"><div style="display:flex;justify-content:space-between;gap:15px;align-items:center"><h2 style="margin:0">💳 Petty Loans & Repayments</h2><button id="afPLClose" type="button">✕ Close</button></div><div id="afPLBody"></div></div>';document.body.appendChild(x);x.querySelector('#afPLClose').onclick=()=>x.style.display='none';return x};
 const btn=(name,action)=>`<button type="button" data-pl="${action}" style="padding:7px 10px;margin:3px;border:1px solid #c5d6cd;border-radius:6px;background:#edf6f0;cursor:pointer">${name}</button>`;
 function render(){const m=modal(),body=m.querySelector('#afPLBody'),r=role();if(!['Director','Secretary'].includes(r)){alert('Director or Secretary access required');return}m.style.display='block';const loans=read(KEY).slice().reverse();const approved=loans.filter(x=>visible(x)&&x.state==='approved');const out=approved.reduce((a,x)=>a+due(x),0);const overdue=approved.filter(x=>due(x)>0&&daysLeft(x.dueDate)<0).length;const borrowed=approved.reduce((a,x)=>a+num(x.principal),0);const totalRepayable=approved.reduce((a,x)=>a+num(x.principal)+num(x.interest),0);const totalPayments=approved.reduce((a,x)=>a+payments(x),0);const percentagePaid=totalRepayable>0?Math.min(100,Math.max(0,totalPayments/totalRepayable*100)):0;
 body.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:9px;margin:14px 0">${[
-['Outstanding',money(out)],['Overdue Loans',String(overdue)],['Pending Approval',String(loans.filter(x=>visible(x)&&x.state==='pending').length)],['Total Payments',money(totalPayments)],['Total Borrowed',money(borrowed)],['Total Repayable',money(totalRepayable)]
+['Outstanding',money(out)],['Overdue Loans',String(overdue)],['Pending Approval',String(loans.filter(x=>visible(x)&&x.state==='pending').length)],['Total Payments',money(totalPayments)],['Total Borrowed',money(borrowed)],['Total Repayable',money(totalRepayable)],['Fully Paid Loans',String(approved.filter(l=>due(l)===0).length)]
 ].map(([label,value])=>`<div style="padding:12px;border:1px solid #d7e3dc;border-radius:8px;background:#f5faf7"><div style="font-size:12px;color:#4e685b">${label}</div><strong style="display:block;font-size:17px;margin-top:5px">${value}</strong></div>`).join('')}</div>
 <div style="padding:12px;border:1px solid #d7e3dc;border-radius:8px;margin:10px 0"><div style="display:flex;justify-content:space-between;align-items:center"><b>Percentage Paid</b><b>${percentagePaid.toFixed(1)}%</b></div><div style="background:#e5eae7;border-radius:99px;height:12px;overflow:hidden;margin-top:8px"><div style="height:100%;width:${percentagePaid}%;background:#22875b;border-radius:99px"></div></div><small style="color:#586c60">Actual repayments ÷ approved total repayable (principal + interest). Pending/rejected loans excluded.</small></div>
 <section style="border:1px solid #d7e3dc;padding:12px;border-radius:8px;margin:12px 0"><h3 style="margin:0 0 8px">Loan Records</h3><p style="font-size:12px;color:#53685d">Filter by loan status. Rejected applications were declined before disbursement; overdue loans are approved but unpaid.</p>
-<div style="display:flex;gap:7px;flex-wrap:wrap">${[['all','All'],['approved','Active'],['overdue','Overdue'],['rejected','Rejected'],['paid','Closed'],['pending','Pending'],['voided','Voided']].map(([k,t])=>btn(t+' ('+loans.filter(l=>k==='all'?visible(l):k==='voided'?!!l.voidedAt:visible(l)&&(k==='approved'?l.state==='approved'&&due(l)>0&&daysLeft(l.dueDate)>=0:k==='overdue'?l.state==='approved'&&due(l)>0&&daysLeft(l.dueDate)<0:k==='paid'?l.state==='approved'&&due(l)===0:l.state===k)).length+')','filter:'+k)).join('')}</div>
+<div style="display:flex;gap:7px;flex-wrap:wrap">${[['all','All'],['approved','Active'],['overdue','Overdue'],['rejected','Rejected'],['paid','Fully Paid Loans'],['pending','Pending'],['voided','Voided']].map(([k,t])=>btn(t+' ('+loans.filter(l=>k==='all'?visible(l):k==='voided'?!!l.voidedAt:visible(l)&&(k==='approved'?l.state==='approved'&&due(l)>0&&daysLeft(l.dueDate)>=0:k==='overdue'?l.state==='approved'&&due(l)>0&&daysLeft(l.dueDate)<0:k==='paid'?l.state==='approved'&&due(l)===0:l.state===k)).length+')','filter:'+k)).join('')}</div>
 <div style="border-top:1px solid #d7e3dc;margin-top:14px;padding-top:12px"><h3 style="margin:0 0 8px">Individual Accounts</h3><label style="display:block;margin-top:10px">Select lender <select id="afPLLender" style="padding:8px;max-width:100%;margin-left:8px"><option value="">All lenders</option>${[...new Set(loans.map(l=>String(l.lender||'').trim()).filter(Boolean))].sort().map(n=>'<option value="'+esc(n)+'"'+(n===lenderFilter?' selected':'')+'>'+esc(n)+'</option>').join('')}</select></label>
 <div id="afPLAccountStatement" style="margin-top:10px"></div></div></section>
 <form id="afPLForm" style="border:1px solid #d7e3dc;padding:12px;border-radius:8px;margin:12px 0"><h3>Record a factory loan</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px">
@@ -106595,7 +106598,7 @@ const reason=prompt('Reason for voiding this unapproved/rejected record (require
 if(!confirm('Void this loan record? The original will remain in audit history.'))return;
 l.voidedAt=new Date().toISOString();l.voidedBy=actor();l.voidReason=reason.trim();audit('Loan voided',l.id,reason.trim());write(KEY,a);render();refresh();return}
 if(action==='approve'||action==='reject'){if(role()!=='Director'||l.state!=='pending')return;const reason=action==='reject'?prompt('Reason for rejecting loan:'):'';if(action==='reject'&&!reason?.trim())return;if(!confirm(action==='approve'?'Confirm company loan was actually received? This will post the borrowing to the loan cash ledger.':'Reject this loan?'))return;l.state=action==='approve'?'approved':'rejected';l.reviewedBy=actor();l.reviewedAt=new Date().toISOString();if(action==='approve')entry(l.id,'BORROWING_CASH_IN',l.principal,'cash');audit(action,l.id,reason||'');write(KEY,a);render();refresh()}
-if(action==='pay'){if(l.voidedAt||l.state!=='approved'||due(l)<=0){alert('Only approved loans with an outstanding balance can be repaid');return}if(role()!=='Director'){alert('Director approval is required to confirm repayment');return}const val=prompt('Enter amount actually repaid (UGX). Outstanding: '+money(due(l)));if(val===null)return;const amt=Number(val);if(!Number.isSafeInteger(amt)||amt<=0||amt>due(l)){alert('Enter a whole UGX amount no greater than the outstanding balance');return}const method=prompt('Payment method: Cash, Bank, or Mobile Money','Cash');if(method===null)return;const paymentMethod=String(method).trim().toLowerCase();if(!['cash','bank','mobile money'].includes(paymentMethod)){alert('Select Cash, Bank, or Mobile Money');return}if(!confirm('Confirm '+money(amt)+' was actually paid by '+method+'?'))return;l.payments.push({amount:amt,date:today(),method:paymentMethod,by:actor(),at:new Date().toISOString()});entry(l.id,'REPAYMENT_'+paymentMethod.toUpperCase().replace(/\s+/g,'_')+'_OUT',amt,paymentMethod);audit('Repayment',l.id,money(amt));write(KEY,a);render();refresh()}
+if(action==='pay'){if(l.voidedAt||l.state!=='approved'||due(l)<=0){alert('Only approved loans with an outstanding balance can be repaid');return}if(role()!=='Director'){alert('Director approval is required to confirm repayment');return}const val=prompt('Enter amount actually repaid (UGX). Outstanding: '+money(due(l)));if(val===null)return;const amt=Number(val);if(!Number.isSafeInteger(amt)||amt<=0||amt>due(l)){alert('Enter a whole UGX amount no greater than the outstanding balance');return}const paymentDate=prompt('Actual repayment date (YYYY-MM-DD)',today());if(paymentDate===null)return;if(!/^\d{4}-\d{2}-\d{2}$/.test(paymentDate)||Number.isNaN(new Date(paymentDate+'T00:00:00').getTime())||new Date(paymentDate+'T00:00:00').toISOString().slice(0,10)!==paymentDate||paymentDate>today()||paymentDate<l.receivedDate){alert('Enter a valid repayment date between the loan receipt date and today');return}const method=prompt('Payment method: Cash, Bank, or Mobile Money','Cash');if(method===null)return;const paymentMethod=String(method).trim().toLowerCase();if(!['cash','bank','mobile money'].includes(paymentMethod)){alert('Select Cash, Bank, or Mobile Money');return}if(!confirm('Confirm '+money(amt)+' was actually paid by '+method+'?'))return;l.payments.push({amount:amt,date:paymentDate,method:paymentMethod,by:actor(),at:new Date().toISOString()});entry(l.id,'REPAYMENT_'+paymentMethod.toUpperCase().replace(/\s+/g,'_')+'_OUT',amt,paymentMethod,paymentDate);audit('Repayment',l.id,money(amt)+' dated '+paymentDate);write(KEY,a);render();refresh()}
 if(action==='history'){alert('Loan: '+l.id+'\nLender: '+l.lender+'\nCreated: '+l.createdBy+'\n'+(l.payments||[]).map(p=>p.date+' - '+money(p.amount)+' by '+p.by).join('\n')+'\nOutstanding: '+money(due(l)))}})
 }
 function nav(){const r=role(),base=document.getElementById('navExpenses');if(!base||!base.parentNode)return;let b=document.getElementById('navPettyLoans');if(!b){b=base.cloneNode(true);b.id='navPettyLoans';b.removeAttribute('onclick');b.onclick=e=>{e.preventDefault();render()};base.insertAdjacentElement('afterend',b)}b.style.display=['Director','Secretary'].includes(r)?'':'none';const alerts=read(KEY).filter(l=>visible(l)&&l.state==='approved'&&due(l)>0&&daysLeft(l.dueDate)<=0);b.textContent='💳 Petty Loans & Repayments'+(alerts.length?' 🔴 '+alerts.length:'')}
