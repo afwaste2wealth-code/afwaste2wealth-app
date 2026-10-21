@@ -1,19 +1,25 @@
-A&F Wekavera App 66 targeted update (20 October 2026)
+A&F WEKAVERA APP 66 — CONSERVATIVE DASHBOARD CORRECTION
 
-Based directly on user-uploaded app (66).js. New file: app.js.
+Source: latest previously supplied App 66 recognition fix (not the earlier unpatched App 66).
 
 Changes:
-- Employee and Team Leader included in birthday dashboard role list.
-- Employee included in Performance & Recognition display role list.
-- Recognition reward-management buttons restricted to Director.
-- Recognition image falls back to stored employee passport photo if ranking row lacks one.
-- Petty Loans: existing 'Closed' filter renamed 'Fully Paid Loans', with a fully paid count in summary. No historical loan migration.
-- Repayment action asks for actual payment date (YYYY-MM-DD), validates it, stores it in payment and cash ledger, and retains timestamp of entry.
+1. Restores company-wide Upcoming Birthdays to Employee and Team Leader roles.
+2. Adds a read-only last-confirmed month-end winner fallback, only when current
+   employee rankings are empty AND confirmed history exists in this browser.
+3. Does not alter factory transaction, petty loan, stock, or payroll routines.
 
-LIMITATIONS / SAFETY:
-- No changes to cloud-sync authorization or cloud database schemas. Employee rankings may still show no qualifying data if employee account cannot read underlying ranking data. Do NOT claim full parity with Director is verified.
-- No new payroll award posting logic; no guarantee of award payroll integration.
-- No live browser, account or data tests were performed. JavaScript syntax check passed.
-- Keep a backup of company data and current app.js before replacing.
-- Test with non-financial entries before entering a real repayment. Confirm ledger and outstanding balance update once.
-- Confirm Director dashboard, employee birthdays and recognition, loans, and payroll all remain functional.
+LIMITATIONS:
+- If the employee account does not receive the Director's saved winner history
+  through Cloud Sync, it cannot display that historical result. A separate
+  backend/cloud permissions and synchronization audit is required.
+- The code cannot guarantee that the Director's browser data is available
+  to other devices or accounts. No synthetic rankings are generated.
+- Awards-to-payroll correctness is NOT certified by this patch.
+- This is a syntax-tested targeted patch, not a full live end-to-end test.
+
+SAFE INSTALL:
+1. Export and save current company data backup.
+2. Download and preserve existing GitHub app.js.
+3. Rename the included file to app.js and upload to the existing repository.
+4. Test Director, Employee, birthdays, winner records, petty loans, and payroll.
+5. If any regression appears, restore the saved app.js.
