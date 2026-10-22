@@ -8015,6 +8015,27 @@ font-weight:bold;
 
 document.body.appendChild(modal);
 
+/* App 71: Attendance statements — read-only, existing attendance records. */
+(function attachAttendanceStatements() {
+ const host = document.createElement("section");
+ host.style.cssText="margin:16px 0;padding:14px;border:1px solid #bcd9c6;border-radius:10px;background:#f4faf6";
+ host.innerHTML=`<details><summary style="cursor:pointer;font-weight:bold;color:#0b5d3b">📒 Individual & Consolidated Attendance Statements</summary>
+ <div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0"><label>Employee<br><select id="afAttReportEmployee"><option value="">All employees</option></select></label><label>From<br><input id="afAttReportFrom" type="date"></label><label>To<br><input id="afAttReportTo" type="date"></label></div>
+ <button type="button" id="afAttReportPrint">🖨️ Print Attendance Statement</button><div id="afAttReportSummary" style="margin:10px 0;font-weight:bold"></div><div style="max-height:220px;overflow:auto"><table style="width:100%;font-size:12px"><thead><tr><th>Date</th><th>Employee</th><th>Status</th><th>Hours</th><th>Overtime</th></tr></thead><tbody id="afAttReportRows"></tbody></table></div></details>`;
+ const target=modal.querySelector("#attendanceEmployee");
+ target?.closest("select")?.parentNode?.insertBefore(host, target.closest("select"));
+ const q=id=>host.querySelector("#"+id);
+ getEmployees().forEach(e=>{const opt=document.createElement("option");opt.value=e.employeeId;opt.textContent=(e.fullName||e.employeeId)+" ("+e.employeeId+")";q("afAttReportEmployee").appendChild(opt);});
+ const moneyHours=n=>(Number(n||0)/60).toFixed(2);
+ const filtered=()=>getAttendanceRecords().filter(r=>(!q("afAttReportEmployee").value||String(r.employeeId)===q("afAttReportEmployee").value)&&(!q("afAttReportFrom").value||String(r.date)>=q("afAttReportFrom").value)&&(!q("afAttReportTo").value||String(r.date)<=q("afAttReportTo").value)).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+ const esc=v=>escapeSettingsText(String(v??""));
+ function render(){const a=filtered();q("afAttReportRows").innerHTML=a.map(r=>`<tr><td>${esc(r.date)}</td><td>${esc(r.employeeName||r.employeeId)}</td><td>${esc(r.status)}</td><td>${moneyHours(r.workedMinutes)}</td><td>${moneyHours(r.overtimeMinutes)}</td></tr>`).join("")||'<tr><td colspan="5">No records for selected period.</td></tr>';
+ q("afAttReportSummary").textContent=`Records: ${a.length} | Present: ${a.filter(r=>String(r.status).toLowerCase()==="present").length} | Recorded absent: ${a.filter(r=>String(r.status).toLowerCase()==="absent").length} | Worked hours: ${moneyHours(a.reduce((n,r)=>n+Number(r.workedMinutes||0),0))} | Overtime hours: ${moneyHours(a.reduce((n,r)=>n+Number(r.overtimeMinutes||0),0))}`;return a;}
+ ["afAttReportEmployee","afAttReportFrom","afAttReportTo"].forEach(id=>q(id).onchange=render);
+ q("afAttReportPrint").onclick=()=>{if(q("afAttReportFrom").value&&q("afAttReportTo").value&&q("afAttReportFrom").value>q("afAttReportTo").value){alert("Invalid date range.");return;}const arr=render();if(!arr.length){alert("No attendance records to print.");return;}const win=window.open("","_blank");if(!win){alert("Allow pop-ups to print.");return;}win.document.write(`<!doctype html><html><head><title>Attendance Statement</title><style>body{font:12px Arial;padding:20px}h1{color:#0b5d3b}table{width:100%;border-collapse:collapse}td,th{border:1px solid #ccc;padding:7px}th{background:#eaf5ee}@media print{button{display:none}}</style></head><body><h1>A&amp;F Wekavera Ltd</h1><h2>Attendance Statement</h2><p>Employee: ${esc(q("afAttReportEmployee").selectedOptions[0].textContent)} | Period: ${esc(q("afAttReportFrom").value||"All")} to ${esc(q("afAttReportTo").value||"All")}</p><p>${esc(q("afAttReportSummary").textContent)}</p><table><thead><tr><th>Date</th><th>Employee</th><th>Status</th><th>Hours</th><th>Overtime</th></tr></thead><tbody>${q("afAttReportRows").innerHTML}</tbody></table><p>Only recorded attendance is counted; missing dates are not automatically marked absent.</p><button onclick="window.print()">Print</button></body></html>`);win.document.close();};
+ render();
+})();
+
 const dateInput =
 modal.querySelector("#attendanceDate");
 
@@ -39549,6 +39570,21 @@ localDateString(end)
     }
 
 
+if (periodType === "custom") {
+      const fields = document.getElementById("afEmployeePerformanceRankingsModal");
+      const from = fields?.querySelector("#afPerformanceFrom")?.value || localDateString(base);
+      const to = fields?.querySelector("#afPerformanceTo")?.value || localDateString(base);
+      if (from > to) return { start: from, end: to, label: "Invalid date range" };
+      return { start: from, end: to, label: from + " to " + to };
+    }
+    if (periodType === "quarter" || periodType === "year") {
+      const month = periodType === "year" ? 0 : Math.floor(base.getMonth()/3)*3;
+      const length = periodType === "year" ? 12 : 3;
+      const startDate = new Date(base.getFullYear(),month,1);
+      const endDate = new Date(base.getFullYear(),month+length,0);
+      return {start:localDateString(startDate),end:localDateString(endDate),label:localDateString(startDate)+" to "+localDateString(endDate)};
+    }
+
 const start =
       new Date(
 base.getFullYear(),
@@ -41068,9 +41104,10 @@ box-sizing:border-box;
                 Week
 </option>
 
-<option value="month">
-                Month
-</option>
+<option value="month">Month</option>
+<option value="quarter">Quarter</option>
+<option value="year">Year</option>
+<option value="custom">Custom date range</option>
 </select>
 
 </div>
@@ -41129,6 +41166,14 @@ cursor:pointer;
 
 </div>
 
+
+<div id="afPerformanceCustomDates" style="display:none;gap:10px;flex-wrap:wrap;margin:0 0 14px">
+<label>From <input id="afPerformanceFrom" type="date"></label>
+<label>To <input id="afPerformanceTo" type="date"></label>
+</div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+<button type="button" id="afPrintPerformanceRankings">🖨️ Print Rankings & Criteria</button>
+</div>
 
 <div
           id="afPerformancePeriodLabel"
@@ -41344,6 +41389,8 @@ font-weight:bold;
 
 
     function render() {
+const customDates = modal.querySelector("#afPerformanceCustomDates");
+if (customDates) customDates.style.display = periodSelect.value === "custom" ? "flex" : "none";
 
 const calculation =
 calculateRankings(
@@ -42895,9 +42942,18 @@ periodSelect.onchange =
       render;
 
 
-dateInput.onchange =
-      render;
-
+dateInput.onchange = render;
+modal.querySelector("#afPerformanceFrom").onchange = render;
+modal.querySelector("#afPerformanceTo").onchange = render;
+modal.querySelector("#afPrintPerformanceRankings").onclick = () => {
+ const user=getCurrentUser();
+ if (!user || !["Director","Manager","HR","Secretary","Team Leader"].includes(user.role)) {alert("Management access required.");return;}
+ const calc=calculateRankings(periodSelect.value,dateInput.value);
+ if(calc.range.start>calc.range.end){alert("Invalid date range.");return;}
+ const table=modal.querySelector("#afPerformanceRows")?.closest("table");
+ const win=window.open("","_blank");if(!win){alert("Allow pop-ups to print.");return;}
+ win.document.write('<!doctype html><html><head><title>Employee Performance Rankings</title><style>body{font:12px Arial;padding:20px}h1{color:#0b5d3b}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:6px}@page{size:A4 landscape}@media print{button{display:none}}</style></head><body><h1>A&amp;F Wekavera Ltd</h1><h2>Employee Performance Rankings</h2><p>Period: '+escapeText(calc.range.label)+'</p><p>Ranked employees: '+calc.results.length+'; N/A criteria excluded from applicable weights.</p>'+(table?table.outerHTML:'')+'<button onclick="window.print()">Print</button></body></html>');win.document.close();
+};
 
 modal.querySelector(
       "#afClosePerformanceRankings"
@@ -53209,7 +53265,7 @@ document.body.appendChild(
     const tr=arr.map(r=>`<tr><td>${afExpenseEscape(r.date||'')}</td><td>${afExpenseEscape(r.expenseNumber||'')}</td><td>${afExpenseEscape(r.payee||'')}</td><td>${afExpenseEscape(r.category||'')}</td><td>${afExpenseEscape(r.description||'')}</td><td>${afExpenseEscape(r.paymentMethod||'')}</td><td style="text-align:right">${money(amount(r))}</td><td>${afExpenseIsCancelled(r)?'CANCELLED':'COMPLETED'}</td></tr>`).join('');
     const win=window.open('','_blank');
     if(!win){alert('Please allow pop-ups to print the statement.');return;}
-    const html=`<!doctype html><html><head><meta charset="utf-8"><title>${afExpenseEscape(title)}</title><style>body{font:12px Arial,sans-serif;color:#223;padding:20px}h1{color:#0b5d3b;font-size:21px}h2{font-size:16px}table{width:100%;border-collapse:collapse}th,td{padding:6px;border:1px solid #ccc;text-align:left;vertical-align:top}th{background:#eaf5ee}.totals{margin:15px 0;font-weight:bold;line-height:1.8}@page{size:A4 landscape;margin:12mm}@media print{button{display:none}}</style></head><body><h1>A&amp;F Wekavera Ltd</h1><div>Waste2Wealth Solutions • Mbalala, Mukono • Turning Waste into Value</div><hr><h2>${afExpenseEscape(title)}</h2><div>Printed: ${afExpenseEscape(new Date().toLocaleString())} | Period: ${afExpenseEscape(q('afStmtFrom').value||'All dates')} to ${afExpenseEscape(q('afStmtTo').value||'All dates')}</div><div class="totals">Records: ${arr.length} | Completed: ${completed.length} — ${money(completed.reduce((n,r)=>n+amount(r),0))} | Cancelled: ${cancelled.length} — ${money(cancelled.reduce((n,r)=>n+amount(r),0))} (excluded from completed total)</div><table><thead><tr><th>Date</th><th>Expense No.</th><th>Payee</th><th>Category</th><th>Description</th><th>Payment</th><th>Amount</th><th>Status</th></tr></thead><tbody>${tr}</tbody></table><p>Prepared from recorded expenses. Cancelled items retained for audit purposes.</p><button onclick="window.print()">Print</button></body></html>`;
+    const html=`<!doctype html><html><head><meta charset="utf-8"><title>${afExpenseEscape(title)}</title><style>body{font:12px Arial,sans-serif;color:#223;padding:20px}h1{color:#0b5d3b;font-size:21px}h2{font-size:16px}table{width:100%;border-collapse:collapse}th,td{padding:6px;border:1px solid #ccc;text-align:left;vertical-align:top}th{background:#eaf5ee}.totals{margin:15px 0;font-weight:bold;line-height:1.8}@page{size:A4 landscape;margin:12mm}@media print{button{display:none}}</style></head><body><h1>A&amp;F Wekavera Ltd</h1><div>Waste2Wealth Solutions • Mbalala, Mukono • Turning Waste into Value</div><hr><h2>${afExpenseEscape(title)}</h2><div>Printed: ${afExpenseEscape(new Date().toLocaleString())} | Period: ${afExpenseEscape(q('afStmtFrom').value||'All dates')} to ${afExpenseEscape(q('afStmtTo').value||'All dates')}</div><div class="totals">Records: ${arr.length} | Completed: ${completed.length} — ${money(completed.reduce((n,r)=>n+amount(r),0))} | Cancelled: ${cancelled.length} — ${money(cancelled.reduce((n,r)=>n+amount(r),0))} (excluded from completed total)</div><table><thead><tr><th>Date</th><th>Expense No.</th><th>Payee</th><th>Category</th><th>Description</th><th>Payment</th><th>Amount</th><th>Status</th></tr></thead><tbody>${tr}</tbody><tfoot><tr><td colspan="6" style="text-align:right;font-weight:bold">TOTAL FOR SELECTED PERIOD (COMPLETED)</td><td style="text-align:right;font-weight:bold">${money(completed.reduce((n,r)=>n+amount(r),0))}</td><td>${completed.length} completed</td></tr></tfoot></table><p>Prepared from recorded expenses. Cancelled items retained for audit purposes.</p><button onclick="window.print()">Print</button></body></html>`;
     win.document.open();win.document.write(html);win.document.close();
   }
   q('afStmtPrintFiltered').onclick=()=>printReport(filtered(),q('afStmtPayee').value?'Expense Account — '+q('afStmtPayee').value:'Filtered Expense Register');
