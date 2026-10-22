@@ -1,5 +1,1 @@
-A&F Wekavera App 69: loan folder display only.
-Source: user uploaded app (68).js.
-Changes: collapsed Fully Paid Loans and Rejected Applications folders; default All excludes settled/rejected loans. Existing filters, loan storage keys, payment handling and financial calculations remain unchanged.
-IMPORTANT: Back up current app.js and business data before replacing app.js. Test with Director and Secretary accounts in a staging copy first.
-Verification: node --check passed; static checks passed. Browser/cloud integration not tested.
+A&F Wekavera App 70 — Expense Accounts & Printing. Based on App 69. Back up your existing app.js and browser data before installing. Replace app.js only; no database changes. Expense module > Expense Accounts & Printing. Print one selected transaction, filtered payee/date/status statement, or all recorded expenses. Cancelled transactions shown separately and excluded from completed totals. JavaScript syntax verified; browser integration not yet tested.

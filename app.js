@@ -53153,6 +53153,70 @@ document.body.appendChild(
   modal
 );
 
+/* App 70: read-only expense statements and print controls.
+   Operates on the same source records; no transaction writes. */
+(function attachAFExpenseStatements() {
+  const historyHeading = Array.from(modal.querySelectorAll('div'))
+    .find(el => el.children.length === 0 && el.textContent.trim() === 'Expense History');
+  if (!historyHeading) return;
+  const panel = document.createElement('section');
+  panel.id = 'afExpenseStatements';
+  panel.style.cssText = 'border:1px solid #c8dfd1;background:#f4faf6;padding:14px;border-radius:10px;margin:16px 0';
+  panel.innerHTML = `
+    <details><summary style="font-weight:700;color:#0b5d3b;cursor:pointer;font-size:16px">📒 Expense Accounts &amp; Printing — Open</summary>
+      <p style="font-size:12px;color:#555">View and print a single expense, an individual payee statement, or a consolidated register. Cancelled transactions remain visible but are excluded from completed totals.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+        <label>Payee<br><select id="afStmtPayee" style="padding:8px;max-width:230px"><option value="">All payees</option></select></label>
+        <label>From<br><input id="afStmtFrom" type="date" style="padding:7px"></label>
+        <label>To<br><input id="afStmtTo" type="date" style="padding:7px"></label>
+        <label>Status<br><select id="afStmtStatus" style="padding:8px"><option value="all">All statuses</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select></label>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        <button type="button" id="afStmtPrintFiltered">🖨️ Print Selected / Filtered</button>
+        <button type="button" id="afStmtPrintAll">🖨️ Print All Expenses</button>
+        <button type="button" id="afStmtPrintOne">🖨️ Print One Expense</button>
+      </div>
+      <div id="afStmtSummary" style="font-size:12px;margin-bottom:8px"></div>
+      <div style="overflow:auto;max-height:280px"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:800px"><thead><tr style="background:#dceee3"><th>Select</th><th>Date</th><th>Expense No.</th><th>Payee</th><th>Category</th><th>Description</th><th>Amount</th><th>Status</th></tr></thead><tbody id="afStmtRows"></tbody></table></div>
+    </details>`;
+  historyHeading.parentNode.insertBefore(panel, historyHeading);
+  const q = id => panel.querySelector('#'+id);
+  const payees = [...new Set(records.map(r => String(r.payee || '').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  payees.forEach(name => { const opt=document.createElement('option');opt.value=name;opt.textContent=name;q('afStmtPayee').appendChild(opt); });
+  const amount = r => Number(r.amount || 0) || 0;
+  const dateKey = r => { const v=String(r.date||''); if(/^\d{4}-\d{2}-\d{2}/.test(v))return v.slice(0,10); const m=v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);return m?m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0'):v; };
+  const filtered = () => records.filter(r => {
+    if(q('afStmtPayee').value && String(r.payee||'').trim()!==q('afStmtPayee').value)return false;
+    const d=dateKey(r);
+    if(q('afStmtFrom').value && d<q('afStmtFrom').value)return false;
+    if(q('afStmtTo').value && d>q('afStmtTo').value)return false;
+    const st=q('afStmtStatus').value;
+    return st==='all'||(st==='cancelled'?afExpenseIsCancelled(r):!afExpenseIsCancelled(r));
+  }).sort((a,b)=>dateKey(a).localeCompare(dateKey(b))||String(a.expenseNumber||'').localeCompare(String(b.expenseNumber||'')));
+  const money = n => 'UGX '+n.toLocaleString('en-UG',{maximumFractionDigits:2});
+  function render() {
+    const arr=filtered();
+    q('afStmtRows').innerHTML=arr.map((r,i)=>`<tr style="border-bottom:1px solid #ddd"><td><input type="radio" name="afStmtOne" value="${i}"></td><td>${afExpenseEscape(r.date||'')}</td><td>${afExpenseEscape(r.expenseNumber||'')}</td><td>${afExpenseEscape(r.payee||'')}</td><td>${afExpenseEscape(r.category||'')}</td><td>${afExpenseEscape(r.description||'')}</td><td style="text-align:right">${money(amount(r))}</td><td>${afExpenseIsCancelled(r)?'CANCELLED':'COMPLETED'}</td></tr>`).join('') || '<tr><td colspan="8">No matching expenses.</td></tr>';
+    const completed=arr.filter(r=>!afExpenseIsCancelled(r));
+    q('afStmtSummary').textContent=`${arr.length} transactions | Completed: ${completed.length} (${money(completed.reduce((n,r)=>n+amount(r),0))}) | Cancelled: ${arr.length-completed.length} (${money(arr.filter(afExpenseIsCancelled).reduce((n,r)=>n+amount(r),0))})`;
+    return arr;
+  }
+  ['afStmtPayee','afStmtFrom','afStmtTo','afStmtStatus'].forEach(id=>q(id).addEventListener('change',render));
+  function printReport(arr,title) {
+    if(!arr.length){alert('There are no expenses to print for this selection.');return;}
+    const completed=arr.filter(r=>!afExpenseIsCancelled(r));
+    const cancelled=arr.filter(afExpenseIsCancelled);
+    const tr=arr.map(r=>`<tr><td>${afExpenseEscape(r.date||'')}</td><td>${afExpenseEscape(r.expenseNumber||'')}</td><td>${afExpenseEscape(r.payee||'')}</td><td>${afExpenseEscape(r.category||'')}</td><td>${afExpenseEscape(r.description||'')}</td><td>${afExpenseEscape(r.paymentMethod||'')}</td><td style="text-align:right">${money(amount(r))}</td><td>${afExpenseIsCancelled(r)?'CANCELLED':'COMPLETED'}</td></tr>`).join('');
+    const win=window.open('','_blank');
+    if(!win){alert('Please allow pop-ups to print the statement.');return;}
+    const html=`<!doctype html><html><head><meta charset="utf-8"><title>${afExpenseEscape(title)}</title><style>body{font:12px Arial,sans-serif;color:#223;padding:20px}h1{color:#0b5d3b;font-size:21px}h2{font-size:16px}table{width:100%;border-collapse:collapse}th,td{padding:6px;border:1px solid #ccc;text-align:left;vertical-align:top}th{background:#eaf5ee}.totals{margin:15px 0;font-weight:bold;line-height:1.8}@page{size:A4 landscape;margin:12mm}@media print{button{display:none}}</style></head><body><h1>A&amp;F Wekavera Ltd</h1><div>Waste2Wealth Solutions • Mbalala, Mukono • Turning Waste into Value</div><hr><h2>${afExpenseEscape(title)}</h2><div>Printed: ${afExpenseEscape(new Date().toLocaleString())} | Period: ${afExpenseEscape(q('afStmtFrom').value||'All dates')} to ${afExpenseEscape(q('afStmtTo').value||'All dates')}</div><div class="totals">Records: ${arr.length} | Completed: ${completed.length} — ${money(completed.reduce((n,r)=>n+amount(r),0))} | Cancelled: ${cancelled.length} — ${money(cancelled.reduce((n,r)=>n+amount(r),0))} (excluded from completed total)</div><table><thead><tr><th>Date</th><th>Expense No.</th><th>Payee</th><th>Category</th><th>Description</th><th>Payment</th><th>Amount</th><th>Status</th></tr></thead><tbody>${tr}</tbody></table><p>Prepared from recorded expenses. Cancelled items retained for audit purposes.</p><button onclick="window.print()">Print</button></body></html>`;
+    win.document.open();win.document.write(html);win.document.close();
+  }
+  q('afStmtPrintFiltered').onclick=()=>printReport(filtered(),q('afStmtPayee').value?'Expense Account — '+q('afStmtPayee').value:'Filtered Expense Register');
+  q('afStmtPrintAll').onclick=()=>printReport(records.slice().sort((a,b)=>dateKey(a).localeCompare(dateKey(b))),'Consolidated Expense Register — All Recorded Expenses');
+  q('afStmtPrintOne').onclick=()=>{const arr=filtered();const selected=q('afStmtRows').querySelector('input[name="afStmtOne"]:checked');if(!selected){alert('Select one expense in the table first.');return;}const r=arr[Number(selected.value)];if(r)printReport([r],'Expense Voucher — '+String(r.expenseNumber||''));};
+  render();
+})();
 
 /* =========================================================
    CLOSE
