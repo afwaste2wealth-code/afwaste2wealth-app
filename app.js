@@ -44654,7 +44654,7 @@ isTeam
 const picture =
 isTeam
         ? item.photo
-        : item.passportPhoto;
+        : (item.passportPhoto || read("employees").find(e => String(e.employeeId||e.id||"")===String(item.employeeId||item.id||"") || String(e.fullName||"").trim().toLowerCase()===String(item.employeeName||"").trim().toLowerCase())?.passportPhoto || "");
 
 
 const subText =
@@ -44698,7 +44698,7 @@ item.teamName ||
 </div>
 
 </div>
-${typeof afWinnerRewardPanel==='function'?afWinnerRewardPanel(isTeam?'Team':'Employee',name,title.includes('Month')?new Date().toISOString().slice(0,7):null):''}
+${getUser()?.role !== 'Employee' && typeof afWinnerRewardPanel==='function'?afWinnerRewardPanel(isTeam?'Team':'Employee',name,title.includes('Month')?new Date().toISOString().slice(0,7):null):''}
 </div>
     `;
   }
@@ -44780,6 +44780,28 @@ month.filter(
 isRecognitionEligible
 );
 
+/* Publish only the four public recognition summaries. Never publish payroll,
+   attendance, full employee profiles, or the Director's reward register. */
+let sharedRecognition = null;
+try { sharedRecognition = JSON.parse(localStorage.getItem('afSharedRecognition') || 'null'); } catch (_) {}
+const publishedWeekEmployee = weekEligible[0] || null;
+const publishedMonthEmployee = monthEligible[0] || null;
+const publishedWeekTeam = getTopTeam(weekEligible);
+const publishedMonthTeam = getTopTeam(monthEligible);
+const currentMonth = date.slice(0,7);
+if (currentUser.role === 'Director' && (publishedMonthEmployee || publishedMonthTeam || publishedWeekEmployee || publishedWeekTeam)) {
+  const employeeSummary = x => x ? {employeeName:x.employeeName, employeeId:x.employeeId, finalScore:Number(x.finalScore),teamName:x.teamName,passportPhoto:String(x.passportPhoto||read('employees').find(e=>String(e.employeeId||'')===String(x.employeeId||''))?.passportPhoto||'')} : null;
+  const teamSummary = x => x ? {name:x.name,score:Number(x.score),leader:x.leader,photo:String(x.photo||'')} : null;
+  const snapshot = {month:currentMonth, weekEmployee:employeeSummary(publishedWeekEmployee),monthEmployee:employeeSummary(publishedMonthEmployee),weekTeam:teamSummary(publishedWeekTeam),monthTeam:teamSummary(publishedMonthTeam)};
+  if (JSON.stringify(sharedRecognition?.snapshot) !== JSON.stringify(snapshot)) {
+    sharedRecognition={snapshot,publishedAt:new Date().toISOString()};
+    localStorage.setItem('afSharedRecognition',JSON.stringify(sharedRecognition));
+  }
+}
+const publicSnapshot = sharedRecognition?.snapshot;
+const usePublished = currentUser.role === 'Employee' && publicSnapshot && publicSnapshot.month === currentMonth;
+
+
 
 
 /* The employee view may have no attendance/production data even when
@@ -44844,25 +44866,25 @@ ${confirmedSummary}
 
         ${card(
           "Best Employee — Week",
-          weekEligible[0] || null,
+          currentUser.role === 'Employee' ? (usePublished ? publicSnapshot.weekEmployee : null) : (weekEligible[0] || null),
           false
         )}
 
         ${card(
           "Best Employee — Month",
-          monthEligible[0] || null,
+          currentUser.role === 'Employee' ? (usePublished ? publicSnapshot.monthEmployee : null) : (monthEligible[0] || null),
           false
         )}
 
         ${card(
           "Best Team — Week",
-getTopTeam(weekEligible),
+currentUser.role === 'Employee' ? (usePublished ? publicSnapshot.weekTeam : null) : getTopTeam(weekEligible),
           true
         )}
 
         ${card(
           "Best Team — Month",
-getTopTeam(monthEligible),
+currentUser.role === 'Employee' ? (usePublished ? publicSnapshot.monthTeam : null) : getTopTeam(monthEligible),
           true
         )}
 
@@ -96012,6 +96034,11 @@ function openAFPerformanceWinnersHistory() {
       kind: "array"
     },
 
+    afSharedRecognition: {
+      label: "Published Recognition (Public to Employees)",
+      kind: "object"
+    },
+
     clientPerformance: {
       label: "Client Performance",
       kind: "object"
@@ -106572,10 +106599,16 @@ const modal=()=>{let x=document.getElementById('afPettyLoanModal');if(x)return x
 const btn=(name,action)=>`<button type="button" data-pl="${action}" style="padding:7px 10px;margin:3px;border:1px solid #c5d6cd;border-radius:6px;background:#edf6f0;cursor:pointer">${name}</button>`;
 function render(){const m=modal(),body=m.querySelector('#afPLBody'),r=role();if(!['Director','Secretary'].includes(r)){alert('Director or Secretary access required');return}m.style.display='block';const loans=read(KEY).slice().reverse();const approved=loans.filter(x=>visible(x)&&x.state==='approved');const out=approved.reduce((a,x)=>a+due(x),0);const overdue=approved.filter(x=>due(x)>0&&daysLeft(x.dueDate)<0).length;const borrowed=approved.reduce((a,x)=>a+num(x.principal),0);const totalRepayable=approved.reduce((a,x)=>a+num(x.principal)+num(x.interest),0);const totalPayments=approved.reduce((a,x)=>a+payments(x),0);const percentagePaid=totalRepayable>0?Math.min(100,Math.max(0,totalPayments/totalRepayable*100)):0;
 body.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:9px;margin:14px 0">${[
-['Outstanding',money(out)],['Fully Paid Loans',String(approved.filter(l=>due(l)<=0).length)],['Overdue Loans',String(overdue)],['Pending Approval',String(loans.filter(x=>visible(x)&&x.state==='pending').length)],['Total Payments',money(totalPayments)],['Total Borrowed',money(borrowed)],['Total Repayable',money(totalRepayable)]
+['Outstanding',money(out)],['Overdue Loans',String(overdue)],['Pending Approval',String(loans.filter(x=>visible(x)&&x.state==='pending').length)],['Total Payments',money(totalPayments)],['Total Borrowed',money(borrowed)],['Total Repayable',money(totalRepayable)]
 ].map(([label,value])=>`<div style="padding:12px;border:1px solid #d7e3dc;border-radius:8px;background:#f5faf7"><div style="font-size:12px;color:#4e685b">${label}</div><strong style="display:block;font-size:17px;margin-top:5px">${value}</strong></div>`).join('')}</div>
 <div style="padding:12px;border:1px solid #d7e3dc;border-radius:8px;margin:10px 0"><div style="display:flex;justify-content:space-between;align-items:center"><b>Percentage Paid</b><b>${percentagePaid.toFixed(1)}%</b></div><div style="background:#e5eae7;border-radius:99px;height:12px;overflow:hidden;margin-top:8px"><div style="height:100%;width:${percentagePaid}%;background:#22875b;border-radius:99px"></div></div><small style="color:#586c60">Actual repayments ÷ approved total repayable (principal + interest). Pending/rejected loans excluded.</small></div>
-<section style="border:1px solid #d7e3dc;padding:12px;border-radius:8px;margin:12px 0"><h3 style="margin:0 0 8px">Loan Records</h3><p style="font-size:12px;color:#53685d">Filter by loan status. Rejected applications were declined before disbursement; overdue loans are approved but unpaid.</p>
+<section id="afPLFullyPaidArchive" style="border:2px solid #a7d2b4;padding:12px;border-radius:9px;margin:12px 0;background:#f4faf5">
+<h3 style="margin:0 0 8px">✅ Fully Paid Loans — Separate Archive (${loans.filter(l=>visible(l)&&l.state==='approved'&&due(l)===0).length})</h3>
+<p style="font-size:12px">Read-only settlement archive derived from the original loan records. No separate loan balances or duplicate postings.</p>
+<div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr><th>Lender</th><th>Principal</th><th>Interest</th><th>Total paid</th><th>Settlement date</th><th>History</th></tr></thead><tbody>
+${loans.filter(l=>visible(l)&&l.state==='approved'&&due(l)===0).map(l=>`<tr><td>${esc(l.lender)}</td><td>${money(l.principal)}</td><td>${money(l.interest)}</td><td>${money(payments(l))}</td><td>${esc((l.payments||[]).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')))[0]?.date||'Not recorded')}</td><td>${btn('View repayment history','history:'+l.id)}</td></tr>`).join('')||'<tr><td colspan="6">No fully paid loans.</td></tr>'}</tbody></table></div>
+</section>
+<section style="border:1px solid #d7e3dc;padding:12px;border-radius:8px;margin:12px 0"><h3 style="margin:0 0 8px">Outstanding and Other Loan Records</h3><p style="font-size:12px;color:#53685d">Filter by loan status. Rejected applications were declined before disbursement; overdue loans are approved but unpaid.</p>
 <div style="display:flex;gap:7px;flex-wrap:wrap">${[['all','All'],['approved','Active'],['overdue','Overdue'],['rejected','Rejected'],['paid','Fully Paid Loans'],['pending','Pending'],['voided','Voided']].map(([k,t])=>btn(t+' ('+loans.filter(l=>k==='all'?visible(l):k==='voided'?!!l.voidedAt:visible(l)&&(k==='approved'?l.state==='approved'&&due(l)>0&&daysLeft(l.dueDate)>=0:k==='overdue'?l.state==='approved'&&due(l)>0&&daysLeft(l.dueDate)<0:k==='paid'?l.state==='approved'&&due(l)===0:l.state===k)).length+')','filter:'+k)).join('')}</div>
 <div style="border-top:1px solid #d7e3dc;margin-top:14px;padding-top:12px"><h3 style="margin:0 0 8px">Individual Accounts</h3><label style="display:block;margin-top:10px">Select lender <select id="afPLLender" style="padding:8px;max-width:100%;margin-left:8px"><option value="">All lenders</option>${[...new Set(loans.map(l=>String(l.lender||'').trim()).filter(Boolean))].sort().map(n=>'<option value="'+esc(n)+'"'+(n===lenderFilter?' selected':'')+'>'+esc(n)+'</option>').join('')}</select></label>
 <div id="afPLAccountStatement" style="margin-top:10px"></div></div></section>
@@ -106588,7 +106621,7 @@ body.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,m
 <label>Repayment due<input name="dueDate" type="date" required value="${today()}" style="display:block;width:100%;padding:8px"></label></div>
 <label>Purpose / notes<input name="purpose" maxlength="250" style="display:block;width:100%;padding:8px"></label>
 <p id="afPLPreview"></p><button type="submit" style="padding:9px 16px">Save loan for Director approval</button></form>
-<div style="overflow:auto"><table style="border-collapse:collapse;width:100%;font-size:13px"><thead><tr><th>Lender</th><th>Principal</th><th>Interest</th><th>Total</th><th>Paid</th><th>Paid %</th><th>Outstanding</th><th>Due</th><th>Status</th><th>Actions</th></tr></thead><tbody>${loans.filter(l=>(!lenderFilter||l.lender===lenderFilter)&&(activeFilter==='all'?visible(l):activeFilter==='voided'?!!l.voidedAt:visible(l)&&(activeFilter==='approved'?l.state==='approved'&&due(l)>0&&daysLeft(l.dueDate)>=0:activeFilter==='overdue'?l.state==='approved'&&due(l)>0&&daysLeft(l.dueDate)<0:activeFilter==='paid'?l.state==='approved'&&due(l)===0:l.state===activeFilter))).map(l=>`<tr><td>${esc(l.lender)}<small style="display:block">${esc(l.purpose)}</small></td><td>${money(l.principal)}</td><td>${money(l.interest)}</td><td>${money(num(l.principal)+num(l.interest))}</td><td>${money(payments(l))}</td><td><div style="min-width:75px">${(num(l.principal)+num(l.interest))>0?Math.min(100,Math.max(0,payments(l)/(num(l.principal)+num(l.interest))*100)).toFixed(1):'0.0'}%<div style="height:5px;background:#e5eae7;border-radius:8px;overflow:hidden"><div style="height:100%;background:#22875b;width:${(num(l.principal)+num(l.interest))>0?Math.min(100,Math.max(0,payments(l)/(num(l.principal)+num(l.interest))*100)):0}%"></div></div></div></td><td>${money(due(l))}</td><td>${esc(l.dueDate)}</td><td>${status(l)}</td><td>${r==='Director'&&l.state==='pending'?btn('Approve','approve:'+l.id)+btn('Reject','reject:'+l.id):''}${l.state==='approved'&&due(l)>0?btn('Record repayment','pay:'+l.id):''}${btn('History','history:'+l.id)}${r==='Director'&&!l.voidedAt&&['pending','rejected'].includes(l.state)?btn('Edit','edit:'+l.id)+btn('Void','void:'+l.id):''}</td></tr>`).join('')||'<tr><td colspan="10">No loans match the selected filters.</td></tr>'}</tbody></table></div>
+<div style="overflow:auto"><table style="border-collapse:collapse;width:100%;font-size:13px"><thead><tr><th>Lender</th><th>Principal</th><th>Interest</th><th>Total</th><th>Paid</th><th>Paid %</th><th>Outstanding</th><th>Due</th><th>Status</th><th>Actions</th></tr></thead><tbody>${loans.filter(l=>(!lenderFilter||l.lender===lenderFilter)&&(activeFilter==='all'?visible(l)&&!(l.state==='approved'&&due(l)===0):activeFilter==='voided'?!!l.voidedAt:visible(l)&&(activeFilter==='approved'?l.state==='approved'&&due(l)>0&&daysLeft(l.dueDate)>=0:activeFilter==='overdue'?l.state==='approved'&&due(l)>0&&daysLeft(l.dueDate)<0:activeFilter==='paid'?l.state==='approved'&&due(l)===0:l.state===activeFilter))).map(l=>`<tr><td>${esc(l.lender)}<small style="display:block">${esc(l.purpose)}</small></td><td>${money(l.principal)}</td><td>${money(l.interest)}</td><td>${money(num(l.principal)+num(l.interest))}</td><td>${money(payments(l))}</td><td><div style="min-width:75px">${(num(l.principal)+num(l.interest))>0?Math.min(100,Math.max(0,payments(l)/(num(l.principal)+num(l.interest))*100)).toFixed(1):'0.0'}%<div style="height:5px;background:#e5eae7;border-radius:8px;overflow:hidden"><div style="height:100%;background:#22875b;width:${(num(l.principal)+num(l.interest))>0?Math.min(100,Math.max(0,payments(l)/(num(l.principal)+num(l.interest))*100)):0}%"></div></div></div></td><td>${money(due(l))}</td><td>${esc(l.dueDate)}</td><td>${status(l)}</td><td>${r==='Director'&&l.state==='pending'?btn('Approve','approve:'+l.id)+btn('Reject','reject:'+l.id):''}${l.state==='approved'&&due(l)>0?btn('Record repayment','pay:'+l.id):''}${btn('History','history:'+l.id)}${r==='Director'&&!l.voidedAt&&['pending','rejected'].includes(l.state)?btn('Edit','edit:'+l.id)+btn('Void','void:'+l.id):''}</td></tr>`).join('')||'<tr><td colspan="10">No loans match the selected filters.</td></tr>'}</tbody></table></div>
 <p style="font-size:12px;color:#555">Company loans are liabilities, not sales. This module keeps its own loan cash ledger; do not also post the same borrowing or repayment as an ordinary expense or sale.</p>`;
 body.querySelectorAll('td,th').forEach(c=>{c.style.padding='8px';c.style.borderBottom='1px solid #ddd';c.style.textAlign='left'});
 const lenderSelect=body.querySelector('#afPLLender');
@@ -106618,7 +106651,7 @@ const reason=prompt('Reason for voiding this unapproved/rejected record (require
 if(!confirm('Void this loan record? The original will remain in audit history.'))return;
 l.voidedAt=new Date().toISOString();l.voidedBy=actor();l.voidReason=reason.trim();audit('Loan voided',l.id,reason.trim());write(KEY,a);render();refresh();return}
 if(action==='approve'||action==='reject'){if(role()!=='Director'||l.state!=='pending')return;const reason=action==='reject'?prompt('Reason for rejecting loan:'):'';if(action==='reject'&&!reason?.trim())return;if(!confirm(action==='approve'?'Confirm company loan was actually received? This will post the borrowing to the loan cash ledger.':'Reject this loan?'))return;l.state=action==='approve'?'approved':'rejected';l.reviewedBy=actor();l.reviewedAt=new Date().toISOString();if(action==='approve')entry(l.id,'BORROWING_CASH_IN',l.principal,'cash');audit(action,l.id,reason||'');write(KEY,a);render();refresh()}
-if(action==='pay'){if(l.voidedAt||l.state!=='approved'||due(l)<=0){alert('Only approved loans with an outstanding balance can be repaid');return}if(role()!=='Director'){alert('Director approval is required to confirm repayment');return}const val=prompt('Enter amount actually repaid (UGX). Outstanding: '+money(due(l)));if(val===null)return;const amt=Number(val);if(!Number.isSafeInteger(amt)||amt<=0||amt>due(l)){alert('Enter a whole UGX amount no greater than the outstanding balance');return}const paymentDate=prompt('Actual repayment date (YYYY-MM-DD):',today());if(paymentDate===null)return;if(!/^\d{4}-\d{2}-\d{2}$/.test(paymentDate)||!Number.isFinite(new Date(paymentDate+'T00:00:00').getTime())||new Date(paymentDate+'T00:00:00').toISOString().slice(0,10)!==paymentDate||paymentDate<l.receivedDate||paymentDate>today()){alert('Enter a valid repayment date between the loan receipt date and today.');return;}const method=prompt('Payment method: Cash, Bank, or Mobile Money','Cash');if(method===null)return;const paymentMethod=String(method).trim().toLowerCase();if(!['cash','bank','mobile money'].includes(paymentMethod)){alert('Select Cash, Bank, or Mobile Money');return}if(!confirm('Confirm '+money(amt)+' was actually paid on '+paymentDate+' by '+method+'?'))return;l.payments.push({amount:amt,date:paymentDate,method:paymentMethod,by:actor(),at:new Date().toISOString()});entry(l.id,'REPAYMENT_'+paymentMethod.toUpperCase().replace(/\s+/g,'_')+'_OUT',amt,paymentMethod);audit('Repayment',l.id,money(amt));write(KEY,a);render();refresh()}
+if(action==='pay'){if(l.voidedAt||l.state!=='approved'||due(l)<=0){alert('Only approved loans with an outstanding balance can be repaid');return}if(role()!=='Director'){alert('Director approval is required to confirm repayment');return}const val=prompt('Enter amount actually repaid (UGX). Outstanding: '+money(due(l)));if(val===null)return;const amt=Number(val);if(!Number.isSafeInteger(amt)||amt<=0||amt>due(l)){alert('Enter a whole UGX amount no greater than the outstanding balance');return}const paymentDate=prompt('Actual repayment date (YYYY-MM-DD):',today());if(paymentDate===null)return;if(!/^\d{4}-\d{2}-\d{2}$/.test(paymentDate)||Number.isNaN(new Date(paymentDate+'T00:00:00').getTime())||paymentDate>today()||paymentDate<l.receivedDate){alert('Enter a valid repayment date between the loan receipt date and today');return}const method=prompt('Payment method: Cash, Bank, or Mobile Money','Cash');if(method===null)return;const paymentMethod=String(method).trim().toLowerCase();if(!['cash','bank','mobile money'].includes(paymentMethod)){alert('Select Cash, Bank, or Mobile Money');return}if(!confirm('Confirm '+money(amt)+' was actually paid by '+method+'?'))return;l.payments.push({amount:amt,date:paymentDate,method:paymentMethod,by:actor(),at:new Date().toISOString()});entry(l.id,'REPAYMENT_'+paymentMethod.toUpperCase().replace(/\s+/g,'_')+'_OUT',amt,paymentMethod);audit('Repayment',l.id,money(amt));write(KEY,a);render();refresh()}
 if(action==='history'){alert('Loan: '+l.id+'\nLender: '+l.lender+'\nCreated: '+l.createdBy+'\n'+(l.payments||[]).map(p=>p.date+' - '+money(p.amount)+' by '+p.by).join('\n')+'\nOutstanding: '+money(due(l)))}})
 }
 function nav(){const r=role(),base=document.getElementById('navExpenses');if(!base||!base.parentNode)return;let b=document.getElementById('navPettyLoans');if(!b){b=base.cloneNode(true);b.id='navPettyLoans';b.removeAttribute('onclick');b.onclick=e=>{e.preventDefault();render()};base.insertAdjacentElement('afterend',b)}b.style.display=['Director','Secretary'].includes(r)?'':'none';const alerts=read(KEY).filter(l=>visible(l)&&l.state==='approved'&&due(l)>0&&daysLeft(l.dueDate)<=0);b.textContent='💳 Petty Loans & Repayments'+(alerts.length?' 🔴 '+alerts.length:'')}
