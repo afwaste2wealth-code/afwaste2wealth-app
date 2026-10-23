@@ -1,7 +1,9 @@
-App 74 SYNC SAFETY CANDIDATE - NOT YET BROWSER TESTED
-
-Back up App 73 and export local data on BOTH devices before deployment.
-Do not run Migrate All Existing Data.
-Changes: prevent pending local master records from being replaced by cloud pulls; detect and retain conflicting server versions without overwriting; paginate cloud master pulls; persist sync failure/conflict diagnostics locally; refresh winner card on performance cloud updates.
-IMPORTANT: Existing diverged records may be flagged as conflicts, not auto-merged. A later supervised reconciliation is required.
-This does NOT guarantee synchronization of all modules or replace a full integration test.
+A&F Wekavera App 75 — Competition Preview CANDIDATE
+Based on App 74 Sync Safety Candidate.
+Adds read-only weekly and monthly provisional employee leaderboards to logged-in dashboards, using existing performance scoring.
+Displays monthly potential cash prize from Director's saved prize plan, or last earlier saved plan; approved month uses recorded approved winner and prize.
+Weekly prize explicitly says not configured because the current code has no weekly cash prize setting.
+No prize is booked, paid, or approved by this display. No database schema or records modified.
+Employee-specific detailed evaluations remain private; the preview shows leader and own rank.
+JavaScript syntax checked. Browser/cloud cross-device testing not performed.
+Backup App 74 and test on both laptop and phone before treating as final.

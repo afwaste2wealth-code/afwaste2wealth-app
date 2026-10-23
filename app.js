@@ -1938,11 +1938,49 @@ integration.style.display = "";
 
 }
 
+/* Read-only competition preview. No awards, payroll or cloud records are changed here. */
+function renderAFCompetitionPreview() {
+  document.getElementById("afCompetitionPreviewCard")?.remove();
+  const user = typeof getAFCurrentUser === "function" ? getAFCurrentUser() : null;
+  const main = document.querySelector("#mainApplication .main");
+  if (!user || !main || typeof window.calculateAFEmployeeRankings !== "function") return;
+  const today = new Date();
+  const date = [today.getFullYear(), String(today.getMonth()+1).padStart(2,"0"), String(today.getDate()).padStart(2,"0")].join("-");
+  const monthKey = date.slice(0,7);
+  const safe = v => String(v ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const read = key => { try { const v=JSON.parse(localStorage.getItem(key)||"[]"); return Array.isArray(v)?v:[]; } catch { return []; } };
+  const plans = read("afMonthEndPrizePlans");
+  const plan = plans.find(p=>p.periodKey===monthKey) || [...plans].filter(p=>p.periodKey<monthKey).sort((a,b)=>String(b.periodKey).localeCompare(String(a.periodKey)))[0];
+  const approved = read("afMonthEndWinners").find(w=>w.periodKey===monthKey);
+  const prize = plan ? Number(plan.bestEmployeePrize || 0) : null;
+  const money = n => "UGX " + Number(n||0).toLocaleString("en-UG");
+  const sections = [];
+  for (const [period,label] of [["week","This Week"],["month","This Month"]]) {
+    let calc;
+    try { calc=window.calculateAFEmployeeRankings(period,date,true); } catch(e) { console.warn("Competition preview:",e); continue; }
+    const rows = Array.isArray(calc?.results) ? calc.results : [];
+    const leader = rows[0];
+    const mine = rows.find(r=>String(r.employeeId)===String(user.employeeId));
+    const isApproved = period==="month" && !!approved;
+    const leaderName = isApproved ? (approved.bestEmployeeName||"—") : (leader?.employeeName||"No qualifying results yet");
+    const leaderScore = isApproved ? Number(approved.bestEmployeeScore||0) : Number(leader?.finalScore||0);
+    const awardText = period==="month" ? (isApproved ? "Approved prize: "+money(approved.bestEmployeePrize) : prize===null ? "Potential prize: Not yet set" : "Potential prize: "+money(prize)) : "Weekly prize: Not configured in the current award settings";
+    sections.push(`<div style="background:white;border:1px solid #dbe7df;border-radius:10px;padding:13px;min-width:0"><div style="font-weight:bold;color:#0b5d3b">${label} — ${isApproved?'Approved':'Provisional'}</div><div style="font-size:12px;color:#666;margin:5px 0">${safe(calc?.range?.label||'')}</div><div>🥇 ${safe(leaderName)} ${leaderName==='No qualifying results yet'?'':'— '+leaderScore.toFixed(1)+'%'}</div><div style="margin-top:6px;font-weight:600">${safe(awardText)}</div>${mine?`<div style="margin-top:6px;font-size:13px">Your position: #${mine.rank} · ${Number(mine.finalScore).toFixed(1)}%</div>`:''}<div style="font-size:12px;color:#666;margin-top:6px">${isApproved?'Confirmed by Director. Payment status is tracked separately.':'Results can change. No prize is payable until Director approval.'}</div></div>`);
+  }
+  if (!sections.length) return;
+  const card=document.createElement("section"); card.id="afCompetitionPreviewCard"; card.className="card";
+  card.style.cssText="margin-bottom:16px;padding:16px;border:1px solid #b6d8c4;background:#f1f9f3;border-radius:12px";
+  card.innerHTML=`<h3 style="margin:0 0 10px;color:#0b5d3b">🏆 Live Employee Competition & Potential Awards</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:10px">${sections.join('')}</div><p style="font-size:12px;color:#555;margin:10px 0 0">Rankings are based on recorded performance for the displayed period. Potential awards are not approved payments.</p>`;
+  const notice=document.getElementById("roleAccessNotice");
+  if (notice) notice.insertAdjacentElement("afterend",card); else main.prepend(card);
+}
+
 /* =========================================================
    PERFORMANCE WINNERS - ALL DASHBOARDS
    ========================================================= */
 
 function renderAFPerformanceWinnerDashboardCard() {
+  try { renderAFCompetitionPreview(); } catch (error) { console.warn("Competition preview failed:",error); }
 
 const oldCard =
 document.getElementById(
@@ -40715,7 +40753,8 @@ const value =
 
   function calculateRankings(
 periodType,
-selectedDate
+selectedDate,
+publicLeaderboard = false
   ) {
 
 const range =
@@ -40739,7 +40778,7 @@ getCurrentUser();
     if (
 currentUser&&
 currentUser.role ===
-        "Employee"
+        "Employee" && !publicLeaderboard
     ) {
 
       employees =
