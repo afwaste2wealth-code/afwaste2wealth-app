@@ -53233,6 +53233,7 @@ document.body.appendChild(
         <button type="button" id="afStmtPrintOne">🖨️ Print One Expense</button>
       </div>
       <div id="afStmtSummary" style="font-size:12px;margin-bottom:8px"></div>
+      <div id="afStmtPeriodTotal" role="status" aria-live="polite" style="padding:13px 16px;margin:10px 0;background:#e2f2e8;border:2px solid #0b5d3b;border-radius:9px;font-weight:800;color:#0b5d3b;font-size:17px"></div>
       <div style="overflow:auto;max-height:280px"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:800px"><thead><tr style="background:#dceee3"><th>Select</th><th>Date</th><th>Expense No.</th><th>Payee</th><th>Category</th><th>Description</th><th>Amount</th><th>Status</th></tr></thead><tbody id="afStmtRows"></tbody></table></div>
     </details>`;
   historyHeading.parentNode.insertBefore(panel, historyHeading);
@@ -53254,7 +53255,11 @@ document.body.appendChild(
     const arr=filtered();
     q('afStmtRows').innerHTML=arr.map((r,i)=>`<tr style="border-bottom:1px solid #ddd"><td><input type="radio" name="afStmtOne" value="${i}"></td><td>${afExpenseEscape(r.date||'')}</td><td>${afExpenseEscape(r.expenseNumber||'')}</td><td>${afExpenseEscape(r.payee||'')}</td><td>${afExpenseEscape(r.category||'')}</td><td>${afExpenseEscape(r.description||'')}</td><td style="text-align:right">${money(amount(r))}</td><td>${afExpenseIsCancelled(r)?'CANCELLED':'COMPLETED'}</td></tr>`).join('') || '<tr><td colspan="8">No matching expenses.</td></tr>';
     const completed=arr.filter(r=>!afExpenseIsCancelled(r));
-    q('afStmtSummary').textContent=`${arr.length} transactions | Completed: ${completed.length} (${money(completed.reduce((n,r)=>n+amount(r),0))}) | Cancelled: ${arr.length-completed.length} (${money(arr.filter(afExpenseIsCancelled).reduce((n,r)=>n+amount(r),0))})`;
+    const periodTotal = completed.reduce((n,r)=>n+amount(r),0);
+    q('afStmtSummary').textContent=`${arr.length} transactions | Completed: ${completed.length} (${money(periodTotal)}) | Cancelled: ${arr.length-completed.length} (${money(arr.filter(afExpenseIsCancelled).reduce((n,r)=>n+amount(r),0))})`;
+    const start=q('afStmtFrom').value||'Beginning';
+    const end=q('afStmtTo').value||'Latest';
+    q('afStmtPeriodTotal').textContent=`TOTAL FOR SELECTED PERIOD (${start} to ${end}): ${money(periodTotal)} • ${completed.length} completed transaction(s)`;
     return arr;
   }
   ['afStmtPayee','afStmtFrom','afStmtTo','afStmtStatus'].forEach(id=>q(id).addEventListener('change',render));
