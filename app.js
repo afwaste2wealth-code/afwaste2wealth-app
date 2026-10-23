@@ -100545,6 +100545,22 @@ function openAFPerformanceWinnersHistory() {
       throw lookupError;
     }
 
+    /* If a different server version exists, do not silently replace it.
+       The Director can review the conflict after comparing both devices. */
+    if (existing && JSON.stringify(existing.payload || {}) !== JSON.stringify(payload)) {
+      const conflicts = readJSON("afCloudMasterConflicts", {});
+      conflicts[moduleKey + ":" + id] = {
+        module: moduleKey, recordId: id,
+        cloudUpdatedAt: existing.updated_at || null,
+        cloudPayload: existing.payload || null,
+        localPayload: payload,
+        detectedAt: new Date().toISOString(),
+        reason: "Cloud and pending local versions differ; upload blocked"
+      };
+      originalStorageSetItem.call(localStorage, "afCloudMasterConflicts", JSON.stringify(conflicts));
+      throw new Error("Cloud conflict: " + moduleKey + "/" + id + ". Neither version was overwritten.");
+    }
+
     if (
       existing &&
       JSON.stringify(
@@ -100815,6 +100831,13 @@ function openAFPerformanceWinnersHistory() {
             id,
             error
           );
+          const failures = readJSON("afCloudMasterFailures", {});
+          failures[moduleKey + ":" + id] = {
+            module: moduleKey, recordId: id,
+            message: String(error?.message || error),
+            occurredAt: new Date().toISOString()
+          };
+          originalStorageSetItem.call(localStorage, "afCloudMasterFailures", JSON.stringify(failures));
         }
       }
 
@@ -101094,6 +101117,25 @@ function openAFPerformanceWinnersHistory() {
   function masterApplyRemoteRow(
     row
   ) {
+    /* Never discard a local unsent edit during a cloud pull or realtime event.
+       Retain both versions for explicit review; the upload path must also
+       refuse to overwrite a different cloud version. */
+    const pendingKey = String(row?.module_key || "");
+    const pendingId = String(row?.source_record_id || "");
+    const localPending = masterPendingState();
+    if (Array.isArray(localPending[pendingKey]) &&
+        localPending[pendingKey].map(String).includes(pendingId)) {
+      const conflicts = readJSON("afCloudMasterConflicts", {});
+      conflicts[pendingKey + ":" + pendingId] = {
+        module: pendingKey, recordId: pendingId,
+        cloudUpdatedAt: row?.updated_at || null,
+        cloudPayload: row?.payload || null,
+        detectedAt: new Date().toISOString(),
+        reason: "Local change pending; cloud record not applied"
+      };
+      originalStorageSetItem.call(localStorage, "afCloudMasterConflicts", JSON.stringify(conflicts));
+      return;
+    }
     const moduleKey =
       String(
         row?.module_key ||
@@ -101318,6 +101360,12 @@ function openAFPerformanceWinnersHistory() {
   function refreshAfterMasterRemote(
     moduleKey
   ) {
+    if (["afMonthEndWinners", "afPerformanceAwards", "afSharedRecognition", "attendanceRecords", "afQualityDisciplineRecords"].includes(moduleKey)) {
+      setTimeout(() => {
+        try { if (typeof renderAFPerformanceWinnerDashboardCard === "function") renderAFPerformanceWinnerDashboardCard(); }
+        catch (error) { console.warn("A&F winner card refresh:", error); }
+      }, 100);
+    }
     try {
       if (
         typeof updateDashboardMaterialTotals ===
@@ -101423,14 +101471,29 @@ function openAFPerformanceWinnersHistory() {
       throw error;
     }
 
-    const rows =
-      Array.isArray(data)
-        ? data
-        : [];
-
-    rows.forEach(
-      masterApplyRemoteRow
-    );
+    const rows = Array.isArray(data) ? [...data] : [];
+    /* Supabase PostgREST defaults to a 1,000-row response cap.
+       Fetch subsequent pages so older employee/attendance records are not
+       silently missing from a phone's local cache. */
+    const PAGE_SIZE = 500;
+    if (rows.length >= PAGE_SIZE) {
+      let offset = rows.length;
+      /* Re-fetch from the start in fixed pages to avoid server max-row truncation. */
+      rows.length = 0;
+      while (true) {
+        const result = await client.from("af_module_records")
+          .select("module_key,source_record_id,payload,data_kind,updated_at")
+          .eq("company_id", COMPANY_ID)
+          .order("updated_at", { ascending: true })
+          .order("source_record_id", { ascending: true })
+          .range(rows.length, rows.length + PAGE_SIZE - 1);
+        if (result.error) throw result.error;
+        const page = Array.isArray(result.data) ? result.data : [];
+        rows.push(...page);
+        if (page.length < PAGE_SIZE) break;
+      }
+    }
+    rows.forEach(masterApplyRemoteRow);
 
     originalStorageSetItem.call(
       localStorage,
@@ -101494,8 +101557,8 @@ function openAFPerformanceWinnersHistory() {
             }
 
             setStatus(
-              "CONNECTED",
-              "Live Cloud Sync connected. All authorised A&F modules are live.",
+              totalCloudPendingCount() ? "PENDING" : "CONNECTED",
+              totalCloudPendingCount() ? (totalCloudPendingCount() + " change(s) pending; check cloud conflicts.") : "Live Cloud Sync connected.",
               {
                 lastRealtimeAt:
                   new Date()
@@ -101513,8 +101576,8 @@ function openAFPerformanceWinnersHistory() {
               "SUBSCRIBED"
             ) {
               setStatus(
-                "CONNECTED",
-                "Live Cloud Sync connected. All authorised A&F modules are live.",
+                totalCloudPendingCount() ? "PENDING" : "CONNECTED",
+                totalCloudPendingCount() ? (totalCloudPendingCount() + " cloud change(s) pending.") : "Live Cloud Sync connected.",
                 {
                   pending:
                     totalCloudPendingCount()
