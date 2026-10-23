@@ -1953,8 +1953,10 @@ function renderAFCompetitionPreview() {
   const plan = plans.find(p=>p.periodKey===monthKey) || [...plans].filter(p=>p.periodKey<monthKey).sort((a,b)=>String(b.periodKey).localeCompare(String(a.periodKey)))[0];
   const approved = read("afMonthEndWinners").find(w=>w.periodKey===monthKey);
   const prize = plan ? Number(plan.bestEmployeePrize || 0) : null;
+  const weeklyPrize = plan && plan.weeklyEmployeePrize !== undefined ? Number(plan.weeklyEmployeePrize) : null;
   const money = n => "UGX " + Number(n||0).toLocaleString("en-UG");
   const sections = [];
+  const teamPrizeLine = period => { const key=period === "week" ? "weeklyTeamPrize" : "bestTeamPrize"; return plan && plan[key] !== undefined ? "Potential team prize: "+money(plan[key]) : "Potential team prize: Not yet set"; };
   for (const [period,label] of [["week","This Week"],["month","This Month"]]) {
     let calc;
     try { calc=window.calculateAFEmployeeRankings(period,date,true); } catch(e) { console.warn("Competition preview:",e); continue; }
@@ -1964,8 +1966,8 @@ function renderAFCompetitionPreview() {
     const isApproved = period==="month" && !!approved;
     const leaderName = isApproved ? (approved.bestEmployeeName||"—") : (leader?.employeeName||"No qualifying results yet");
     const leaderScore = isApproved ? Number(approved.bestEmployeeScore||0) : Number(leader?.finalScore||0);
-    const awardText = period==="month" ? (isApproved ? "Approved prize: "+money(approved.bestEmployeePrize) : prize===null ? "Potential prize: Not yet set" : "Potential prize: "+money(prize)) : "Weekly prize: Not configured in the current award settings";
-    sections.push(`<div style="background:white;border:1px solid #dbe7df;border-radius:10px;padding:13px;min-width:0"><div style="font-weight:bold;color:#0b5d3b">${label} — ${isApproved?'Approved':'Provisional'}</div><div style="font-size:12px;color:#666;margin:5px 0">${safe(calc?.range?.label||'')}</div><div>🥇 ${safe(leaderName)} ${leaderName==='No qualifying results yet'?'':'— '+leaderScore.toFixed(1)+'%'}</div><div style="margin-top:6px;font-weight:600">${safe(awardText)}</div>${mine?`<div style="margin-top:6px;font-size:13px">Your position: #${mine.rank} · ${Number(mine.finalScore).toFixed(1)}%</div>`:''}<div style="font-size:12px;color:#666;margin-top:6px">${isApproved?'Confirmed by Director. Payment status is tracked separately.':'Results can change. No prize is payable until Director approval.'}</div></div>`);
+    const awardText = period==="month" ? (isApproved ? "Approved prize: "+money(approved.bestEmployeePrize) : prize===null ? "Potential prize: Not yet set" : "Potential prize: "+money(prize)) : (weeklyPrize===null ? "Potential weekly prize: Not yet set" : "Potential weekly prize: "+money(weeklyPrize));
+    sections.push(`<div style="background:white;border:1px solid #dbe7df;border-radius:10px;padding:13px;min-width:0"><div style="font-weight:bold;color:#0b5d3b">${label} — ${isApproved?'Approved':'Provisional'}</div><div style="font-size:12px;color:#666;margin:5px 0">${safe(calc?.range?.label||'')}</div><div>🥇 ${safe(leaderName)} ${leaderName==='No qualifying results yet'?'':'— '+leaderScore.toFixed(1)+'%'}</div><div style="margin-top:6px;font-weight:600">${safe(awardText)}</div><div style="font-size:12px;margin-top:4px">${safe(teamPrizeLine(period))}</div>${mine?`<div style="margin-top:6px;font-size:13px">Your position: #${mine.rank} · ${Number(mine.finalScore).toFixed(1)}%</div>`:''}<div style="font-size:12px;color:#666;margin-top:6px">${isApproved?'Confirmed by Director. Payment status is tracked separately.':'Results can change. No prize is payable until Director approval.'}</div></div>`);
   }
   if (!sections.length) return;
   const card=document.createElement("section"); card.id="afCompetitionPreviewCard"; card.className="card";
@@ -94711,386 +94713,74 @@ console.log("A&F Accounts & Reports + Weekly Stock Taking connected.");
    ========================================================= */
 
 function openAFPerformanceWinnersHistory() {
-  const currentUser =
-    typeof getAFCurrentUser === "function"
-      ? getAFCurrentUser()
-      : null;
-
-  if (!currentUser || currentUser.role !== "Director") {
-    alert("Only the Director can view the full Performance Winners History.");
-    return;
-  }
-
-  let winners = [];
-
-  try {
-    const saved = JSON.parse(
-      localStorage.getItem("afMonthEndWinners") || "[]"
-    );
-
-    winners = Array.isArray(saved) ? saved : [];
-  } catch (error) {
-    console.error("Unable to read Performance Winners History:", error);
-    winners = [];
-  }
-
-  winners = [...winners].sort((a, b) => {
-    const aIndex =
-      Number(a.year || 0) * 12 +
-      Number(a.month || 0);
-
-    const bIndex =
-      Number(b.year || 0) * 12 +
-      Number(b.month || 0);
-
-    return bIndex - aIndex;
-  });
-
-  const money = amount =>
-    typeof formatPayrollMoney === "function"
-      ? formatPayrollMoney(amount)
-      : "UGX " + Number(amount || 0).toLocaleString();
-
-  const employeeWins = {};
-
-  winners.forEach(item => {
-    const key =
-      String(item.bestEmployeeId || "") ||
-      String(item.bestEmployeeName || "");
-
-    if (!key) return;
-
-    if (!employeeWins[key]) {
-      employeeWins[key] = {
-        employeeId: item.bestEmployeeId || "",
-        employeeName: item.bestEmployeeName || "",
-        wins: 0,
-        totalPrize: 0
-      };
-    }
-
-    employeeWins[key].wins += 1;
-    employeeWins[key].totalPrize +=
-      Number(item.bestEmployeePrize || 0);
-  });
-
-  const employeeLeaderboard =
-    Object.values(employeeWins).sort((a, b) =>
-      b.wins - a.wins ||
-      b.totalPrize - a.totalPrize ||
-      String(a.employeeName).localeCompare(
-        String(b.employeeName)
-      )
-    );
-
-  const modal = document.createElement("div");
-  modal.id = "afPerformanceWinnersHistoryModal";
-
-  modal.style.cssText = `
-    position:fixed;
-    inset:0;
-    background:rgba(0,0,0,.6);
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    z-index:100002;
-    padding:10px;
-    font-family:Arial,sans-serif;
-  `;
-
-  modal.innerHTML = `
-    <div style="
-      width:1100px;
-      max-width:98%;
-      max-height:94vh;
-      overflow:auto;
-      background:white;
-      border-radius:14px;
-      padding:22px;
-      box-shadow:0 10px 40px rgba(0,0,0,.35);
-    ">
-
-      <div style="
-        display:flex;
-        justify-content:space-between;
-        gap:12px;
-        align-items:center;
-        margin-bottom:16px;
-      ">
-        <div>
-          <h2 style="margin:0;color:#0b5d3b;">
-            🏆 Performance Winners History
-          </h2>
-          <div style="margin-top:5px;color:#666;font-size:13px;">
-            Confirmed Best Employee and Best Team month-end awards
-          </div>
-        </div>
-
-        <button
-          id="afClosePerformanceWinnersHistory"
-          type="button"
-          style="
-            border:0;
-            background:#eee;
-            padding:9px 13px;
-            border-radius:7px;
-            cursor:pointer;
-            font-weight:bold;
-          "
-        >
-          ✕ Close
-        </button>
-      </div>
-
-      ${
-        !winners.length
-          ? `
-            <div style="
-              padding:22px;
-              background:#f7f7f7;
-              border-radius:9px;
-              text-align:center;
-              color:#666;
-            ">
-              No confirmed month-end winners have been recorded yet.
-            </div>
-          `
-          : `
-            <div style="
-              display:grid;
-              grid-template-columns:
-                repeat(3,minmax(180px,1fr));
-              gap:10px;
-              margin-bottom:18px;
-            ">
-              <div style="
-                border:1px solid #ddd;
-                border-radius:9px;
-                padding:13px;
-                background:#fafcfb;
-              ">
-                <div style="font-size:12px;color:#666;">
-                  Months Confirmed
-                </div>
-                <div style="
-                  margin-top:4px;
-                  font-size:23px;
-                  font-weight:bold;
-                  color:#0b5d3b;
-                ">
-                  ${winners.length}
-                </div>
-              </div>
-
-              <div style="
-                border:1px solid #ddd;
-                border-radius:9px;
-                padding:13px;
-                background:#fafcfb;
-              ">
-                <div style="font-size:12px;color:#666;">
-                  Most Best Employee Wins
-                </div>
-                <div style="
-                  margin-top:4px;
-                  font-size:17px;
-                  font-weight:bold;
-                  color:#0b5d3b;
-                ">
-                  ${
-                    employeeLeaderboard[0]
-                      ? escapeText(
-                          employeeLeaderboard[0].employeeName
-                        )
-                      : "—"
-                  }
-                </div>
-                <div style="margin-top:3px;font-size:12px;color:#666;">
-                  ${
-                    employeeLeaderboard[0]
-                      ? employeeLeaderboard[0].wins +
-                        " win(s)"
-                      : ""
-                  }
-                </div>
-              </div>
-
-              <div style="
-                border:1px solid #ddd;
-                border-radius:9px;
-                padding:13px;
-                background:#fafcfb;
-              ">
-                <div style="font-size:12px;color:#666;">
-                  Total Best Employee Prizes
-                </div>
-                <div style="
-                  margin-top:4px;
-                  font-size:18px;
-                  font-weight:bold;
-                  color:#0b5d3b;
-                ">
-                  ${money(
-                    winners.reduce(
-                      (sum, item) =>
-                        sum +
-                        Number(
-                          item.bestEmployeePrize || 0
-                        ),
-                      0
-                    )
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <h3 style="color:#0b5d3b;margin:0 0 9px;">
-              🥇 Best Employee Record
-            </h3>
-
-            <div style="
-              overflow:auto;
-              border:1px solid #ddd;
-              border-radius:9px;
-              margin-bottom:20px;
-            ">
-              <table style="
-                width:100%;
-                min-width:850px;
-                border-collapse:collapse;
-                font-size:13px;
-              ">
-                <thead>
-                  <tr style="background:#eaf5ee;text-align:left;">
-                    <th style="padding:10px;">Employee</th>
-                    <th style="padding:10px;">Employee ID</th>
-                    <th style="padding:10px;">Times Won</th>
-                    <th style="padding:10px;">Total Cash Prizes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${employeeLeaderboard.map(item => `
-                    <tr style="border-bottom:1px solid #eee;">
-                      <td style="padding:10px;font-weight:bold;">
-                        ${escapeText(item.employeeName || "")}
-                      </td>
-                      <td style="padding:10px;">
-                        ${escapeText(item.employeeId || "—")}
-                      </td>
-                      <td style="padding:10px;">
-                        ${item.wins}
-                      </td>
-                      <td style="padding:10px;">
-                        ${money(item.totalPrize)}
-                      </td>
-                    </tr>
-                  `).join("")}
-                </tbody>
-              </table>
-            </div>
-
-            <h3 style="color:#0b5d3b;margin:0 0 9px;">
-              📅 Month-by-Month Winners
-            </h3>
-
-            <div style="
-              overflow:auto;
-              border:1px solid #ddd;
-              border-radius:9px;
-            ">
-              <table style="
-                width:100%;
-                min-width:1150px;
-                border-collapse:collapse;
-                font-size:13px;
-              ">
-                <thead>
-                  <tr style="background:#0b5d3b;color:white;text-align:left;">
-                    <th style="padding:10px;">Month</th>
-                    <th style="padding:10px;">Best Employee</th>
-                    <th style="padding:10px;">Score</th>
-                    <th style="padding:10px;">Employee Prize</th>
-                    <th style="padding:10px;">Best Team</th>
-                    <th style="padding:10px;">Team Score</th>
-                    <th style="padding:10px;">Team Prize</th>
-                    <th style="padding:10px;">Confirmed By</th>
-                    <th style="padding:10px;">Confirmed At</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${winners.map(item => {
-                    const confirmedAt =
-                      item.confirmedAt
-                        ? new Date(
-                            item.confirmedAt
-                          ).toLocaleString()
-                        : "—";
-
-                    return `
-                      <tr style="border-bottom:1px solid #eee;">
-                        <td style="padding:10px;font-weight:bold;">
-                          ${escapeText(
-                            item.label ||
-                            item.periodKey ||
-                            ""
-                          )}
-                        </td>
-                        <td style="padding:10px;">
-                          ${escapeText(
-                            item.bestEmployeeName || ""
-                          )}
-                        </td>
-                        <td style="padding:10px;">
-                          ${Number(
-                            item.bestEmployeeScore || 0
-                          ).toFixed(1)}%
-                        </td>
-                        <td style="padding:10px;">
-                          ${money(
-                            item.bestEmployeePrize
-                          )}
-                        </td>
-                        <td style="padding:10px;">
-                          ${escapeText(
-                            item.bestTeamName || ""
-                          )}
-                        </td>
-                        <td style="padding:10px;">
-                          ${Number(
-                            item.bestTeamScore || 0
-                          ).toFixed(1)}%
-                        </td>
-                        <td style="padding:10px;">
-                          ${money(
-                            item.bestTeamPrize
-                          )}
-                        </td>
-                        <td style="padding:10px;">
-                          ${escapeText(
-                            item.confirmedBy || "Director"
-                          )}
-                        </td>
-                        <td style="padding:10px;">
-                          ${escapeText(confirmedAt)}
-                        </td>
-                      </tr>
-                    `;
-                  }).join("")}
-                </tbody>
-              </table>
-            </div>
-          `
-      }
-    </div>
-  `;
-
+  const user = typeof getAFCurrentUser === 'function' ? getAFCurrentUser() : JSON.parse(localStorage.getItem('currentUser') || '{}');
+  if (String(user?.role || '').toLowerCase() !== 'director') return alert('Only the Director can view full Performance Winners History.');
+  document.getElementById('afPerformanceWinnersHistoryModal')?.remove();
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const money = n => 'UGX ' + (Number(n) || 0).toLocaleString('en-UG');
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2,'0');
+  const modal = document.createElement('div');
+  modal.id = 'afPerformanceWinnersHistoryModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:#0009;display:flex;align-items:center;justify-content:center;z-index:100002;padding:10px;font-family:Arial,sans-serif';
+  modal.innerHTML = `<section style="background:#fff;color:#19352a;border-radius:12px;width:min(1120px,98vw);max-height:94vh;overflow:auto;padding:20px;box-sizing:border-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><h2>🏆 Performance Winners History</h2><button type="button" id="afWHClose">Close ✕</button></div>
+    <p>Confirmed month-end winners. Filter by competition period; printing never changes awards or payroll.</p>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:end;background:#f1f7f4;padding:12px;border-radius:8px">
+      <label>From <input type="date" id="afWHFrom" value="${year}-01-01"></label>
+      <label>To <input type="date" id="afWHTo" value="${year}-${month}-${String(today.getDate()).padStart(2,'0')}"></label>
+      <label>Competition <select id="afWHCategory"><option value="all">Employee and Team</option><option value="employee">Best Employee</option><option value="team">Best Team</option></select></label>
+      <button type="button" id="afWHApply">View Selected Period</button><button type="button" id="afWHPrint">🖨️ Print Selected Period</button>
+    </div><p id="afWHMessage" aria-live="polite"></p><div id="afWHResults"></div>
+    <p style="font-size:12px;color:#555">Note: This report uses confirmed month-end winners. Weekly rankings and unapproved provisional competitions are not historical winners and are not presented as approved awards. Paid/unpaid totals cannot be inferred from winner records.</p>
+    </section>`;
   document.body.appendChild(modal);
-
-  modal.querySelector(
-    "#afClosePerformanceWinnersHistory"
-  ).onclick = () => {
-    modal.remove();
+  const $ = id => modal.querySelector('#' + id);
+  const getRows = () => {
+    let source = [];
+    try { const v = JSON.parse(localStorage.getItem('afMonthEndWinners') || '[]'); if(Array.isArray(v)) source = v; }
+    catch(e) { console.error('Winner history could not be read',e); }
+    const from = $('afWHFrom').value, to = $('afWHTo').value;
+    if (!from || !to || from > to) { $('afWHMessage').textContent = 'Select a valid From and To date.'; return null; }
+    $('afWHMessage').textContent = '';
+    const cat = $('afWHCategory').value;
+    const result=[];
+    source.forEach(w => {
+      let period = String(w.periodKey || '');
+      if(!/^\d{4}-\d{2}$/.test(period)) {
+        const y = Number(w.year), m = Number(w.month);
+        if(Number.isInteger(y) && Number.isInteger(m) && m >= 0 && m <= 11) period = `${y}-${String(m+1).padStart(2,'0')}`;
+      }
+      if(!/^\d{4}-\d{2}$/.test(period)) return;
+      // The monthly award belongs to the month it covers, not the date it was approved.
+      const periodStart=period+'-01';
+      const periodEnd=period+'-'+String(new Date(Number(period.slice(0,4)),Number(period.slice(5,7)),0).getDate()).padStart(2,'0');
+      if(periodEnd < from || periodStart > to) return;
+      if(cat !== 'team' && w.bestEmployeeName) result.push({period,category:'Best Employee',winner:w.bestEmployeeName,score:w.bestEmployeeScore,prize:w.bestEmployeePrize,confirmedAt:w.confirmedAt,confirmedBy:w.confirmedBy});
+      if(cat !== 'employee' && w.bestTeamName) result.push({period,category:'Best Team',winner:w.bestTeamName,score:w.bestTeamScore,prize:w.bestTeamPrize,confirmedAt:w.confirmedAt,confirmedBy:w.confirmedBy});
+    });
+    return result.sort((x,y)=>y.period.localeCompare(x.period)||x.category.localeCompare(y.category));
   };
+  const render = () => {
+    const rows = getRows(); if(!rows) return null;
+    const sum = rows.reduce((t,r)=>t+(Number(r.prize)||0),0);
+    const label = `Reporting period: ${$('afWHFrom').value} to ${$('afWHTo').value}`;
+    const table = `<table style="border-collapse:collapse;width:100%;font-size:13px" border="1" cellpadding="7"><thead style="background:#e7f2eb"><tr><th>Month</th><th>Category</th><th>Winner</th><th>Score</th><th>Approved Prize</th><th>Confirmed By</th><th>Confirmed At</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.period)}</td><td>${esc(r.category)}</td><td>${esc(r.winner)}</td><td>${Number.isFinite(Number(r.score))?Number(r.score).toFixed(1)+'%':'—'}</td><td>${money(r.prize)}</td><td>${esc(r.confirmedBy||'Director')}</td><td>${esc(r.confirmedAt ? new Date(r.confirmedAt).toLocaleString() : '—')}</td></tr>`).join('') || '<tr><td colspan="7">No confirmed winners for the selected period.</td></tr>'}</tbody></table>`;
+    $('afWHResults').innerHTML = `<p><b>${esc(label)}</b> · ${rows.length} confirmed winner entries</p><p><b>Total approved prize values: ${money(sum)}</b> (not a payment total)</p><div style="overflow:auto">${table}</div>`;
+    return {rows,table,label,sum};
+  };
+  $('afWHClose').onclick = () => modal.remove();
+  $('afWHApply').onclick = render;
+  $('afWHPrint').onclick = () => {
+    const report = render(); if(!report) return;
+    const win = window.open('','_blank','width=1100,height=850');
+    if(!win) return alert('Allow pop-ups for this site to print the report.');
+    const printDate = new Date().toLocaleString('en-UG');
+    win.document.write(`<!doctype html><html><head><title>Performance Winners History</title><style>@page{size:A4 landscape;margin:13mm}body{font-family:Arial,sans-serif;color:#18382a;font-size:11px}header{text-align:center;border-bottom:2px solid #0b5d3b;margin-bottom:14px}h1{font-size:20px;margin:4px}h2{font-size:15px}table{border-collapse:collapse;width:100%;font-size:10px}th,td{border:1px solid #aaa;padding:6px;text-align:left}th{background:#e7f2eb}footer{margin-top:35px}small{color:#555}</style></head><body><header><h1>A&F WEKAVERA LTD</h1><div>Waste2Wealth Solutions · Turning Waste into Value</div><h2>PERFORMANCE WINNERS HISTORY REPORT</h2></header><p><b>${esc(report.label)}</b> · Generated: ${esc(printDate)}</p><p>Confirmed winner entries: ${report.rows.length} · <b>Total approved prize values: ${money(report.sum)}</b></p>${report.table}<p><small>Approved prize values are not evidence of payment. Provisional competitions are excluded. Records are reported for their competition month.</small></p><footer>Prepared for: Director ____________________ &nbsp;&nbsp; Date ____________________</footer></body></html>`);
+    win.document.close();win.focus();setTimeout(()=>win.print(),350);
+  };
+  render();
 }
 
 
@@ -106606,6 +106296,38 @@ function afOpenDirectorRewards(prefillType, prefillName, prefillPeriod) {
     alert('Reward saved as Approved / Not Issued. Confirm payment or receipt separately.');
   };render();
 }
+/* App 76: Director-only provisional prize settings. Separate from approved reward register. */
+function afOpenProvisionalPrizeSettings() {
+  const user=JSON.parse(localStorage.getItem('currentUser')||'{}');
+  if(String(user.role||'').toLowerCase()!=='director') return alert('Director only.');
+  document.getElementById('afProvisionalPrizeModal')?.remove();
+  const now=new Date(); const key=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const getPlans=()=>{try{const v=JSON.parse(localStorage.getItem('afMonthEndPrizePlans')||'[]');return Array.isArray(v)?v:[]}catch(_){return []}};
+  const plans=getPlans(); const existing=plans.find(p=>p.periodKey===key)||{};
+  const prior=[...plans].filter(p=>p.periodKey<key).sort((a,b)=>String(b.periodKey).localeCompare(String(a.periodKey)))[0]||{};
+  const defaults={...prior,...existing};
+  const modal=document.createElement('div');modal.id='afProvisionalPrizeModal';modal.style.cssText='position:fixed;inset:0;z-index:120000;background:#0009;display:flex;align-items:center;justify-content:center;padding:12px';
+  modal.innerHTML=`<section style="background:#fff;border-radius:14px;max-width:520px;width:100%;max-height:90vh;overflow:auto;padding:22px;font-family:Arial;color:#172b25"><h2 style="margin-top:0">🏆 Set Provisional Prizes</h2><p>These are potential competition prizes only. Saving does not approve winners, create payroll amounts, or record payments.</p><label>Competition month <input type="month" id="afPPMonth" value="${key}" style="padding:8px;width:100%;box-sizing:border-box"></label><div id="afPPFields" style="display:grid;gap:12px;margin:16px 0">${[['weeklyEmployeePrize','Best Employee — Weekly'],['weeklyTeamPrize','Best Team — Weekly'],['bestEmployeePrize','Best Employee — Monthly'],['bestTeamPrize','Best Team — Monthly']].map(([k,label])=>`<label>${label} (UGX)<input type="number" min="0" step="100" id="afPP_${k}" value="${Number(defaults[k]||0)}" style="display:block;padding:10px;width:100%;box-sizing:border-box"></label>`).join('')}</div><p style="font-size:12px;color:#555">The monthly amounts also feed the existing month-end approval screen. Approved winners and rewards are not changed here.</p><div style="display:flex;gap:10px"><button id="afPPSave" style="background:#0b5d3b;color:white;border:0;border-radius:7px;padding:12px;flex:1">Save Potential Prizes</button><button id="afPPClose" style="padding:12px">Close</button></div></section>`;
+  document.body.appendChild(modal);
+  const fieldKeys=['weeklyEmployeePrize','weeklyTeamPrize','bestEmployeePrize','bestTeamPrize'];
+  const fill=()=>{const month=modal.querySelector('#afPPMonth').value;const all=getPlans();const p=all.find(x=>x.periodKey===month)||[...all].filter(x=>x.periodKey<month).sort((a,b)=>String(b.periodKey).localeCompare(String(a.periodKey)))[0]||{};fieldKeys.forEach(k=>modal.querySelector('#afPP_'+k).value=Number(p[k]||0));};
+  modal.querySelector('#afPPMonth').onchange=fill;
+  modal.querySelector('#afPPClose').onclick=()=>modal.remove();
+  modal.querySelector('#afPPSave').onclick=()=>{
+    const month=modal.querySelector('#afPPMonth').value;if(!/^\d{4}-\d{2}$/.test(month))return alert('Select a valid month.');
+    const values={};for(const k of fieldKeys){const raw=modal.querySelector('#afPP_'+k).value;const n=Number(raw);if(raw===''||!Number.isSafeInteger(n)||n<0||n%100!==0)return alert('Enter non-negative whole UGX amounts in increments of 100.');values[k]=n;}
+    const all=getPlans();const index=all.findIndex(p=>p.periodKey===month);
+    const current=index>=0?all[index]:{};
+    const locked=(()=>{try{return JSON.parse(localStorage.getItem('afMonthEndWinners')||'[]').some(w=>w.periodKey===month)}catch(_){return false}})();
+    if(locked&&(values.bestEmployeePrize!==Number(current.bestEmployeePrize||0)||values.bestTeamPrize!==Number(current.bestTeamPrize||0)))return alert('Monthly winners are already locked. Monthly prize amounts cannot be changed here.');
+    const record={...current,periodKey:month,year:Number(month.slice(0,4)),month:Number(month.slice(5,7))-1,...values,provisionalUpdatedAt:new Date().toISOString(),provisionalUpdatedBy:user.fullName||user.employeeId||'Director'};
+    if(index>=0)all[index]=record;else all.push(record);
+    localStorage.setItem('afMonthEndPrizePlans',JSON.stringify(all));
+    window.dispatchEvent(new Event('storage'));try{renderAFPerformanceWinnerDashboardCard()}catch(e){console.warn('Preview refresh',e)}
+    alert('Potential prizes saved. No awards have been approved or paid.');modal.remove();
+  };
+}
+
 /* Attach a discoverable director-only entry to the existing performance screen. */
 (function afInstallDirectorRewardShortcut(){
  const observer=new MutationObserver(()=>{
@@ -106617,6 +106339,7 @@ function afOpenDirectorRewards(prefillType, prefillName, prefillPeriod) {
      const b=document.createElement("button");b.className="afDirectorRewardsShortcut";b.textContent="🏆 Director Rewards Management";
      b.style.cssText="padding:10px;margin:8px;background:#08633e;color:white;border:0;border-radius:7px;cursor:pointer";
      b.onclick=afOpenDirectorRewards;h.insertAdjacentElement("afterend",b);
+     const pp=document.createElement("button");pp.className="afProvisionalPrizeShortcut";pp.textContent="💰 Set Provisional Prizes";pp.style.cssText="padding:10px;margin:8px;background:#176f9c;color:white;border:0;border-radius:7px;cursor:pointer";pp.onclick=afOpenProvisionalPrizeSettings;b.insertAdjacentElement("afterend",pp);
    });
  });observer.observe(document.documentElement,{childList:true,subtree:true});
 })();
