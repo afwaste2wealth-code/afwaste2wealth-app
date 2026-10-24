@@ -86641,11 +86641,48 @@ b.textContent = "Calculate Payroll";
           (Number(a.year) * 12 + Number(a.month))
         );
 
+      // Load the employee's advance register once per portal render.
+      // Do not mutate source records: filtering affects display only.
       const employeeAdvances = advances()
-        .filter(record =>
-          String(record.employeeId) === String(employee.employeeId)
-        )
+        .filter(record => String(record.employeeId) === String(employee.employeeId))
         .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+      const monthlyAdvances = employeeAdvances.filter(record => sameMonth(record.date, year, month));
+      const periodEnd = new Date(year, month + 1, 0, 23, 59, 59, 999).getTime();
+      const periodStart = new Date(year, month, 1).getTime();
+      const advanceRecoveries = recoveries();
+      const recoveryByAdvance = new Map();
+      const recoveryInPeriod = new Map();
+      for (const recovery of advanceRecoveries) {
+        const key = String(recovery.advanceId ?? "");
+        const amount = Number(recovery.amount || 0);
+        if (!key || !Number.isFinite(amount)) continue;
+        const dateValue = recovery.date || recovery.recoveryDate || recovery.paymentDate;
+        const timestamp = dateValue ? new Date(String(dateValue).slice(0, 10) + "T12:00:00").getTime() : NaN;
+        // Undated recoveries must not be assigned to an arbitrary month.
+        if (!Number.isFinite(timestamp)) continue;
+        if (timestamp <= periodEnd) recoveryByAdvance.set(key, (recoveryByAdvance.get(key) || 0) + amount);
+        if (timestamp >= periodStart && timestamp <= periodEnd) recoveryInPeriod.set(key, (recoveryInPeriod.get(key) || 0) + amount);
+      }
+      const advanceDateMillis = item => {
+        const value = String(item.date || "").slice(0, 10);
+        const time = new Date(value + "T12:00:00").getTime();
+        return Number.isFinite(time) ? time : NaN;
+      };
+      const advanceAmount = item => Number(item.amount || 0);
+      const openingAdvances = employeeAdvances.reduce((sum, item) => {
+        const timestamp = advanceDateMillis(item);
+        if (!Number.isFinite(timestamp) || timestamp >= periodStart) return sum;
+        const recoveriesBeforePeriod = advanceRecoveries.reduce((total, recovery) => {
+          if (String(recovery.advanceId) !== String(item.id)) return total;
+          const dateValue = recovery.date || recovery.recoveryDate || recovery.paymentDate;
+          const t = dateValue ? new Date(String(dateValue).slice(0, 10) + "T12:00:00").getTime() : NaN;
+          return Number.isFinite(t) && t < periodStart ? total + Number(recovery.amount || 0) : total;
+        }, 0);
+        return sum + Math.max(0, advanceAmount(item) - recoveriesBeforePeriod);
+      }, 0);
+      const newAdvancesTotal = monthlyAdvances.reduce((sum, item) => sum + advanceAmount(item), 0);
+      const recoveredThisMonth = employeeAdvances.reduce((sum, item) => sum + (recoveryInPeriod.get(String(item.id)) || 0), 0);
+      const closingAdvances = Math.max(0, openingAdvances + newAdvancesTotal - recoveredThisMonth);
 
       const employeeDocuments = readDocuments()
         .filter(record =>
@@ -86672,6 +86709,23 @@ b.textContent = "Calculate Payroll";
         payroll?.netOvertimeMinutes ??
         0
       ) / 60;
+
+      // Read-only employee statement: only recorded approved awards count as earnings.
+      let approvedAwards = [];
+      try {
+        if (typeof getEmployeePerformanceAwards === "function") {
+          approvedAwards = getEmployeePerformanceAwards(employee.employeeId, month, year) || [];
+        }
+      } catch (error) { console.warn("Employee awards could not be loaded", error); }
+      const approvedBonusTotal = approvedAwards.reduce((sum, award) => sum + (Number(award.amount) || 0), 0);
+      const profileMissing = [
+        ["Department", employee.department], ["Team", employee.teamName],
+        ["Employment type", employee.employmentType], ["Date joined", employee.dateJoined],
+        ["Phone", employee.phone], ["Photograph", employee.passportPhoto]
+      ].filter(item => !item[1]).map(item => item[0]);
+      const attendanceKnown = !!attendance;
+      const payrollSaved = !!savedPayroll;
+      const bonusRows = approvedAwards.map(award => `<tr><td style="padding:8px;border-bottom:1px solid #eee">${esc(award.awardType || "Performance award")}</td><td style="padding:8px;border-bottom:1px solid #eee">${money(award.amount)}</td><td style="padding:8px;border-bottom:1px solid #eee">${esc(award.rewardStatus || "Approved")}</td></tr>`).join("");
 
       body.innerHTML = `
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;">
@@ -86729,6 +86783,26 @@ b.textContent = "Calculate Payroll";
 
         </div>
 
+        <section style="margin-top:14px;border:1px solid #d7e8df;border-radius:10px;padding:15px;background:#f5faf7;">
+          <div style="font-size:17px;font-weight:bold;color:#0b5d3b;margin-bottom:8px;">My Monthly Attendance & Rewards Statement</div>
+          <div style="font-size:12px;color:#555;margin-bottom:10px;">${esc(monthName(year, month))} · Read only · Values come from the official attendance, payroll and approved reward registers.</div>
+          ${!attendanceKnown ? '<p style="color:#9b4b0b">Attendance summary unavailable. Zero must not be interpreted as verified attendance.</p>' : ''}
+          ${!payrollSaved ? '<p style="color:#9b4b0b">Payroll for this month is not yet saved. Earnings shown above are provisional calculations, not confirmed payment.</p>' : ''}
+          ${profileMissing.length ? `<p style="color:#9b4b0b"><b>Profile details unavailable on this device:</b> ${esc(profileMissing.join(', '))}. Please contact HR; missing fields are not proof that your information was deleted.</p>` : ''}
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px">
+            <div style="background:white;padding:10px;border-radius:8px"><b>Days attended</b><br>${attendanceKnown ? actualDaysWorked : 'Not available'}</div>
+            <div style="background:white;padding:10px;border-radius:8px"><b>Days absent</b><br>${attendanceKnown ? absentDays : 'Not available'}</div>
+            <div style="background:white;padding:10px;border-radius:8px"><b>Approved cash bonuses</b><br>${money(approvedBonusTotal)}</div>
+            <div style="background:white;padding:10px;border-radius:8px"><b>Earned allowance</b><br>${payroll ? money(payroll.earnedAllowance) : 'Not available'}</div>
+            <div style="background:white;padding:10px;border-radius:8px"><b>Approved deductions</b><br>${payroll ? money(payroll.approvedDeductions ?? payroll.totalDeductions ?? 0) : 'Not available'}</div>
+            <div style="background:white;padding:10px;border-radius:8px"><b>Payment status</b><br>${esc(savedPayroll?.status || 'Not confirmed')}</div>
+          </div>
+          <h4 style="margin-bottom:6px">Approved performance rewards</h4>
+          <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr><th align="left">Award</th><th align="left">Amount</th><th align="left">Status</th></tr></thead><tbody>${bonusRows || '<tr><td colspan="3" style="padding:8px">No approved cash awards recorded for this month. Potential prizes are not earnings.</td></tr>'}</tbody></table></div>
+          <p style="font-size:12px;color:#555">Any unpaid balances from earlier months must be verified against saved payroll before a final settlement is confirmed.</p>
+          <button type="button" id="afPortalPrintMonthlyStatement" style="padding:10px 14px;background:#0b5d3b;color:white;border:0;border-radius:7px">🖨️ Print Monthly Statement</button>
+        </section>
+
         <section style="margin-top:14px;border:1px solid #dde7e1;border-radius:10px;padding:15px;">
           <div style="font-size:16px;font-weight:bold;color:#0b5d3b;margin-bottom:10px;">Payroll & Payslips</div>
 
@@ -86766,8 +86840,17 @@ b.textContent = "Calculate Payroll";
         </section>
 
         <section style="margin-top:14px;border:1px solid #dde7e1;border-radius:10px;padding:15px;">
-          <div style="font-size:16px;font-weight:bold;color:#0b5d3b;margin-bottom:10px;">Advances</div>
-
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+            <div style="font-size:16px;font-weight:bold;color:#0b5d3b;">Advances — ${esc(monthName(year, month))}</div>
+            <button type="button" id="afPortalToggleAdvanceHistory" style="padding:7px 10px;border:1px solid #0b5d3b;border-radius:6px;background:#fff;color:#0b5d3b;cursor:pointer;">View All Advances History</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px;margin-bottom:12px;font-size:12px;">
+            <div><b>Brought forward</b><br>${money(openingAdvances)}</div>
+            <div><b>New this month</b><br>${money(newAdvancesTotal)}</div>
+            <div><b>Recovered this month</b><br>${money(recoveredThisMonth)}</div>
+            <div><b>Carried forward</b><br>${money(closingAdvances)}</div>
+          </div>
+          <div id="afPortalMonthlyAdvances">
           <div style="overflow:auto;">
             <table style="width:100%;min-width:700px;border-collapse:collapse;font-size:12px;">
               <thead>
@@ -86780,9 +86863,10 @@ b.textContent = "Calculate Payroll";
                 </tr>
               </thead>
               <tbody>
-                ${employeeAdvances.length
-                  ? employeeAdvances.map(advance => {
-                      const totals = outstandingAdvance(advance);
+                ${monthlyAdvances.length
+                  ? monthlyAdvances.map(advance => {
+                      const recovered = recoveryByAdvance.get(String(advance.id)) || 0;
+                      const totals = { recovered, outstanding: Math.max(0, Number(advance.amount || 0) - recovered) };
                       return `
                         <tr style="border-top:1px solid #eee;">
                           <td style="padding:8px;">${esc(localDate(advance.date))}</td>
@@ -86793,10 +86877,17 @@ b.textContent = "Calculate Payroll";
                         </tr>
                       `;
                     }).join("")
-                  : `<tr><td colspan="5" style="padding:14px;text-align:center;color:#777;">No employee advances recorded.</td></tr>`
+                  : `<tr><td colspan="5" style="padding:14px;text-align:center;color:#777;">No advances issued in the selected month.</td></tr>`
                 }
               </tbody>
             </table>
+          </div>
+          </div>
+          <div id="afPortalAllAdvances" hidden style="margin-top:12px;overflow:auto;">
+            <h4 style="margin:6px 0">Complete advances history (read only)</h4>
+            <table style="width:100%;min-width:600px;border-collapse:collapse;font-size:12px"><thead><tr><th>Date</th><th>Reason</th><th>Advance</th><th>Recovered to date</th><th>Current outstanding</th></tr></thead><tbody>
+            ${employeeAdvances.map(item => { const total = outstandingAdvance(item); return `<tr style="border-top:1px solid #eee"><td>${esc(localDate(item.date))}</td><td>${esc(item.reason || "Staff Advance")}</td><td>${money(item.amount)}</td><td>${money(total.recovered)}</td><td>${money(total.outstanding)}</td></tr>`; }).join("") || '<tr><td colspan="5">No advances recorded.</td></tr>'}
+            </tbody></table>
           </div>
         </section>
 
@@ -86822,6 +86913,26 @@ b.textContent = "Calculate Payroll";
           </div>
         </section>
       `;
+
+      const toggleAdvanceHistory = body.querySelector("#afPortalToggleAdvanceHistory");
+      if (toggleAdvanceHistory) toggleAdvanceHistory.onclick = () => {
+        const history = body.querySelector("#afPortalAllAdvances");
+        if (!history) return;
+        history.hidden = !history.hidden;
+        toggleAdvanceHistory.textContent = history.hidden ? "View All Advances History" : "Hide Advances History";
+      };
+
+      const printStatement = body.querySelector("#afPortalPrintMonthlyStatement");
+      if (printStatement) printStatement.onclick = () => {
+        const printable = body.querySelector("#afPortalPrintMonthlyStatement")?.closest("section");
+        if (!printable) return;
+        const win = window.open("", "_blank", "width=900,height=800");
+        if (!win) return alert("Please allow pop-ups to print the monthly statement.");
+        const copy = printable.cloneNode(true);
+        copy.querySelector("#afPortalPrintMonthlyStatement")?.remove();
+        win.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Employee Monthly Statement</title><style>@page{size:A4;margin:16mm}body{font:13px Arial,sans-serif;color:#173c2a}section{padding:15px}table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid #ddd;padding:8px;text-align:left}</style></head><body><header><h2>A&F WEKAVERA LTD</h2><div>Waste2Wealth Solutions</div><h3>EMPLOYEE MONTHLY STATEMENT</h3><p>' + esc(employee.fullName) + ' (' + esc(employee.employeeId) + ')</p></header>' + copy.outerHTML + '<p>Generated: ' + esc(new Date().toLocaleString('en-UG')) + '</p></body></html>');
+        win.document.close(); win.focus(); setTimeout(() => win.print(), 350);
+      };
 
       body.querySelectorAll("[data-portal-payslip]").forEach(button => {
         button.onclick = () => {
@@ -94726,14 +94837,14 @@ function openAFPerformanceWinnersHistory() {
   modal.style.cssText = 'position:fixed;inset:0;background:#0009;display:flex;align-items:center;justify-content:center;z-index:100002;padding:10px;font-family:Arial,sans-serif';
   modal.innerHTML = `<section style="background:#fff;color:#19352a;border-radius:12px;width:min(1120px,98vw);max-height:94vh;overflow:auto;padding:20px;box-sizing:border-box">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><h2>🏆 Performance Winners History</h2><button type="button" id="afWHClose">Close ✕</button></div>
-    <p>Confirmed month-end winners. Filter by competition period; printing never changes awards or payroll.</p>
+    <p>Approved month-end winner snapshots only. Unapproved historical winners cannot be reconstructed safely without stored period-end results. Printing never approves awards or changes payroll.</p>
     <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:end;background:#f1f7f4;padding:12px;border-radius:8px">
       <label>From <input type="date" id="afWHFrom" value="${year}-01-01"></label>
       <label>To <input type="date" id="afWHTo" value="${year}-${month}-${String(today.getDate()).padStart(2,'0')}"></label>
       <label>Competition <select id="afWHCategory"><option value="all">Employee and Team</option><option value="employee">Best Employee</option><option value="team">Best Team</option></select></label>
-      <button type="button" id="afWHApply">View Selected Period</button><button type="button" id="afWHPrint">🖨️ Print Selected Period</button>
+      <button type="button" id="afWHApply">View Selected Period</button><button type="button" id="afWHPreview">🔎 Preview Unapproved Results (To Date)</button><button type="button" id="afWHPrint">🖨️ Print Selected Period</button>
     </div><p id="afWHMessage" aria-live="polite"></p><div id="afWHResults"></div>
-    <p style="font-size:12px;color:#555">Note: This report uses confirmed month-end winners. Weekly rankings and unapproved provisional competitions are not historical winners and are not presented as approved awards. Paid/unpaid totals cannot be inferred from winner records.</p>
+    <p style="font-size:12px;color:#555">Confirmed monthly winners are stored snapshots. The optional unapproved preview recalculates the week and month containing the To Date using currently available records. It is NOT a historical snapshot or a Director approval. Printing cannot approve or pay a prize.</p>
     </section>`;
   document.body.appendChild(modal);
   const $ = id => modal.querySelector('#' + id);
@@ -94766,12 +94877,33 @@ function openAFPerformanceWinnersHistory() {
     const rows = getRows(); if(!rows) return null;
     const sum = rows.reduce((t,r)=>t+(Number(r.prize)||0),0);
     const label = `Reporting period: ${$('afWHFrom').value} to ${$('afWHTo').value}`;
-    const table = `<table style="border-collapse:collapse;width:100%;font-size:13px" border="1" cellpadding="7"><thead style="background:#e7f2eb"><tr><th>Month</th><th>Category</th><th>Winner</th><th>Score</th><th>Approved Prize</th><th>Confirmed By</th><th>Confirmed At</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.period)}</td><td>${esc(r.category)}</td><td>${esc(r.winner)}</td><td>${Number.isFinite(Number(r.score))?Number(r.score).toFixed(1)+'%':'—'}</td><td>${money(r.prize)}</td><td>${esc(r.confirmedBy||'Director')}</td><td>${esc(r.confirmedAt ? new Date(r.confirmedAt).toLocaleString() : '—')}</td></tr>`).join('') || '<tr><td colspan="7">No confirmed winners for the selected period.</td></tr>'}</tbody></table>`;
+    const table = `<table style="border-collapse:collapse;width:100%;font-size:13px" border="1" cellpadding="7"><thead style="background:#e7f2eb"><tr><th>Month</th><th>Category</th><th>Winner</th><th>Score</th><th>Approved Prize</th><th>Confirmed By</th><th>Confirmed At</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.period)}</td><td>${esc(r.category)}</td><td>${esc(r.winner)}</td><td>${Number.isFinite(Number(r.score))?Number(r.score).toFixed(1)+'%':'—'}</td><td>${money(r.prize)}</td><td>${esc(r.confirmedBy||'Director')}</td><td>${esc(r.confirmedAt ? new Date(r.confirmedAt).toLocaleString() : '—')}</td></tr>`).join('') || '<tr><td colspan="7">No approved winner snapshots found for the selected period. Provisional results may exist in performance rankings; this report cannot reconstruct an unrecorded historical winner.</td></tr>'}</tbody></table>`;
     $('afWHResults').innerHTML = `<p><b>${esc(label)}</b> · ${rows.length} confirmed winner entries</p><p><b>Total approved prize values: ${money(sum)}</b> (not a payment total)</p><div style="overflow:auto">${table}</div>`;
     return {rows,table,label,sum};
   };
   $('afWHClose').onclick = () => modal.remove();
-  $('afWHApply').onclick = render;
+  $('afWHApply').onclick = () => { $('afWHUnapprovedPreview')?.remove(); render(); };
+  $('afWHPreview').onclick = () => {
+    const report = render(); if(!report) return;
+    const date = $('afWHTo').value;
+    if(typeof window.calculateAFEmployeeRankings !== 'function') {
+      $('afWHMessage').textContent = 'Ranking calculator is unavailable. No provisional results were created.';
+      return;
+    }
+    const safe = value => esc(value);
+    const previews=[];
+    for(const [period,label] of [['week','Weekly'],['month','Monthly']]) {
+      try {
+        const calculation=window.calculateAFEmployeeRankings(period,date,true);
+        const top=Array.isArray(calculation?.results) ? calculation.results[0] : null;
+        previews.push(`<tr><td>${safe(label)}</td><td>${safe(calculation?.range?.label||date)}</td><td>${safe(top?.employeeName||'No qualifying employee')}</td><td>${top && Number.isFinite(Number(top.finalScore))?Number(top.finalScore).toFixed(1)+'%':'—'}</td><td>Unapproved calculation — not archived</td></tr>`);
+      } catch(e) { console.warn('Unapproved performance preview unavailable',e); }
+    }
+    const box=document.createElement('section'); box.id='afWHUnapprovedPreview';
+    box.style.cssText='border:2px solid #d49a35;padding:12px;margin-top:15px;border-radius:8px;background:#fffaf0';
+    box.innerHTML='<h3>Unapproved performance preview for selected To Date</h3><p>This is a live recalculation, not an archived historical winner. The result may differ from what was recorded at the time. Director approval is NOT performed here.</p><table border="1" cellpadding="7" style="width:100%;border-collapse:collapse"><tr><th>Competition</th><th>Calculated period</th><th>Current leading employee</th><th>Score</th><th>Status</th></tr>'+previews.join('')+'</table>';
+    $('afWHUnapprovedPreview')?.remove(); $('afWHResults').insertAdjacentElement('afterend',box);
+  };
   $('afWHPrint').onclick = () => {
     const report = render(); if(!report) return;
     const win = window.open('','_blank','width=1100,height=850');
