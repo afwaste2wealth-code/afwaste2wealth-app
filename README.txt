@@ -1,18 +1,9 @@
-A&F Wekavera App82 — Director Command Centre TEST CANDIDATE
+A&F Wekavera App 83 — Director Activities History TEST CANDIDATE
 
-BASE: App81 source; includes App80 changes previously inherited by App81.
+Built from App 82, adding Director-only activity status updates, completion date/remarks, separate completed/cancelled history, from/to date filtering, date basis, category/status filtering and print report.
 
-ADDED:
-- Director-only command centre with counts from existing Upcoming Events, Customer Follow-ups, and Factory Item Register.
-- Record client appointments, company meetings, marketing campaigns, assigned tasks, and events using the existing afUpcomingEvents record store.
-- View scheduled work and mark App82-created records completed.
-- Responsive cards and scrolling records table for phone screens.
-- No changes to payroll, stock calculations, sales, purchases or cloud sync intervals.
+Installation: Back up your existing working app.js and local records. Replace app.js in the GitHub Pages repository and commit only after deciding to test. Do not clear localStorage or migrate existing data.
 
-LIMITATIONS:
-- New records use the existing afUpcomingEvents cloud-sync key; cloud synchronization has NOT been tested live on multiple devices.
-- Pending verification and social media account integration remain unimplemented; no misleading fake counts or invented account links.
-- The original dashboard placeholder rows may remain visible elsewhere in the legacy dashboard; the new command centre is authoritative for the above connected metrics.
-- This is a TEST CANDIDATE, not a certified production release.
+IMPORTANT: This update preserves the existing afUpcomingEvents register and emits its existing update event. It does not alter the cloud sync engine. Synchronization across devices and integration with legacy event workflows have NOT been live-tested. Historic events lacking an explicit completion date use their last update date (or scheduled date) as a fallback and must be interpreted carefully. Existing event data are not deleted. Status update access is restricted in the UI to Director; true server-side permissions require separate audit.
 
-INSTALL: Back up existing app.js and data. Replace app.js in the same repository and commit once. Do not clear browser storage or click Migrate All Existing Data. Verify on Director laptop and phone before relying on synchronization.
+Validation: JavaScript syntax and ZIP integrity checks performed. No production browser or cloud data write tests.
