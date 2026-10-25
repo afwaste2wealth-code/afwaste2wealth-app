@@ -107894,3 +107894,92 @@ document.addEventListener('click',()=>setTimeout(attachGLDashboardButton,0));
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, {once:true});
   else init();
 })();
+
+
+
+/* AF APP81 DIRECTOR OVERSIGHT — READ ONLY; NO RECORD WRITES */
+(function () {
+  'use strict';
+  const KEYS = ['afUpcomingEvents','afCustomerFollowups','afFactoryItemRegister','afWeeklyFactoryChecks'];
+  function read(key) {
+    try { const v=JSON.parse(localStorage.getItem(key)||'[]'); return Array.isArray(v)?v:[]; }
+    catch (_) { return []; }
+  }
+  function role() {
+    try { return String(getAFCurrentRole()||''); } catch (_) { return ''; }
+  }
+  function escape(s) { return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function day(s) {
+    if(!s)return '';
+    const t=String(s).slice(0,10);
+    return /^\d{4}-\d\d-\d\d$/.test(t)?t:'';
+  }
+  function dateToday(){const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');}
+  function openStatus(v){return !/^(done|completed|closed|cancelled|canceled|resolved|approved|verified|inactive)$/i.test(String(v||'pending'));}
+  function render(){
+    const existing=document.getElementById('afDirectorFollowupOversight81');
+    if(role()!=='Director'){existing?.remove();return;}
+    const host=document.querySelector('#mainApplication .main');if(!host)return;
+    const today=dateToday();
+    const events=read('afUpcomingEvents').filter(x=>x&&openStatus(x.status));
+    const upcoming=events.filter(x=>day(x.date)>=today).sort((a,b)=>day(a.date).localeCompare(day(b.date)));
+    const followups=read('afCustomerFollowups').filter(x=>x&&openStatus(x.status));
+    const overdue=followups.filter(x=>{const d=day(x.followupDate||x.date||x.dueDate);return d&&d<today;});
+    const assets=read('afFactoryItemRegister').filter(x=>x&&/repair|damaged|replacement|attention/i.test(String(x.status||x.condition||'')));
+    const rows=[
+      ['Upcoming events',upcoming.length,upcoming.slice(0,3).map(x=>`${escape(day(x.date))}: ${escape(x.title||x.name||x.description||'Event')}`).join('<br>')],
+      ['Open customer follow-ups',followups.length,followups.slice(0,3).map(x=>`${escape(x.customerName||x.customer||'Customer')}: ${escape(day(x.followupDate||x.date||x.dueDate)||'No date')}`).join('<br>')],
+      ['Overdue follow-ups',overdue.length,'Based on recorded follow-up dates'],
+      ['Equipment requiring attention',assets.length,'Based on factory item condition records']
+    ];
+    const html='<div style="font-size:18px;font-weight:800;margin-bottom:10px">Director — Upcoming & Pending Work</div><div style="font-size:12px;margin-bottom:10px;color:#425466">Read-only overview from existing records. Missing or unrecorded information is not counted.</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px">'+rows.map(r=>'<div style="border:1px solid #d8e5dc;border-radius:10px;padding:12px"><div style="font-weight:700">'+r[0]+'</div><div style="font-size:24px;font-weight:800;color:#0b5d3b">'+r[1]+'</div><div style="font-size:12px;line-height:1.6">'+(r[2]||'No matching records')+'</div></div>').join('')+'</div><div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"><button type="button" id="afDirEvents81">Open Upcoming Events</button><button type="button" id="afDirRefresh81">Refresh Overview</button></div>';
+    let el=existing;
+    if(!el){el=document.createElement('section');el.id='afDirectorFollowupOversight81';el.className='card';el.style.cssText='margin:14px 0;padding:16px';host.appendChild(el);}
+    if(el.dataset.snapshot!==html){el.innerHTML=html;el.dataset.snapshot=html;el.querySelector('#afDirEvents81')?.addEventListener('click',()=>{if(typeof window.openAFUpcomingEvents==='function')window.openAFUpcomingEvents();});el.querySelector('#afDirRefresh81')?.addEventListener('click',()=>{el.dataset.snapshot='';render();});}
+  }
+  let timer;
+  function schedule(){clearTimeout(timer);timer=setTimeout(render,200);}
+  window.addEventListener('storage',e=>{if(!e.key||KEYS.includes(e.key))schedule();});
+  window.addEventListener('af-cloud-master-updated',schedule);
+  window.addEventListener('af-upcoming-events-updated',schedule);
+  document.addEventListener('DOMContentLoaded',()=>{setTimeout(render,600);setTimeout(render,1800);});
+  setTimeout(render,700);
+  window.renderAFDirectorFollowupOversight=render;
+})();
+/* APP82 Director Command Centre — additive, preserves existing modules and records. */
+(function(){'use strict';
+const KEY='afUpcomingEvents';
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const read=k=>{try{const a=JSON.parse(localStorage.getItem(k)||'[]');return Array.isArray(a)?a:[]}catch{return []}};
+const currentRole=()=>{try{return String(getAFCurrentRole()||'')}catch{return ''}};
+const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
+const date=v=>{const s=String(v||'').slice(0,10);return /^\d{4}-\d{2}-\d{2}$/.test(s)?s:''};
+const open=s=>!/^(completed|done|cancelled|canceled|closed|resolved|verified)$/i.test(String(s||'upcoming'));
+const types=[['appointment','Client Appointment'],['meeting','Company Meeting'],['campaign','Marketing Campaign'],['task','Assigned Task'],['event','Other Event']];
+function classify(e){if(e.af82Type)return e.af82Type;const s=String(e.title||'').toLowerCase();return s.startsWith('meeting:')?'meeting':s.startsWith('campaign:')?'campaign':s.startsWith('task:')?'task':'event'}
+function mount(){
+ const old=document.getElementById('afDirectorCommandCentre82');
+ if(currentRole()!=='Director'){old?.remove();return}
+ const host=document.querySelector('#mainApplication .main');if(!host)return;
+ let box=old;
+ if(!box){box=document.createElement('section');box.id='afDirectorCommandCentre82';box.className='card';box.style.cssText='margin:16px 0;padding:18px;border:1px solid #c8ddcf;border-radius:12px';const old81=document.getElementById('afDirectorFollowupOversight81');if(old81)old81.before(box);else host.prepend(box)}
+ const all=read(KEY), active=all.filter(x=>x&&open(x.status));
+ const follow=read('afCustomerFollowups').filter(x=>x&&open(x.status));
+ const assets=read('afFactoryItemRegister').filter(x=>x&&/repair|damaged|replacement|attention/i.test([x.status,x.condition].join(' ')));
+ const pending=active.filter(x=>classify(x)==='task');
+ const count=t=>active.filter(x=>classify(x)===t).length;
+ const overdue=active.filter(x=>date(x.date)&&date(x.date)<today()).length;
+ const cards=[['Client Appointments',count('appointment')],['Upcoming Events',active.filter(x=>date(x.date)>=today()).length],['Customer Follow-ups',follow.length],['Company Meetings',count('meeting')],['Marketing Campaigns',count('campaign')],['Assigned Tasks',pending.length],['Overdue Items',overdue],['Equipment Attention',assets.length]];
+ box.innerHTML=`<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><h2 style="margin:0;color:#075a38">Director — Management Command Centre</h2><p style="font-size:12px;color:#52645b">Connected to recorded events, customer follow-ups and equipment. Counts exclude completed entries.</p></div><button id="af82refresh" type="button">Refresh</button></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px">${cards.map(([n,v])=>`<div style="padding:12px;background:#f0f7f2;border-radius:9px"><div style="font-size:12px">${esc(n)}</div><b style="font-size:24px">${v}</b></div>`).join('')}</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0"><button id="af82new" type="button">+ Record Appointment / Meeting / Campaign / Task</button><button id="af82events" type="button">Open Existing Events</button><button id="af82followups" type="button">Customer Follow-ups</button></div><h3 style="margin:12px 0 6px">Scheduled & Assigned Work</h3><div style="overflow:auto"><table style="width:100%;min-width:680px;border-collapse:collapse;font-size:12px"><thead><tr style="background:#e8f3ed"><th>Type</th><th>Title / Person Responsible</th><th>Date</th><th>Status</th><th>Action</th></tr></thead><tbody>${all.slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).slice(0,40).map(e=>`<tr><td>${esc(types.find(t=>t[0]===classify(e))?.[1]||'Event')}</td><td><b>${esc(e.title)}</b><br>${esc(e.af82Assignee||e.notes||'')}</td><td>${esc(date(e.date))}</td><td>${esc(e.status||'Upcoming')}</td><td>${e.af82Type&&open(e.status)?`<button data-af82done="${esc(e.id)}" type="button">Complete</button>`:'—'}</td></tr>`).join('')||'<tr><td colspan="5">No recorded events or tasks yet.</td></tr>'}</tbody></table></div><p style="font-size:11px;color:#667">Director-only creation and completion. Existing event records remain unchanged. Company social media links are not connected until verified official account URLs are entered.</p>`;
+ box.querySelectorAll('th,td').forEach(el=>{el.style.padding='8px';el.style.borderBottom='1px solid #e5ebe7'});
+ box.querySelector('#af82refresh').onclick=mount;
+ box.querySelector('#af82new').onclick=showForm;
+ box.querySelector('#af82events').onclick=()=>{if(typeof window.openAFUpcomingEvents==='function')window.openAFUpcomingEvents();else alert('Existing events screen is unavailable.')};
+ box.querySelector('#af82followups').onclick=()=>{const nav=[...document.querySelectorAll('button,a')].find(x=>/customer follow.up/i.test(x.textContent||'')&&x.offsetParent);if(nav)nav.click();else alert('Open Sales & Customers to view customer follow-ups.')};
+ box.querySelectorAll('[data-af82done]').forEach(btn=>btn.onclick=()=>{if(!confirm('Mark this assigned record completed?'))return;const arr=read(KEY),r=arr.find(x=>String(x.id)===btn.dataset.af82done);if(!r||!r.af82Type)return;r.status='Completed';r.updatedAt=new Date().toISOString();localStorage.setItem(KEY,JSON.stringify(arr));window.dispatchEvent(new CustomEvent('af-upcoming-events-updated',{detail:{key:KEY}}));mount()});
+ const old81=document.getElementById('afDirectorFollowupOversight81');if(old81)old81.style.display='none';
+}
+function showForm(){if(currentRole()!=='Director')return;document.getElementById('af82overlay')?.remove();const overlay=document.createElement('div');overlay.id='af82overlay';overlay.style.cssText='position:fixed;inset:0;background:#0009;z-index:2147480000;display:flex;align-items:center;justify-content:center;padding:12px';overlay.innerHTML=`<form id="af82form" style="background:white;border-radius:12px;padding:22px;max-width:530px;width:100%;max-height:92vh;overflow:auto"><h2>Record Director Activity</h2><label>Category<br><select name="type" required>${types.map(t=>`<option value="${t[0]}">${t[1]}</option>`).join('')}</select></label><br><label>Title / Purpose<br><input name="title" maxlength="180" required style="width:100%"></label><br><label>Scheduled / Due Date<br><input name="date" type="date" required></label><br><label>Assigned to / Client / Contact<br><input name="assignee" maxlength="150" style="width:100%"></label><br><label>Location / Channel<br><input name="location" maxlength="150" style="width:100%"></label><br><label>Notes / Action required<br><textarea name="notes" maxlength="1500" style="width:100%"></textarea></label><br><div style="display:flex;gap:10px;margin-top:12px"><button type="submit">Save Record</button><button id="af82cancel" type="button">Cancel</button></div><p style="font-size:11px">This saves to the existing Upcoming Events register, already included in cloud synchronization. Confirm synchronization before relying on another device.</p></form>`;document.body.appendChild(overlay);overlay.querySelector('[name=date]').value=today();overlay.querySelector('#af82cancel').onclick=()=>overlay.remove();overlay.querySelector('#af82form').onsubmit=e=>{e.preventDefault();if(currentRole()!=='Director')return;const fd=new FormData(e.target);const a=read(KEY),now=new Date().toISOString();a.push({id:'DIR-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),title:String(fd.get('title')).trim(),date:String(fd.get('date')),location:String(fd.get('location')).trim(),notes:String(fd.get('notes')).trim(),af82Type:String(fd.get('type')),af82Assignee:String(fd.get('assignee')).trim(),status:'Upcoming',createdAt:now,updatedAt:now,createdBy:'Director'});localStorage.setItem(KEY,JSON.stringify(a));window.dispatchEvent(new CustomEvent('af-upcoming-events-updated',{detail:{key:KEY}}));overlay.remove();mount()}}
+let debounce;function schedule(){clearTimeout(debounce);debounce=setTimeout(mount,180)}
+window.addEventListener('storage',e=>{if(!e.key||[KEY,'afCustomerFollowups','afFactoryItemRegister'].includes(e.key))schedule()});window.addEventListener('af-upcoming-events-updated',schedule);window.addEventListener('af-cloud-master-updated',schedule);document.addEventListener('click',e=>{if(e.target?.closest?.('#navDashboard'))schedule()},true);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(mount,900));else setTimeout(mount,900);window.AFDirectorCommand82={refresh:mount};
+})();

@@ -1,25 +1,18 @@
-A&F Wekavera Ltd — App 80 (targeted Employee Portal advances update)
+A&F Wekavera App82 — Director Command Centre TEST CANDIDATE
 
-Contents: app.js
-Based on App 79 candidate. No database migration, no storage reset.
+BASE: App81 source; includes App80 changes previously inherited by App81.
 
-Change:
-- Employee Portal Advances table now shows advances issued in the selected month only.
-- Read-only brought-forward / new / recovered / carried-forward summary.
-- View All Advances History button displays the complete historical register on demand.
-- Recovery summaries use dated recovery transactions, without altering original records.
+ADDED:
+- Director-only command centre with counts from existing Upcoming Events, Customer Follow-ups, and Factory Item Register.
+- Record client appointments, company meetings, marketing campaigns, assigned tasks, and events using the existing afUpcomingEvents record store.
+- View scheduled work and mark App82-created records completed.
+- Responsive cards and scrolling records table for phone screens.
+- No changes to payroll, stock calculations, sales, purchases or cloud sync intervals.
 
-Cautions:
-- A recovery without a usable date is excluded from period totals; it is not assigned to an arbitrary month.
-- Existing saved payroll and performance reward calculations are unchanged.
-- Cloud sync cadence and backend requests are unchanged. Sync speed has NOT been proven faster; changing it safely requires profiling real sync requests and queue behavior.
-- This is a TEST CANDIDATE, not a verified live deployment.
-- Keep a backup of your current app and browser data before replacing app.js.
+LIMITATIONS:
+- New records use the existing afUpcomingEvents cloud-sync key; cloud synchronization has NOT been tested live on multiple devices.
+- Pending verification and social media account integration remain unimplemented; no misleading fake counts or invented account links.
+- The original dashboard placeholder rows may remain visible elsewhere in the legacy dashboard; the new command centre is authoritative for the above connected metrics.
+- This is a TEST CANDIDATE, not a certified production release.
 
-Suggested tests:
-1. Select October 2026; verify only October-issued advances are listed.
-2. Select January; verify January advances appear.
-3. Open View All Advances History; verify older records are accessible.
-4. Compare brought-forward/recovery totals with accounting records.
-5. Repeat on phone after cloud sync and ensure no pending changes remain.
-6. Confirm employee portal, payroll, and other screens still open normally.
+INSTALL: Back up existing app.js and data. Replace app.js in the same repository and commit once. Do not clear browser storage or click Migrate All Existing Data. Verify on Director laptop and phone before relying on synchronization.
